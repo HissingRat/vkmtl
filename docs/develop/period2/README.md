@@ -47,6 +47,8 @@ Decision notes: `phase2.md`.
 - Handle resources destroyed while GPU work may still reference them.
 - Introduce deferred destruction or an equivalent strategy.
 
+Decision notes: `phase3.md`.
+
 ## Phase 4: Basic Usage Tracking / Sync Baseline
 
 - Define a portable resource usage model.

@@ -50,6 +50,13 @@ modules, render pipeline states, bind group layouts, and bind groups.
 
 Resource wrappers also guard against use after their own `deinit()`.
 
+Starting in Period 2, the tracker also records submitted/completed work serials
+from command-buffer `commit()`. If a resource is released while work is still
+incomplete, the release is recorded as a deferred retirement. The current
+Vulkan and Metal backends still wait for work to complete before `commit()`
+returns, so these retirements are flushed at the end of the same commit. Later
+non-idle submission can attach native destroys to the same serial model.
+
 ## Command Objects
 
 Command buffers, render command encoders, and blit command encoders are

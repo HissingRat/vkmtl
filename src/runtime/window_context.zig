@@ -49,6 +49,9 @@ pub const ResourceTracker = struct {
     compute_pipeline_states: usize = 0,
     bind_group_layouts: usize = 0,
     bind_groups: usize = 0,
+    submitted_work_serial: u64 = 0,
+    completed_work_serial: u64 = 0,
+    pending_retirements: usize = 0,
 
     pub fn retain(self: *ResourceTracker, kind: ResourceKind) void {
         self.countPtr(kind).* += 1;
@@ -60,6 +63,39 @@ pub const ResourceTracker = struct {
             std.debug.panic("vkmtl resource tracker underflow for {s}", .{kindName(kind)});
         }
         if (count.* != 0) count.* -= 1;
+        self.retire(kind);
+    }
+
+    pub fn submitWork(self: *ResourceTracker) u64 {
+        self.submitted_work_serial += 1;
+        return self.submitted_work_serial;
+    }
+
+    pub fn completeWork(self: *ResourceTracker, serial: u64) void {
+        self.completed_work_serial = @max(self.completed_work_serial, serial);
+        self.flushCompletedRetirements();
+    }
+
+    pub fn completeAllWork(self: *ResourceTracker) void {
+        self.completed_work_serial = self.submitted_work_serial;
+        self.flushCompletedRetirements();
+    }
+
+    pub fn hasPendingRetirements(self: ResourceTracker) bool {
+        return self.pending_retirements != 0;
+    }
+
+    fn retire(self: *ResourceTracker, kind: ResourceKind) void {
+        _ = kind;
+        if (self.completed_work_serial < self.submitted_work_serial) {
+            self.pending_retirements += 1;
+        }
+    }
+
+    fn flushCompletedRetirements(self: *ResourceTracker) void {
+        if (self.completed_work_serial >= self.submitted_work_serial) {
+            self.pending_retirements = 0;
+        }
     }
 
     pub fn hasLeaks(self: ResourceTracker) bool {
@@ -89,6 +125,12 @@ pub const ResourceTracker = struct {
                     self.bind_group_layouts,
                     self.bind_groups,
                 },
+            );
+        }
+        if (builtin.mode == .Debug and self.hasPendingRetirements()) {
+            std.debug.panic(
+                "vkmtl has {} deferred resource retirements before WindowContext.deinit; complete submitted work before destroying the context",
+                .{self.pending_retirements},
             );
         }
     }
@@ -859,6 +901,7 @@ fn metalDepthAttachmentTarget(target: RenderPassDepthAttachmentTarget) MetalComm
 
 pub const CommandBuffer = struct {
     backend: core.Backend,
+    tracker: ?*ResourceTracker = null,
     alive: bool = true,
     uses_current_drawable_pass: bool = false,
     debug: core.CommandBufferDebugState = .{},
@@ -956,8 +999,10 @@ pub const CommandBuffer = struct {
     pub fn commit(self: *CommandBuffer) !void {
         assertObjectAlive(self.alive, "command_buffer");
         try self.debug.commit();
+        const work_serial = if (self.tracker) |tracker| tracker.submitWork() else 0;
         switch (self.impl orelse {
             self.alive = false;
+            if (self.tracker) |tracker| tracker.completeWork(work_serial);
             return;
         }) {
             .vulkan => |*vulkan| {
@@ -969,6 +1014,7 @@ pub const CommandBuffer = struct {
                 metal.deinit();
             },
         }
+        if (self.tracker) |tracker| tracker.completeWork(work_serial);
         self.alive = false;
     }
 
@@ -1337,6 +1383,7 @@ pub const Swapchain = struct {
 
 pub const Queue = struct {
     backend: core.Backend,
+    tracker: *ResourceTracker,
     impl: *BackendRuntime,
 
     pub fn selectedBackend(self: Queue) core.Backend {
@@ -1350,6 +1397,7 @@ pub const Queue = struct {
         };
         return .{
             .backend = self.backend,
+            .tracker = self.tracker,
             .impl = impl,
         };
     }
@@ -1388,6 +1436,7 @@ pub const Device = struct {
     pub fn queue(self: *Device) Queue {
         return .{
             .backend = self.backend,
+            .tracker = self.tracker,
             .impl = self.impl,
         };
     }
@@ -1694,6 +1743,7 @@ pub const WindowContext = struct {
     }
 
     pub fn deinit(self: *WindowContext) void {
+        self.tracker.completeAllWork();
         self.tracker.assertNoLeaks();
         deinitBackendRuntime(&self.impl);
         if (self.owned_adapter_name) |name| {
@@ -1730,6 +1780,7 @@ pub const WindowContext = struct {
     pub fn queue(self: *WindowContext) Queue {
         return .{
             .backend = self.backend,
+            .tracker = self.tracker,
             .impl = &self.impl,
         };
     }
@@ -2079,6 +2130,32 @@ test "runtime rejects shader cache dir arg without value" {
         error.MissingShaderCacheDirValue,
         parseShaderCacheDirFromIterator(std.testing.allocator, &iterator),
     );
+}
+
+test "resource tracker defers retirements until submitted work completes" {
+    var tracker = ResourceTracker{};
+    tracker.retain(.buffer);
+
+    const serial = tracker.submitWork();
+    tracker.release(.buffer);
+
+    try std.testing.expect(!tracker.hasLeaks());
+    try std.testing.expect(tracker.hasPendingRetirements());
+
+    tracker.completeWork(serial);
+    try std.testing.expect(!tracker.hasPendingRetirements());
+}
+
+test "resource tracker completeAllWork flushes pending retirements" {
+    var tracker = ResourceTracker{};
+    tracker.retain(.texture);
+
+    _ = tracker.submitWork();
+    tracker.release(.texture);
+    try std.testing.expect(tracker.hasPendingRetirements());
+
+    tracker.completeAllWork();
+    try std.testing.expect(!tracker.hasPendingRetirements());
 }
 
 test "runtime device exposes adapter features limits and format caps" {

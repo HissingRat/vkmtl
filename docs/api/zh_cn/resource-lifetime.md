@@ -46,6 +46,11 @@ render pipeline state、bind group layout 和 bind group。
 如果 `WindowContext.deinit()` 时仍有资源存活，会 panic。资源 wrapper 也会防止自身 `deinit()`
 之后继续被使用。
 
+Period 2 开始，tracker 还会记录 command buffer `commit()` 产生的 submitted/completed work serial。
+如果资源在 work 尚未完成时释放，会登记为 deferred retirement；当前 Vulkan 和 Metal 后端仍会在
+`commit()` 返回前等待 work 完成，所以这些 retirement 会在同一个 commit 结束后被清空。后续取消
+wait-idle 时，native destroy 会接到同一套 serial 模型上。
+
 ## Command Object
 
 Command buffer、render command encoder 和 blit command encoder 都是短生命周期 recording object。

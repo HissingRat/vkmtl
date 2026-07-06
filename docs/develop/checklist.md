@@ -240,6 +240,16 @@ closed one by one as vkmtl moves from prototype to library.
 - [ ] Add explicit adapter selection.
 - [ ] Replace conservative default capabilities with backend-native queries.
 
+## Period 2 Phase 3 Checklist
+
+- [x] Define resource owner relationships for the current runtime views.
+- [x] Add submitted/completed work serials to the runtime tracker.
+- [x] Record deferred retirements when resources are released while work is
+  incomplete.
+- [x] Advance work serials from command buffer commit.
+- [x] Keep debug leak checks for live resources and pending retirements.
+- [x] Document that current backends still complete work synchronously.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
