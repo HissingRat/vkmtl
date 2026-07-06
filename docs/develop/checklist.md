@@ -439,11 +439,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 4 Checklist
 
-- [ ] Add blend factors and operations.
-- [ ] Add color/alpha blend descriptor shape.
-- [ ] Validate format blendability.
-- [ ] Keep independent blend state per color attachment.
-- [ ] Document blend lowering limits.
+- [x] Add blend factors and operations.
+- [x] Add color/alpha blend descriptor shape.
+- [x] Validate format blendability.
+- [x] Keep independent blend state per color attachment.
+- [x] Document blend lowering limits.
 
 ## Period 5 Phase 5 Checklist
 

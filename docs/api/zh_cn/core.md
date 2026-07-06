@@ -182,6 +182,12 @@ conservative-rasterization flag。Cull mode 和 front face 已在现有 lowering
 非默认 fill mode、启用的 depth bias 和 conservative rasterization 会由 feature gate 控制，
 当前 runtime pipeline 创建会用 typed unsupported error 拒绝。
 
+Color attachment pipeline state 包含 write mask 和可选的
+`RenderPipelineBlendDescriptor`。Blend descriptor 分别描述 RGB / alpha 的 factor 和
+operation，每个 attachment 都可以有自己的 descriptor。非空 blend state 当前由
+`DeviceFeatures.blend_state` gate；每个 attachment 使用不同 blend descriptor 还需要
+`DeviceFeatures.independent_blend`。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

@@ -89,6 +89,8 @@ pub const DeviceFeatures = struct {
     wireframe_fill_mode: bool = false,
     depth_bias: bool = false,
     conservative_rasterization: bool = false,
+    blend_state: bool = false,
+    independent_blend: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -355,6 +357,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedDepthBias,
         error.UnsupportedConservativeRasterization,
         error.UnsupportedDynamicRenderState,
+        error.UnsupportedBlendState,
+        error.UnsupportedIndependentBlend,
+        error.UnsupportedBlendFormat,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -1020,6 +1025,49 @@ pub const ColorWriteMask = struct {
     alpha: bool = true,
 };
 
+pub const BlendFactor = enum {
+    zero,
+    one,
+    source_color,
+    one_minus_source_color,
+    source_alpha,
+    one_minus_source_alpha,
+    destination_color,
+    one_minus_destination_color,
+    destination_alpha,
+    one_minus_destination_alpha,
+    blend_color,
+    one_minus_blend_color,
+    blend_alpha,
+    one_minus_blend_alpha,
+};
+
+pub const BlendOperation = enum {
+    add,
+    subtract,
+    reverse_subtract,
+    min,
+    max,
+};
+
+pub const RenderPipelineBlendDescriptor = struct {
+    source_rgb_blend_factor: BlendFactor = .one,
+    destination_rgb_blend_factor: BlendFactor = .zero,
+    rgb_blend_operation: BlendOperation = .add,
+    source_alpha_blend_factor: BlendFactor = .one,
+    destination_alpha_blend_factor: BlendFactor = .zero,
+    alpha_blend_operation: BlendOperation = .add,
+
+    pub fn eql(a: RenderPipelineBlendDescriptor, b: RenderPipelineBlendDescriptor) bool {
+        return a.source_rgb_blend_factor == b.source_rgb_blend_factor and
+            a.destination_rgb_blend_factor == b.destination_rgb_blend_factor and
+            a.rgb_blend_operation == b.rgb_blend_operation and
+            a.source_alpha_blend_factor == b.source_alpha_blend_factor and
+            a.destination_alpha_blend_factor == b.destination_alpha_blend_factor and
+            a.alpha_blend_operation == b.alpha_blend_operation;
+    }
+};
+
 pub const CompareFunction = enum {
     never,
     less,
@@ -1044,6 +1092,15 @@ pub const DepthStencilDescriptor = struct {
 pub const RenderPipelineColorAttachmentDescriptor = struct {
     format: TextureFormat = .automatic,
     write_mask: ColorWriteMask = .{},
+    blend: ?RenderPipelineBlendDescriptor = null,
+
+    pub fn validate(self: RenderPipelineColorAttachmentDescriptor) PipelineError!void {
+        if (self.format == .automatic) return PipelineError.InvalidColorAttachmentFormat;
+        if (!isColorFormat(self.format)) return PipelineError.InvalidColorAttachmentFormat;
+        if (self.blend != null and !defaultFormatCapabilities(self.format).blendable) {
+            return PipelineError.UnsupportedBlendFormat;
+        }
+    }
 };
 
 pub const RenderPipelineDescriptor = struct {
@@ -1075,8 +1132,7 @@ pub const RenderPipelineDescriptor = struct {
         try self.depth_bias.validate();
         try validateSampleCount(self.sample_count);
         for (self.color_attachments) |attachment| {
-            if (attachment.format == .automatic) return PipelineError.InvalidColorAttachmentFormat;
-            if (!isColorFormat(attachment.format)) return PipelineError.InvalidColorAttachmentFormat;
+            try attachment.validate();
         }
         if (self.depth_stencil) |depth_stencil| try depth_stencil.validate();
     }
@@ -1134,6 +1190,9 @@ pub const PipelineError = error{
     UnsupportedFillMode,
     UnsupportedDepthBias,
     UnsupportedConservativeRasterization,
+    UnsupportedBlendState,
+    UnsupportedIndependentBlend,
+    UnsupportedBlendFormat,
 };
 
 pub fn validateProgrammableStageReflection(
@@ -3870,6 +3929,37 @@ test "render pipeline descriptor validates shader stages and color targets" {
         },
         .depth_bias = .{ .enabled = true, .constant = std.math.nan(f32) },
         .color_attachments = color_attachments[0..],
+    }).validate());
+
+    const blend_attachments = [_]RenderPipelineColorAttachmentDescriptor{.{
+        .format = .rgba8_unorm,
+        .blend = .{
+            .source_rgb_blend_factor = .source_alpha,
+            .destination_rgb_blend_factor = .one_minus_source_alpha,
+            .source_alpha_blend_factor = .one,
+            .destination_alpha_blend_factor = .one_minus_source_alpha,
+        },
+    }};
+    try (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = vertex_module,
+            .stage = .vertex,
+            .entry_point = "vs_main",
+        },
+        .color_attachments = blend_attachments[0..],
+    }).validate();
+
+    const unblendable_attachments = [_]RenderPipelineColorAttachmentDescriptor{.{
+        .format = .depth32_float,
+        .blend = .{},
+    }};
+    try std.testing.expectError(PipelineError.InvalidColorAttachmentFormat, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = vertex_module,
+            .stage = .vertex,
+            .entry_point = "vs_main",
+        },
+        .color_attachments = unblendable_attachments[0..],
     }).validate());
 }
 

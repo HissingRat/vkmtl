@@ -2414,6 +2414,18 @@ fn validateRuntimeRenderPipelineShape(
     if (descriptor.conservative_rasterization and !features.conservative_rasterization) {
         return core.PipelineError.UnsupportedConservativeRasterization;
     }
+    var first_blend: ?core.RenderPipelineBlendDescriptor = null;
+    for (descriptor.color_attachments) |attachment| {
+        const blend = attachment.blend orelse continue;
+        if (!features.blend_state) return core.PipelineError.UnsupportedBlendState;
+        if (first_blend) |existing| {
+            if (!core.RenderPipelineBlendDescriptor.eql(existing, blend) and !features.independent_blend) {
+                return core.PipelineError.UnsupportedIndependentBlend;
+            }
+        } else {
+            first_blend = blend;
+        }
+    }
 }
 
 fn materializeVulkanBindGroupEntries(
@@ -3028,6 +3040,24 @@ test "runtime render pipeline gate rejects unsupported raster state" {
     try validateRuntimeRenderPipelineShape(wireframe, .{ .wireframe_fill_mode = true });
     try validateRuntimeRenderPipelineShape(biased, .{ .depth_bias = true });
     try validateRuntimeRenderPipelineShape(conservative, .{ .conservative_rasterization = true });
+
+    const blended_attachments = [_]core.RenderPipelineColorAttachmentDescriptor{.{
+        .format = .rgba8_unorm,
+        .blend = .{ .source_rgb_blend_factor = .source_alpha },
+    }};
+    var blended = descriptor;
+    blended.color_attachments = blended_attachments[0..];
+    try std.testing.expectError(core.PipelineError.UnsupportedBlendState, validateRuntimeRenderPipelineShape(blended, .{}));
+    try validateRuntimeRenderPipelineShape(blended, .{ .blend_state = true });
+
+    const independent_blend_attachments = [_]core.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = .rgba8_unorm, .blend = .{ .source_rgb_blend_factor = .source_alpha } },
+        .{ .format = .rgba8_unorm, .blend = .{ .source_rgb_blend_factor = .one } },
+    };
+    var independent = descriptor;
+    independent.color_attachments = independent_blend_attachments[0..];
+    try std.testing.expectError(core.PipelineError.UnsupportedIndependentBlend, validateRuntimeRenderPipelineShape(independent, .{ .blend_state = true }));
+    try validateRuntimeRenderPipelineShape(independent, .{ .blend_state = true, .independent_blend = true });
 }
 
 test "runtime render encoder validates bind group binding" {

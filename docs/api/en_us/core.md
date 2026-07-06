@@ -213,6 +213,13 @@ of the existing lowered path. Non-default fill mode, enabled depth bias, and
 conservative rasterization are feature-gated and currently rejected with typed
 unsupported errors during runtime pipeline creation.
 
+Color attachment pipeline state includes write masks and optional
+`RenderPipelineBlendDescriptor` values. Blend descriptors carry separate RGB and
+alpha factors/operations, and each attachment may specify its own descriptor.
+Non-empty blend state is currently feature-gated by `DeviceFeatures.blend_state`;
+different per-attachment blend descriptors also require
+`DeviceFeatures.independent_blend`.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:
