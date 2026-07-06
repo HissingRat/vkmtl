@@ -14,10 +14,17 @@ pub const DevelopmentMatrixError = error{
 
 pub const FeatureGate = enum {
     multi_surface,
+    native_handles,
+    external_texture_interop,
+    native_command_insertion,
 
     pub fn enabled(self: FeatureGate, features: core.DeviceFeatures) bool {
         return switch (self) {
             .multi_surface => features.multi_surface,
+            .native_handles => features.native_handles,
+            .external_texture_interop,
+            .native_command_insertion,
+            => false,
         };
     }
 };
@@ -288,6 +295,62 @@ pub fn validateMultiWindowGallery(cases: []const MultiWindowExampleCase) Develop
     }
 }
 
+pub const NativeInteropKind = enum {
+    vulkan_native_handle,
+    metal_native_handle,
+    external_texture,
+    native_command_insertion,
+};
+
+pub const NativeInteropExampleCase = struct {
+    name: []const u8,
+    kind: NativeInteropKind,
+    status: GalleryCaseStatus = .planned,
+    required_feature: FeatureGate,
+    validation_goal: []const u8,
+
+    pub fn validate(self: NativeInteropExampleCase) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation_goal.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+    }
+};
+
+pub const native_interop_gallery = [_]NativeInteropExampleCase{
+    .{
+        .name = "vulkan_native_handles",
+        .kind = .vulkan_native_handle,
+        .required_feature = .native_handles,
+        .validation_goal = "borrow Vulkan handles through explicit native handle escape hatch",
+    },
+    .{
+        .name = "metal_native_handles",
+        .kind = .metal_native_handle,
+        .required_feature = .native_handles,
+        .validation_goal = "borrow Metal handles through explicit native handle escape hatch",
+    },
+    .{
+        .name = "external_texture_import",
+        .kind = .external_texture,
+        .required_feature = .external_texture_interop,
+        .validation_goal = "import an external texture handle through an explicit backend-gated path",
+    },
+    .{
+        .name = "native_command_insertion",
+        .kind = .native_command_insertion,
+        .required_feature = .native_command_insertion,
+        .validation_goal = "insert user native commands without weakening portable command ordering",
+    },
+};
+
+pub fn validateNativeInteropGallery(cases: []const NativeInteropExampleCase) DevelopmentMatrixError!void {
+    for (cases, 0..) |case, i| {
+        try case.validate();
+        for (cases[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, case.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
     try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
@@ -313,4 +376,14 @@ test "multi-window gallery is gated by multi-surface feature" {
         try std.testing.expect(!case.required_feature.?.enabled(core.DeviceFeatures{}));
         try std.testing.expect(case.required_feature.?.enabled(.{ .multi_surface = true }));
     }
+}
+
+test "native interop gallery keeps explicit feature gates" {
+    try validateNativeInteropGallery(native_interop_gallery[0..]);
+    var native_handle_cases: usize = 0;
+    for (native_interop_gallery) |case| {
+        if (case.required_feature == .native_handles) native_handle_cases += 1;
+        try std.testing.expect(case.required_feature.enabled(.{ .native_handles = true }) == (case.required_feature == .native_handles));
+    }
+    try std.testing.expectEqual(@as(usize, 2), native_handle_cases);
 }

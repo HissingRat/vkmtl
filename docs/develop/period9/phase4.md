@@ -12,5 +12,8 @@ examples depend on backend-private modules.
 
 ## Current Limits
 
+- Planned native interop cases are recorded in `src/development_matrix.zig`.
+- Vulkan and Metal native-handle examples use `DeviceFeatures.native_handles`.
+- External texture and native command insertion examples remain planned gates.
 - Existing native handle access is borrowed and advanced; external texture and
   native command insertion are planned coverage.

@@ -658,11 +658,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 4 Checklist
 
 - [x] Define native interop example scope before implementation.
-- [ ] Add native interop example planning descriptors.
-- [ ] Cover Vulkan handles, Metal handles, external texture interop, and native
+- [x] Add native interop example planning descriptors.
+- [x] Cover Vulkan handles, Metal handles, external texture interop, and native
   command insertion planning.
-- [ ] Document that ordinary examples should not use native handles.
-- [ ] Add validation for interop example metadata.
+- [x] Document that ordinary examples should not use native handles.
+- [x] Add validation for interop example metadata.
 
 ## Period 9 Phase 5 Checklist
 

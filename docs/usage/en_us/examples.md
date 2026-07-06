@@ -330,3 +330,16 @@ Multi-window examples are planned, not implemented. The tracked cases are:
 Current public `SurfaceCollection` can track multiple neutral surface states,
 but native multiple swapchain execution remains gated by
 `DeviceFeatures.multi_surface`.
+
+## Native Interop Gallery
+
+Native interop examples are explicit advanced samples, not ordinary example
+dependencies. Planned cases are:
+
+- `vulkan_native_handles`
+- `metal_native_handles`
+- `external_texture_import`
+- `native_command_insertion`
+
+Portable examples should keep using public vkmtl abstractions. If an example
+needs native access, it should be named and documented as a native interop case.
