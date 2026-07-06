@@ -592,10 +592,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 3 Checklist
 
 - [x] Define pipeline layout cache scope before implementation.
-- [ ] Add pipeline layout cache-key descriptor shape.
-- [ ] Include bind group layout list and small/root constant layout inputs.
-- [ ] Keep native pipeline layout reuse as future backend work.
-- [ ] Document pipeline layout cache limits.
+- [x] Add pipeline layout cache-key descriptor shape.
+- [x] Include bind group layout list and small/root constant layout inputs.
+- [x] Keep native pipeline layout reuse as future backend work.
+- [x] Document pipeline layout cache limits.
 
 ## Period 8 Phase 4 Checklist
 

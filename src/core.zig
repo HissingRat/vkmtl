@@ -3424,6 +3424,28 @@ pub const BindGroupLayoutCacheKeyDescriptor = struct {
     }
 };
 
+pub const PipelineLayoutCacheKeyDescriptor = struct {
+    bind_group_layouts: []const BindGroupLayoutCacheKeyDescriptor = &.{},
+    small_constants: []const SmallConstantDescriptor = &.{},
+    root_constant_layout: ?RootConstantLayoutDescriptor = null,
+
+    pub fn validate(
+        self: PipelineLayoutCacheKeyDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (BindingError || SmallConstantError || RootConstantError)!void {
+        for (self.bind_group_layouts) |layout| {
+            try layout.validate();
+        }
+        for (self.small_constants) |constant| {
+            try constant.validate(features, limits);
+        }
+        if (self.root_constant_layout) |layout| {
+            try layout.validate(features, limits);
+        }
+    }
+};
+
 pub const BufferBindingDescriptor = struct {
     offset: u64 = 0,
     size: ?u64 = null,
@@ -6684,6 +6706,45 @@ test "root constant descriptors validate ranges and writes" {
         .offset = 12,
         .bytes = bytes[0..8],
     }).validate(layout, features, limits));
+}
+
+test "pipeline layout cache key validates layouts and constants" {
+    const layout_entries = [_]BindGroupLayoutEntry{.{
+        .binding = 0,
+        .resource = .uniform_buffer,
+        .visibility = .{ .vertex = true },
+    }};
+    const bind_layouts = [_]BindGroupLayoutCacheKeyDescriptor{.{
+        .entries = layout_entries[0..],
+    }};
+    const bytes = [_]u8{0} ** 16;
+    const small_constants = [_]SmallConstantDescriptor{.{
+        .visibility = .{ .vertex = true },
+        .bytes = bytes[0..8],
+    }};
+    const root_ranges = [_]RootConstantRange{.{
+        .visibility = .{ .fragment = true },
+        .offset = 0,
+        .size = 16,
+    }};
+    const features = DeviceFeatures{
+        .small_constants = true,
+        .root_constants = true,
+    };
+    const limits = DeviceLimits{
+        .max_small_constant_bytes = 16,
+        .max_root_constant_bytes = 16,
+    };
+
+    try (PipelineLayoutCacheKeyDescriptor{
+        .bind_group_layouts = bind_layouts[0..],
+        .small_constants = small_constants[0..],
+        .root_constant_layout = .{ .ranges = root_ranges[0..] },
+    }).validate(features, limits);
+    try (PipelineLayoutCacheKeyDescriptor{}).validate(features, limits);
+    try std.testing.expectError(SmallConstantError.UnsupportedSmallConstants, (PipelineLayoutCacheKeyDescriptor{
+        .small_constants = small_constants[0..],
+    }).validate(.{}, limits));
 }
 
 test "bind group layout rejects non-compute storage textures" {
