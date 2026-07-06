@@ -1,5 +1,7 @@
 # Period 10: Advanced / Backend-Gated
 
+Status: in progress.
+
 Goal: expose advanced Vulkan and Metal features without forcing them into the
 portable core.
 
@@ -12,6 +14,8 @@ portable fallback unless a future design explicitly adds one.
 - Metal argument buffers.
 - Advanced API that does not pollute the base bind group model.
 
+See `phase1.md`.
+
 ## Phase 2: Sparse / Tiled Resources
 
 - Vulkan sparse resources.
@@ -19,6 +23,8 @@ portable fallback unless a future design explicitly adds one.
 - Page size differences.
 - Residency and mapping differences.
 - Capability-gated API.
+
+See `phase2.md`.
 
 ## Phase 3: External Texture / Platform Interop
 
@@ -28,6 +34,8 @@ portable fallback unless a future design explicitly adds one.
 - Platform handles.
 - Integration with the native handle escape hatch.
 
+See `phase3.md`.
+
 ## Phase 4: Tessellation Gated
 
 - Vulkan tessellation.
@@ -35,11 +43,15 @@ portable fallback unless a future design explicitly adds one.
 - Shader model capability gate.
 - Not part of the base render path.
 
+See `phase4.md`.
+
 ## Phase 5: Mesh Shader Gated
 
 - Vulkan mesh shader.
 - Metal object shader or mesh-like paths if feasible.
 - Clear documentation for non-portable differences.
+
+See `phase5.md`.
 
 ## Phase 6: Ray Tracing Gated Module
 
@@ -47,6 +59,8 @@ portable fallback unless a future design explicitly adds one.
 - Ray tracing pipelines.
 - Shader binding table and Metal intersection function differences.
 - Backend-gated module, not a forced portable abstraction.
+
+See `phase6.md`.
 
 ## Phase 7: Driver-Level Pipeline Cache / Binary Archive
 
@@ -56,3 +70,5 @@ portable fallback unless a future design explicitly adds one.
 - Version validation.
 - Driver, device, and shader hash validation.
 - Cache invalidation rules.
+
+See `phase7.md`.

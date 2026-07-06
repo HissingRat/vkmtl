@@ -1,5 +1,7 @@
 # Period 9: Examples / Test Matrix / Documentation
 
+Status: in progress.
+
 Goal: make the library maintainable and verifiable across examples, backends,
 validation tests, and documentation.
 
@@ -20,6 +22,8 @@ feature works.
 - Mipmap.
 - Review names, run commands, and expected output.
 
+See `phase1.md`.
+
 ## Phase 2: Compute Example Gallery
 
 - Image filter.
@@ -28,6 +32,8 @@ feature works.
 - Readback.
 - Storage texture.
 
+See `phase2.md`.
+
 ## Phase 3: Multi-Window Examples
 
 - Single device with multiple surfaces.
@@ -35,12 +41,16 @@ feature works.
 - Resize handling.
 - Surface-lost handling.
 
+See `phase3.md`.
+
 ## Phase 4: Native Interop Examples
 
 - Vulkan native handle.
 - Metal native handle.
 - IOSurface or external texture as a gated feature.
 - User-defined native command insertion where supported.
+
+See `phase4.md`.
 
 ## Phase 5: Backend Test Matrix
 
@@ -51,6 +61,8 @@ feature works.
 - MoltenVK macOS as an optional backend-test target.
 - Headless or offscreen tests where practical.
 
+See `phase5.md`.
+
 ## Phase 6: Validation Tests
 
 - Invalid bind group.
@@ -59,6 +71,8 @@ feature works.
 - Resource destroyed while in use.
 - Unsupported feature.
 - Shader reflection mismatch.
+
+See `phase6.md`.
 
 ## Phase 7: Documentation Completeness
 
@@ -71,3 +85,5 @@ feature works.
 - Backend difference notes.
 - Performance guide.
 - Compatibility table.
+
+See `phase7.md`.

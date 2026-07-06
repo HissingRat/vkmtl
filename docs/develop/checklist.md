@@ -629,6 +629,125 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Expose diagnostics through runtime device/context views.
 - [x] Document diagnostics limits.
 
+## Period 9 Phase 1 Checklist
+
+- [x] Define example gallery cleanup scope before implementation.
+- [ ] Remove ignored workspace-only artifacts from `examples/`.
+- [ ] Add an example manifest that records names, run commands, kind, backend
+  expectation, and deterministic output where applicable.
+- [ ] Document current examples against the manifest.
+- [ ] Keep examples importing public vkmtl APIs only.
+
+## Period 9 Phase 2 Checklist
+
+- [x] Define compute gallery scope before implementation.
+- [ ] Add compute gallery planning descriptors for image filter, particle
+  simulation, prefix sum, readback, and storage texture coverage.
+- [ ] Keep deterministic `compute_readback` as the implemented compute example.
+- [ ] Document which compute examples are implemented versus planned.
+- [ ] Add validation that compute gallery metadata stays well-formed.
+
+## Period 9 Phase 3 Checklist
+
+- [x] Define multi-window example scope before implementation.
+- [ ] Add multi-window example planning descriptors.
+- [ ] Gate native multi-surface execution behind `DeviceFeatures.multi_surface`.
+- [ ] Document current `SurfaceCollection` limits.
+- [ ] Add validation for planned multi-window cases.
+
+## Period 9 Phase 4 Checklist
+
+- [x] Define native interop example scope before implementation.
+- [ ] Add native interop example planning descriptors.
+- [ ] Cover Vulkan handles, Metal handles, external texture interop, and native
+  command insertion planning.
+- [ ] Document that ordinary examples should not use native handles.
+- [ ] Add validation for interop example metadata.
+
+## Period 9 Phase 5 Checklist
+
+- [x] Define backend test matrix scope before implementation.
+- [ ] Add backend matrix descriptors for supported host/backend combinations.
+- [ ] Include macOS Metal, macOS MoltenVK testing, Linux Vulkan, Windows
+  Vulkan, optional iOS Metal, and headless/offscreen expectations.
+- [ ] Document required commands and optional runtime configuration.
+- [ ] Add validation for backend matrix entries.
+
+## Period 9 Phase 6 Checklist
+
+- [x] Define validation test coverage scope before implementation.
+- [ ] Add validation case descriptors for invalid bind groups, texture formats,
+  barriers, resource lifetime, unsupported features, and reflection mismatch.
+- [ ] Link validation cases to existing unit-test coverage where available.
+- [ ] Document validation gaps that still need backend/integration tests.
+- [ ] Add tests that keep validation case metadata consistent.
+
+## Period 9 Phase 7 Checklist
+
+- [x] Define documentation completeness scope before implementation.
+- [ ] Add documentation completeness descriptors.
+- [ ] Cover getting started, architecture, lifetime, binding, command/sync,
+  capabilities, backend notes, performance, and compatibility.
+- [ ] Update docs index and Period 9 status.
+- [ ] Add validation for documentation completeness metadata.
+
+## Period 10 Phase 1 Checklist
+
+- [x] Define descriptor indexing / argument buffer scope before implementation.
+- [ ] Add feature gates and descriptor shapes.
+- [ ] Validate descriptor counts, bindless ranges, and visibility.
+- [ ] Keep backend lowering unsupported until native implementation lands.
+- [ ] Document Vulkan descriptor indexing and Metal argument buffer mapping
+  direction.
+
+## Period 10 Phase 2 Checklist
+
+- [x] Define sparse / tiled resource scope before implementation.
+- [ ] Add feature gates and sparse resource descriptor shapes.
+- [ ] Validate page size, region alignment, and residency intent.
+- [ ] Keep native sparse/tiled resource lowering unsupported.
+- [ ] Document portability limits.
+
+## Period 10 Phase 3 Checklist
+
+- [x] Define external texture / platform interop scope before implementation.
+- [ ] Add feature gates and external handle descriptor shapes.
+- [ ] Validate platform handle kind, backend compatibility, and usage.
+- [ ] Keep native import/export lowering unsupported.
+- [ ] Document relationship to native handles.
+
+## Period 10 Phase 4 Checklist
+
+- [x] Define tessellation scope before implementation.
+- [ ] Add feature gates and tessellation descriptor shapes.
+- [ ] Validate patch control point counts and shader stage requirements.
+- [ ] Keep tessellation out of the base render path.
+- [ ] Document backend-gated behavior.
+
+## Period 10 Phase 5 Checklist
+
+- [x] Define mesh shader scope before implementation.
+- [ ] Add feature gates and mesh pipeline descriptor shapes.
+- [ ] Validate task/mesh stage requirements and workgroup limits.
+- [ ] Keep mesh shader lowering unsupported until backend work lands.
+- [ ] Document Vulkan/Metal portability differences.
+
+## Period 10 Phase 6 Checklist
+
+- [x] Define ray tracing module scope before implementation.
+- [ ] Add feature gates and ray tracing descriptor shapes.
+- [ ] Validate acceleration structure, pipeline, and shader table descriptors.
+- [ ] Keep ray tracing isolated from the portable render pipeline.
+- [ ] Document backend differences.
+
+## Period 10 Phase 7 Checklist
+
+- [x] Define driver-level pipeline cache scope before implementation.
+- [ ] Add feature gates and driver cache descriptor shapes.
+- [ ] Validate backend, device, driver, shader, and version identity.
+- [ ] Keep disk cache invalidation explicit.
+- [ ] Update Period 10 status and docs.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
