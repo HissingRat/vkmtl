@@ -298,6 +298,64 @@ closed one by one as vkmtl moves from prototype to library.
   implementation detail.
 - [x] Document borrowed label lifetime and current diagnostics limits.
 
+## Period 3 Phase 0 Checklist
+
+- [x] Define Period 3 resource coverage contract.
+- [x] Keep advanced memory/heap control outside default resource descriptors.
+- [x] Require capability gates for non-basic resource features.
+- [x] Document which Period 3 features are validation/API shape first.
+
+## Period 3 Phase 1 Checklist
+
+- [ ] Add CPU visibility and resolved storage-mode helpers.
+- [ ] Add public buffer mapping descriptors.
+- [ ] Add runtime buffer map/unmap wrappers.
+- [ ] Keep read/write convenience helpers working.
+- [ ] Document private-buffer staging/readback expectations.
+
+## Period 3 Phase 2 Checklist
+
+- [ ] Add texture shape classification helpers.
+- [ ] Validate array, 3D, cube-compatible, and multisample constraints.
+- [ ] Report texture-shape support through features or format caps.
+- [ ] Document cube texture representation limits.
+
+## Period 3 Phase 3 Checklist
+
+- [ ] Add expanded format classification helpers.
+- [ ] Add mip/filter/blend/storage capability fields.
+- [ ] Keep unsupported formats behind typed validation errors.
+- [ ] Document implemented versus classified-only formats.
+
+## Period 3 Phase 4 Checklist
+
+- [ ] Add max mip-count and mip-dimension helpers.
+- [ ] Validate texture mip counts against extent.
+- [ ] Add public generate-mipmaps descriptor shape.
+- [ ] Document that automatic mip generation is not lowered yet.
+
+## Period 3 Phase 5 Checklist
+
+- [ ] Expose resolved texture view range on runtime `TextureView`.
+- [ ] Validate explicit view ranges and dimensions.
+- [ ] Keep format reinterpretation and aspect views gated for later.
+- [ ] Document current texture-view limits.
+
+## Period 3 Phase 6 Checklist
+
+- [ ] Add compare sampler descriptor shape.
+- [ ] Add anisotropy descriptor shape and validation.
+- [ ] Add border-color descriptor shape.
+- [ ] Report sampler support through features/limits.
+- [ ] Document backend mapping limits.
+
+## Period 3 Phase 7 Checklist
+
+- [ ] Add heap/memory advanced capability shape.
+- [ ] Add public heap descriptor shape.
+- [ ] Keep default resource creation independent from manual heaps.
+- [ ] Document heap ownership and future backend mapping.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
