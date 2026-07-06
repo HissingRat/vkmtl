@@ -10,6 +10,8 @@ compile more than one entry point from one Slang source.
 - Define cache-key inputs for later Period 8 cache integration.
 - Keep actual runtime compilation through current `Device.compile*` entry
   points for now.
+- Implemented as `ShaderCompileProfile`, `ShaderLibraryEntryDescriptor`,
+  `ShaderLibraryDescriptor`, and `ShaderLibraryCacheKeyDescriptor`.
 
 ## Current Limits
 

@@ -408,6 +408,12 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidLodRange,
         error.InvalidMaxAnisotropy,
         error.InvalidHeapSize,
+        error.EmptyShaderLibraryName,
+        error.EmptyShaderLibraryEntryName,
+        error.EmptyShaderIncludePath,
+        error.EmptyShaderSourceHash,
+        error.MissingShaderLibraryEntry,
+        error.DuplicateShaderLibraryEntry,
         error.InvalidRenderPassAttachment,
         error.InvalidStorageTextureUsage,
         error.PresentRequiresCurrentDrawable,
@@ -695,6 +701,64 @@ pub const ShaderStage = enum {
     compute,
 };
 
+pub const ShaderCompileProfile = enum {
+    debug,
+    release,
+};
+
+pub const ShaderLibraryEntryDescriptor = struct {
+    name: []const u8,
+    stage: ShaderStage,
+    entry_point: []const u8 = "main",
+
+    pub fn validate(self: ShaderLibraryEntryDescriptor) ShaderError!void {
+        if (self.name.len == 0) return ShaderError.EmptyShaderLibraryEntryName;
+        if (self.entry_point.len == 0) return ShaderError.EmptyShaderEntryPoint;
+    }
+};
+
+pub const ShaderLibraryDescriptor = struct {
+    label: ?[]const u8 = null,
+    name: []const u8,
+    source: ShaderSource,
+    entries: []const ShaderLibraryEntryDescriptor = &.{},
+    include_paths: []const []const u8 = &.{},
+    profile: ShaderCompileProfile = .debug,
+
+    pub fn validate(self: ShaderLibraryDescriptor) ShaderError!void {
+        try (ShaderModuleDescriptor{
+            .label = self.label,
+            .source = self.source,
+        }).validate();
+        if (self.name.len == 0) return ShaderError.EmptyShaderLibraryName;
+        if (self.entries.len == 0) return ShaderError.MissingShaderLibraryEntry;
+        for (self.entries, 0..) |entry, i| {
+            try entry.validate();
+            for (self.entries[i + 1 ..]) |other| {
+                if (std.mem.eql(u8, entry.name, other.name)) return ShaderError.DuplicateShaderLibraryEntry;
+                if (entry.stage == other.stage and std.mem.eql(u8, entry.entry_point, other.entry_point)) {
+                    return ShaderError.DuplicateShaderLibraryEntry;
+                }
+            }
+        }
+        for (self.include_paths) |path| {
+            if (path.len == 0) return ShaderError.EmptyShaderIncludePath;
+        }
+    }
+};
+
+pub const ShaderLibraryCacheKeyDescriptor = struct {
+    library_name: []const u8,
+    source_hash: []const u8,
+    profile: ShaderCompileProfile = .debug,
+    backend: Backend,
+
+    pub fn validate(self: ShaderLibraryCacheKeyDescriptor) ShaderError!void {
+        if (self.library_name.len == 0) return ShaderError.EmptyShaderLibraryName;
+        if (self.source_hash.len == 0) return ShaderError.EmptyShaderSourceHash;
+    }
+};
+
 pub const ShaderReflectionArtifact = struct {
     path: []const u8,
 };
@@ -892,6 +956,12 @@ pub const ShaderError = error{
     EmptyShaderSource,
     EmptyShaderArtifactPath,
     EmptyShaderEntryPoint,
+    EmptyShaderLibraryName,
+    EmptyShaderLibraryEntryName,
+    EmptyShaderIncludePath,
+    EmptyShaderSourceHash,
+    MissingShaderLibraryEntry,
+    DuplicateShaderLibraryEntry,
     EmptyShaderReflectionPath,
     InvalidShaderReflection,
     ShaderReflectionReadFailed,
@@ -3154,6 +3224,47 @@ test "shader module descriptor validates source inputs" {
             .path = "",
             .language = .spirv,
         } },
+    }).validate());
+}
+
+test "shader library descriptor validates entries and cache keys" {
+    const entries = [_]ShaderLibraryEntryDescriptor{
+        .{ .name = "vertex", .stage = .vertex, .entry_point = "vs_main" },
+        .{ .name = "fragment", .stage = .fragment, .entry_point = "fs_main" },
+    };
+    const includes = [_][]const u8{"shaders/include"};
+    try (ShaderLibraryDescriptor{
+        .name = "basic",
+        .source = .{ .slang = "shader source" },
+        .entries = entries[0..],
+        .include_paths = includes[0..],
+        .profile = .release,
+    }).validate();
+
+    try std.testing.expectError(ShaderError.MissingShaderLibraryEntry, (ShaderLibraryDescriptor{
+        .name = "empty",
+        .source = .{ .slang = "shader source" },
+    }).validate());
+
+    const duplicate_entries = [_]ShaderLibraryEntryDescriptor{
+        .{ .name = "main", .stage = .vertex, .entry_point = "vs_main" },
+        .{ .name = "main", .stage = .fragment, .entry_point = "fs_main" },
+    };
+    try std.testing.expectError(ShaderError.DuplicateShaderLibraryEntry, (ShaderLibraryDescriptor{
+        .name = "dupes",
+        .source = .{ .slang = "shader source" },
+        .entries = duplicate_entries[0..],
+    }).validate());
+
+    try (ShaderLibraryCacheKeyDescriptor{
+        .library_name = "basic",
+        .source_hash = "abc",
+        .backend = .metal,
+    }).validate();
+    try std.testing.expectError(ShaderError.EmptyShaderSourceHash, (ShaderLibraryCacheKeyDescriptor{
+        .library_name = "basic",
+        .source_hash = "",
+        .backend = .metal,
     }).validate());
 }
 

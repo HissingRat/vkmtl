@@ -372,10 +372,10 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 2 Checklist
 
-- [ ] Add shader compile profile/options shape.
-- [ ] Add shader library descriptor and entry descriptors.
-- [ ] Define cache-key requirements.
-- [ ] Document that object cache implementation remains Period 8.
+- [x] Add shader compile profile/options shape.
+- [x] Add shader library descriptor and entry descriptors.
+- [x] Define cache-key requirements.
+- [x] Document that object cache implementation remains Period 8.
 
 ## Period 4 Phase 3 Checklist
 
