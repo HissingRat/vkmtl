@@ -528,10 +528,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 7 Phase 1 Checklist
 
 - [x] Define compute dispatch completeness scope before implementation.
-- [ ] Add compute dispatch limits and validation helpers.
-- [ ] Add a dispatch-threads convenience descriptor.
-- [ ] Keep current dispatch-threadgroups backend lowering working.
-- [ ] Document compute dispatch limits.
+- [x] Add compute dispatch limits and validation helpers.
+- [x] Add a dispatch-threads convenience descriptor.
+- [x] Keep current dispatch-threadgroups backend lowering working.
+- [x] Document compute dispatch limits.
 
 ## Period 7 Phase 2 Checklist
 

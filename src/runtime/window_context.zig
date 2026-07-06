@@ -1580,9 +1580,25 @@ pub const ComputeCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug.dispatchThreadgroups(descriptor);
+        try descriptor.validateForLimits(core.defaultDeviceLimits(self.backend));
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.dispatchThreadgroups(descriptor),
             .metal => |*metal| try metal.dispatchThreadgroups(descriptor),
+        };
+    }
+
+    pub fn dispatchThreads(
+        self: *ComputeCommandEncoder,
+        descriptor: core.DispatchThreadsDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        const resolved = try self.debug.dispatchThreads(
+            descriptor,
+            core.defaultDeviceLimits(self.backend),
+        );
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.dispatchThreadgroups(resolved),
+            .metal => |*metal| try metal.dispatchThreadgroups(resolved),
         };
     }
 

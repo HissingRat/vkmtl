@@ -140,6 +140,13 @@ pub const DeviceLimits = struct {
     max_root_constant_bytes: u32 = 0,
     root_constant_alignment: u32 = 4,
     query_result_alignment: u64 = 8,
+    max_compute_threadgroups_per_grid_x: u32 = 65_535,
+    max_compute_threadgroups_per_grid_y: u32 = 65_535,
+    max_compute_threadgroups_per_grid_z: u32 = 65_535,
+    max_compute_threads_per_threadgroup_x: u32 = 1024,
+    max_compute_threads_per_threadgroup_y: u32 = 1024,
+    max_compute_threads_per_threadgroup_z: u32 = 64,
+    max_compute_total_threads_per_threadgroup: u32 = 1024,
 };
 
 pub const FormatCapabilities = struct {
@@ -1958,6 +1965,66 @@ pub const DispatchThreadgroupsDescriptor = struct {
             return CommandEncodingError.InvalidThreadgroupCount;
         }
     }
+
+    pub fn validateForLimits(
+        self: DispatchThreadgroupsDescriptor,
+        limits: DeviceLimits,
+    ) CommandEncodingError!void {
+        try self.validate();
+        if (self.threadgroup_count_x > limits.max_compute_threadgroups_per_grid_x or
+            self.threadgroup_count_y > limits.max_compute_threadgroups_per_grid_y or
+            self.threadgroup_count_z > limits.max_compute_threadgroups_per_grid_z)
+        {
+            return CommandEncodingError.InvalidThreadgroupCount;
+        }
+        if (self.threads_per_threadgroup_x > limits.max_compute_threads_per_threadgroup_x or
+            self.threads_per_threadgroup_y > limits.max_compute_threads_per_threadgroup_y or
+            self.threads_per_threadgroup_z > limits.max_compute_threads_per_threadgroup_z)
+        {
+            return CommandEncodingError.InvalidThreadgroupCount;
+        }
+        const total = checkedMul(usize, self.threads_per_threadgroup_x, self.threads_per_threadgroup_y) catch {
+            return CommandEncodingError.InvalidThreadgroupCount;
+        };
+        const total_xyz = checkedMul(usize, total, self.threads_per_threadgroup_z) catch {
+            return CommandEncodingError.InvalidThreadgroupCount;
+        };
+        if (total_xyz > limits.max_compute_total_threads_per_threadgroup) {
+            return CommandEncodingError.InvalidThreadgroupCount;
+        }
+    }
+};
+
+pub const DispatchThreadsDescriptor = struct {
+    thread_count_x: u32 = 0,
+    thread_count_y: u32 = 1,
+    thread_count_z: u32 = 1,
+    threads_per_threadgroup_x: u32 = 1,
+    threads_per_threadgroup_y: u32 = 1,
+    threads_per_threadgroup_z: u32 = 1,
+
+    pub fn resolve(self: DispatchThreadsDescriptor, limits: DeviceLimits) CommandEncodingError!DispatchThreadgroupsDescriptor {
+        if (self.thread_count_x == 0 or
+            self.thread_count_y == 0 or
+            self.thread_count_z == 0 or
+            self.threads_per_threadgroup_x == 0 or
+            self.threads_per_threadgroup_y == 0 or
+            self.threads_per_threadgroup_z == 0)
+        {
+            return CommandEncodingError.InvalidThreadgroupCount;
+        }
+
+        const resolved = DispatchThreadgroupsDescriptor{
+            .threadgroup_count_x = try ceilDivU32(self.thread_count_x, self.threads_per_threadgroup_x),
+            .threadgroup_count_y = try ceilDivU32(self.thread_count_y, self.threads_per_threadgroup_y),
+            .threadgroup_count_z = try ceilDivU32(self.thread_count_z, self.threads_per_threadgroup_z),
+            .threads_per_threadgroup_x = self.threads_per_threadgroup_x,
+            .threads_per_threadgroup_y = self.threads_per_threadgroup_y,
+            .threads_per_threadgroup_z = self.threads_per_threadgroup_z,
+        };
+        try resolved.validateForLimits(limits);
+        return resolved;
+    }
 };
 
 pub const CopyBufferToBufferDescriptor = struct {
@@ -2357,6 +2424,15 @@ pub const ComputeCommandEncoderDebugState = struct {
     ) CommandEncodingError!void {
         try self.requirePipeline();
         try descriptor.validate();
+    }
+
+    pub fn dispatchThreads(
+        self: *ComputeCommandEncoderDebugState,
+        descriptor: DispatchThreadsDescriptor,
+        limits: DeviceLimits,
+    ) CommandEncodingError!DispatchThreadgroupsDescriptor {
+        try self.requirePipeline();
+        return try descriptor.resolve(limits);
     }
 
     pub fn insertDebugSignpost(
@@ -3599,6 +3675,14 @@ fn checkedMul(comptime T: type, a: anytype, b: anytype) error{Overflow}!T {
 
 fn checkedAdd(comptime T: type, a: T, b: T) error{Overflow}!T {
     return try std.math.add(T, a, b);
+}
+
+fn ceilDivU32(numerator: u32, denominator: u32) CommandEncodingError!u32 {
+    if (denominator == 0) return CommandEncodingError.InvalidThreadgroupCount;
+    const adjusted = std.math.add(u32, numerator, denominator - 1) catch {
+        return CommandEncodingError.InvalidThreadgroupCount;
+    };
+    return adjusted / denominator;
 }
 
 fn requiredUploadBytes(
@@ -5429,6 +5513,42 @@ test "query descriptors validate feature gates and ranges" {
     }).validate(occlusion_set));
 }
 
+test "compute dispatch descriptors validate limits and resolve thread counts" {
+    const limits = DeviceLimits{
+        .max_compute_threadgroups_per_grid_x = 8,
+        .max_compute_threadgroups_per_grid_y = 8,
+        .max_compute_threadgroups_per_grid_z = 8,
+        .max_compute_threads_per_threadgroup_x = 16,
+        .max_compute_threads_per_threadgroup_y = 16,
+        .max_compute_threads_per_threadgroup_z = 4,
+        .max_compute_total_threads_per_threadgroup = 64,
+    };
+
+    try (DispatchThreadgroupsDescriptor{
+        .threadgroup_count_x = 4,
+        .threads_per_threadgroup_x = 8,
+    }).validateForLimits(limits);
+    try std.testing.expectError(CommandEncodingError.InvalidThreadgroupCount, (DispatchThreadgroupsDescriptor{
+        .threadgroup_count_x = 9,
+    }).validateForLimits(limits));
+    try std.testing.expectError(CommandEncodingError.InvalidThreadgroupCount, (DispatchThreadgroupsDescriptor{
+        .threadgroup_count_x = 1,
+        .threads_per_threadgroup_x = 16,
+        .threads_per_threadgroup_y = 16,
+        .threads_per_threadgroup_z = 1,
+    }).validateForLimits(limits));
+
+    const resolved = try (DispatchThreadsDescriptor{
+        .thread_count_x = 33,
+        .threads_per_threadgroup_x = 8,
+    }).resolve(limits);
+    try std.testing.expectEqual(@as(u32, 5), resolved.threadgroup_count_x);
+    try std.testing.expectEqual(@as(u32, 8), resolved.threads_per_threadgroup_x);
+    try std.testing.expectError(CommandEncodingError.InvalidThreadgroupCount, (DispatchThreadsDescriptor{
+        .thread_count_x = 0,
+    }).resolve(limits));
+}
+
 test "command debug state validates render pass ordering" {
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var command_buffer = CommandBufferDebugState{};
@@ -5519,6 +5639,10 @@ test "command debug state validates compute pass ordering" {
     try encoder.setComputePipelineState();
     try encoder.setBindGroup(.{ .index = 0 });
     try encoder.insertDebugSignpost(.{ .label = "dispatch setup" });
+    _ = try encoder.dispatchThreads(.{
+        .thread_count_x = 7,
+        .threads_per_threadgroup_x = 4,
+    }, defaultDeviceLimits(.metal));
     try encoder.dispatchThreadgroups(.{
         .threadgroup_count_x = 1,
         .threads_per_threadgroup_x = 4,

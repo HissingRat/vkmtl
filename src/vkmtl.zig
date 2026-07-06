@@ -126,6 +126,7 @@ pub const QueryResolveDescriptor = core.QueryResolveDescriptor;
 pub const QueryReadbackDescriptor = core.QueryReadbackDescriptor;
 pub const QueryError = core.QueryError;
 pub const DispatchThreadgroupsDescriptor = core.DispatchThreadgroupsDescriptor;
+pub const DispatchThreadsDescriptor = core.DispatchThreadsDescriptor;
 pub const CommandBufferDescriptor = core.CommandBufferDescriptor;
 pub const CopyBufferToBufferDescriptor = core.CopyBufferToBufferDescriptor;
 pub const FillBufferDescriptor = core.FillBufferDescriptor;

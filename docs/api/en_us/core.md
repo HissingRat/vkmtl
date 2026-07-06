@@ -405,7 +405,11 @@ try command_buffer.commit();
 ```
 
 The first compute slice supports storage-buffer and storage-texture
-write/readback validation.
+write/readback validation. `DispatchThreadgroupsDescriptor` validates dispatch
+grid and threadgroup dimensions against `DeviceLimits`; `DispatchThreadsDescriptor`
+and `ComputeCommandEncoder.dispatchThreads(...)` are convenience APIs that
+resolve total thread counts into threadgroup counts before using the same
+backend path.
 
 ## Debug Labels And Groups
 

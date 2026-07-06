@@ -342,6 +342,9 @@ try command_buffer.commit();
 ```
 
 第一版 compute slice 支持 storage-buffer 和 storage-texture 写入/读回验证。
+`DispatchThreadgroupsDescriptor` 会根据 `DeviceLimits` 校验 dispatch grid 和 threadgroup
+维度；`DispatchThreadsDescriptor` 与 `ComputeCommandEncoder.dispatchThreads(...)` 是便利 API，
+会把总线程数 resolve 成 threadgroup 数量，然后走同一条 backend path。
 
 ## Debug Label 与 Group
 
