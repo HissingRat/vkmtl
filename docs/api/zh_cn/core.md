@@ -60,6 +60,11 @@ CPU 可见 buffer 可以用 `buffer.replaceBytes(...)` 更新，也可以用
 `buffer.readBytes(...)` 读回。Texture 通过 `texture.makeTextureView(...)` 创建 view，
 上传 helper 包括 `texture.replaceRegion(...)` 和 `texture.replaceAll2D(...)`。
 
+Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
+能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
+render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan
+barrier lowering 会消费这些 transition。
+
 ## Shader 与 Pipeline
 
 Slang 是唯一的 shader 源语言。应用通常用 `@embedFile(...)` 嵌入 `.slang` 文件，

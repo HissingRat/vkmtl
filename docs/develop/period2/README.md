@@ -58,6 +58,8 @@ Decision notes: `phase3.md`.
 - Reserve manual barriers as a future escape hatch instead of exposing them in
   the base API immediately.
 
+Decision notes: `phase4.md`.
+
 ## Phase 5: Error Model / Validation Layer
 
 - Separate validation errors, unsupported features, backend errors, device lost,

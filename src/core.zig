@@ -100,6 +100,97 @@ pub const FormatCapabilities = struct {
     }
 };
 
+pub const ResourceAccess = enum {
+    read,
+    write,
+};
+
+pub const ResourceUsageKind = enum {
+    vertex_buffer,
+    index_buffer,
+    uniform_buffer,
+    storage_buffer_read,
+    storage_buffer_write,
+    sampled_texture,
+    storage_texture_read,
+    storage_texture_write,
+    render_attachment_read,
+    render_attachment_write,
+    copy_source,
+    copy_destination,
+    present,
+
+    pub fn access(self: ResourceUsageKind) ResourceAccess {
+        return switch (self) {
+            .vertex_buffer,
+            .index_buffer,
+            .uniform_buffer,
+            .storage_buffer_read,
+            .sampled_texture,
+            .storage_texture_read,
+            .render_attachment_read,
+            .copy_source,
+            .present,
+            => .read,
+            .storage_buffer_write,
+            .storage_texture_write,
+            .render_attachment_write,
+            .copy_destination,
+            => .write,
+        };
+    }
+};
+
+pub const ResourceHazard = enum {
+    none,
+    read_after_write,
+    write_after_read,
+    write_after_write,
+};
+
+pub const ResourceUsageTransition = struct {
+    previous: ?ResourceUsageKind = null,
+    next: ResourceUsageKind,
+    hazard: ResourceHazard = .none,
+    requires_barrier: bool = false,
+};
+
+pub const ResourceUsageState = struct {
+    current: ?ResourceUsageKind = null,
+    barrier_count: usize = 0,
+
+    pub fn transitionTo(self: *ResourceUsageState, next: ResourceUsageKind) ResourceUsageTransition {
+        const previous = self.current;
+        const hazard = resourceHazard(previous, next);
+        const requires_barrier = hazard != .none;
+        if (requires_barrier) self.barrier_count += 1;
+        self.current = next;
+        return .{
+            .previous = previous,
+            .next = next,
+            .hazard = hazard,
+            .requires_barrier = requires_barrier,
+        };
+    }
+};
+
+fn resourceHazard(previous: ?ResourceUsageKind, next: ResourceUsageKind) ResourceHazard {
+    const prev = previous orelse return .none;
+    const prev_access = prev.access();
+    const next_access = next.access();
+
+    return switch (prev_access) {
+        .read => switch (next_access) {
+            .read => .none,
+            .write => .write_after_read,
+        },
+        .write => switch (next_access) {
+            .read => .read_after_write,
+            .write => .write_after_write,
+        },
+    };
+}
+
 pub const BackendAvailability = struct {
     vulkan: bool = true,
     metal: bool = builtin.os.tag.isDarwin(),
@@ -2065,6 +2156,27 @@ test "debug override only affects auto selection" {
         .availability = .{ .vulkan = true, .metal = true },
         .debug_override = .vulkan,
     }));
+}
+
+test "resource usage state records portable hazards" {
+    var state = ResourceUsageState{};
+
+    var transition = state.transitionTo(.copy_destination);
+    try std.testing.expectEqual(ResourceHazard.none, transition.hazard);
+    try std.testing.expect(!transition.requires_barrier);
+
+    transition = state.transitionTo(.vertex_buffer);
+    try std.testing.expectEqual(ResourceHazard.read_after_write, transition.hazard);
+    try std.testing.expect(transition.requires_barrier);
+
+    transition = state.transitionTo(.index_buffer);
+    try std.testing.expectEqual(ResourceHazard.none, transition.hazard);
+    try std.testing.expect(!transition.requires_barrier);
+
+    transition = state.transitionTo(.copy_destination);
+    try std.testing.expectEqual(ResourceHazard.write_after_read, transition.hazard);
+    try std.testing.expect(transition.requires_barrier);
+    try std.testing.expectEqual(@as(usize, 2), state.barrier_count);
 }
 
 test "adapter enumeration follows auto backend order" {

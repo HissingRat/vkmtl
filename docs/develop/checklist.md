@@ -250,6 +250,16 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Keep debug leak checks for live resources and pending retirements.
 - [x] Document that current backends still complete work synchronously.
 
+## Period 2 Phase 4 Checklist
+
+- [x] Add portable resource usage kinds.
+- [x] Add usage transition and hazard classification.
+- [x] Track usage state on buffers, textures, and texture views.
+- [x] Record usage from blit copy commands.
+- [x] Record usage from render attachments and vertex/index buffers.
+- [x] Document current limits for bind groups and backend-native barrier
+  lowering.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

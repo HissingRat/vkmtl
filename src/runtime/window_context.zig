@@ -153,7 +153,9 @@ pub const ResourceTracker = struct {
 pub const Buffer = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    length_value: usize,
     usage_value: core.BufferUsage = .{},
+    usage_state: core.ResourceUsageState = .{},
     alive: bool = true,
     impl: Impl,
 
@@ -177,14 +179,23 @@ pub const Buffer = struct {
     }
 
     pub fn length(self: Buffer) usize {
-        return switch (self.impl) {
-            .vulkan => |vulkan| vulkan.length(),
-            .metal => |metal| metal.length(),
-        };
+        return self.length_value;
     }
 
     pub fn usage(self: Buffer) core.BufferUsage {
         return self.usage_value;
+    }
+
+    pub fn currentUsage(self: Buffer) ?core.ResourceUsageKind {
+        return self.usage_state.current;
+    }
+
+    pub fn usageBarrierCount(self: Buffer) usize {
+        return self.usage_state.barrier_count;
+    }
+
+    fn recordUsage(self: *Buffer, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
+        return self.usage_state.transitionTo(next_usage);
     }
 
     pub fn replaceBytes(self: *Buffer, offset: usize, bytes: []const u8) !void {
@@ -221,6 +232,7 @@ pub const Texture = struct {
     format_value: core.TextureFormat,
     usage_value: core.TextureUsage,
     sample_count_value: u32,
+    usage_state: core.ResourceUsageState = .{},
     alive: bool = true,
     impl: Impl,
 
@@ -249,6 +261,18 @@ pub const Texture = struct {
 
     pub fn usage(self: Texture) core.TextureUsage {
         return self.usage_value;
+    }
+
+    pub fn currentUsage(self: Texture) ?core.ResourceUsageKind {
+        return self.usage_state.current;
+    }
+
+    pub fn usageBarrierCount(self: Texture) usize {
+        return self.usage_state.barrier_count;
+    }
+
+    fn recordUsage(self: *Texture, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
+        return self.usage_state.transitionTo(next_usage);
     }
 
     pub fn sampleCount(self: Texture) u32 {
@@ -365,6 +389,7 @@ pub const TextureView = struct {
     sample_count_value: u32,
     width_value: u32,
     height_value: u32,
+    usage_state: core.ResourceUsageState = .{},
     alive: bool = true,
     impl: Impl,
 
@@ -393,6 +418,18 @@ pub const TextureView = struct {
 
     pub fn usage(self: TextureView) core.TextureUsage {
         return self.usage_value;
+    }
+
+    pub fn currentUsage(self: TextureView) ?core.ResourceUsageKind {
+        return self.usage_state.current;
+    }
+
+    pub fn usageBarrierCount(self: TextureView) usize {
+        return self.usage_state.barrier_count;
+    }
+
+    fn recordUsage(self: *TextureView, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
+        return self.usage_state.transitionTo(next_usage);
     }
 
     pub fn sampleCount(self: TextureView) u32 {
@@ -899,6 +936,24 @@ fn metalDepthAttachmentTarget(target: RenderPassDepthAttachmentTarget) MetalComm
     };
 }
 
+fn recordRenderPassUsage(descriptor: RenderPassDescriptor) void {
+    for (descriptor.color_attachments) |attachment| {
+        switch (attachment.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| _ = texture_view.recordUsage(.render_attachment_write),
+        }
+        if (attachment.resolve_target) |resolve_target| {
+            _ = resolve_target.recordUsage(.render_attachment_write);
+        }
+    }
+    if (descriptor.depth_attachment) |depth_attachment| {
+        switch (depth_attachment.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| _ = texture_view.recordUsage(.render_attachment_write),
+        }
+    }
+}
+
 pub const CommandBuffer = struct {
     backend: core.Backend,
     tracker: ?*ResourceTracker = null,
@@ -918,6 +973,7 @@ pub const CommandBuffer = struct {
     ) !RenderCommandEncoder {
         assertObjectAlive(self.alive, "command_buffer");
         try descriptor.validateRuntime(self.backend);
+        recordRenderPassUsage(descriptor);
 
         const core_color_attachments = [_]core.RenderPassColorAttachmentDescriptor{
             descriptor.color_attachments[0].toCore(),
@@ -1049,6 +1105,8 @@ pub const BlitCommandEncoder = struct {
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
         try self.debug.copyBufferToBuffer(descriptor, source.length(), destination.length());
+        _ = source.recordUsage(.copy_source);
+        _ = destination.recordUsage(.copy_destination);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.copyBufferToBuffer(&source.impl.vulkan, &destination.impl.vulkan, descriptor),
             .metal => |*metal| try metal.copyBufferToBuffer(&source.impl.metal, &destination.impl.metal, descriptor),
@@ -1069,6 +1127,8 @@ pub const BlitCommandEncoder = struct {
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
         const resolved = try self.debug.copyBufferToTexture(descriptor, source.length(), destination.textureDescriptor());
+        _ = source.recordUsage(.copy_source);
+        _ = destination.recordUsage(.copy_destination);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.copyBufferToTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
             .metal => |*metal| try metal.copyBufferToTexture(&source.impl.metal, &destination.impl.metal, resolved),
@@ -1089,6 +1149,8 @@ pub const BlitCommandEncoder = struct {
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
         const resolved = try self.debug.copyTextureToBuffer(descriptor, source.textureDescriptor(), destination.length());
+        _ = source.recordUsage(.copy_source);
+        _ = destination.recordUsage(.copy_destination);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.copyTextureToBuffer(&source.impl.vulkan, &destination.impl.vulkan, resolved),
             .metal => |*metal| try metal.copyTextureToBuffer(&source.impl.metal, &destination.impl.metal, resolved),
@@ -1219,6 +1281,7 @@ pub const RenderCommandEncoder = struct {
         assertAlive(buffer.alive, .buffer);
         try expectSameBackend(self.backend, buffer.backend);
         try self.debug.setVertexBuffer(binding);
+        _ = buffer.recordUsage(.vertex_buffer);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setVertexBuffer(&buffer.impl.vulkan, binding),
             .metal => |*metal| try metal.setVertexBuffer(&buffer.impl.metal, binding),
@@ -1230,6 +1293,7 @@ pub const RenderCommandEncoder = struct {
         assertAlive(buffer.alive, .buffer);
         try expectSameBackend(self.backend, buffer.backend);
         try self.debug.setIndexBuffer();
+        _ = buffer.recordUsage(.index_buffer);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setIndexBuffer(&buffer.impl.vulkan),
             .metal => |*metal| try metal.setIndexBuffer(&buffer.impl.metal),
@@ -1472,6 +1536,7 @@ pub const Device = struct {
     }
 
     pub fn makeBuffer(self: *Device, descriptor: core.BufferDescriptor) !Buffer {
+        const length = try descriptor.resolvedLength();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| Buffer.Impl{ .vulkan = try vulkan.makeBuffer(descriptor) },
             .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(descriptor) },
@@ -1480,6 +1545,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .length_value = length,
             .usage_value = descriptor.usage,
             .impl = impl,
         };
@@ -2158,6 +2224,34 @@ test "resource tracker completeAllWork flushes pending retirements" {
     try std.testing.expect(!tracker.hasPendingRetirements());
 }
 
+test "runtime blit encoder records buffer usage transitions" {
+    var tracker = ResourceTracker{};
+    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var encoder = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+    };
+    var source = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 4,
+        .usage_value = .{ .copy_source = true },
+        .impl = undefined,
+    };
+    var destination = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 4,
+        .usage_value = .{ .copy_destination = true },
+        .impl = undefined,
+    };
+
+    try encoder.copyBufferToBuffer(&source, &destination, .{ .size = 4 });
+
+    try std.testing.expectEqual(core.ResourceUsageKind.copy_source, source.currentUsage().?);
+    try std.testing.expectEqual(core.ResourceUsageKind.copy_destination, destination.currentUsage().?);
+}
+
 test "runtime device exposes adapter features limits and format caps" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
@@ -2257,6 +2351,7 @@ test "runtime bind group materialization validates resources against layout" {
     var buffer = Buffer{
         .backend = .vulkan,
         .tracker = &tracker,
+        .length_value = 128,
         .impl = undefined,
     };
     var texture_view = TextureView{
@@ -2328,6 +2423,7 @@ test "runtime bind group materialization validates resources against layout" {
     var metal_buffer = Buffer{
         .backend = .metal,
         .tracker = &tracker,
+        .length_value = 128,
         .impl = undefined,
     };
     const backend_mismatch_entries = [_]BindGroupEntry{

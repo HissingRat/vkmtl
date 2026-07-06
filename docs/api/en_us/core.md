@@ -73,6 +73,12 @@ Buffers created with CPU-visible storage can be updated with
 create views through `texture.makeTextureView(...)`, and upload helpers include
 `texture.replaceRegion(...)` and `texture.replaceAll2D(...)`.
 
+Starting in Period 2, runtime resources record portable usage state.
+`ResourceUsageState` can classify read-after-write, write-after-read, and
+write-after-write hazards. Blit copies, render attachments, vertex buffers, and
+index buffers already feed this state. Later Vulkan barrier lowering should
+consume these transitions.
+
 ## Shaders And Pipelines
 
 Slang is the source language. Applications usually embed `.slang` files and
