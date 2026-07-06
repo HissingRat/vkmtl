@@ -488,10 +488,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 6 Phase 2 Checklist
 
 - [x] Define blit completeness scope before implementation.
-- [ ] Add texture-to-texture copy and fill-buffer descriptor shapes.
-- [ ] Validate copy regions, resource usage, and buffer ranges.
-- [ ] Keep unsupported native blit operations behind typed errors.
-- [ ] Document transfer command limits.
+- [x] Add texture-to-texture copy and fill-buffer descriptor shapes.
+- [x] Validate copy regions, resource usage, and buffer ranges.
+- [x] Keep unsupported native blit operations behind typed errors.
+- [x] Document transfer command limits.
 
 ## Period 6 Phase 3 Checklist
 

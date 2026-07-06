@@ -301,7 +301,11 @@ try blit.endEncoding();
 try command_buffer.commit();
 ```
 
-第一版 blit 支持 buffer-to-buffer、buffer-to-texture 和 texture-to-buffer。
+当前 lowered blit slice 支持 buffer-to-buffer、buffer-to-texture 和
+texture-to-buffer。`CopyTextureToTextureDescriptor` 和 `FillBufferDescriptor`
+已经是 public validation shape；`BlitCommandEncoder.copyTextureToTexture(...)` /
+`fillBuffer(...)` 会先校验 resource usage 和范围，再在 native lowering 接上前返回 typed
+unsupported error。
 
 Compute 使用 Metal 风格的 compute encoder：
 

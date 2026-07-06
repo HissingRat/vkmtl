@@ -360,8 +360,12 @@ try blit.endEncoding();
 try command_buffer.commit();
 ```
 
-The first blit slice supports buffer-to-buffer, buffer-to-texture, and
-texture-to-buffer copies.
+The lowered blit slice supports buffer-to-buffer, buffer-to-texture, and
+texture-to-buffer copies. `CopyTextureToTextureDescriptor` and
+`FillBufferDescriptor` are public validation shapes now, and
+`BlitCommandEncoder.copyTextureToTexture(...)` / `fillBuffer(...)` validate
+resource usage and ranges before returning typed unsupported errors until native
+lowering is implemented.
 
 Compute work uses a Metal-style compute encoder:
 

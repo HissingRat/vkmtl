@@ -402,6 +402,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedShaderReflectionSchema,
         error.UnsupportedCommandBufferPooling,
         error.UnsupportedCommandBufferReset,
+        error.UnsupportedTextureToTextureCopy,
+        error.UnsupportedFillBuffer,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -1746,6 +1748,18 @@ pub const CopyBufferToBufferDescriptor = struct {
     }
 };
 
+pub const FillBufferDescriptor = struct {
+    offset: u64 = 0,
+    size: u64,
+    value: u8 = 0,
+
+    pub fn validate(self: FillBufferDescriptor, buffer_length: usize) CommandEncodingError!void {
+        if (self.size == 0) return CommandEncodingError.InvalidFillBufferRange;
+        const end = std.math.add(u64, self.offset, self.size) catch return CommandEncodingError.InvalidFillBufferRange;
+        if (end > buffer_length) return CommandEncodingError.InvalidFillBufferRange;
+    }
+};
+
 pub const CommandBufferState = enum {
     ready,
     render_encoding,
@@ -2017,6 +2031,25 @@ pub const BlitCommandEncoderDebugState = struct {
         return try descriptor.resolve(source, destination_length);
     }
 
+    pub fn copyTextureToTexture(
+        self: *BlitCommandEncoderDebugState,
+        descriptor: CopyTextureToTextureDescriptor,
+        source: TextureDescriptor,
+        destination: TextureDescriptor,
+    ) CommandEncodingError!ResolvedTextureTextureCopy {
+        try self.requireEncoding();
+        return try descriptor.resolve(source, destination);
+    }
+
+    pub fn fillBuffer(
+        self: *BlitCommandEncoderDebugState,
+        descriptor: FillBufferDescriptor,
+        buffer_length: usize,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try descriptor.validate(buffer_length);
+    }
+
     pub fn endEncoding(
         self: *BlitCommandEncoderDebugState,
         command_buffer: *CommandBufferDebugState,
@@ -2118,6 +2151,8 @@ pub const CommandEncodingError = error{
     UnsupportedMultiDraw,
     UnsupportedCommandBufferPooling,
     UnsupportedCommandBufferReset,
+    UnsupportedTextureToTextureCopy,
+    UnsupportedFillBuffer,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -2125,6 +2160,7 @@ pub const CommandEncodingError = error{
     InvalidCopyBufferLayout,
     InvalidCopyBufferUsage,
     InvalidCopyTextureUsage,
+    InvalidFillBufferRange,
     InvalidThreadgroupCount,
     UnsupportedTextureCopyFormat,
     TextureCopySizeOverflow,
@@ -2587,6 +2623,23 @@ pub const CopyTextureToBufferDescriptor = struct {
     }
 };
 
+pub const CopyTextureToTextureDescriptor = struct {
+    source_region: Region3D,
+    source_mip_level: u32 = 0,
+    source_slice: u32 = 0,
+    destination_origin: Origin3D = .{},
+    destination_mip_level: u32 = 0,
+    destination_slice: u32 = 0,
+
+    pub fn resolve(
+        self: CopyTextureToTextureDescriptor,
+        source: TextureDescriptor,
+        destination: TextureDescriptor,
+    ) CommandEncodingError!ResolvedTextureTextureCopy {
+        return try resolveTextureTextureCopy(self, source, destination);
+    }
+};
+
 pub const ResolvedBufferTextureCopy = struct {
     buffer_offset: u64,
     bytes_per_row: usize,
@@ -2596,6 +2649,15 @@ pub const ResolvedBufferTextureCopy = struct {
     region: Region3D,
     mip_level: u32,
     slice: u32,
+};
+
+pub const ResolvedTextureTextureCopy = struct {
+    source_region: Region3D,
+    source_mip_level: u32,
+    source_slice: u32,
+    destination_origin: Origin3D,
+    destination_mip_level: u32,
+    destination_slice: u32,
 };
 
 pub const TextureError = error{
@@ -3267,17 +3329,12 @@ fn requiredUploadBytes(
     return try checkedAdd(usize, try checkedAdd(usize, image_offset, row_offset), row_bytes);
 }
 
-fn resolveBufferTextureCopy(
-    buffer_length: usize,
+fn validateTextureCopyRegion(
     texture: TextureDescriptor,
     region: Region3D,
     mip_level: u32,
     slice: u32,
-    layout: BufferTextureCopyLayout,
-) CommandEncodingError!ResolvedBufferTextureCopy {
-    texture.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
-    if (!isColorFormat(texture.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
-    if (texture.sample_count != 1) return CommandEncodingError.UnsupportedTextureCopyFormat;
+) CommandEncodingError!void {
     if (region.size.isZero()) return CommandEncodingError.InvalidCopyTextureRegion;
     if (mip_level >= texture.mip_level_count) return CommandEncodingError.InvalidCopyTextureRegion;
 
@@ -3310,6 +3367,62 @@ fn resolveBufferTextureCopy(
             validateRange(region.origin.z, region.size.depth, mip_depth) catch return CommandEncodingError.InvalidCopyTextureRegion;
         },
     }
+}
+
+fn resolveTextureTextureCopy(
+    descriptor: CopyTextureToTextureDescriptor,
+    source: TextureDescriptor,
+    destination: TextureDescriptor,
+) CommandEncodingError!ResolvedTextureTextureCopy {
+    source.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
+    destination.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
+    if (source.format != destination.format) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    if (!isColorFormat(source.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    if (source.sample_count != 1 or destination.sample_count != 1) {
+        return CommandEncodingError.UnsupportedTextureCopyFormat;
+    }
+    if (source.dimension != destination.dimension) return CommandEncodingError.UnsupportedTextureCopyFormat;
+
+    try validateTextureCopyRegion(
+        source,
+        descriptor.source_region,
+        descriptor.source_mip_level,
+        descriptor.source_slice,
+    );
+
+    const destination_region = Region3D{
+        .origin = descriptor.destination_origin,
+        .size = descriptor.source_region.size,
+    };
+    try validateTextureCopyRegion(
+        destination,
+        destination_region,
+        descriptor.destination_mip_level,
+        descriptor.destination_slice,
+    );
+
+    return .{
+        .source_region = descriptor.source_region,
+        .source_mip_level = descriptor.source_mip_level,
+        .source_slice = descriptor.source_slice,
+        .destination_origin = descriptor.destination_origin,
+        .destination_mip_level = descriptor.destination_mip_level,
+        .destination_slice = descriptor.destination_slice,
+    };
+}
+
+fn resolveBufferTextureCopy(
+    buffer_length: usize,
+    texture: TextureDescriptor,
+    region: Region3D,
+    mip_level: u32,
+    slice: u32,
+    layout: BufferTextureCopyLayout,
+) CommandEncodingError!ResolvedBufferTextureCopy {
+    texture.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
+    if (!isColorFormat(texture.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    if (texture.sample_count != 1) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    try validateTextureCopyRegion(texture, region, mip_level, slice);
 
     const bytes_per_pixel = textureFormatBytesPerPixel(texture.format);
     const tight_row_bytes = checkedMul(usize, region.size.width, bytes_per_pixel) catch {
@@ -4807,6 +4920,45 @@ test "copy descriptors validate ranges and texture layouts" {
     try std.testing.expectError(CommandEncodingError.InvalidCopyBufferRange, (CopyTextureToBufferDescriptor{
         .source_region = .{ .size = .{ .width = 4, .height = 4 } },
     }).resolve(texture, 8));
+
+    try (FillBufferDescriptor{
+        .offset = 4,
+        .size = 4,
+        .value = 0xff,
+    }).validate(16);
+    try std.testing.expectError(CommandEncodingError.InvalidFillBufferRange, (FillBufferDescriptor{
+        .offset = 12,
+        .size = 8,
+    }).validate(16));
+
+    const source_texture = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 4,
+        .height = 4,
+        .usage = .{ .copy_source = true },
+    };
+    const destination_texture = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 4,
+        .height = 4,
+        .usage = .{ .copy_destination = true },
+    };
+    const resolved_texture_copy = try (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 2, .height = 2 } },
+        .destination_origin = .{ .x = 1, .y = 1 },
+    }).resolve(source_texture, destination_texture);
+    try std.testing.expectEqual(@as(u32, 1), resolved_texture_copy.destination_origin.x);
+    try std.testing.expectError(CommandEncodingError.InvalidCopyTextureRegion, (CopyTextureToTextureDescriptor{
+        .source_region = .{ .origin = .{ .x = 3 }, .size = .{ .width = 2, .height = 1 } },
+    }).resolve(source_texture, destination_texture));
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureCopyFormat, (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+    }).resolve(source_texture, .{
+        .format = .bgra8_unorm,
+        .width = 4,
+        .height = 4,
+        .usage = .{ .copy_destination = true },
+    }));
 }
 
 test "query descriptors validate feature gates and ranges" {
@@ -4913,8 +5065,23 @@ test "command debug state validates blit pass ordering" {
 
     try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.commit());
     try encoder.copyBufferToBuffer(.{ .size = 4 }, 8, 8);
+    try encoder.fillBuffer(.{ .size = 4 }, 8);
+    _ = try encoder.copyTextureToTexture(.{
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+    }, .{
+        .format = .rgba8_unorm,
+        .width = 1,
+        .height = 1,
+        .usage = .{ .copy_source = true },
+    }, .{
+        .format = .rgba8_unorm,
+        .width = 1,
+        .height = 1,
+        .usage = .{ .copy_destination = true },
+    });
     try encoder.endEncoding(&command_buffer);
     try std.testing.expectError(CommandEncodingError.InvalidBlitCommandEncoderState, encoder.copyBufferToBuffer(.{ .size = 4 }, 8, 8));
+    try std.testing.expectError(CommandEncodingError.InvalidBlitCommandEncoderState, encoder.fillBuffer(.{ .size = 4 }, 8));
     try command_buffer.commit();
 }
 

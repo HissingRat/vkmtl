@@ -1449,6 +1449,40 @@ pub const BlitCommandEncoder = struct {
         };
     }
 
+    pub fn copyTextureToTexture(
+        self: *BlitCommandEncoder,
+        source: *Texture,
+        destination: *Texture,
+        descriptor: core.CopyTextureToTextureDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        assertAlive(source.alive, .texture);
+        assertAlive(destination.alive, .texture);
+        try expectSameBackend(self.backend, source.backend);
+        try expectSameBackend(self.backend, destination.backend);
+        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        _ = try self.debug.copyTextureToTexture(
+            descriptor,
+            source.textureDescriptor(),
+            destination.textureDescriptor(),
+        );
+        return core.CommandEncodingError.UnsupportedTextureToTextureCopy;
+    }
+
+    pub fn fillBuffer(
+        self: *BlitCommandEncoder,
+        buffer: *Buffer,
+        descriptor: core.FillBufferDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        assertAlive(buffer.alive, .buffer);
+        try expectSameBackend(self.backend, buffer.backend);
+        if (!buffer.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try self.debug.fillBuffer(descriptor, buffer.length());
+        return core.CommandEncodingError.UnsupportedFillBuffer;
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         try self.debug_groups.requireEmpty();

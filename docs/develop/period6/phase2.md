@@ -15,4 +15,8 @@ lowering explicit.
 - Texture-to-texture, fill-buffer, clear-texture, and mipmap generation encoder
   commands are represented first and can return typed unsupported errors until
   native lowering lands.
+- `CopyTextureToTextureDescriptor` validates format compatibility, region
+  bounds, mip levels, slices, dimensions, and sample count.
+- `FillBufferDescriptor` validates byte ranges. Runtime `fillBuffer(...)`
+  additionally requires copy-destination buffer usage.
 - Copy alignment checks remain portable and conservative.
