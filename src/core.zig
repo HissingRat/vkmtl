@@ -559,6 +559,24 @@ pub const ObjectCacheError = error{
     MissingObjectCacheLayout,
 };
 
+pub const ObjectCacheMode = enum {
+    enabled,
+    disabled,
+    diagnostics_only,
+};
+
+pub const ObjectCachePolicy = struct {
+    mode: ObjectCacheMode = .enabled,
+
+    pub fn allowsReuse(self: ObjectCachePolicy) bool {
+        return self.mode == .enabled;
+    }
+
+    pub fn recordsDiagnostics(self: ObjectCachePolicy) bool {
+        return self.mode != .disabled;
+    }
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -3289,6 +3307,23 @@ pub const SamplerDescriptor = struct {
         if (self.border_color != null and !features.sampler_border_color) {
             return SamplerError.UnsupportedSamplerBorderColor;
         }
+    }
+};
+
+pub const SamplerCacheKeyDescriptor = struct {
+    descriptor: SamplerDescriptor = .{},
+    policy: ObjectCachePolicy = .{},
+
+    pub fn validate(self: SamplerCacheKeyDescriptor) SamplerError!void {
+        try self.descriptor.validate();
+    }
+
+    pub fn validateForDevice(
+        self: SamplerCacheKeyDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) SamplerError!void {
+        try self.descriptor.validateForDevice(features, limits);
     }
 };
 
@@ -6256,6 +6291,21 @@ test "sampler descriptor validates feature-gated fields" {
     try std.testing.expectError(SamplerError.InvalidMaxAnisotropy, (SamplerDescriptor{
         .max_anisotropy = 16,
     }).validateForDevice(.{ .sampler_anisotropy = true }, .{ .max_sampler_anisotropy = 8 }));
+
+    const cache_key = SamplerCacheKeyDescriptor{
+        .descriptor = .{ .max_anisotropy = 4 },
+    };
+    try cache_key.validateForDevice(.{ .sampler_anisotropy = true }, .{ .max_sampler_anisotropy = 8 });
+    try std.testing.expect(cache_key.policy.allowsReuse());
+
+    const disabled_key = SamplerCacheKeyDescriptor{
+        .policy = .{ .mode = .disabled },
+    };
+    try disabled_key.validate();
+    try std.testing.expect(!disabled_key.policy.allowsReuse());
+    try std.testing.expect(!disabled_key.policy.recordsDiagnostics());
+    try std.testing.expect((ObjectCachePolicy{ .mode = .diagnostics_only }).recordsDiagnostics());
+    try std.testing.expect(!(ObjectCachePolicy{ .mode = .diagnostics_only }).allowsReuse());
 }
 
 test "heap descriptor is gated by device features" {

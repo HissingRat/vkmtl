@@ -616,10 +616,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 6 Checklist
 
 - [x] Define sampler cache scope before implementation.
-- [ ] Add sampler cache-key descriptor shape and opt-out policy.
-- [ ] Validate keys with existing sampler descriptor validation.
-- [ ] Keep native sampler reuse as future backend work.
-- [ ] Document sampler cache limits.
+- [x] Add sampler cache-key descriptor shape and opt-out policy.
+- [x] Validate keys with existing sampler descriptor validation.
+- [x] Keep native sampler reuse as future backend work.
+- [x] Document sampler cache limits.
 
 ## Period 8 Phase 7 Checklist
 

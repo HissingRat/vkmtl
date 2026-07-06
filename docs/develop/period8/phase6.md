@@ -10,4 +10,8 @@ Phase 6 defines sampler cache identity and opt-out policy.
 
 ## Current Limits
 
+- `SamplerCacheKeyDescriptor` wraps `SamplerDescriptor` and an
+  `ObjectCachePolicy`.
+- `ObjectCachePolicy.mode = .disabled` opts out of reuse and diagnostics;
+  `.diagnostics_only` records diagnostics without requesting reuse.
 - Native sampler reuse is not implemented yet.
