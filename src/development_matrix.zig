@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("core.zig");
 
 pub const DevelopmentMatrixError = error{
     EmptyName,
@@ -7,7 +8,18 @@ pub const DevelopmentMatrixError = error{
     EmptyExpectation,
     EmptyValidationGoal,
     MissingDeterministicOutput,
+    MissingFeatureGate,
     DuplicateName,
+};
+
+pub const FeatureGate = enum {
+    multi_surface,
+
+    pub fn enabled(self: FeatureGate, features: core.DeviceFeatures) bool {
+        return switch (self) {
+            .multi_surface => features.multi_surface,
+        };
+    }
 };
 
 pub const ExampleKind = enum {
@@ -223,6 +235,59 @@ pub fn implementedComputeGalleryCount(cases: []const ComputeGalleryCase) usize {
     return count;
 }
 
+pub const MultiWindowExampleKind = enum {
+    single_device_multiple_surfaces,
+    multiple_swapchains,
+    resize_handling,
+    surface_lost,
+};
+
+pub const MultiWindowExampleCase = struct {
+    name: []const u8,
+    kind: MultiWindowExampleKind,
+    status: GalleryCaseStatus = .planned,
+    required_feature: ?FeatureGate = .multi_surface,
+    validation_goal: []const u8,
+
+    pub fn validate(self: MultiWindowExampleCase) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation_goal.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        if (self.required_feature == null) return DevelopmentMatrixError.MissingFeatureGate;
+    }
+};
+
+pub const multi_window_gallery = [_]MultiWindowExampleCase{
+    .{
+        .name = "single_device_multiple_surfaces",
+        .kind = .single_device_multiple_surfaces,
+        .validation_goal = "one selected device owns more than one public Surface view",
+    },
+    .{
+        .name = "multiple_swapchains",
+        .kind = .multiple_swapchains,
+        .validation_goal = "one selected backend presents to more than one swapchain",
+    },
+    .{
+        .name = "multi_window_resize",
+        .kind = .resize_handling,
+        .validation_goal = "resize one surface without invalidating the other",
+    },
+    .{
+        .name = "surface_lost_recovery",
+        .kind = .surface_lost,
+        .validation_goal = "surface-lost handling reports typed errors and allows recreation",
+    },
+};
+
+pub fn validateMultiWindowGallery(cases: []const MultiWindowExampleCase) DevelopmentMatrixError!void {
+    for (cases, 0..) |case, i| {
+        try case.validate();
+        for (cases[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, case.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
     try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
@@ -239,4 +304,13 @@ test "deterministic examples declare output markers" {
 test "compute gallery metadata is valid" {
     try validateComputeGallery(compute_gallery[0..]);
     try std.testing.expectEqual(@as(usize, 1), implementedComputeGalleryCount(compute_gallery[0..]));
+}
+
+test "multi-window gallery is gated by multi-surface feature" {
+    try validateMultiWindowGallery(multi_window_gallery[0..]);
+    for (multi_window_gallery) |case| {
+        try std.testing.expectEqual(FeatureGate.multi_surface, case.required_feature.?);
+        try std.testing.expect(!case.required_feature.?.enabled(core.DeviceFeatures{}));
+        try std.testing.expect(case.required_feature.?.enabled(.{ .multi_surface = true }));
+    }
 }

@@ -317,3 +317,16 @@ Current status:
 
 Planned compute examples should keep deterministic readback or pixel validation
 where practical so they can become useful backend regression tests.
+
+## Multi-Window Gallery
+
+Multi-window examples are planned, not implemented. The tracked cases are:
+
+- `single_device_multiple_surfaces`
+- `multiple_swapchains`
+- `multi_window_resize`
+- `surface_lost_recovery`
+
+Current public `SurfaceCollection` can track multiple neutral surface states,
+but native multiple swapchain execution remains gated by
+`DeviceFeatures.multi_surface`.

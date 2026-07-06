@@ -650,10 +650,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 3 Checklist
 
 - [x] Define multi-window example scope before implementation.
-- [ ] Add multi-window example planning descriptors.
-- [ ] Gate native multi-surface execution behind `DeviceFeatures.multi_surface`.
-- [ ] Document current `SurfaceCollection` limits.
-- [ ] Add validation for planned multi-window cases.
+- [x] Add multi-window example planning descriptors.
+- [x] Gate native multi-surface execution behind `DeviceFeatures.multi_surface`.
+- [x] Document current `SurfaceCollection` limits.
+- [x] Add validation for planned multi-window cases.
 
 ## Period 9 Phase 4 Checklist
 
