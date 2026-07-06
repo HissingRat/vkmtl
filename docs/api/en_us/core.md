@@ -130,6 +130,13 @@ backend mappings are implemented.
 resource creation still owns memory internally, and `DeviceFeatures.heaps` is
 false until explicit Vulkan/Metal heap allocation is implemented.
 
+Sparse and tiled resource shapes are represented by
+`SparseBufferMappingDescriptor`, `SparseTextureMappingDescriptor`, and
+`SparseMappingCommitDescriptor`. They validate page size, region alignment, and
+residency intent behind `DeviceFeatures.sparse_buffers`,
+`DeviceFeatures.sparse_textures`, and `DeviceFeatures.tiled_textures`. Native
+residency management is future backend work.
+
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and
 write-after-write hazards. Blit copies, render attachments, vertex buffers, and

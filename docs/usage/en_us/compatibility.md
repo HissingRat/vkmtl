@@ -29,3 +29,7 @@ implemented.
 Descriptor indexing maps toward Vulkan descriptor indexing. Argument buffers map
 toward Metal argument buffers. Both are represented by
 `DescriptorIndexingLayoutDescriptor` and remain disabled by default.
+
+Sparse buffers/textures map toward Vulkan sparse resources and Metal tiled or
+sparse texture concepts. The current descriptors validate page-aligned mapping
+intent only.

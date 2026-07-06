@@ -25,3 +25,6 @@ pipeline cache 都会保持 gated，直到 backend lowering 实现。
 
 Descriptor indexing 未来映射到 Vulkan descriptor indexing，argument buffer 未来映射到 Metal
 argument buffer。两者目前都通过 `DescriptorIndexingLayoutDescriptor` 表达，默认关闭。
+
+Sparse buffer/texture 未来映射到 Vulkan sparse resource 和 Metal tiled/sparse texture 概念。
+当前 descriptor 只校验 page-aligned mapping intent。

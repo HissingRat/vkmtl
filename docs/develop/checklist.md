@@ -703,10 +703,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 2 Checklist
 
 - [x] Define sparse / tiled resource scope before implementation.
-- [ ] Add feature gates and sparse resource descriptor shapes.
-- [ ] Validate page size, region alignment, and residency intent.
-- [ ] Keep native sparse/tiled resource lowering unsupported.
-- [ ] Document portability limits.
+- [x] Add feature gates and sparse resource descriptor shapes.
+- [x] Validate page size, region alignment, and residency intent.
+- [x] Keep native sparse/tiled resource lowering unsupported.
+- [x] Document portability limits.
 
 ## Period 10 Phase 3 Checklist
 

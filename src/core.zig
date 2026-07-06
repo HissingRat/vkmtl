@@ -106,6 +106,9 @@ pub const DeviceFeatures = struct {
     bind_groups: bool = true,
     descriptor_indexing: bool = false,
     argument_buffers: bool = false,
+    sparse_buffers: bool = false,
+    sparse_textures: bool = false,
+    tiled_textures: bool = false,
     transfer_commands: bool = true,
     storage_buffers: bool = true,
     storage_textures: bool = true,
@@ -156,6 +159,11 @@ pub const DeviceLimits = struct {
     dispatch_indirect_alignment: u64 = 4,
     max_bindless_descriptors_per_range: u32 = 0,
     max_bindless_ranges_per_layout: u32 = 0,
+    sparse_buffer_page_size: u64 = 0,
+    sparse_texture_page_width: u32 = 0,
+    sparse_texture_page_height: u32 = 0,
+    sparse_texture_page_depth: u32 = 0,
+    max_sparse_regions_per_commit: u32 = 0,
 };
 
 pub const FormatCapabilities = struct {
@@ -570,6 +578,12 @@ pub const AdvancedFeatureError = error{
     EmptyDescriptorIndexingVisibility,
     InvalidDescriptorIndexingCount,
     DescriptorIndexingRangeCountExceeded,
+    UnsupportedSparseBuffers,
+    UnsupportedSparseTextures,
+    UnsupportedTiledTextures,
+    InvalidSparsePageSize,
+    InvalidSparseRegion,
+    SparseRegionCountExceeded,
 };
 
 pub const ObjectCacheMode = enum {
@@ -786,6 +800,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedThreadgroupMemory,
         error.UnsupportedDescriptorIndexing,
         error.UnsupportedArgumentBuffers,
+        error.UnsupportedSparseBuffers,
+        error.UnsupportedSparseTextures,
+        error.UnsupportedTiledTextures,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -938,6 +955,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptyDescriptorIndexingVisibility,
         error.InvalidDescriptorIndexingCount,
         error.DescriptorIndexingRangeCountExceeded,
+        error.InvalidSparsePageSize,
+        error.InvalidSparseRegion,
+        error.SparseRegionCountExceeded,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -3091,6 +3111,83 @@ pub const Region3D = struct {
 };
 
 pub const TextureRegion = Region3D;
+
+pub const SparseResidency = enum {
+    resident,
+    evicted,
+};
+
+pub const SparseBufferMappingDescriptor = struct {
+    offset: u64 = 0,
+    size: u64 = 0,
+    page_size: u64 = 0,
+    residency: SparseResidency = .resident,
+
+    pub fn validate(self: SparseBufferMappingDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.sparse_buffers) return AdvancedFeatureError.UnsupportedSparseBuffers;
+        const page_size = if (self.page_size != 0) self.page_size else limits.sparse_buffer_page_size;
+        if (page_size == 0) return AdvancedFeatureError.InvalidSparsePageSize;
+        if (self.size == 0) return AdvancedFeatureError.InvalidSparseRegion;
+        if (!isAlignedU64(self.offset, page_size) or !isAlignedU64(self.size, page_size)) {
+            return AdvancedFeatureError.InvalidSparseRegion;
+        }
+    }
+};
+
+pub const SparseTextureKind = enum {
+    sparse_texture,
+    tiled_texture,
+};
+
+pub const SparseTextureMappingDescriptor = struct {
+    kind: SparseTextureKind = .sparse_texture,
+    region: Region3D,
+    mip_level: u32 = 0,
+    array_layer: u32 = 0,
+    page_extent: Size3D,
+    residency: SparseResidency = .resident,
+
+    pub fn validate(self: SparseTextureMappingDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        switch (self.kind) {
+            .sparse_texture => if (!features.sparse_textures) return AdvancedFeatureError.UnsupportedSparseTextures,
+            .tiled_texture => if (!features.tiled_textures) return AdvancedFeatureError.UnsupportedTiledTextures,
+        }
+        if (self.region.size.isZero() or self.page_extent.isZero()) return AdvancedFeatureError.InvalidSparseRegion;
+        if (limits.sparse_texture_page_width != 0 and self.page_extent.width != limits.sparse_texture_page_width) {
+            return AdvancedFeatureError.InvalidSparsePageSize;
+        }
+        if (limits.sparse_texture_page_height != 0 and self.page_extent.height != limits.sparse_texture_page_height) {
+            return AdvancedFeatureError.InvalidSparsePageSize;
+        }
+        if (limits.sparse_texture_page_depth != 0 and self.page_extent.depth != limits.sparse_texture_page_depth) {
+            return AdvancedFeatureError.InvalidSparsePageSize;
+        }
+        if (!isAlignedU32(self.region.origin.x, self.page_extent.width) or
+            !isAlignedU32(self.region.origin.y, self.page_extent.height) or
+            !isAlignedU32(self.region.origin.z, self.page_extent.depth) or
+            !isAlignedU32(self.region.size.width, self.page_extent.width) or
+            !isAlignedU32(self.region.size.height, self.page_extent.height) or
+            !isAlignedU32(self.region.size.depth, self.page_extent.depth))
+        {
+            return AdvancedFeatureError.InvalidSparseRegion;
+        }
+    }
+};
+
+pub const SparseMappingCommitDescriptor = struct {
+    buffers: []const SparseBufferMappingDescriptor = &.{},
+    textures: []const SparseTextureMappingDescriptor = &.{},
+
+    pub fn validate(self: SparseMappingCommitDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        const count = self.buffers.len + self.textures.len;
+        if (count == 0) return AdvancedFeatureError.InvalidSparseRegion;
+        if (limits.max_sparse_regions_per_commit != 0 and count > limits.max_sparse_regions_per_commit) {
+            return AdvancedFeatureError.SparseRegionCountExceeded;
+        }
+        for (self.buffers) |buffer| try buffer.validate(features, limits);
+        for (self.textures) |texture| try texture.validate(features, limits);
+    }
+};
 
 pub const TextureReplaceRegionDescriptor = struct {
     bytes: []const u8,
@@ -6361,6 +6458,40 @@ test "texture descriptor validates and resolves mip ranges" {
         .height = 4,
         .mip_level_count = 5,
     }).validate());
+}
+
+test "sparse resource descriptors validate feature gates and alignment" {
+    const buffer_mapping = SparseBufferMappingDescriptor{
+        .offset = 4096,
+        .size = 4096,
+    };
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedSparseBuffers, buffer_mapping.validate(.{}, .{}));
+    try buffer_mapping.validate(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 });
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseBufferMappingDescriptor{
+        .offset = 1,
+        .size = 4096,
+    }).validate(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 }));
+
+    const texture_mapping = SparseTextureMappingDescriptor{
+        .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+    };
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedSparseTextures, texture_mapping.validate(.{}, .{}));
+    try texture_mapping.validate(.{ .sparse_textures = true }, .{
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+    });
+    try std.testing.expectError(AdvancedFeatureError.SparseRegionCountExceeded, (SparseMappingCommitDescriptor{
+        .buffers = &.{buffer_mapping},
+        .textures = &.{texture_mapping},
+    }).validate(.{ .sparse_buffers = true, .sparse_textures = true }, .{
+        .sparse_buffer_page_size = 4096,
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+        .max_sparse_regions_per_commit = 1,
+    }));
 }
 
 test "texture usage can detect empty usage" {

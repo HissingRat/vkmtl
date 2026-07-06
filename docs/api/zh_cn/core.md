@@ -106,6 +106,12 @@ Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和
 `HeapDescriptor` 定义 future advanced memory/heap shape。默认资源创建仍由 vkmtl 内部管理 memory；
 `DeviceFeatures.heaps` 在显式 Vulkan/Metal heap allocation 实现前保持 false。
 
+Sparse/tiled resource shape 由 `SparseBufferMappingDescriptor`、
+`SparseTextureMappingDescriptor` 和 `SparseMappingCommitDescriptor` 表示。它们会在
+`DeviceFeatures.sparse_buffers`、`DeviceFeatures.sparse_textures` 和
+`DeviceFeatures.tiled_textures` gate 后面校验 page size、region alignment 和 residency intent。
+Native residency management 仍是 future backend work。
+
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
 render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan
