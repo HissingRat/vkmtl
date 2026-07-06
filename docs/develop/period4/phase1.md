@@ -9,6 +9,8 @@ introspection helpers.
 - Add binding resource classification helpers.
 - Add layout helpers for entry lookup and resource counts.
 - Keep Vulkan descriptor sets and Metal binding slots behind backend modules.
+- Implemented as `BindingLocation`, `BindingResourceKind` classification
+  helpers, and `BindGroupLayoutDescriptor` lookup/count helpers.
 
 ## Current Limits
 

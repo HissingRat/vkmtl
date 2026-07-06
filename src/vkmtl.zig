@@ -119,6 +119,7 @@ pub const HeapStorageMode = core.HeapStorageMode;
 pub const HeapDescriptor = core.HeapDescriptor;
 pub const HeapError = core.HeapError;
 pub const ShaderVisibility = core.ShaderVisibility;
+pub const BindingLocation = core.BindingLocation;
 pub const BindingResourceKind = core.BindingResourceKind;
 pub const BindGroupLayoutEntry = core.BindGroupLayoutEntry;
 pub const BindGroupLayoutDescriptor = core.BindGroupLayoutDescriptor;

@@ -1988,12 +1988,42 @@ pub const ShaderVisibility = struct {
     }
 };
 
+pub const BindingLocation = struct {
+    group: u32,
+    binding: u32,
+};
+
 pub const BindingResourceKind = enum {
     uniform_buffer,
     storage_buffer,
     storage_texture,
     sampled_texture,
     sampler,
+
+    pub fn isBuffer(self: BindingResourceKind) bool {
+        return switch (self) {
+            .uniform_buffer, .storage_buffer => true,
+            .storage_texture, .sampled_texture, .sampler => false,
+        };
+    }
+
+    pub fn isTexture(self: BindingResourceKind) bool {
+        return switch (self) {
+            .storage_texture, .sampled_texture => true,
+            .uniform_buffer, .storage_buffer, .sampler => false,
+        };
+    }
+
+    pub fn isSampler(self: BindingResourceKind) bool {
+        return self == .sampler;
+    }
+
+    pub fn isWritable(self: BindingResourceKind) bool {
+        return switch (self) {
+            .storage_buffer, .storage_texture => true,
+            .uniform_buffer, .sampled_texture, .sampler => false,
+        };
+    }
 };
 
 pub const BindGroupLayoutEntry = struct {
@@ -2025,6 +2055,23 @@ pub const BindGroupLayoutDescriptor = struct {
             if (entry.binding == binding) return entry;
         }
         return null;
+    }
+
+    pub fn containsBinding(self: BindGroupLayoutDescriptor, binding: u32) bool {
+        return self.entryForBinding(binding) != null;
+    }
+
+    pub fn locationForBinding(self: BindGroupLayoutDescriptor, group: u32, binding: u32) ?BindingLocation {
+        if (!self.containsBinding(binding)) return null;
+        return .{ .group = group, .binding = binding };
+    }
+
+    pub fn resourceCount(self: BindGroupLayoutDescriptor, kind: BindingResourceKind) usize {
+        var count: usize = 0;
+        for (self.entries) |entry| {
+            if (entry.resource == kind) count += 1;
+        }
+        return count;
     }
 };
 
@@ -3870,6 +3917,14 @@ test "bind group layout descriptor validates resource bindings" {
     try layout.validate();
     try std.testing.expectEqual(BindingResourceKind.uniform_buffer, layout.entryForBinding(0).?.resource);
     try std.testing.expect(layout.entryForBinding(9) == null);
+    try std.testing.expect(layout.containsBinding(1));
+    try std.testing.expectEqual(BindingLocation{ .group = 3, .binding = 1 }, layout.locationForBinding(3, 1).?);
+    try std.testing.expect(layout.locationForBinding(3, 9) == null);
+    try std.testing.expectEqual(@as(usize, 1), layout.resourceCount(.sampler));
+    try std.testing.expect(BindingResourceKind.storage_buffer.isBuffer());
+    try std.testing.expect(BindingResourceKind.sampled_texture.isTexture());
+    try std.testing.expect(BindingResourceKind.sampler.isSampler());
+    try std.testing.expect(BindingResourceKind.storage_texture.isWritable());
 
     try std.testing.expectError(BindingError.MissingBindGroupLayoutEntry, (BindGroupLayoutDescriptor{}).validate());
 

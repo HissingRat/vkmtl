@@ -365,10 +365,10 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 1 Checklist
 
-- [ ] Add portable binding location shape.
-- [ ] Add binding resource classification helpers.
-- [ ] Add bind group layout introspection helpers.
-- [ ] Document backend mapping limits.
+- [x] Add portable binding location shape.
+- [x] Add binding resource classification helpers.
+- [x] Add bind group layout introspection helpers.
+- [x] Document backend mapping limits.
 
 ## Period 4 Phase 2 Checklist
 
