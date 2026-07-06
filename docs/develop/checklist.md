@@ -455,11 +455,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 6 Checklist
 
-- [ ] Add explicit vertex buffer indices.
-- [ ] Add instance step-rate metadata.
-- [ ] Validate duplicate vertex attributes and buffer indices.
-- [ ] Validate vertex layout limits.
-- [ ] Document vertex layout limits.
+- [x] Add explicit vertex buffer indices.
+- [x] Add instance step-rate metadata.
+- [x] Validate duplicate vertex attributes and buffer indices.
+- [x] Validate vertex layout limits.
+- [x] Document vertex layout limits.
 
 ## Period 5 Phase 7 Checklist
 

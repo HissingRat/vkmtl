@@ -92,6 +92,7 @@ pub const DeviceFeatures = struct {
     blend_state: bool = false,
     independent_blend: bool = false,
     stencil_state: bool = false,
+    vertex_instance_step_rate: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -362,6 +363,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedIndependentBlend,
         error.UnsupportedBlendFormat,
         error.UnsupportedStencilState,
+        error.UnsupportedInstanceStepRate,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -379,6 +381,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ShaderReflectionVisibilityMismatch,
         error.InvalidVertexStride,
         error.InvalidVertexAttributeOffset,
+        error.DuplicateVertexBufferIndex,
+        error.DuplicateVertexAttributeLocation,
+        error.InvalidInstanceStepRate,
         error.InvalidDepthBias,
         error.InvalidStencilMask,
         error.InvalidColorAttachmentFormat,
@@ -960,16 +965,28 @@ pub const VertexAttributeDescriptor = struct {
 
 pub const VertexBufferLayoutDescriptor = struct {
     stride: u32,
+    buffer_index: ?u32 = null,
     step_function: VertexStepFunction = .per_vertex,
+    instance_step_rate: u32 = 1,
     attributes: []const VertexAttributeDescriptor = &.{},
 
     pub fn validate(self: VertexBufferLayoutDescriptor) PipelineError!void {
+        try self.validateAt(0);
+    }
+
+    fn validateAt(self: VertexBufferLayoutDescriptor, default_index: usize) PipelineError!void {
+        if (self.resolvedBufferIndex(default_index) >= default_max_vertex_buffer_slots) return PipelineError.InvalidVertexBufferIndex;
         if (self.stride == 0 and self.attributes.len != 0) return PipelineError.InvalidVertexStride;
+        if (self.instance_step_rate == 0) return PipelineError.InvalidInstanceStepRate;
         for (self.attributes) |attribute| {
             if (attribute.offset > self.stride or vertexFormatSize(attribute.format) > self.stride - attribute.offset) {
                 return PipelineError.InvalidVertexAttributeOffset;
             }
         }
+    }
+
+    pub fn resolvedBufferIndex(self: VertexBufferLayoutDescriptor, default_index: usize) u32 {
+        return self.buffer_index orelse @intCast(default_index);
     }
 };
 
@@ -977,8 +994,24 @@ pub const VertexDescriptor = struct {
     buffers: []const VertexBufferLayoutDescriptor = &.{},
 
     pub fn validate(self: VertexDescriptor) PipelineError!void {
-        for (self.buffers) |buffer| {
-            try buffer.validate();
+        for (self.buffers, 0..) |buffer, i| {
+            try buffer.validateAt(i);
+            const resolved_index = buffer.resolvedBufferIndex(i);
+            for (self.buffers[i + 1 ..], i + 1..) |other, other_i| {
+                if (resolved_index == other.resolvedBufferIndex(other_i)) return PipelineError.DuplicateVertexBufferIndex;
+            }
+            for (buffer.attributes) |attribute| {
+                for (self.buffers[i + 1 ..]) |other| {
+                    for (other.attributes) |other_attribute| {
+                        if (attribute.location == other_attribute.location) return PipelineError.DuplicateVertexAttributeLocation;
+                    }
+                }
+            }
+            for (buffer.attributes, 0..) |attribute, attribute_i| {
+                for (buffer.attributes[attribute_i + 1 ..]) |other_attribute| {
+                    if (attribute.location == other_attribute.location) return PipelineError.DuplicateVertexAttributeLocation;
+                }
+            }
         }
     }
 };
@@ -1226,6 +1259,10 @@ pub const PipelineError = error{
     UnsupportedSampleCount,
     InvalidVertexStride,
     InvalidVertexAttributeOffset,
+    InvalidVertexBufferIndex,
+    DuplicateVertexBufferIndex,
+    DuplicateVertexAttributeLocation,
+    InvalidInstanceStepRate,
     InvalidDepthBias,
     UnsupportedFillMode,
     UnsupportedDepthBias,
@@ -1235,6 +1272,7 @@ pub const PipelineError = error{
     UnsupportedBlendFormat,
     InvalidStencilMask,
     UnsupportedStencilState,
+    UnsupportedInstanceStepRate,
 };
 
 pub fn validateProgrammableStageReflection(
@@ -4238,6 +4276,47 @@ test "render pipeline descriptor rejects invalid shapes" {
             .stage = .vertex,
         },
         .vertex_descriptor = .{ .buffers = bad_vertex_buffers[0..] },
+        .color_attachments = color_attachments[0..],
+    }).validate());
+
+    const duplicate_location_attributes = [_]VertexAttributeDescriptor{
+        .{ .location = 0, .format = .float32x2, .offset = 0 },
+        .{ .location = 0, .format = .float32x2, .offset = 8 },
+    };
+    const duplicate_location_buffers = [_]VertexBufferLayoutDescriptor{
+        .{ .stride = 16, .attributes = duplicate_location_attributes[0..] },
+    };
+    try std.testing.expectError(PipelineError.DuplicateVertexAttributeLocation, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .vertex_descriptor = .{ .buffers = duplicate_location_buffers[0..] },
+        .color_attachments = color_attachments[0..],
+    }).validate());
+
+    const duplicate_index_buffers = [_]VertexBufferLayoutDescriptor{
+        .{ .buffer_index = 2, .stride = 8 },
+        .{ .buffer_index = 2, .stride = 8 },
+    };
+    try std.testing.expectError(PipelineError.DuplicateVertexBufferIndex, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .vertex_descriptor = .{ .buffers = duplicate_index_buffers[0..] },
+        .color_attachments = color_attachments[0..],
+    }).validate());
+
+    const invalid_step_rate_buffers = [_]VertexBufferLayoutDescriptor{
+        .{ .stride = 8, .step_function = .per_instance, .instance_step_rate = 0 },
+    };
+    try std.testing.expectError(PipelineError.InvalidInstanceStepRate, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .vertex_descriptor = .{ .buffers = invalid_step_rate_buffers[0..] },
         .color_attachments = color_attachments[0..],
     }).validate());
 }

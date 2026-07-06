@@ -317,7 +317,7 @@ fn makeVertexBindings(
     const bindings = try allocator.alloc(vk.VertexInputBindingDescription, descriptor.buffers.len);
     for (descriptor.buffers, bindings, 0..) |buffer, *binding, i| {
         binding.* = .{
-            .binding = @intCast(i),
+            .binding = buffer.resolvedBufferIndex(i),
             .stride = buffer.stride,
             .input_rate = vertexInputRate(buffer.step_function),
         };
@@ -338,7 +338,7 @@ fn makeVertexAttributes(
         for (buffer.attributes) |attribute| {
             attributes[out_index] = .{
                 .location = attribute.location,
-                .binding = @intCast(binding),
+                .binding = buffer.resolvedBufferIndex(binding),
                 .format = vertexFormat(attribute.format),
                 .offset = attribute.offset,
             };

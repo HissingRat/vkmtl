@@ -15,3 +15,7 @@ Phase 6 expands vertex layout validation and names the instance-rate boundary.
 - Existing backends lower multiple buffers and attributes.
 - Non-default instance step rates are validation/API shape first until backend
   lowering is completed.
+- `VertexBufferLayoutDescriptor.buffer_index` is optional; when omitted, vkmtl
+  preserves the existing array-index behavior.
+- Duplicate resolved buffer indices and duplicate attribute locations are
+  rejected during descriptor validation.

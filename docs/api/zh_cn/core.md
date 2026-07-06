@@ -193,6 +193,11 @@ operation 和 read/write mask 的 `StencilDescriptor`。Depth state 已在第一
 路径里。Stencil state 已经可以表达和校验，但当前 format 列表还没有 stencil-capable format，
 所以启用 stencil 的 descriptor 会先被校验拒绝，直到 format support 补上。
 
+Vertex layout 支持多个 buffer 和 attribute。`VertexBufferLayoutDescriptor` 可以指定显式
+`buffer_index`；省略时保持现有按数组位置映射的行为。校验会拒绝重复的 resolved buffer
+index、重复 attribute location、非法 stride/offset，以及为 0 的 instance step rate。
+非默认 `instance_step_rate` 已能表达，但要等 backend lowering 接上。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

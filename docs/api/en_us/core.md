@@ -226,6 +226,13 @@ Depth state is part of the lowered first slice. Stencil state is represented and
 validated, but the current format list has no stencil-capable format yet, so
 stencil-enabled descriptors are rejected until that format support lands.
 
+Vertex layouts support multiple buffers and attributes. A
+`VertexBufferLayoutDescriptor` may specify an explicit `buffer_index`; when it
+is omitted, the descriptor keeps the existing array-index mapping. Validation
+rejects duplicate resolved buffer indices, duplicate attribute locations,
+invalid strides/offsets, and zero instance step rates. Non-default
+`instance_step_rate` is represented but gated until backend lowering is wired.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:

@@ -78,8 +78,9 @@ fn makeVertexBufferLayouts(
 ) ![]metal.vkmtl_metal_vertex_buffer_layout {
     const layouts = try allocator.alloc(metal.vkmtl_metal_vertex_buffer_layout, descriptor.buffers.len);
     for (descriptor.buffers, layouts, 0..) |buffer, *layout, i| {
+        const buffer_index = buffer.resolvedBufferIndex(i);
         layout.* = .{
-            .buffer_index = slots.vertexBufferSlotUnchecked(@intCast(i)) orelse return core.CommandEncodingError.InvalidVertexBufferIndex,
+            .buffer_index = slots.vertexBufferSlotUnchecked(buffer_index) orelse return core.CommandEncodingError.InvalidVertexBufferIndex,
             .stride = buffer.stride,
             .step_function = vertexStepFunction(buffer.step_function),
         };
@@ -97,10 +98,11 @@ fn makeVertexAttributes(
     const attributes = try allocator.alloc(metal.vkmtl_metal_vertex_attribute, count);
     var out_index: usize = 0;
     for (descriptor.buffers, 0..) |buffer, buffer_index| {
+        const resolved_buffer_index = buffer.resolvedBufferIndex(buffer_index);
         for (buffer.attributes) |attribute| {
             attributes[out_index] = .{
                 .location = attribute.location,
-                .buffer_index = slots.vertexBufferSlotUnchecked(@intCast(buffer_index)) orelse return core.CommandEncodingError.InvalidVertexBufferIndex,
+                .buffer_index = slots.vertexBufferSlotUnchecked(resolved_buffer_index) orelse return core.CommandEncodingError.InvalidVertexBufferIndex,
                 .format = vertexFormat(attribute.format),
                 .offset = attribute.offset,
             };

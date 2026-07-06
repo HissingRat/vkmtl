@@ -2429,6 +2429,11 @@ fn validateRuntimeRenderPipelineShape(
     if (descriptor.depth_stencil) |depth_stencil| {
         if (depth_stencil.stencil.enabled and !features.stencil_state) return core.PipelineError.UnsupportedStencilState;
     }
+    for (descriptor.vertex_descriptor.buffers) |buffer| {
+        if (buffer.instance_step_rate != 1 and !features.vertex_instance_step_rate) {
+            return core.PipelineError.UnsupportedInstanceStepRate;
+        }
+    }
 }
 
 fn materializeVulkanBindGroupEntries(
@@ -3069,6 +3074,16 @@ test "runtime render pipeline gate rejects unsupported raster state" {
     };
     try std.testing.expectError(core.PipelineError.UnsupportedStencilState, validateRuntimeRenderPipelineShape(stencil, .{}));
     try validateRuntimeRenderPipelineShape(stencil, .{ .stencil_state = true });
+
+    const stepped_buffers = [_]core.VertexBufferLayoutDescriptor{.{
+        .stride = 8,
+        .step_function = .per_instance,
+        .instance_step_rate = 2,
+    }};
+    var stepped = descriptor;
+    stepped.vertex_descriptor = .{ .buffers = stepped_buffers[0..] };
+    try std.testing.expectError(core.PipelineError.UnsupportedInstanceStepRate, validateRuntimeRenderPipelineShape(stepped, .{}));
+    try validateRuntimeRenderPipelineShape(stepped, .{ .vertex_instance_step_rate = true });
 }
 
 test "runtime render encoder validates bind group binding" {
