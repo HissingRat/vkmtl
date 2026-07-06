@@ -15,3 +15,6 @@ pipeline structs.
 
 - Fill mode, depth bias, and conservative rasterization are public validation
   shapes until backend lowering is implemented.
+- Non-default fill mode, enabled depth bias, and conservative rasterization are
+  rejected during runtime pipeline creation unless the matching feature gate is
+  explicitly enabled by a future backend.

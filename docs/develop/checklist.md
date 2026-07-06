@@ -423,11 +423,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 2 Checklist
 
-- [ ] Add fill-mode descriptor shape.
-- [ ] Add depth-bias descriptor shape.
-- [ ] Add conservative rasterization feature gate.
-- [ ] Validate unsupported raster-state lowering through typed errors.
-- [ ] Document raster-state limits.
+- [x] Add fill-mode descriptor shape.
+- [x] Add depth-bias descriptor shape.
+- [x] Add conservative rasterization feature gate.
+- [x] Validate unsupported raster-state lowering through typed errors.
+- [x] Document raster-state limits.
 
 ## Period 5 Phase 3 Checklist
 

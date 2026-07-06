@@ -1930,6 +1930,7 @@ pub const Device = struct {
 
     pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
         try descriptor.validate();
+        try validateRuntimeRenderPipelineShape(descriptor, self.features());
         try validateRuntimeSpecialization(descriptor.vertex);
         if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment);
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
@@ -2371,6 +2372,17 @@ fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor)
 
 fn validateRuntimeSpecialization(stage: core.ProgrammableStageDescriptor) core.ShaderError!void {
     if (stage.specialization.constants.len != 0) return core.ShaderError.UnsupportedShaderSpecialization;
+}
+
+fn validateRuntimeRenderPipelineShape(
+    descriptor: core.RenderPipelineDescriptor,
+    features: core.DeviceFeatures,
+) core.PipelineError!void {
+    if (descriptor.fill_mode != .fill and !features.wireframe_fill_mode) return core.PipelineError.UnsupportedFillMode;
+    if (descriptor.depth_bias.enabled and !features.depth_bias) return core.PipelineError.UnsupportedDepthBias;
+    if (descriptor.conservative_rasterization and !features.conservative_rasterization) {
+        return core.PipelineError.UnsupportedConservativeRasterization;
+    }
 }
 
 fn materializeVulkanBindGroupEntries(
@@ -2956,6 +2968,35 @@ test "runtime specialization gate rejects non-empty specialization descriptors" 
         .stage = .vertex,
         .specialization = .{ .constants = constants[0..] },
     }));
+}
+
+test "runtime render pipeline gate rejects unsupported raster state" {
+    const module = core.ShaderModuleDescriptor{
+        .source = .{ .slang = "shader source" },
+    };
+    const color_attachments = [_]core.RenderPipelineColorAttachmentDescriptor{.{
+        .format = .rgba8_unorm,
+    }};
+    const descriptor = core.RenderPipelineDescriptor{
+        .vertex = .{ .module = module, .stage = .vertex },
+        .color_attachments = color_attachments[0..],
+    };
+
+    var wireframe = descriptor;
+    wireframe.fill_mode = .lines;
+    try std.testing.expectError(core.PipelineError.UnsupportedFillMode, validateRuntimeRenderPipelineShape(wireframe, .{}));
+
+    var biased = descriptor;
+    biased.depth_bias = .{ .enabled = true, .constant = 1 };
+    try std.testing.expectError(core.PipelineError.UnsupportedDepthBias, validateRuntimeRenderPipelineShape(biased, .{}));
+
+    var conservative = descriptor;
+    conservative.conservative_rasterization = true;
+    try std.testing.expectError(core.PipelineError.UnsupportedConservativeRasterization, validateRuntimeRenderPipelineShape(conservative, .{}));
+
+    try validateRuntimeRenderPipelineShape(wireframe, .{ .wireframe_fill_mode = true });
+    try validateRuntimeRenderPipelineShape(biased, .{ .depth_bias = true });
+    try validateRuntimeRenderPipelineShape(conservative, .{ .conservative_rasterization = true });
 }
 
 test "runtime render encoder validates bind group binding" {

@@ -207,6 +207,12 @@ IDs, duplicate names, and empty names. Runtime pipeline creation currently
 rejects non-empty specialization data with `UnsupportedShaderSpecialization`
 instead of ignoring it.
 
+Render pipeline raster state includes cull mode, front face, fill mode, depth
+bias, and a conservative-rasterization flag. Cull mode and front face are part
+of the existing lowered path. Non-default fill mode, enabled depth bias, and
+conservative rasterization are feature-gated and currently rejected with typed
+unsupported errors during runtime pipeline creation.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:

@@ -177,6 +177,11 @@ defer vertex_descriptor.deinit();
 runtime pipeline 创建会用 `UnsupportedShaderSpecialization` 拒绝非空 specialization，
 而不是静默忽略。
 
+Render pipeline raster state 包含 cull mode、front face、fill mode、depth bias 和
+conservative-rasterization flag。Cull mode 和 front face 已在现有 lowering 路径里。
+非默认 fill mode、启用的 depth bias 和 conservative rasterization 会由 feature gate 控制，
+当前 runtime pipeline 创建会用 typed unsupported error 拒绝。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

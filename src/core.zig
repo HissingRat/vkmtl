@@ -86,6 +86,9 @@ pub const DeviceFeatures = struct {
     small_constants: bool = false,
     root_constants: bool = false,
     shader_specialization: bool = false,
+    wireframe_fill_mode: bool = false,
+    depth_bias: bool = false,
+    conservative_rasterization: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -348,6 +351,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedMultipleRenderTargets,
         error.UnsupportedStencilAttachment,
         error.UnsupportedTransientAttachment,
+        error.UnsupportedFillMode,
+        error.UnsupportedDepthBias,
+        error.UnsupportedConservativeRasterization,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -365,6 +371,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ShaderReflectionVisibilityMismatch,
         error.InvalidVertexStride,
         error.InvalidVertexAttributeOffset,
+        error.InvalidDepthBias,
         error.InvalidColorAttachmentFormat,
         error.MissingColorAttachment,
         error.InvalidDepthStencilFormat,
@@ -980,6 +987,27 @@ pub const CullMode = enum {
     back,
 };
 
+pub const TriangleFillMode = enum {
+    fill,
+    lines,
+};
+
+pub const DepthBiasDescriptor = struct {
+    enabled: bool = false,
+    constant: f32 = 0,
+    slope: f32 = 0,
+    clamp: f32 = 0,
+
+    pub fn validate(self: DepthBiasDescriptor) PipelineError!void {
+        if (!std.math.isFinite(self.constant) or
+            !std.math.isFinite(self.slope) or
+            !std.math.isFinite(self.clamp))
+        {
+            return PipelineError.InvalidDepthBias;
+        }
+    }
+};
+
 pub const ColorWriteMask = struct {
     red: bool = true,
     green: bool = true,
@@ -1022,6 +1050,9 @@ pub const RenderPipelineDescriptor = struct {
     primitive_topology: PrimitiveTopology = .triangle,
     front_facing_winding: Winding = .counter_clockwise,
     cull_mode: CullMode = .none,
+    fill_mode: TriangleFillMode = .fill,
+    depth_bias: DepthBiasDescriptor = .{},
+    conservative_rasterization: bool = false,
     sample_count: u32 = 1,
     color_attachments: []const RenderPipelineColorAttachmentDescriptor = &.{},
     depth_stencil: ?DepthStencilDescriptor = null,
@@ -1036,6 +1067,7 @@ pub const RenderPipelineDescriptor = struct {
         try validateProgrammableStageReflection(self.vertex, .vertex, self.bind_group_layouts);
         if (self.fragment) |fragment| try validateProgrammableStageReflection(fragment, .fragment, self.bind_group_layouts);
         if (self.color_attachments.len == 0) return PipelineError.MissingColorAttachment;
+        try self.depth_bias.validate();
         try validateSampleCount(self.sample_count);
         for (self.color_attachments) |attachment| {
             if (attachment.format == .automatic) return PipelineError.InvalidColorAttachmentFormat;
@@ -1093,6 +1125,10 @@ pub const PipelineError = error{
     UnsupportedSampleCount,
     InvalidVertexStride,
     InvalidVertexAttributeOffset,
+    InvalidDepthBias,
+    UnsupportedFillMode,
+    UnsupportedDepthBias,
+    UnsupportedConservativeRasterization,
 };
 
 pub fn validateProgrammableStageReflection(
@@ -3711,6 +3747,16 @@ test "render pipeline descriptor validates shader stages and color targets" {
             .entry_point = "vs_main",
         },
         .sample_count = 3,
+        .color_attachments = color_attachments[0..],
+    }).validate());
+
+    try std.testing.expectError(PipelineError.InvalidDepthBias, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = vertex_module,
+            .stage = .vertex,
+            .entry_point = "vs_main",
+        },
+        .depth_bias = .{ .enabled = true, .constant = std.math.nan(f32) },
         .color_attachments = color_attachments[0..],
     }).validate());
 }
