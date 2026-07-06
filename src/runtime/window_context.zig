@@ -1341,6 +1341,11 @@ pub const CommandBuffer = struct {
         try self.debug_groups.pop();
     }
 
+    pub fn insertDebugSignpost(self: *CommandBuffer, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "command_buffer");
+        try self.debug.insertDebugSignpost(.{ .label = label_value });
+    }
+
     pub fn commit(self: *CommandBuffer) !void {
         assertObjectAlive(self.alive, "command_buffer");
         try self.debug_groups.requireEmpty();
@@ -1516,6 +1521,11 @@ pub const BlitCommandEncoder = struct {
         try self.debug_groups.pop();
     }
 
+    pub fn insertDebugSignpost(self: *BlitCommandEncoder, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        try self.debug.insertDebugSignpost(.{ .label = label_value });
+    }
+
     pub fn selectedBackend(self: BlitCommandEncoder) core.Backend {
         return self.backend;
     }
@@ -1607,6 +1617,11 @@ pub const ComputeCommandEncoder = struct {
     pub fn popDebugGroup(self: *ComputeCommandEncoder) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug_groups.pop();
+    }
+
+    pub fn insertDebugSignpost(self: *ComputeCommandEncoder, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        try self.debug.insertDebugSignpost(.{ .label = label_value });
     }
 
     pub fn selectedBackend(self: ComputeCommandEncoder) core.Backend {
@@ -1814,6 +1829,11 @@ pub const RenderCommandEncoder = struct {
     pub fn popDebugGroup(self: *RenderCommandEncoder) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug_groups.pop();
+    }
+
+    pub fn insertDebugSignpost(self: *RenderCommandEncoder, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.insertDebugSignpost(.{ .label = label_value });
     }
 
     pub fn selectedBackend(self: RenderCommandEncoder) core.Backend {
@@ -3402,6 +3422,9 @@ test "runtime command objects validate debug group balance" {
     command_buffer.setLabel("frame commands");
     try std.testing.expectEqualStrings("frame commands", command_buffer.label().?);
 
+    try command_buffer.insertDebugSignpost("frame start");
+    try std.testing.expectError(core.CommandEncodingError.EmptyDebugGroupLabel, command_buffer.insertDebugSignpost(""));
+
     try command_buffer.pushDebugGroup("frame");
     try std.testing.expectError(core.CommandEncodingError.UnclosedDebugGroup, command_buffer.commit());
     try command_buffer.popDebugGroup();
@@ -3412,6 +3435,9 @@ test "runtime command objects validate debug group balance" {
         .color_attachments = color_attachments[0..],
     });
     try std.testing.expectEqualStrings("main render", encoder.label().?);
+
+    try encoder.insertDebugSignpost("draw setup");
+    try std.testing.expectError(core.CommandEncodingError.EmptyDebugGroupLabel, encoder.insertDebugSignpost(""));
 
     try encoder.pushDebugGroup("draws");
     try std.testing.expectError(core.CommandEncodingError.UnclosedDebugGroup, encoder.endEncoding());

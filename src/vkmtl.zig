@@ -37,6 +37,7 @@ pub const QueueCapabilities = core.QueueCapabilities;
 pub const QueueDescriptor = core.QueueDescriptor;
 pub const QueueOwnershipTransferDescriptor = core.QueueOwnershipTransferDescriptor;
 pub const DebugGroupStack = core.DebugGroupStack;
+pub const DebugSignpostDescriptor = core.DebugSignpostDescriptor;
 pub const VulkanNativeHandles = core.VulkanNativeHandles;
 pub const MetalNativeHandles = core.MetalNativeHandles;
 pub const NativeHandles = core.NativeHandles;

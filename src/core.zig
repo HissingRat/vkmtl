@@ -124,6 +124,7 @@ pub const DeviceFeatures = struct {
     dedicated_compute_queue: bool = false,
     dedicated_transfer_queue: bool = false,
     queue_ownership_transfer: bool = false,
+    debug_markers: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -494,6 +495,14 @@ pub const DebugGroupStack = struct {
 
     pub fn requireEmpty(self: DebugGroupStack) CommandEncodingError!void {
         if (self.depth != 0) return CommandEncodingError.UnclosedDebugGroup;
+    }
+};
+
+pub const DebugSignpostDescriptor = struct {
+    label: []const u8,
+
+    pub fn validate(self: DebugSignpostDescriptor) CommandEncodingError!void {
+        if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
     }
 };
 
@@ -1999,6 +2008,7 @@ pub const CommandBufferDebugState = struct {
     state: CommandBufferState = .ready,
     presented: bool = false,
     reusable: bool = false,
+    signpost_count: u32 = 0,
 
     pub fn init(
         descriptor: CommandBufferDescriptor,
@@ -2019,6 +2029,7 @@ pub const CommandBufferDebugState = struct {
         if (self.state != .committed) return CommandEncodingError.InvalidCommandBufferState;
         self.state = .ready;
         self.presented = false;
+        self.signpost_count = 0;
     }
 
     pub fn makeRenderCommandEncoder(
@@ -2041,6 +2052,15 @@ pub const CommandBufferDebugState = struct {
         if (self.state != .ready) return CommandEncodingError.InvalidCommandBufferState;
         self.state = .compute_encoding;
         return .{};
+    }
+
+    pub fn insertDebugSignpost(
+        self: *CommandBufferDebugState,
+        descriptor: DebugSignpostDescriptor,
+    ) CommandEncodingError!void {
+        if (self.state != .ready) return CommandEncodingError.InvalidCommandBufferState;
+        try descriptor.validate();
+        self.signpost_count += 1;
     }
 
     pub fn finishRenderEncoding(self: *CommandBufferDebugState) CommandEncodingError!void {
@@ -2076,6 +2096,7 @@ pub const RenderCommandEncoderDebugState = struct {
     vertex_buffer_mask: u64 = 0,
     bind_group_mask: u64 = 0,
     index_buffer_set: bool = false,
+    signpost_count: u32 = 0,
 
     pub fn setRenderPipelineState(self: *RenderCommandEncoderDebugState) CommandEncodingError!void {
         try self.requireEncoding();
@@ -2143,6 +2164,15 @@ pub const RenderCommandEncoderDebugState = struct {
     ) CommandEncodingError!void {
         try self.requireEncoding();
         try descriptor.validate();
+    }
+
+    pub fn insertDebugSignpost(
+        self: *RenderCommandEncoderDebugState,
+        descriptor: DebugSignpostDescriptor,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try descriptor.validate();
+        self.signpost_count += 1;
     }
 
     pub fn drawPrimitives(
@@ -2222,6 +2252,7 @@ pub const BlitCommandEncoderState = enum {
 
 pub const BlitCommandEncoderDebugState = struct {
     state: BlitCommandEncoderState = .encoding,
+    signpost_count: u32 = 0,
 
     pub fn copyBufferToBuffer(
         self: *BlitCommandEncoderDebugState,
@@ -2272,6 +2303,15 @@ pub const BlitCommandEncoderDebugState = struct {
         try descriptor.validate(buffer_length);
     }
 
+    pub fn insertDebugSignpost(
+        self: *BlitCommandEncoderDebugState,
+        descriptor: DebugSignpostDescriptor,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try descriptor.validate();
+        self.signpost_count += 1;
+    }
+
     pub fn endEncoding(
         self: *BlitCommandEncoderDebugState,
         command_buffer: *CommandBufferDebugState,
@@ -2295,6 +2335,7 @@ pub const ComputeCommandEncoderDebugState = struct {
     state: ComputeCommandEncoderState = .encoding,
     pipeline_set: bool = false,
     bind_group_mask: u64 = 0,
+    signpost_count: u32 = 0,
 
     pub fn setComputePipelineState(self: *ComputeCommandEncoderDebugState) CommandEncodingError!void {
         try self.requireEncoding();
@@ -2316,6 +2357,15 @@ pub const ComputeCommandEncoderDebugState = struct {
     ) CommandEncodingError!void {
         try self.requirePipeline();
         try descriptor.validate();
+    }
+
+    pub fn insertDebugSignpost(
+        self: *ComputeCommandEncoderDebugState,
+        descriptor: DebugSignpostDescriptor,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try descriptor.validate();
+        self.signpost_count += 1;
     }
 
     pub fn endEncoding(
@@ -4277,6 +4327,9 @@ test "queue descriptors validate capabilities and gates" {
 test "debug group stack validates labels and nesting" {
     var stack = DebugGroupStack{ .max_depth = 1 };
 
+    try (DebugSignpostDescriptor{ .label = "frame marker" }).validate();
+    try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (DebugSignpostDescriptor{ .label = "" }).validate());
+
     try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, stack.push(""));
     try stack.push("frame");
     try std.testing.expectEqual(@as(u32, 1), stack.depth);
@@ -5379,19 +5432,23 @@ test "query descriptors validate feature gates and ranges" {
 test "command debug state validates render pass ordering" {
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var command_buffer = CommandBufferDebugState{};
+    try command_buffer.insertDebugSignpost(.{ .label = "before pass" });
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
         .color_attachments = color_attachments[0..],
     });
 
+    try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.insertDebugSignpost(.{ .label = "inside pass" }));
     try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.commit());
     try std.testing.expectError(CommandEncodingError.MissingRenderPipelineState, encoder.drawPrimitives(.{
         .vertex_count = 3,
     }));
 
+    try encoder.insertDebugSignpost(.{ .label = "draw setup" });
     try encoder.setRenderPipelineState();
     try encoder.setVertexBuffer(.{ .index = 0 });
     try encoder.drawPrimitives(.{ .vertex_count = 3 });
     try encoder.endEncoding(&command_buffer);
+    try std.testing.expectError(CommandEncodingError.InvalidRenderCommandEncoderState, encoder.insertDebugSignpost(.{ .label = "ended" }));
     try std.testing.expectError(CommandEncodingError.InvalidRenderCommandEncoderState, encoder.drawPrimitives(.{
         .vertex_count = 3,
     }));
@@ -5430,6 +5487,7 @@ test "command debug state validates blit pass ordering" {
     try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.commit());
     try encoder.copyBufferToBuffer(.{ .size = 4 }, 8, 8);
     try encoder.fillBuffer(.{ .size = 4 }, 8);
+    try encoder.insertDebugSignpost(.{ .label = "copy setup" });
     _ = try encoder.copyTextureToTexture(.{
         .source_region = .{ .size = .{ .width = 1, .height = 1 } },
     }, .{
@@ -5446,6 +5504,7 @@ test "command debug state validates blit pass ordering" {
     try encoder.endEncoding(&command_buffer);
     try std.testing.expectError(CommandEncodingError.InvalidBlitCommandEncoderState, encoder.copyBufferToBuffer(.{ .size = 4 }, 8, 8));
     try std.testing.expectError(CommandEncodingError.InvalidBlitCommandEncoderState, encoder.fillBuffer(.{ .size = 4 }, 8));
+    try std.testing.expectError(CommandEncodingError.InvalidBlitCommandEncoderState, encoder.insertDebugSignpost(.{ .label = "ended" }));
     try command_buffer.commit();
 }
 
@@ -5459,11 +5518,13 @@ test "command debug state validates compute pass ordering" {
     }));
     try encoder.setComputePipelineState();
     try encoder.setBindGroup(.{ .index = 0 });
+    try encoder.insertDebugSignpost(.{ .label = "dispatch setup" });
     try encoder.dispatchThreadgroups(.{
         .threadgroup_count_x = 1,
         .threads_per_threadgroup_x = 4,
     });
     try encoder.endEncoding(&command_buffer);
+    try std.testing.expectError(CommandEncodingError.InvalidComputeCommandEncoderState, encoder.insertDebugSignpost(.{ .label = "ended" }));
     try std.testing.expectError(CommandEncodingError.InvalidComputeCommandEncoderState, encoder.dispatchThreadgroups(.{
         .threadgroup_count_x = 1,
     }));

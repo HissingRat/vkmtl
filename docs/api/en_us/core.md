@@ -415,6 +415,7 @@ labels:
 ```zig
 buffer.setLabel("vertices");
 try render_encoder.pushDebugGroup("opaque pass");
+try render_encoder.insertDebugSignpost("draw batch");
 try render_encoder.popDebugGroup();
 ```
 
@@ -422,9 +423,12 @@ Descriptor labels are copied into runtime wrappers when resources or pipelines
 are created. `label()` returns the current borrowed label, and `setLabel(null)`
 clears it.
 
-Debug groups are validated portably. Empty labels, underflow, overflow, and
-unclosed groups become `CommandEncodingError` values. Native Vulkan debug-utils
-markers and Metal debug groups can be lowered behind this API later.
+Debug groups and signposts are validated portably. Empty labels, underflow,
+overflow, and unclosed groups become `CommandEncodingError` values.
+`DebugSignpostDescriptor` is the shape-only marker descriptor, and command
+buffers plus render/blit/compute encoders expose `insertDebugSignpost(...)`.
+Native Vulkan debug-utils markers and Metal GPU capture markers can be lowered
+behind this API later.
 
 ## Error Classification
 

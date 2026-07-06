@@ -520,10 +520,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 6 Phase 6 Checklist
 
 - [x] Define debug marker scope before implementation.
-- [ ] Add portable debug signpost descriptor shape.
-- [ ] Expose command-buffer and encoder signpost helpers.
-- [ ] Keep marker validation independent from backend-native lowering.
-- [ ] Document debug marker behavior and limits.
+- [x] Add portable debug signpost descriptor shape.
+- [x] Expose command-buffer and encoder signpost helpers.
+- [x] Keep marker validation independent from backend-native lowering.
+- [x] Document debug marker behavior and limits.
 
 ## First Backend-Independent Triangle Checklist
 

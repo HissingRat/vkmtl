@@ -12,5 +12,10 @@ Phase 6 extends the existing debug group model with signpost-style markers.
 ## Current Limits
 
 - Signposts are currently recorded only in the portable debug state.
+- `DebugSignpostDescriptor` validates marker labels.
+- `CommandBuffer`, `RenderCommandEncoder`, `BlitCommandEncoder`, and
+  `ComputeCommandEncoder` expose `insertDebugSignpost(...)`.
+- Native marker lowering will be gated by `DeviceFeatures.debug_markers`, which
+  is disabled by default.
 - Vulkan debug-utils labels and Metal GPU capture markers can be lowered later
   without changing user code.
