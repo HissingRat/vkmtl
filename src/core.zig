@@ -95,6 +95,8 @@ pub const DeviceFeatures = struct {
     tessellation: bool = false,
     mesh_shaders: bool = false,
     task_shaders: bool = false,
+    acceleration_structures: bool = false,
+    ray_tracing: bool = false,
     vertex_instance_step_rate: bool = false,
     draw_base_vertex: bool = false,
     draw_base_instance: bool = false,
@@ -168,6 +170,8 @@ pub const DeviceLimits = struct {
     max_tessellation_control_points: u32 = 0,
     max_mesh_threads_per_threadgroup: u32 = 0,
     max_task_threads_per_threadgroup: u32 = 0,
+    max_ray_tracing_recursion_depth: u32 = 0,
+    shader_binding_table_alignment: u64 = 0,
     sparse_buffer_page_size: u64 = 0,
     sparse_texture_page_width: u32 = 0,
     sparse_texture_page_height: u32 = 0,
@@ -605,6 +609,11 @@ pub const AdvancedFeatureError = error{
     UnsupportedTaskShaders,
     MissingMeshStage,
     InvalidMeshThreadgroupSize,
+    UnsupportedAccelerationStructures,
+    UnsupportedRayTracing,
+    InvalidAccelerationStructureDescriptor,
+    InvalidRayTracingPipeline,
+    InvalidShaderBindingTable,
 };
 
 pub const ObjectCacheMode = enum {
@@ -830,6 +839,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTessellation,
         error.UnsupportedMeshShaders,
         error.UnsupportedTaskShaders,
+        error.UnsupportedAccelerationStructures,
+        error.UnsupportedRayTracing,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -991,6 +1002,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.MissingTessellationStage,
         error.MissingMeshStage,
         error.InvalidMeshThreadgroupSize,
+        error.InvalidAccelerationStructureDescriptor,
+        error.InvalidRayTracingPipeline,
+        error.InvalidShaderBindingTable,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -1608,6 +1622,76 @@ pub const MeshPipelineDescriptor = struct {
                 return AdvancedFeatureError.InvalidMeshThreadgroupSize;
             }
         }
+    }
+};
+
+pub const AccelerationStructureKind = enum {
+    bottom_level,
+    top_level,
+};
+
+pub const AccelerationStructureDescriptor = struct {
+    label: ?[]const u8 = null,
+    kind: AccelerationStructureKind,
+    primitive_count: u32,
+    allow_update: bool = false,
+
+    pub fn validate(self: AccelerationStructureDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        if (!features.acceleration_structures) return AdvancedFeatureError.UnsupportedAccelerationStructures;
+        if (self.primitive_count == 0) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+    }
+};
+
+pub const RayTracingShaderGroupKind = enum {
+    ray_generation,
+    miss,
+    hit,
+    callable,
+};
+
+pub const RayTracingShaderGroupDescriptor = struct {
+    kind: RayTracingShaderGroupKind,
+    entry_point: []const u8,
+
+    pub fn validate(self: RayTracingShaderGroupDescriptor) AdvancedFeatureError!void {
+        if (self.entry_point.len == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+};
+
+pub const RayTracingPipelineDescriptor = struct {
+    label: ?[]const u8 = null,
+    shader_groups: []const RayTracingShaderGroupDescriptor = &.{},
+    max_recursion_depth: u32 = 1,
+
+    pub fn validate(self: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (self.shader_groups.len == 0 or self.max_recursion_depth == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        if (limits.max_ray_tracing_recursion_depth != 0 and self.max_recursion_depth > limits.max_ray_tracing_recursion_depth) {
+            return AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        var has_ray_generation = false;
+        for (self.shader_groups) |group| {
+            try group.validate();
+            if (group.kind == .ray_generation) has_ray_generation = true;
+        }
+        if (!has_ray_generation) return AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+};
+
+pub const ShaderBindingTableDescriptor = struct {
+    stride: u64,
+    ray_generation_count: u32 = 1,
+    miss_count: u32 = 0,
+    hit_count: u32 = 0,
+    callable_count: u32 = 0,
+
+    pub fn validate(self: ShaderBindingTableDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (self.stride == 0) return AdvancedFeatureError.InvalidShaderBindingTable;
+        if (limits.shader_binding_table_alignment != 0 and !isAlignedU64(self.stride, limits.shader_binding_table_alignment)) {
+            return AdvancedFeatureError.InvalidShaderBindingTable;
+        }
+        if (self.ray_generation_count == 0) return AdvancedFeatureError.InvalidShaderBindingTable;
     }
 };
 
@@ -5609,6 +5693,36 @@ test "render pipeline descriptor validates shader stages and color targets" {
         .max_mesh_threads_per_threadgroup = 64,
         .max_task_threads_per_threadgroup = 32,
     });
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedAccelerationStructures, (AccelerationStructureDescriptor{
+        .kind = .bottom_level,
+        .primitive_count = 1,
+    }).validate(.{}));
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureDescriptor{
+        .kind = .bottom_level,
+        .primitive_count = 0,
+    }).validate(.{ .acceleration_structures = true }));
+    const ray_groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen_main" },
+        .{ .kind = .miss, .entry_point = "miss_main" },
+        .{ .kind = .hit, .entry_point = "hit_main" },
+    };
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracing, (RayTracingPipelineDescriptor{
+        .shader_groups = ray_groups[0..],
+    }).validate(.{}, .{}));
+    try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, (RayTracingPipelineDescriptor{
+        .shader_groups = ray_groups[0..],
+        .max_recursion_depth = 3,
+    }).validate(.{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 }));
+    try (RayTracingPipelineDescriptor{
+        .shader_groups = ray_groups[0..],
+        .max_recursion_depth = 2,
+    }).validate(.{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
+    try std.testing.expectError(AdvancedFeatureError.InvalidShaderBindingTable, (ShaderBindingTableDescriptor{
+        .stride = 12,
+    }).validate(.{ .ray_tracing = true }, .{ .shader_binding_table_alignment = 16 }));
+    try (ShaderBindingTableDescriptor{
+        .stride = 32,
+    }).validate(.{ .ray_tracing = true }, .{ .shader_binding_table_alignment = 16 });
 
     const bind_group_entries = [_]BindGroupLayoutEntry{
         .{

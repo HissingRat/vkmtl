@@ -735,10 +735,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 6 Checklist
 
 - [x] Define ray tracing module scope before implementation.
-- [ ] Add feature gates and ray tracing descriptor shapes.
-- [ ] Validate acceleration structure, pipeline, and shader table descriptors.
-- [ ] Keep ray tracing isolated from the portable render pipeline.
-- [ ] Document backend differences.
+- [x] Add feature gates and ray tracing descriptor shapes.
+- [x] Validate acceleration structure, pipeline, and shader table descriptors.
+- [x] Keep ray tracing isolated from the portable render pipeline.
+- [x] Document backend differences.
 
 ## Period 10 Phase 7 Checklist
 

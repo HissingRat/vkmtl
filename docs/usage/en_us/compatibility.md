@@ -44,3 +44,7 @@ render pipeline extension, not a default portable render path.
 Mesh/task shaders are represented by `MeshPipelineDescriptor`. Vulkan mesh
 shader and Metal object/mesh-like paths are treated as backend-gated advanced
 features.
+
+Ray tracing descriptors are isolated from the normal render pipeline because
+Vulkan and Metal differ in acceleration structure, pipeline, and shader table
+details.

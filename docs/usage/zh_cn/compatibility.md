@@ -37,3 +37,6 @@ portable render path。
 
 Mesh/task shader 由 `MeshPipelineDescriptor` 表示。Vulkan mesh shader 和 Metal object/mesh-like
 path 都被视为 backend-gated advanced feature。
+
+Ray tracing descriptor 和普通 render pipeline 隔离，因为 Vulkan 和 Metal 在 acceleration
+structure、pipeline 和 shader table 细节上差异很大。

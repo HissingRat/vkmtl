@@ -229,6 +229,12 @@ index、重复 attribute location、非法 stride/offset，以及为 0 的 insta
 `DeviceFeatures.mesh_shaders` 和 `DeviceFeatures.task_shaders` gate，校验 mesh entry point、
 可选 task entry point 和 workgroup limits，并且保持在 base render pipeline 之外。
 
+Ray tracing 被隔离在高级 descriptor 里：`AccelerationStructureDescriptor`、
+`RayTracingPipelineDescriptor` 和 `ShaderBindingTableDescriptor`。它们会在
+`DeviceFeatures.acceleration_structures` 和 `DeviceFeatures.ray_tracing` gate 后面校验
+acceleration structure shape、ray-generation shader group、recursion depth 和 shader binding
+table alignment。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

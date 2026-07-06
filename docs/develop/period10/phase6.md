@@ -12,5 +12,9 @@ the portable render path.
 
 ## Current Limits
 
+- `AccelerationStructureDescriptor`, `RayTracingPipelineDescriptor`, and
+  `ShaderBindingTableDescriptor` validate ray tracing shape.
+- `DeviceFeatures.acceleration_structures` and `DeviceFeatures.ray_tracing`
+  default to false.
 - Vulkan and Metal ray tracing differ substantially; lowering remains isolated
   future backend work.

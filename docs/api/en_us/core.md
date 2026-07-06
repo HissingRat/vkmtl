@@ -270,6 +270,13 @@ It is gated by `DeviceFeatures.mesh_shaders` and `DeviceFeatures.task_shaders`,
 validates mesh and optional task entry points plus workgroup limits, and remains
 outside the base render pipeline.
 
+Ray tracing is isolated in advanced descriptors:
+`AccelerationStructureDescriptor`, `RayTracingPipelineDescriptor`, and
+`ShaderBindingTableDescriptor`. They validate acceleration structure shape,
+ray-generation shader group presence, recursion depth, and shader binding table
+alignment behind `DeviceFeatures.acceleration_structures` and
+`DeviceFeatures.ray_tracing`.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:
