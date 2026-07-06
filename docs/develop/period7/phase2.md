@@ -11,5 +11,10 @@ Phase 2 defines dispatch-indirect validation before backend lowering.
 
 ## Current Limits
 
+- `DispatchThreadgroupsIndirectDescriptor` validates the 12-byte argument
+  block offset and `DeviceLimits.dispatch_indirect_alignment`.
+- Indirect argument buffers should be created with `BufferUsage.indirect`.
+- Runtime `dispatchThreadgroupsIndirect(...)` validates shape and usage before
+  returning `UnsupportedDispatchIndirect`.
 - Native Vulkan `vkCmdDispatchIndirect` and Metal indirect dispatch lowering are
   future work.

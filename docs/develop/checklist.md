@@ -536,10 +536,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 7 Phase 2 Checklist
 
 - [x] Define dispatch-indirect scope before implementation.
-- [ ] Add dispatch-indirect descriptor and alignment validation.
-- [ ] Add indirect buffer usage metadata.
-- [ ] Gate dispatch indirect until native lowering lands.
-- [ ] Document dispatch-indirect limits.
+- [x] Add dispatch-indirect descriptor and alignment validation.
+- [x] Add indirect buffer usage metadata.
+- [x] Gate dispatch indirect until native lowering lands.
+- [x] Document dispatch-indirect limits.
 
 ## Period 7 Phase 3 Checklist
 

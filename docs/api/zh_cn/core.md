@@ -346,6 +346,11 @@ try command_buffer.commit();
 维度；`DispatchThreadsDescriptor` 与 `ComputeCommandEncoder.dispatchThreads(...)` 是便利 API，
 会把总线程数 resolve 成 threadgroup 数量，然后走同一条 backend path。
 
+`DispatchThreadgroupsIndirectDescriptor` 表示未来的 indirect dispatch arguments。
+Indirect buffer 使用 `BufferUsage.indirect`；runtime `dispatchThreadgroupsIndirect(...)`
+会先校验 usage、offset 和 alignment，然后在 backend lowering 接上前返回
+`UnsupportedDispatchIndirect`。
+
 ## Debug Label 与 Group
 
 Runtime resource、command buffer 和 command encoder 都暴露借用字符串形式的 debug label：

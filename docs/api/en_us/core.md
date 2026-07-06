@@ -411,6 +411,11 @@ and `ComputeCommandEncoder.dispatchThreads(...)` are convenience APIs that
 resolve total thread counts into threadgroup counts before using the same
 backend path.
 
+`DispatchThreadgroupsIndirectDescriptor` represents future indirect dispatch
+arguments. Indirect buffers use `BufferUsage.indirect`; runtime
+`dispatchThreadgroupsIndirect(...)` validates usage, offset, and alignment
+before returning `UnsupportedDispatchIndirect` until backend lowering lands.
+
 ## Debug Labels And Groups
 
 Runtime resources, command buffers, and command encoders expose borrowed debug

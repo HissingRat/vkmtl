@@ -1602,6 +1602,24 @@ pub const ComputeCommandEncoder = struct {
         };
     }
 
+    pub fn dispatchThreadgroupsIndirect(
+        self: *ComputeCommandEncoder,
+        indirect_buffer: *Buffer,
+        descriptor: core.DispatchThreadgroupsIndirectDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        assertAlive(indirect_buffer.alive, .buffer);
+        try expectSameBackend(self.backend, indirect_buffer.backend);
+        if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try self.debug.dispatchThreadgroupsIndirect(
+            descriptor,
+            indirect_buffer.length(),
+            .{ .compute_dispatch_indirect = true },
+            core.defaultDeviceLimits(self.backend),
+        );
+        return core.CommandEncodingError.UnsupportedDispatchIndirect;
+    }
+
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug_groups.requireEmpty();
@@ -2893,6 +2911,39 @@ test "runtime blit encoder records buffer usage transitions" {
 
     try std.testing.expectEqual(core.ResourceUsageKind.copy_source, source.currentUsage().?);
     try std.testing.expectEqual(core.ResourceUsageKind.copy_destination, destination.currentUsage().?);
+}
+
+test "runtime compute encoder validates dispatch indirect before unsupported gate" {
+    var tracker = ResourceTracker{};
+    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var encoder = ComputeCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .debug = .{ .pipeline_set = true },
+    };
+    var indirect_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 16,
+        .usage_value = .{ .indirect = true },
+        .impl = undefined,
+    };
+    var storage_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 16,
+        .usage_value = .{ .storage = true },
+        .impl = undefined,
+    };
+
+    try std.testing.expectError(
+        core.CommandEncodingError.UnsupportedDispatchIndirect,
+        encoder.dispatchThreadgroupsIndirect(&indirect_buffer, .{}),
+    );
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidIndirectBufferUsage,
+        encoder.dispatchThreadgroupsIndirect(&storage_buffer, .{}),
+    );
 }
 
 test "runtime device exposes adapter features limits and format caps" {

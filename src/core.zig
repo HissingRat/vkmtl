@@ -102,6 +102,7 @@ pub const DeviceFeatures = struct {
     pipeline_statistics_queries: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
+    compute_dispatch_indirect: bool = false,
     bind_groups: bool = true,
     transfer_commands: bool = true,
     storage_buffers: bool = true,
@@ -147,6 +148,7 @@ pub const DeviceLimits = struct {
     max_compute_threads_per_threadgroup_y: u32 = 1024,
     max_compute_threads_per_threadgroup_z: u32 = 64,
     max_compute_total_threads_per_threadgroup: u32 = 1024,
+    dispatch_indirect_alignment: u64 = 4,
 };
 
 pub const FormatCapabilities = struct {
@@ -636,6 +638,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedMultiQueue,
         error.UnsupportedDedicatedQueue,
         error.UnsupportedQueueOwnershipTransfer,
+        error.UnsupportedDispatchIndirect,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -700,6 +703,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidResourceBarrierRange,
         error.InvalidQueueCapability,
         error.InvalidFenceValue,
+        error.InvalidDispatchIndirectOffset,
+        error.InvalidIndirectBufferUsage,
         error.TextureCopySizeOverflow,
         error.MissingBindGroupLayoutEntry,
         error.EmptyShaderVisibility,
@@ -2027,6 +2032,26 @@ pub const DispatchThreadsDescriptor = struct {
     }
 };
 
+pub const DispatchThreadgroupsIndirectDescriptor = struct {
+    offset: u64 = 0,
+
+    pub fn validate(
+        self: DispatchThreadgroupsIndirectDescriptor,
+        buffer_length: usize,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) CommandEncodingError!void {
+        if (!features.compute_dispatch_indirect) return CommandEncodingError.UnsupportedDispatchIndirect;
+        if (!isAlignedU64(self.offset, limits.dispatch_indirect_alignment)) {
+            return CommandEncodingError.InvalidDispatchIndirectOffset;
+        }
+        const end = std.math.add(u64, self.offset, 12) catch {
+            return CommandEncodingError.InvalidDispatchIndirectOffset;
+        };
+        if (end > buffer_length) return CommandEncodingError.InvalidDispatchIndirectOffset;
+    }
+};
+
 pub const CopyBufferToBufferDescriptor = struct {
     source_offset: u64 = 0,
     destination_offset: u64 = 0,
@@ -2435,6 +2460,17 @@ pub const ComputeCommandEncoderDebugState = struct {
         return try descriptor.resolve(limits);
     }
 
+    pub fn dispatchThreadgroupsIndirect(
+        self: *ComputeCommandEncoderDebugState,
+        descriptor: DispatchThreadgroupsIndirectDescriptor,
+        buffer_length: usize,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) CommandEncodingError!void {
+        try self.requirePipeline();
+        try descriptor.validate(buffer_length, features, limits);
+    }
+
     pub fn insertDebugSignpost(
         self: *ComputeCommandEncoderDebugState,
         descriptor: DebugSignpostDescriptor,
@@ -2509,12 +2545,15 @@ pub const CommandEncodingError = error{
     UnsupportedMultiQueue,
     UnsupportedDedicatedQueue,
     UnsupportedQueueOwnershipTransfer,
+    UnsupportedDispatchIndirect,
     RedundantResourceBarrier,
     RedundantQueueOwnershipTransfer,
     InvalidResourceBarrierState,
     InvalidResourceBarrierRange,
     InvalidQueueCapability,
     InvalidFenceValue,
+    InvalidDispatchIndirectOffset,
+    InvalidIndirectBufferUsage,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -3874,6 +3913,7 @@ pub const BufferUsage = struct {
     index: bool = false,
     uniform: bool = false,
     storage: bool = false,
+    indirect: bool = false,
 
     pub fn isEmpty(self: BufferUsage) bool {
         return !self.copy_source and
@@ -3881,7 +3921,8 @@ pub const BufferUsage = struct {
             !self.vertex and
             !self.index and
             !self.uniform and
-            !self.storage;
+            !self.storage and
+            !self.indirect;
     }
 };
 
@@ -5547,6 +5588,15 @@ test "compute dispatch descriptors validate limits and resolve thread counts" {
     try std.testing.expectError(CommandEncodingError.InvalidThreadgroupCount, (DispatchThreadsDescriptor{
         .thread_count_x = 0,
     }).resolve(limits));
+
+    try std.testing.expectError(CommandEncodingError.UnsupportedDispatchIndirect, (DispatchThreadgroupsIndirectDescriptor{}).validate(16, .{}, limits));
+    try (DispatchThreadgroupsIndirectDescriptor{ .offset = 4 }).validate(16, .{ .compute_dispatch_indirect = true }, limits);
+    try std.testing.expectError(CommandEncodingError.InvalidDispatchIndirectOffset, (DispatchThreadgroupsIndirectDescriptor{
+        .offset = 2,
+    }).validate(16, .{ .compute_dispatch_indirect = true }, limits));
+    try std.testing.expectError(CommandEncodingError.InvalidDispatchIndirectOffset, (DispatchThreadgroupsIndirectDescriptor{
+        .offset = 8,
+    }).validate(16, .{ .compute_dispatch_indirect = true }, limits));
 }
 
 test "command debug state validates render pass ordering" {
@@ -5643,12 +5693,14 @@ test "command debug state validates compute pass ordering" {
         .thread_count_x = 7,
         .threads_per_threadgroup_x = 4,
     }, defaultDeviceLimits(.metal));
+    try encoder.dispatchThreadgroupsIndirect(.{}, 16, .{ .compute_dispatch_indirect = true }, defaultDeviceLimits(.metal));
     try encoder.dispatchThreadgroups(.{
         .threadgroup_count_x = 1,
         .threads_per_threadgroup_x = 4,
     });
     try encoder.endEncoding(&command_buffer);
     try std.testing.expectError(CommandEncodingError.InvalidComputeCommandEncoderState, encoder.insertDebugSignpost(.{ .label = "ended" }));
+    try std.testing.expectError(CommandEncodingError.InvalidComputeCommandEncoderState, encoder.dispatchThreadgroupsIndirect(.{}, 16, .{ .compute_dispatch_indirect = true }, defaultDeviceLimits(.metal)));
     try std.testing.expectError(CommandEncodingError.InvalidComputeCommandEncoderState, encoder.dispatchThreadgroups(.{
         .threadgroup_count_x = 1,
     }));
