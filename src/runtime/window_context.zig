@@ -1683,6 +1683,7 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.drawPrimitives(descriptor);
+        try validateDrawPrimitivesLowering(descriptor, .{});
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawPrimitives(descriptor),
             .metal => |*metal| try metal.drawPrimitives(descriptor),
@@ -1695,10 +1696,53 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.drawIndexedPrimitives(descriptor);
+        try validateDrawIndexedPrimitivesLowering(descriptor, .{});
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawIndexedPrimitives(descriptor),
             .metal => |*metal| try metal.drawIndexedPrimitives(descriptor),
         };
+    }
+
+    pub fn drawPrimitivesIndirect(
+        self: *RenderCommandEncoder,
+        indirect_buffer: *Buffer,
+        descriptor: core.DrawPrimitivesIndirectDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        assertAlive(indirect_buffer.alive, .buffer);
+        try expectSameBackend(self.backend, indirect_buffer.backend);
+        try self.debug.drawPrimitivesIndirect(descriptor);
+        return core.CommandEncodingError.UnsupportedIndirectDraw;
+    }
+
+    pub fn drawIndexedPrimitivesIndirect(
+        self: *RenderCommandEncoder,
+        indirect_buffer: *Buffer,
+        descriptor: core.DrawIndexedPrimitivesIndirectDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        assertAlive(indirect_buffer.alive, .buffer);
+        try expectSameBackend(self.backend, indirect_buffer.backend);
+        try self.debug.drawIndexedPrimitivesIndirect(descriptor);
+        return core.CommandEncodingError.UnsupportedIndirectDraw;
+    }
+
+    pub fn drawPrimitivesMulti(
+        self: *RenderCommandEncoder,
+        descriptor: core.MultiDrawPrimitivesDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.drawPrimitivesMulti(descriptor);
+        return core.CommandEncodingError.UnsupportedMultiDraw;
+    }
+
+    pub fn drawIndexedPrimitivesMulti(
+        self: *RenderCommandEncoder,
+        descriptor: core.MultiDrawIndexedPrimitivesDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.drawIndexedPrimitivesMulti(descriptor);
+        return core.CommandEncodingError.UnsupportedMultiDraw;
     }
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
@@ -2436,6 +2480,21 @@ fn validateRuntimeRenderPipelineShape(
     }
 }
 
+fn validateDrawPrimitivesLowering(
+    descriptor: core.DrawPrimitivesDescriptor,
+    features: core.DeviceFeatures,
+) core.CommandEncodingError!void {
+    if (descriptor.base_instance != 0 and !features.draw_base_instance) return core.CommandEncodingError.UnsupportedBaseInstance;
+}
+
+fn validateDrawIndexedPrimitivesLowering(
+    descriptor: core.DrawIndexedPrimitivesDescriptor,
+    features: core.DeviceFeatures,
+) core.CommandEncodingError!void {
+    if (descriptor.base_vertex != 0 and !features.draw_base_vertex) return core.CommandEncodingError.UnsupportedBaseVertex;
+    if (descriptor.base_instance != 0 and !features.draw_base_instance) return core.CommandEncodingError.UnsupportedBaseInstance;
+}
+
 fn materializeVulkanBindGroupEntries(
     allocator: std.mem.Allocator,
     entries: []const BindGroupEntry,
@@ -3145,6 +3204,53 @@ test "runtime render encoder dynamic state methods are gated" {
     try std.testing.expectError(core.CommandEncodingError.InvalidViewport, encoder.setViewport(.{
         .width = 0,
         .height = 480,
+    }));
+
+    try encoder.endEncoding();
+}
+
+test "runtime render encoder draw variants are gated" {
+    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
+    var encoder = try command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = color_attachments[0..],
+    });
+
+    var tracker = ResourceTracker{};
+    var pipeline = RenderPipelineState{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .impl = undefined,
+    };
+    try encoder.setRenderPipelineState(&pipeline);
+
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedBaseInstance, encoder.drawPrimitives(.{
+        .vertex_count = 3,
+        .base_instance = 1,
+    }));
+    var index_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 64,
+        .impl = undefined,
+    };
+    try encoder.setIndexBuffer(&index_buffer);
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedBaseVertex, encoder.drawIndexedPrimitives(.{
+        .index_count = 3,
+        .base_vertex = 1,
+    }));
+
+    var indirect_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 64,
+        .impl = undefined,
+    };
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedIndirectDraw, encoder.drawPrimitivesIndirect(&indirect_buffer, .{}));
+
+    const draws = [_]core.DrawPrimitivesDescriptor{.{ .vertex_count = 3 }};
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedMultiDraw, encoder.drawPrimitivesMulti(.{
+        .draws = draws[0..],
     }));
 
     try encoder.endEncoding();

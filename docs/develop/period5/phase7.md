@@ -14,3 +14,8 @@ Phase 7 rounds out direct and indirect draw command descriptor shapes.
 
 - Existing command encoders lower direct draw and indexed draw.
 - Indirect and multi-draw are validation/API shape first in this period.
+- `base_instance` and `base_vertex` are represented on direct draw descriptors,
+  but runtime lowering rejects non-zero values until both backends support them.
+- `drawPrimitivesIndirect`, `drawIndexedPrimitivesIndirect`,
+  `drawPrimitivesMulti`, and `drawIndexedPrimitivesMulti` exist on the runtime
+  render encoder and return typed unsupported errors after validation.

@@ -330,6 +330,12 @@ Dynamic render state descriptors include `Viewport`, `ScissorRect`,
 validate their inputs and return `UnsupportedDynamicRenderState` until backend
 lowering is wired.
 
+Direct draw descriptors include `base_instance`; indexed draw descriptors also
+include `base_vertex`. Non-zero base fields are currently rejected with typed
+unsupported errors. Indirect and multi-draw descriptor shapes are available, and
+`RenderCommandEncoder` exposes matching methods that validate inputs before
+returning unsupported until backend lowering exists.
+
 Transfer work uses a Metal-style blit encoder:
 
 ```zig

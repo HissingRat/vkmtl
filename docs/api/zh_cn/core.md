@@ -274,6 +274,11 @@ Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`
 这些 setter 当前会先校验输入，然后返回 `UnsupportedDynamicRenderState`，直到 backend
 lowering 接上。
 
+Direct draw descriptor 包含 `base_instance`；indexed draw descriptor 也包含 `base_vertex`。
+非零 base 字段当前会返回 typed unsupported error。Indirect 和 multi-draw descriptor shape
+已经存在，`RenderCommandEncoder` 也暴露对应方法；这些方法会先校验输入，再在 backend
+lowering 接上前返回 unsupported。
+
 Transfer 使用 Metal 风格的 blit encoder：
 
 ```zig

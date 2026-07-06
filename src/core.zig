@@ -93,6 +93,10 @@ pub const DeviceFeatures = struct {
     independent_blend: bool = false,
     stencil_state: bool = false,
     vertex_instance_step_rate: bool = false,
+    draw_base_vertex: bool = false,
+    draw_base_instance: bool = false,
+    indirect_draw: bool = false,
+    multi_draw: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -364,6 +368,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedBlendFormat,
         error.UnsupportedStencilState,
         error.UnsupportedInstanceStepRate,
+        error.UnsupportedBaseVertex,
+        error.UnsupportedBaseInstance,
+        error.UnsupportedIndirectDraw,
+        error.UnsupportedMultiDraw,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -409,7 +417,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidVertexCount,
         error.InvalidIndexCount,
         error.InvalidInstanceCount,
+        error.InvalidDrawCount,
         error.InvalidIndexBufferOffset,
+        error.InvalidIndirectDrawStride,
         error.InvalidStencilClearValue,
         error.InvalidThreadgroupCount,
         error.InvalidCopySize,
@@ -1512,6 +1522,7 @@ pub const DrawPrimitivesDescriptor = struct {
     vertex_start: u32 = 0,
     vertex_count: u32 = 0,
     instance_count: u32 = 1,
+    base_instance: u32 = 0,
 
     pub fn validate(self: DrawPrimitivesDescriptor) CommandEncodingError!void {
         if (self.vertex_count == 0) return CommandEncodingError.InvalidVertexCount;
@@ -1525,6 +1536,8 @@ pub const DrawIndexedPrimitivesDescriptor = struct {
     index_count: u32 = 0,
     index_buffer_offset: u64 = 0,
     instance_count: u32 = 1,
+    base_vertex: i32 = 0,
+    base_instance: u32 = 0,
 
     pub fn validate(self: DrawIndexedPrimitivesDescriptor) CommandEncodingError!void {
         if (self.index_count == 0) return CommandEncodingError.InvalidIndexCount;
@@ -1534,6 +1547,52 @@ pub const DrawIndexedPrimitivesDescriptor = struct {
         }
     }
 };
+
+pub const DrawPrimitivesIndirectDescriptor = struct {
+    primitive_type: PrimitiveTopology = .triangle,
+    buffer_offset: u64 = 0,
+    draw_count: u32 = 1,
+    stride: u32 = 0,
+
+    pub fn validate(self: DrawPrimitivesIndirectDescriptor) CommandEncodingError!void {
+        try validateIndirectDrawShape(self.draw_count, self.stride);
+    }
+};
+
+pub const DrawIndexedPrimitivesIndirectDescriptor = struct {
+    primitive_type: PrimitiveTopology = .triangle,
+    index_type: IndexType = .uint16,
+    buffer_offset: u64 = 0,
+    draw_count: u32 = 1,
+    stride: u32 = 0,
+
+    pub fn validate(self: DrawIndexedPrimitivesIndirectDescriptor) CommandEncodingError!void {
+        try validateIndirectDrawShape(self.draw_count, self.stride);
+    }
+};
+
+pub const MultiDrawPrimitivesDescriptor = struct {
+    draws: []const DrawPrimitivesDescriptor = &.{},
+
+    pub fn validate(self: MultiDrawPrimitivesDescriptor) CommandEncodingError!void {
+        if (self.draws.len == 0) return CommandEncodingError.InvalidDrawCount;
+        for (self.draws) |draw| try draw.validate();
+    }
+};
+
+pub const MultiDrawIndexedPrimitivesDescriptor = struct {
+    draws: []const DrawIndexedPrimitivesDescriptor = &.{},
+
+    pub fn validate(self: MultiDrawIndexedPrimitivesDescriptor) CommandEncodingError!void {
+        if (self.draws.len == 0) return CommandEncodingError.InvalidDrawCount;
+        for (self.draws) |draw| try draw.validate();
+    }
+};
+
+fn validateIndirectDrawShape(draw_count: u32, stride: u32) CommandEncodingError!void {
+    if (draw_count == 0) return CommandEncodingError.InvalidDrawCount;
+    if (stride != 0 and stride % 4 != 0) return CommandEncodingError.InvalidIndirectDrawStride;
+}
 
 pub const DispatchThreadgroupsDescriptor = struct {
     threadgroup_count_x: u32 = 0,
@@ -1733,6 +1792,40 @@ pub const RenderCommandEncoderDebugState = struct {
         try descriptor.validate();
     }
 
+    pub fn drawPrimitivesIndirect(
+        self: *RenderCommandEncoderDebugState,
+        descriptor: DrawPrimitivesIndirectDescriptor,
+    ) CommandEncodingError!void {
+        try self.requirePipeline();
+        try descriptor.validate();
+    }
+
+    pub fn drawIndexedPrimitivesIndirect(
+        self: *RenderCommandEncoderDebugState,
+        descriptor: DrawIndexedPrimitivesIndirectDescriptor,
+    ) CommandEncodingError!void {
+        try self.requirePipeline();
+        if (!self.index_buffer_set) return CommandEncodingError.MissingIndexBuffer;
+        try descriptor.validate();
+    }
+
+    pub fn drawPrimitivesMulti(
+        self: *RenderCommandEncoderDebugState,
+        descriptor: MultiDrawPrimitivesDescriptor,
+    ) CommandEncodingError!void {
+        try self.requirePipeline();
+        try descriptor.validate();
+    }
+
+    pub fn drawIndexedPrimitivesMulti(
+        self: *RenderCommandEncoderDebugState,
+        descriptor: MultiDrawIndexedPrimitivesDescriptor,
+    ) CommandEncodingError!void {
+        try self.requirePipeline();
+        if (!self.index_buffer_set) return CommandEncodingError.MissingIndexBuffer;
+        try descriptor.validate();
+    }
+
     pub fn endEncoding(
         self: *RenderCommandEncoderDebugState,
         command_buffer: *CommandBufferDebugState,
@@ -1882,7 +1975,13 @@ pub const CommandEncodingError = error{
     InvalidVertexCount,
     InvalidIndexCount,
     InvalidInstanceCount,
+    InvalidDrawCount,
     InvalidIndexBufferOffset,
+    InvalidIndirectDrawStride,
+    UnsupportedBaseVertex,
+    UnsupportedBaseInstance,
+    UnsupportedIndirectDraw,
+    UnsupportedMultiDraw,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -4510,6 +4609,33 @@ test "draw descriptors validate counts and index alignment" {
         .index_count = 6,
         .index_buffer_offset = 2,
     }).validate());
+
+    try (DrawPrimitivesDescriptor{
+        .vertex_count = 3,
+        .base_instance = 2,
+    }).validate();
+    try (DrawIndexedPrimitivesDescriptor{
+        .index_count = 6,
+        .base_vertex = -3,
+        .base_instance = 2,
+    }).validate();
+    try (DrawPrimitivesIndirectDescriptor{
+        .draw_count = 2,
+        .stride = 16,
+    }).validate();
+    try std.testing.expectError(CommandEncodingError.InvalidDrawCount, (DrawPrimitivesIndirectDescriptor{
+        .draw_count = 0,
+    }).validate());
+    try std.testing.expectError(CommandEncodingError.InvalidIndirectDrawStride, (DrawIndexedPrimitivesIndirectDescriptor{
+        .stride = 6,
+    }).validate());
+
+    const draws = [_]DrawPrimitivesDescriptor{
+        .{ .vertex_count = 3 },
+        .{ .vertex_count = 6, .instance_count = 2 },
+    };
+    try (MultiDrawPrimitivesDescriptor{ .draws = draws[0..] }).validate();
+    try std.testing.expectError(CommandEncodingError.InvalidDrawCount, (MultiDrawIndexedPrimitivesDescriptor{}).validate());
 }
 
 test "copy descriptors validate ranges and texture layouts" {

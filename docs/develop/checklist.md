@@ -463,11 +463,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 7 Checklist
 
-- [ ] Add base vertex/base instance draw fields.
-- [ ] Add indirect draw descriptor shapes.
-- [ ] Add multi-draw descriptor shapes and feature gate.
-- [ ] Return typed unsupported errors for non-lowered draw forms.
-- [ ] Document draw command limits.
+- [x] Add base vertex/base instance draw fields.
+- [x] Add indirect draw descriptor shapes.
+- [x] Add multi-draw descriptor shapes and feature gate.
+- [x] Return typed unsupported errors for non-lowered draw forms.
+- [x] Document draw command limits.
 
 ## Period 5 Phase 8 Checklist
 
