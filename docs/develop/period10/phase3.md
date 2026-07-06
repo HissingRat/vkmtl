@@ -10,4 +10,8 @@ Phase 3 defines external texture and platform handle import/export shapes.
 
 ## Current Limits
 
+- `ExternalHandleDescriptor`, `ExternalTextureDescriptor`, and
+  `ExternalSemaphoreDescriptor` validate handle kind and backend compatibility.
+- `DeviceFeatures.external_memory`, `external_textures`, and
+  `external_semaphores` default to false.
 - Native import/export remains future backend work and should stay explicit.

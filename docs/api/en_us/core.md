@@ -137,6 +137,12 @@ residency intent behind `DeviceFeatures.sparse_buffers`,
 `DeviceFeatures.sparse_textures`, and `DeviceFeatures.tiled_textures`. Native
 residency management is future backend work.
 
+External interop shapes are represented by `ExternalHandleDescriptor`,
+`ExternalTextureDescriptor`, and `ExternalSemaphoreDescriptor`. They validate
+handle kind, selected backend compatibility, and texture shape behind
+`DeviceFeatures.external_textures` and `DeviceFeatures.external_semaphores`.
+Native handle import/export remains explicit future backend work.
+
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and
 write-after-write hazards. Blit copies, render attachments, vertex buffers, and

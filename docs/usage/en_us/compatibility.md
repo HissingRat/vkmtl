@@ -33,3 +33,7 @@ toward Metal argument buffers. Both are represented by
 Sparse buffers/textures map toward Vulkan sparse resources and Metal tiled or
 sparse texture concepts. The current descriptors validate page-aligned mapping
 intent only.
+
+External texture and semaphore interop uses explicit platform/backend handle
+descriptors. It is related to native handles, but it is not part of ordinary
+portable resource creation.

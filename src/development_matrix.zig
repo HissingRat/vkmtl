@@ -22,9 +22,8 @@ pub const FeatureGate = enum {
         return switch (self) {
             .multi_surface => features.multi_surface,
             .native_handles => features.native_handles,
-            .external_texture_interop,
-            .native_command_insertion,
-            => false,
+            .external_texture_interop => features.external_textures,
+            .native_command_insertion => false,
         };
     }
 };

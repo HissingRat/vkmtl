@@ -711,10 +711,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 3 Checklist
 
 - [x] Define external texture / platform interop scope before implementation.
-- [ ] Add feature gates and external handle descriptor shapes.
-- [ ] Validate platform handle kind, backend compatibility, and usage.
-- [ ] Keep native import/export lowering unsupported.
-- [ ] Document relationship to native handles.
+- [x] Add feature gates and external handle descriptor shapes.
+- [x] Validate platform handle kind, backend compatibility, and usage.
+- [x] Keep native import/export lowering unsupported.
+- [x] Document relationship to native handles.
 
 ## Period 10 Phase 4 Checklist
 

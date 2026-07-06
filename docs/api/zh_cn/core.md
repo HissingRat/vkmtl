@@ -112,6 +112,11 @@ Sparse/tiled resource shape 由 `SparseBufferMappingDescriptor`、
 `DeviceFeatures.tiled_textures` gate 后面校验 page size、region alignment 和 residency intent。
 Native residency management 仍是 future backend work。
 
+External interop shape 由 `ExternalHandleDescriptor`、`ExternalTextureDescriptor` 和
+`ExternalSemaphoreDescriptor` 表示。它们会在 `DeviceFeatures.external_textures` 和
+`DeviceFeatures.external_semaphores` gate 后面校验 handle kind、selected backend compatibility 和
+texture shape。Native handle import/export 仍是显式 future backend work。
+
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
 render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan

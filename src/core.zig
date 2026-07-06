@@ -109,6 +109,9 @@ pub const DeviceFeatures = struct {
     sparse_buffers: bool = false,
     sparse_textures: bool = false,
     tiled_textures: bool = false,
+    external_memory: bool = false,
+    external_textures: bool = false,
+    external_semaphores: bool = false,
     transfer_commands: bool = true,
     storage_buffers: bool = true,
     storage_textures: bool = true,
@@ -584,6 +587,11 @@ pub const AdvancedFeatureError = error{
     InvalidSparsePageSize,
     InvalidSparseRegion,
     SparseRegionCountExceeded,
+    UnsupportedExternalMemory,
+    UnsupportedExternalTextures,
+    UnsupportedExternalSemaphores,
+    InvalidExternalHandle,
+    ExternalHandleBackendMismatch,
 };
 
 pub const ObjectCacheMode = enum {
@@ -803,6 +811,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSparseBuffers,
         error.UnsupportedSparseTextures,
         error.UnsupportedTiledTextures,
+        error.UnsupportedExternalMemory,
+        error.UnsupportedExternalTextures,
+        error.UnsupportedExternalSemaphores,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -958,6 +969,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidSparsePageSize,
         error.InvalidSparseRegion,
         error.SparseRegionCountExceeded,
+        error.InvalidExternalHandle,
+        error.ExternalHandleBackendMismatch,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -3015,6 +3028,73 @@ pub const TextureDescriptor = struct {
                 .depth = mipDimension(self.depth_or_array_layers, level),
             },
         };
+    }
+};
+
+pub const ExternalHandleKind = enum {
+    opaque_fd,
+    win32_handle,
+    iosurface,
+    metal_texture,
+    vulkan_image,
+    vulkan_semaphore,
+};
+
+pub const ExternalHandleDescriptor = struct {
+    kind: ExternalHandleKind,
+    value: usize,
+    backend: ?Backend = null,
+
+    pub fn validateForBackend(self: ExternalHandleDescriptor, selected_backend: Backend) AdvancedFeatureError!void {
+        if (self.value == 0) return AdvancedFeatureError.InvalidExternalHandle;
+        if (self.backend) |backend| {
+            if (backend != selected_backend) return AdvancedFeatureError.ExternalHandleBackendMismatch;
+        }
+        switch (self.kind) {
+            .iosurface, .metal_texture => if (selected_backend != .metal) return AdvancedFeatureError.ExternalHandleBackendMismatch,
+            .vulkan_image, .vulkan_semaphore => if (selected_backend != .vulkan) return AdvancedFeatureError.ExternalHandleBackendMismatch,
+            .opaque_fd, .win32_handle => {},
+        }
+    }
+};
+
+pub const ExternalTextureDescriptor = struct {
+    label: ?[]const u8 = null,
+    handle: ExternalHandleDescriptor,
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+    depth_or_array_layers: u32 = 1,
+    usage: TextureUsage = .{ .shader_read = true },
+
+    pub fn validate(
+        self: ExternalTextureDescriptor,
+        selected_backend: Backend,
+        features: DeviceFeatures,
+    ) (AdvancedFeatureError || TextureError)!void {
+        if (!features.external_textures) return AdvancedFeatureError.UnsupportedExternalTextures;
+        try self.handle.validateForBackend(selected_backend);
+        try (TextureDescriptor{
+            .format = self.format,
+            .width = self.width,
+            .height = self.height,
+            .depth_or_array_layers = self.depth_or_array_layers,
+            .usage = self.usage,
+        }).validate();
+    }
+};
+
+pub const ExternalSemaphoreDescriptor = struct {
+    handle: ExternalHandleDescriptor,
+    timeline: bool = false,
+
+    pub fn validate(
+        self: ExternalSemaphoreDescriptor,
+        selected_backend: Backend,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!void {
+        if (!features.external_semaphores) return AdvancedFeatureError.UnsupportedExternalSemaphores;
+        try self.handle.validateForBackend(selected_backend);
     }
 };
 
@@ -6458,6 +6538,38 @@ test "texture descriptor validates and resolves mip ranges" {
         .height = 4,
         .mip_level_count = 5,
     }).validate());
+}
+
+test "external texture descriptors validate backend and feature gates" {
+    const metal_handle = ExternalHandleDescriptor{
+        .kind = .iosurface,
+        .value = 1,
+        .backend = .metal,
+    };
+    const external_texture = ExternalTextureDescriptor{
+        .handle = metal_handle,
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+    };
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalTextures, external_texture.validate(.metal, .{}));
+    try external_texture.validate(.metal, .{ .external_textures = true });
+    try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, external_texture.validate(.vulkan, .{ .external_textures = true }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidExternalHandle, (ExternalTextureDescriptor{
+        .handle = .{ .kind = .opaque_fd, .value = 0 },
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+    }).validate(.vulkan, .{ .external_textures = true }));
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalSemaphores, (ExternalSemaphoreDescriptor{
+        .handle = .{ .kind = .vulkan_semaphore, .value = 1 },
+    }).validate(.vulkan, .{}));
+    try (ExternalSemaphoreDescriptor{
+        .handle = .{ .kind = .vulkan_semaphore, .value = 1 },
+        .timeline = true,
+    }).validate(.vulkan, .{ .external_semaphores = true });
 }
 
 test "sparse resource descriptors validate feature gates and alignment" {

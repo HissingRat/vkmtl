@@ -28,3 +28,6 @@ argument buffer。两者目前都通过 `DescriptorIndexingLayoutDescriptor` 表
 
 Sparse buffer/texture 未来映射到 Vulkan sparse resource 和 Metal tiled/sparse texture 概念。
 当前 descriptor 只校验 page-aligned mapping intent。
+
+External texture 和 semaphore interop 使用显式 platform/backend handle descriptor。它和 native
+handle escape hatch 相关，但不属于普通 portable resource creation。
