@@ -2283,6 +2283,7 @@ pub const Queue = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     impl: *BackendRuntime,
+    features_value: core.DeviceFeatures,
     kind_value: core.QueueKind = .graphics,
 
     pub fn selectedBackend(self: Queue) core.Backend {
@@ -2303,7 +2304,7 @@ pub const Queue = struct {
     ) !CommandBuffer {
         const debug = try core.CommandBufferDebugState.init(
             descriptor,
-            core.defaultDeviceFeatures(self.backend),
+            self.features_value,
         );
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
@@ -2325,6 +2326,7 @@ pub const Device = struct {
     backend: core.Backend,
     impl: *BackendRuntime,
     adapter_info: core.AdapterInfo,
+    capability_report: core.DeviceCapabilityReport,
     shader_cache_dir: ?[]const u8 = null,
     slangc_path: ?[]const u8 = null,
 
@@ -2337,19 +2339,26 @@ pub const Device = struct {
     }
 
     pub fn features(self: Device) core.DeviceFeatures {
-        return core.defaultDeviceFeatures(self.backend);
+        return self.capability_report.features;
+    }
+
+    pub fn nativeFeatures(self: Device) core.DeviceFeatures {
+        return self.capability_report.native_features;
     }
 
     pub fn limits(self: Device) core.DeviceLimits {
-        return switch (self.impl.*) {
-            .vulkan => |*vulkan| vulkan.limits(),
-            .metal => |*metal| metal.limits(),
-        };
+        return self.capability_report.limits;
+    }
+
+    pub fn capabilityReport(self: Device) core.DeviceCapabilityReport {
+        return self.capability_report;
     }
 
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
-        _ = self;
-        return core.defaultFormatCapabilities(format);
+        return switch (self.impl.*) {
+            .vulkan => |*vulkan| vulkan.formatCapabilities(format),
+            .metal => |*metal| metal.formatCapabilities(format),
+        };
     }
 
     pub fn objectCacheDiagnostics(self: Device) core.ObjectCacheDiagnostics {
@@ -2361,6 +2370,7 @@ pub const Device = struct {
             .backend = self.backend,
             .tracker = self.tracker,
             .impl = self.impl,
+            .features_value = self.features(),
         };
     }
 
@@ -2643,6 +2653,25 @@ fn resolveAdapterInfo(allocator: std.mem.Allocator, impl: *BackendRuntime) !Reso
     };
 }
 
+fn resolveCapabilityReport(impl: *BackendRuntime) core.DeviceCapabilityReport {
+    return switch (impl.*) {
+        .vulkan => |*vulkan| .{
+            .backend = .vulkan,
+            .source = .vulkan_query,
+            .features = vulkan.features(),
+            .native_features = vulkan.nativeFeatures(),
+            .limits = vulkan.limits(),
+        },
+        .metal => |*metal| .{
+            .backend = .metal,
+            .source = .metal_query,
+            .features = metal.features(),
+            .native_features = metal.nativeFeatures(),
+            .limits = metal.limits(),
+        },
+    };
+}
+
 fn validateAdapterSelection(selection: core.AdapterSelectionDescriptor, adapter: core.AdapterInfo) core.BackendSelectionError!void {
     if (!selection.matches(adapter)) return core.BackendSelectionError.AdapterNotFound;
 }
@@ -2661,6 +2690,7 @@ pub const WindowContext = struct {
     surface_descriptor: core.SurfaceDescriptor,
     presentation_descriptor: core.PresentationDescriptor,
     adapter_info: core.AdapterInfo,
+    capability_report: core.DeviceCapabilityReport,
     owned_adapter_name: ?[]u8 = null,
     shader_cache_dir: ?[]const u8 = null,
     owns_shader_cache_dir: bool = false,
@@ -2707,6 +2737,7 @@ pub const WindowContext = struct {
         const adapter_info = try resolveAdapterInfo(allocator, &impl);
         errdefer adapter_info.deinit(allocator);
         try validateAdapterSelection(adapter_selection, adapter_info.info);
+        const capability_report = resolveCapabilityReport(&impl);
 
         return .{
             .allocator = allocator,
@@ -2715,6 +2746,7 @@ pub const WindowContext = struct {
             .surface_descriptor = options.surface,
             .presentation_descriptor = options.presentation,
             .adapter_info = adapter_info.info,
+            .capability_report = capability_report,
             .owned_adapter_name = adapter_info.owned_name,
             .shader_cache_dir = resolved_shader_cache_dir.value,
             .owns_shader_cache_dir = resolved_shader_cache_dir.owned,
@@ -2764,6 +2796,7 @@ pub const WindowContext = struct {
             .backend = self.backend,
             .impl = &self.impl,
             .adapter_info = self.adapter_info,
+            .capability_report = self.capability_report,
             .shader_cache_dir = self.shader_cache_dir,
             .slangc_path = self.slangc_path,
         };
@@ -2774,6 +2807,7 @@ pub const WindowContext = struct {
             .backend = self.backend,
             .tracker = self.tracker,
             .impl = &self.impl,
+            .features_value = self.capability_report.features,
         };
     }
 
@@ -3357,6 +3391,7 @@ test "runtime device exposes adapter features limits and format caps" {
             .name = "test metal adapter",
             .vendor = "Test Vendor",
         },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
     };
 
     try std.testing.expectEqual(core.Backend.metal, device.selectedBackend());
@@ -3366,6 +3401,7 @@ test "runtime device exposes adapter features limits and format caps" {
     try std.testing.expectEqual(core.default_max_bind_group_slots, device.limits().max_bind_group_slots);
     try std.testing.expect(device.getFormatCaps(.rgba8_unorm).storage);
     try std.testing.expect(device.getFormatCaps(.depth32_float).depth_stencil_attachment);
+    try std.testing.expectEqual(core.DeviceCapabilitySource.defaults, device.capabilityReport().source);
 }
 
 test "runtime adapter selection validates resolved adapter info" {
@@ -3402,6 +3438,7 @@ test "window context exposes device and queue views" {
             .name = "test vulkan adapter",
             .vendor = "Test Vendor",
         },
+        .capability_report = core.defaultDeviceCapabilityReport(.vulkan),
         .impl = undefined,
     };
 

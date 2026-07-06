@@ -13,3 +13,12 @@ Phase 3 centralizes how backend query data becomes public capability data.
 
 - Tests should verify that default feature sets are conservative.
 - Tests should verify that backend query data does not bypass public structs.
+
+## Current Status
+
+- `DeviceCapabilityReport` records backend, source, usable features, native
+  queried features, and limits in one snapshot.
+- `WindowContext` resolves the report once after backend creation.
+- `Device.features()`, `Device.nativeFeatures()`, `Device.limits()`, and
+  `Device.capabilityReport()` expose the unified path.
+- `Device.getFormatCaps(...)` routes to the selected backend where available.

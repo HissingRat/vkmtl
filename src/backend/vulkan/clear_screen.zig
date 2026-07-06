@@ -95,6 +95,18 @@ pub fn limits(self: *const VulkanClearScreen) core.DeviceLimits {
     return self.gc.limits();
 }
 
+pub fn features(self: *const VulkanClearScreen) core.DeviceFeatures {
+    return self.gc.features();
+}
+
+pub fn nativeFeatures(self: *const VulkanClearScreen) core.DeviceFeatures {
+    return self.gc.nativeFeatures();
+}
+
+pub fn formatCapabilities(self: *const VulkanClearScreen, format: core.TextureFormat) core.FormatCapabilities {
+    return self.gc.formatCapabilities(format);
+}
+
 pub fn nativeHandles(self: *const VulkanClearScreen) core.NativeHandles {
     return .{
         .vulkan = .{

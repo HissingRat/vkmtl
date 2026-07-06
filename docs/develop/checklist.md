@@ -766,11 +766,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 11 Phase 3 Checklist
 
-- [ ] Define the unified feature/limit fill path before implementation.
-- [ ] Route backend-native query results into public `DeviceFeatures`.
-- [ ] Route backend-native query results into public `DeviceLimits`.
-- [ ] Keep unknown values conservative.
-- [ ] Add tests that prevent hardcoded advanced support.
+- [x] Define the unified feature/limit fill path before implementation.
+- [x] Route backend-native query results into public `DeviceFeatures`.
+- [x] Route backend-native query results into public `DeviceLimits`.
+- [x] Keep unknown values conservative.
+- [x] Add tests that prevent hardcoded advanced support.
 
 ## Period 11 Phase 4 Checklist
 

@@ -210,6 +210,20 @@ pub const FormatCapabilities = struct {
     }
 };
 
+pub const DeviceCapabilitySource = enum {
+    defaults,
+    vulkan_query,
+    metal_query,
+};
+
+pub const DeviceCapabilityReport = struct {
+    backend: Backend,
+    source: DeviceCapabilitySource = .defaults,
+    features: DeviceFeatures,
+    native_features: DeviceFeatures,
+    limits: DeviceLimits,
+};
+
 pub const ResourceAccess = enum {
     read,
     write,
@@ -1261,6 +1275,16 @@ pub fn defaultDeviceFeatures(_: Backend) DeviceFeatures {
 
 pub fn defaultDeviceLimits(_: Backend) DeviceLimits {
     return .{};
+}
+
+pub fn defaultDeviceCapabilityReport(backend: Backend) DeviceCapabilityReport {
+    const features = defaultDeviceFeatures(backend);
+    return .{
+        .backend = backend,
+        .features = features,
+        .native_features = features,
+        .limits = defaultDeviceLimits(backend),
+    };
 }
 
 pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
