@@ -77,6 +77,8 @@ Decision notes: `phase5.md`.
 - Support resize, recreate, and surface-lost handling.
 - Make clear that `WindowContext` is not equivalent to `Device`.
 
+Decision notes: `phase6.md`.
+
 ## Phase 7: Native Handle Escape Hatch
 
 - Provide controlled Vulkan and Metal native handle access.

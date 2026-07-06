@@ -42,6 +42,12 @@ resize, and the current clear-screen helper lives at `Swapchain.clear(...)`.
 `WindowContext.resize(...)` and `WindowContext.clear(...)` remain compatibility
 forwards.
 
+`SurfaceCollection` is the first multi-surface management shape. It can track
+multiple neutral surface presentation states for one selected backend and uses
+generation handles for resize/remove validation. It does not create multiple
+native swapchains yet; complete native multi-window support is gated by
+`DeviceFeatures.multi_surface`.
+
 ## Resources
 
 Starting in Period 2, the long-term resource creation entry point is the runtime

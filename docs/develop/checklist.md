@@ -269,6 +269,16 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Export the classifier from the public root module.
 - [x] Document that precise Zig errors remain the primary low-level signal.
 
+## Period 2 Phase 6 Checklist
+
+- [x] Add a public surface handle.
+- [x] Add a backend-neutral surface collection.
+- [x] Track multiple surface presentation states for one selected backend.
+- [x] Support resize/remove through handles.
+- [x] Validate stale or invalid handles.
+- [x] Document that native multi-swapchain support remains behind
+  `DeviceFeatures.multi_surface`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

@@ -298,6 +298,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidStorageTextureVisibility,
         error.MissingSurfaceSource,
         error.InvalidSurfaceExtent,
+        error.InvalidSurfaceHandle,
         error.InvalidBufferLength,
         error.InitialDataTooLarge,
         error.InitialDataRequiresCpuVisibleStorage,
@@ -2148,6 +2149,7 @@ pub const BufferError = error{
 pub const SurfaceError = error{
     MissingSurfaceSource,
     InvalidSurfaceExtent,
+    InvalidSurfaceHandle,
 };
 
 pub const Surface = struct {
@@ -2182,6 +2184,96 @@ pub const Surface = struct {
         var descriptor = self.presentation orelse return SurfaceError.InvalidSurfaceExtent;
         descriptor.extent = extent;
         try self.configure(descriptor);
+    }
+};
+
+pub const SurfaceHandle = struct {
+    index: u32,
+    generation: u32,
+};
+
+pub const SurfaceCollection = struct {
+    allocator: std.mem.Allocator,
+    backend: Backend,
+    entries: std.ArrayListUnmanaged(Entry) = .empty,
+
+    const Entry = struct {
+        generation: u32 = 1,
+        alive: bool = true,
+        surface: Surface,
+    };
+
+    pub fn init(allocator: std.mem.Allocator, backend: Backend) SurfaceCollection {
+        return .{
+            .allocator = allocator,
+            .backend = backend,
+        };
+    }
+
+    pub fn deinit(self: *SurfaceCollection) void {
+        self.entries.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn add(self: *SurfaceCollection, descriptor: SurfaceDescriptor, presentation: PresentationDescriptor) !SurfaceHandle {
+        if (descriptor.source == null) return SurfaceError.MissingSurfaceSource;
+
+        var surface = Surface{
+            .backend = self.backend,
+            .descriptor = descriptor,
+        };
+        try surface.configure(presentation);
+
+        for (self.entries.items, 0..) |*entry, i| {
+            if (!entry.alive) {
+                entry.generation +%= 1;
+                if (entry.generation == 0) entry.generation = 1;
+                entry.alive = true;
+                entry.surface = surface;
+                return .{
+                    .index = @intCast(i),
+                    .generation = entry.generation,
+                };
+            }
+        }
+
+        try self.entries.append(self.allocator, .{ .surface = surface });
+        return .{
+            .index = @intCast(self.entries.items.len - 1),
+            .generation = 1,
+        };
+    }
+
+    pub fn remove(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!void {
+        const entry = try self.entryPtr(handle);
+        entry.alive = false;
+        entry.surface.state = .unconfigured;
+        entry.surface.presentation = null;
+    }
+
+    pub fn get(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!*Surface {
+        return &(try self.entryPtr(handle)).surface;
+    }
+
+    pub fn resize(self: *SurfaceCollection, handle: SurfaceHandle, extent: Extent2D) SurfaceError!void {
+        try (try self.get(handle)).resize(extent);
+    }
+
+    pub fn liveCount(self: SurfaceCollection) usize {
+        var count: usize = 0;
+        for (self.entries.items) |entry| {
+            if (entry.alive) count += 1;
+        }
+        return count;
+    }
+
+    fn entryPtr(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!*Entry {
+        if (handle.index >= self.entries.items.len) return SurfaceError.InvalidSurfaceHandle;
+        const entry = &self.entries.items[handle.index];
+        if (!entry.alive or entry.generation != handle.generation) {
+            return SurfaceError.InvalidSurfaceHandle;
+        }
+        return entry;
     }
 };
 
@@ -2425,6 +2517,39 @@ test "surface presentation handles configured and suspended extents" {
         .extent = .{ .width = 0, .height = 480 },
         .resize_policy = .recreate,
     }));
+}
+
+test "surface collection manages multiple neutral surfaces" {
+    var collection = SurfaceCollection.init(std.testing.allocator, .metal);
+    defer collection.deinit();
+
+    var window_a: u8 = 0;
+    var window_b: u8 = 0;
+    const handle_a = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_a,
+        },
+    }, .{
+        .extent = .{ .width = 640, .height = 480 },
+    });
+    const handle_b = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_b,
+        },
+    }, .{
+        .extent = .{ .width = 320, .height = 240 },
+    });
+
+    try std.testing.expectEqual(@as(usize, 2), collection.liveCount());
+    try std.testing.expectEqual(Backend.metal, (try collection.get(handle_a)).selectedBackend());
+    try collection.resize(handle_b, .{ .width = 800, .height = 600 });
+    try std.testing.expectEqual(@as(u32, 800), (try collection.get(handle_b)).presentation.?.extent.width);
+
+    try collection.remove(handle_a);
+    try std.testing.expectEqual(@as(usize, 1), collection.liveCount());
+    try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.get(handle_a));
 }
 
 test "buffer descriptor resolves length from explicit length or bytes" {
