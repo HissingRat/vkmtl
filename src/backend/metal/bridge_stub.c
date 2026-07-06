@@ -71,6 +71,17 @@ vkmtl_metal_status vkmtl_metal_clear_screen_draw(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
+    const vkmtl_metal_clear_screen *clear_screen,
+    char *buffer,
+    size_t buffer_len
+) {
+    (void)clear_screen;
+    (void)buffer;
+    (void)buffer_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_clear_screen *owner,
     size_t length,

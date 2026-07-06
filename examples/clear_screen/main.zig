@@ -29,7 +29,10 @@ pub fn main() !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var texture = try context.makeTexture(.{
+    var device = context.device();
+    var swapchain = context.swapchain();
+
+    var texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = 2,
         .height = 2,
@@ -52,7 +55,7 @@ pub fn main() !void {
     var texture_view = try texture.makeTextureView(.{});
     defer texture_view.deinit();
 
-    var sampler = try context.makeSamplerState(.{
+    var sampler = try device.makeSamplerState(.{
         .min_filter = .linear,
         .mag_filter = .linear,
     });
@@ -65,8 +68,8 @@ pub fn main() !void {
             continue;
         }
 
-        try context.resize(extent);
-        try context.clear(.{
+        try swapchain.resize(extent);
+        try swapchain.clear(.{
             .red = 0.04,
             .green = 0.07,
             .blue = 0.10,

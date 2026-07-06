@@ -6,6 +6,9 @@ queries can become more precise over time.
 ## First Slice
 
 - Add `AdapterInfo` for the selected backend adapter.
+- Add conservative public adapter enumeration using backend availability.
+- Fill selected-adapter name/vendor/type from backend runtime queries where
+  available.
 - Add `DeviceFeatures` for portable feature gates.
 - Add `DeviceLimits` for known public limits.
 - Add `FormatCapabilities` and `Device.getFormatCaps(format)`.
@@ -13,9 +16,11 @@ queries can become more precise over time.
 
 ## First-Slice Limits
 
-- Adapter enumeration remains future work.
+- Enumeration returns one conservative `AdapterInfo` per available backend
+  instead of backend-native physical devices.
 - Explicit adapter selection remains future work.
-- Backend-native capability queries can refine the conservative defaults later.
+- Backend-native limits and format capability queries can refine the
+  conservative defaults later.
 
 ## Capability Rules
 

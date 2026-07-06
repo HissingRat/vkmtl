@@ -14,6 +14,11 @@ const MetalClearScreen = @This();
 handle: *metal.vkmtl_metal_clear_screen,
 extent: core.Extent2D,
 
+pub const AdapterInfoResult = struct {
+    info: core.AdapterInfo,
+    owned_name: ?[]u8 = null,
+};
+
 const Error = error{
     MetalUnsupported,
     NoMetalDevice,
@@ -22,6 +27,8 @@ const Error = error{
     CommandFailed,
     UnexpectedMetalStatus,
 };
+
+const adapter_name_buffer_len = 256;
 
 pub fn init(
     surface: core.SurfaceDescriptor,
@@ -47,6 +54,30 @@ pub fn init(
 
 pub fn deinit(self: *MetalClearScreen) void {
     metal.vkmtl_metal_clear_screen_destroy(self.handle);
+}
+
+pub fn adapterInfo(self: *const MetalClearScreen, allocator: std.mem.Allocator) !AdapterInfoResult {
+    var buffer: [adapter_name_buffer_len]u8 = undefined;
+    const status = metal.vkmtl_metal_clear_screen_copy_device_name(
+        self.handle,
+        &buffer,
+        buffer.len,
+    );
+    if (status != metal.VKMTL_METAL_STATUS_OK) {
+        return .{ .info = core.defaultAdapterInfo(.metal) };
+    }
+
+    const name_len = std.mem.indexOfScalar(u8, buffer[0..], 0) orelse buffer.len;
+    const name = try allocator.dupe(u8, buffer[0..name_len]);
+    return .{
+        .info = .{
+            .backend = .metal,
+            .name = name,
+            .vendor = "Apple",
+            .device_type = .integrated_gpu,
+        },
+        .owned_name = name,
+    };
 }
 
 pub fn resize(self: *MetalClearScreen, extent: core.Extent2D) !void {

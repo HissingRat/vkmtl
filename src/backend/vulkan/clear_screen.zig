@@ -25,6 +25,11 @@ pool: vk.CommandPool,
 cmdbufs: []vk.CommandBuffer,
 clear_color: core.ClearColorLike,
 
+pub const AdapterInfoResult = struct {
+    info: core.AdapterInfo,
+    owned_name: ?[]u8 = null,
+};
+
 pub fn init(
     allocator: std.mem.Allocator,
     app_name: [*:0]const u8,
@@ -80,6 +85,10 @@ pub fn init(
 
     self.cmdbufs = try self.createCommandBuffers();
     return self;
+}
+
+pub fn adapterInfo(self: *const VulkanClearScreen) AdapterInfoResult {
+    return .{ .info = self.gc.adapterInfo() };
 }
 
 pub fn deinit(self: *VulkanClearScreen) void {

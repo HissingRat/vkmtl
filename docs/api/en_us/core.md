@@ -35,6 +35,13 @@ For Vulkan, that glue also supplies a `VulkanSurfaceProvider` with the instance
 extensions, proc-address lookup, and surface-creation callback required by the
 backend. Examples pass the resulting descriptors to `WindowContext.init(...)`.
 
+Starting in Period 2, `WindowContext.surface()` and
+`WindowContext.swapchain()` expose runtime views. `Surface` keeps the
+window/provider descriptor information. `Swapchain` owns presentation-chain
+resize, and the current clear-screen helper lives at `Swapchain.clear(...)`.
+`WindowContext.resize(...)` and `WindowContext.clear(...)` remain compatibility
+forwards.
+
 ## Resources
 
 Starting in Period 2, the long-term resource creation entry point is the runtime
@@ -48,10 +55,18 @@ forwards.
 
 `Device` also exposes the first capability-query shape:
 
+- `vkmtl.enumerateAdapters(allocator, BackendSelectionOptions)`
 - `adapterInfo()`
 - `features()`
 - `limits()`
 - `getFormatCaps(TextureFormat)`
+
+Current adapter enumeration uses the same availability and ordering rules as
+backend selection and returns conservative `AdapterInfo` values for each
+available backend. After runtime context creation, `context.adapterInfo()` and
+`device.adapterInfo()` try to return backend-queried selected-adapter
+name/vendor/type. Backend-native limits and format capabilities should replace
+the current defaults in later Period 2 phases.
 
 Buffers created with CPU-visible storage can be updated with
 `buffer.replaceBytes(...)` and read back with `buffer.readBytes(...)`. Textures

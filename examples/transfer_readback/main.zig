@@ -38,21 +38,24 @@ pub fn main() !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var source_buffer = try context.makeBuffer(.{
+    var device = context.device();
+    var queue = context.queue();
+
+    var source_buffer = try device.makeBuffer(.{
         .bytes = pixels[0..],
         .usage = .{ .copy_source = true },
         .storage_mode = .shared,
     });
     defer source_buffer.deinit();
 
-    var buffer_readback = try context.makeBuffer(.{
+    var buffer_readback = try device.makeBuffer(.{
         .length = pixels.len,
         .usage = .{ .copy_destination = true },
         .storage_mode = .shared,
     });
     defer buffer_readback.deinit();
 
-    var texture = try context.makeTexture(.{
+    var texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = 2,
         .height = 2,
@@ -64,14 +67,14 @@ pub fn main() !void {
     });
     defer texture.deinit();
 
-    var texture_readback = try context.makeBuffer(.{
+    var texture_readback = try device.makeBuffer(.{
         .length = pixels.len,
         .usage = .{ .copy_destination = true },
         .storage_mode = .shared,
     });
     defer texture_readback.deinit();
 
-    var command_buffer = try context.makeCommandBuffer();
+    var command_buffer = try queue.makeCommandBuffer();
     var blit = try command_buffer.makeBlitCommandEncoder();
     try blit.copyBufferToBuffer(&source_buffer, &buffer_readback, .{
         .size = pixels.len,

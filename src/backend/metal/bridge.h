@@ -156,6 +156,11 @@ vkmtl_metal_status vkmtl_metal_clear_screen_draw(
     float blue,
     float alpha
 );
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
+    const vkmtl_metal_clear_screen *clear_screen,
+    char *buffer,
+    size_t buffer_len
+);
 
 vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_clear_screen *owner,

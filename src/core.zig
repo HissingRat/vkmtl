@@ -12,6 +12,94 @@ pub const Backend = enum {
     metal,
 };
 
+pub const AdapterDeviceType = enum {
+    unknown,
+    integrated_gpu,
+    discrete_gpu,
+    virtual_gpu,
+    cpu,
+};
+
+pub const AdapterPowerPreference = enum {
+    default,
+    low_power,
+    high_performance,
+};
+
+pub const AdapterInfo = struct {
+    backend: Backend,
+    name: []const u8,
+    vendor: []const u8 = "",
+    device_type: AdapterDeviceType = .unknown,
+};
+
+pub const AdapterList = struct {
+    allocator: std.mem.Allocator,
+    adapters: []AdapterInfo,
+
+    pub fn deinit(self: *AdapterList) void {
+        self.allocator.free(self.adapters);
+        self.* = undefined;
+    }
+
+    pub fn items(self: AdapterList) []const AdapterInfo {
+        return self.adapters;
+    }
+
+    pub fn len(self: AdapterList) usize {
+        return self.adapters.len;
+    }
+};
+
+pub const DeviceFeatures = struct {
+    runtime_slang: bool = true,
+    shader_reflection: bool = true,
+    buffers: bool = true,
+    textures: bool = true,
+    samplers: bool = true,
+    render_pipelines: bool = true,
+    compute_pipelines: bool = true,
+    bind_groups: bool = true,
+    transfer_commands: bool = true,
+    storage_buffers: bool = true,
+    storage_textures: bool = true,
+    depth_attachments: bool = true,
+    offscreen_render_targets: bool = true,
+    msaa_render_targets: bool = true,
+    indexed_draw: bool = true,
+    multi_surface: bool = false,
+    native_handles: bool = false,
+    debug_labels: bool = false,
+};
+
+pub const DeviceLimits = struct {
+    max_vertex_buffer_slots: u32 = default_max_vertex_buffer_slots,
+    max_bind_group_slots: u32 = default_max_bind_group_slots,
+    max_color_attachments: u32 = 4,
+    max_sample_count: u32 = 4,
+    min_uniform_buffer_offset_alignment: u64 = 256,
+    min_storage_buffer_offset_alignment: u64 = 256,
+};
+
+pub const FormatCapabilities = struct {
+    sampled: bool = false,
+    storage: bool = false,
+    color_attachment: bool = false,
+    depth_stencil_attachment: bool = false,
+    filterable: bool = false,
+    blendable: bool = false,
+    copy_source: bool = false,
+    copy_destination: bool = false,
+
+    pub fn supportsTextureUsage(self: FormatCapabilities, usage: TextureUsage) bool {
+        return (!usage.shader_read or self.sampled) and
+            (!usage.shader_write or self.storage) and
+            (!usage.render_attachment or self.color_attachment or self.depth_stencil_attachment) and
+            (!usage.copy_source or self.copy_source) and
+            (!usage.copy_destination or self.copy_destination);
+    }
+};
+
 pub const BackendAvailability = struct {
     vulkan: bool = true,
     metal: bool = builtin.os.tag.isDarwin(),
@@ -130,6 +218,102 @@ pub const TextureFormat = enum {
     rgba8_unorm_srgb,
     depth32_float,
 };
+
+pub fn defaultAdapterInfo(backend: Backend) AdapterInfo {
+    return .{
+        .backend = backend,
+        .name = switch (backend) {
+            .vulkan => "Default Vulkan adapter",
+            .metal => "Default Metal adapter",
+        },
+    };
+}
+
+pub fn enumerateAdapters(
+    allocator: std.mem.Allocator,
+    options: BackendSelectionOptions,
+) (std.mem.Allocator.Error || BackendSelectionError)!AdapterList {
+    var backends: [2]Backend = undefined;
+    var backend_count: usize = 0;
+
+    switch (options.preference) {
+        .vulkan => {
+            backends[0] = try requireBackend(.vulkan, options.availability);
+            backend_count = 1;
+        },
+        .metal => {
+            backends[0] = try requireBackend(.metal, options.availability);
+            backend_count = 1;
+        },
+        .auto => {
+            if (options.debug_override) |override| {
+                backends[0] = try requireBackend(override, options.availability);
+                backend_count = 1;
+            } else {
+                const first: Backend = if (options.os_tag.isDarwin()) .metal else .vulkan;
+                const second: Backend = if (first == .metal) .vulkan else .metal;
+                if (isAvailable(first, options.availability)) {
+                    backends[backend_count] = first;
+                    backend_count += 1;
+                }
+                if (isAvailable(second, options.availability)) {
+                    backends[backend_count] = second;
+                    backend_count += 1;
+                }
+                if (backend_count == 0) return BackendSelectionError.NoSupportedBackend;
+            }
+        },
+    }
+
+    const adapters = try allocator.alloc(AdapterInfo, backend_count);
+    for (backends[0..backend_count], adapters) |backend, *adapter| {
+        adapter.* = defaultAdapterInfo(backend);
+    }
+
+    return .{
+        .allocator = allocator,
+        .adapters = adapters,
+    };
+}
+
+pub fn defaultDeviceFeatures(_: Backend) DeviceFeatures {
+    return .{};
+}
+
+pub fn defaultDeviceLimits(_: Backend) DeviceLimits {
+    return .{};
+}
+
+pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
+    return switch (format) {
+        .automatic => .{},
+        .bgra8_unorm,
+        .bgra8_unorm_srgb,
+        .rgba8_unorm_srgb,
+        => .{
+            .sampled = true,
+            .color_attachment = true,
+            .filterable = true,
+            .blendable = true,
+            .copy_source = true,
+            .copy_destination = true,
+        },
+        .rgba8_unorm => .{
+            .sampled = true,
+            .storage = true,
+            .color_attachment = true,
+            .filterable = true,
+            .blendable = true,
+            .copy_source = true,
+            .copy_destination = true,
+        },
+        .depth32_float => .{
+            .depth_stencil_attachment = true,
+            .copy_source = true,
+            .copy_destination = true,
+        },
+    };
+}
 
 pub const ShaderSourceLanguage = enum {
     slang,
@@ -1469,8 +1653,10 @@ fn validateSampleCount(sample_count: u32) error{ InvalidSampleCount, Unsupported
     }
 }
 
-const max_vertex_buffer_slots: u32 = 31;
-const max_bind_group_slots: u32 = 16;
+pub const default_max_vertex_buffer_slots: u32 = 31;
+pub const default_max_bind_group_slots: u32 = 16;
+const max_vertex_buffer_slots: u32 = default_max_vertex_buffer_slots;
+const max_bind_group_slots: u32 = default_max_bind_group_slots;
 
 fn validateRange(origin: u32, size: u32, limit: u32) TextureError!void {
     const end = std.math.add(u32, origin, size) catch return TextureError.InvalidTextureRegion;
@@ -1878,6 +2064,47 @@ test "debug override only affects auto selection" {
         .os_tag = .linux,
         .availability = .{ .vulkan = true, .metal = true },
         .debug_override = .vulkan,
+    }));
+}
+
+test "adapter enumeration follows auto backend order" {
+    var adapters = try enumerateAdapters(std.testing.allocator, .{
+        .preference = .auto,
+        .os_tag = .macos,
+        .availability = .{ .vulkan = true, .metal = true },
+    });
+    defer adapters.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), adapters.len());
+    try std.testing.expectEqual(Backend.metal, adapters.items()[0].backend);
+    try std.testing.expectEqual(Backend.vulkan, adapters.items()[1].backend);
+}
+
+test "adapter enumeration respects explicit preference and debug override" {
+    var explicit = try enumerateAdapters(std.testing.allocator, .{
+        .preference = .vulkan,
+        .availability = .{ .vulkan = true, .metal = true },
+    });
+    defer explicit.deinit();
+
+    try std.testing.expectEqual(@as(usize, 1), explicit.len());
+    try std.testing.expectEqual(Backend.vulkan, explicit.items()[0].backend);
+
+    var override = try enumerateAdapters(std.testing.allocator, .{
+        .preference = .auto,
+        .availability = .{ .vulkan = true, .metal = true },
+        .debug_override = .metal,
+    });
+    defer override.deinit();
+
+    try std.testing.expectEqual(@as(usize, 1), override.len());
+    try std.testing.expectEqual(Backend.metal, override.items()[0].backend);
+}
+
+test "adapter enumeration reports unavailable explicit backend" {
+    try std.testing.expectError(BackendSelectionError.MetalUnavailable, enumerateAdapters(std.testing.allocator, .{
+        .preference = .metal,
+        .availability = .{ .vulkan = true, .metal = false },
     }));
 }
 
@@ -2998,4 +3225,37 @@ test "texture upload 2d descriptor converts to replace region descriptor" {
     try std.testing.expectEqual(@as(u32, 2), replace.slice);
     try std.testing.expectEqual(@as(usize, 8), replace.bytes_per_row);
     try std.testing.expectEqual(@as(usize, 0), replace.bytes_per_image);
+}
+
+test "default adapter info tracks selected backend" {
+    const adapter = defaultAdapterInfo(.metal);
+
+    try std.testing.expectEqual(Backend.metal, adapter.backend);
+    try std.testing.expect(adapter.name.len != 0);
+}
+
+test "default device limits expose public slot constants" {
+    const limits = defaultDeviceLimits(.vulkan);
+
+    try std.testing.expectEqual(default_max_vertex_buffer_slots, limits.max_vertex_buffer_slots);
+    try std.testing.expectEqual(default_max_bind_group_slots, limits.max_bind_group_slots);
+}
+
+test "default format capabilities describe current portable formats" {
+    const color = defaultFormatCapabilities(.rgba8_unorm);
+    try std.testing.expect(color.sampled);
+    try std.testing.expect(color.storage);
+    try std.testing.expect(color.color_attachment);
+    try std.testing.expect(color.supportsTextureUsage(.{
+        .shader_read = true,
+        .shader_write = true,
+        .render_attachment = true,
+        .copy_source = true,
+        .copy_destination = true,
+    }));
+
+    const depth = defaultFormatCapabilities(.depth32_float);
+    try std.testing.expect(!depth.color_attachment);
+    try std.testing.expect(depth.depth_stencil_attachment);
+    try std.testing.expect(depth.supportsTextureUsage(.{ .render_attachment = true }));
 }

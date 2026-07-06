@@ -71,28 +71,32 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var color_vertex_buffer = try context.makeBuffer(.{
+    var device = context.device();
+    var queue = context.queue();
+    var swapchain = context.swapchain();
+
+    var color_vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(color_vertices[0..]),
         .usage = .{ .vertex = true },
         .storage_mode = .shared,
     });
     defer color_vertex_buffer.deinit();
 
-    var screen_vertex_buffer = try context.makeBuffer(.{
+    var screen_vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(screen_vertices[0..]),
         .usage = .{ .vertex = true },
         .storage_mode = .shared,
     });
     defer screen_vertex_buffer.deinit();
 
-    var screen_index_buffer = try context.makeBuffer(.{
+    var screen_index_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(screen_indices[0..]),
         .usage = .{ .index = true },
         .storage_mode = .shared,
     });
     defer screen_index_buffer.deinit();
 
-    var msaa_texture = try context.makeTexture(.{
+    var msaa_texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = msaa_width,
         .height = msaa_height,
@@ -105,7 +109,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var msaa_view = try msaa_texture.makeTextureView(.{});
     defer msaa_view.deinit();
 
-    var resolved_texture = try context.makeTexture(.{
+    var resolved_texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = msaa_width,
         .height = msaa_height,
@@ -120,19 +124,19 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var resolved_view = try resolved_texture.makeTextureView(.{});
     defer resolved_view.deinit();
 
-    var sampler = try context.makeSamplerState(.{
+    var sampler = try device.makeSamplerState(.{
         .min_filter = .linear,
         .mag_filter = .linear,
     });
     defer sampler.deinit();
 
-    var msaa_shader = try context.compileRenderShader("msaa_triangle_msaa", shader_source, .{
+    var msaa_shader = try device.compileRenderShader("msaa_triangle_msaa", shader_source, .{
         .vertex_entry = "msaa_vs",
         .fragment_entry = "msaa_fs",
     });
     defer msaa_shader.deinit();
 
-    var screen_shader = try context.compileRenderShader("msaa_triangle_screen", shader_source, .{
+    var screen_shader = try device.compileRenderShader("msaa_triangle_screen", shader_source, .{
         .vertex_entry = "screen_vs",
         .fragment_entry = "screen_fs",
     });
@@ -147,7 +151,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer derived_bind_group_layouts.deinit();
     if (derived_bind_group_layouts.descriptors().len == 0) return error.MissingDerivedBindGroupLayout;
 
-    var bind_group_layout = try context.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
+    var bind_group_layout = try device.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
     defer bind_group_layout.deinit();
 
     const bind_group_entries = [_]vkmtl.BindGroupEntry{
@@ -160,7 +164,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
             .resource = .{ .sampler = &sampler },
         },
     };
-    var bind_group = try context.makeBindGroup(.{
+    var bind_group = try device.makeBindGroup(.{
         .layout = &bind_group_layout,
         .entries = bind_group_entries[0..],
     });
@@ -174,7 +178,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     );
     defer msaa_vertex_descriptor.deinit();
 
-    var msaa_pipeline = try context.makeRenderPipelineState(msaaPipelineDescriptor(
+    var msaa_pipeline = try device.makeRenderPipelineState(msaaPipelineDescriptor(
         msaa_stages.vertex,
         msaa_stages.fragment,
         msaa_vertex_descriptor.descriptor,
@@ -191,7 +195,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     const pipeline_bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
         bind_group_layout.descriptor(),
     };
-    var screen_pipeline = try context.makeRenderPipelineState(screenPipelineDescriptor(
+    var screen_pipeline = try device.makeRenderPipelineState(screenPipelineDescriptor(
         screen_stages.vertex,
         screen_stages.fragment,
         screen_vertex_descriptor.descriptor,
@@ -206,9 +210,9 @@ pub fn main(init: std.process.Init.Minimal) !void {
             continue;
         }
 
-        try context.resize(extent);
+        try swapchain.resize(extent);
 
-        var msaa_command_buffer = try context.makeCommandBuffer();
+        var msaa_command_buffer = try queue.makeCommandBuffer();
         var msaa_encoder = try msaa_command_buffer.makeRenderCommandEncoder(.{
             .color_attachments = &.{.{
                 .target = .{ .texture_view = &msaa_view },
@@ -230,7 +234,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
         try msaa_encoder.endEncoding();
         try msaa_command_buffer.commit();
 
-        var screen_command_buffer = try context.makeCommandBuffer();
+        var screen_command_buffer = try queue.makeCommandBuffer();
         var screen_encoder = try screen_command_buffer.makeRenderCommandEncoder(.{
             .color_attachments = &.{.{
                 .clear_color = .{

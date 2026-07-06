@@ -29,6 +29,11 @@ Period 2 开始，长期资源入口是 `Device`，长期 command-buffer / submi
 proc-address lookup 和 surface creation callback。示例把这些 descriptor 传给
 `WindowContext.init(...)`。
 
+Period 2 开始，`WindowContext.surface()` 和 `WindowContext.swapchain()` 暴露 runtime view。
+`Surface` 保留 window/provider descriptor 信息；`Swapchain` 管 presentation-chain resize，
+当前 clear-screen helper 也挂在 `Swapchain.clear(...)`。`WindowContext.resize(...)` 和
+`WindowContext.clear(...)` 仍是兼容转发。
+
 ## 资源
 
 Period 2 开始，长期资源创建入口是 runtime `Device`。`WindowContext.device()` 返回当前 context
@@ -40,10 +45,16 @@ Period 2 开始，长期资源创建入口是 runtime `Device`。`WindowContext.
 
 `Device` 也暴露第一版 capability 查询：
 
+- `vkmtl.enumerateAdapters(allocator, BackendSelectionOptions)`
 - `adapterInfo()`
 - `features()`
 - `limits()`
 - `getFormatCaps(TextureFormat)`
+
+当前 adapter enumeration 使用和 backend selection 一致的可用性与排序规则，返回每个可用后端的
+保守 `AdapterInfo`。创建 runtime context 后，`context.adapterInfo()` 和 `device.adapterInfo()`
+会尽量返回后端查询到的 selected adapter 名称/vendor/type。Backend-native limits 和 format
+capability 会在后续 Period 2 phase 逐步替换当前默认值。
 
 CPU 可见 buffer 可以用 `buffer.replaceBytes(...)` 更新，也可以用
 `buffer.readBytes(...)` 读回。Texture 通过 `texture.makeTextureView(...)` 创建 view，

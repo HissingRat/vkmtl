@@ -34,9 +34,9 @@ zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
 `examples/triangle` is the first backend-independent rendering sample. It
 creates a GLFW surface, requests `.auto` backend selection, uploads vertex data
 through `Device.makeBuffer`, creates a render pipeline through
-`Device.makeRenderPipelineState`, records commands with
-`CommandBuffer`/`RenderCommandEncoder`, and presents through the public command
-API.
+`Device.makeRenderPipelineState`, handles drawable resize through
+`Swapchain.resize(...)`, records commands with `CommandBuffer` /
+`RenderCommandEncoder`, and presents through the public command API.
 
 Run it with:
 

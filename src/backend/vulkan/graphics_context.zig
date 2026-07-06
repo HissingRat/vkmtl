@@ -143,6 +143,15 @@ pub fn deviceName(self: *const GraphicsContext) []const u8 {
     return std.mem.sliceTo(&self.props.device_name, 0);
 }
 
+pub fn adapterInfo(self: *const GraphicsContext) core.AdapterInfo {
+    return .{
+        .backend = .vulkan,
+        .name = self.deviceName(),
+        .vendor = vendorName(self.props.vendor_id),
+        .device_type = adapterDeviceType(self.props.device_type),
+    };
+}
+
 pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
     for (self.mem_props.memory_types[0..self.mem_props.memory_type_count], 0..) |mem_type, i| {
         if (memory_type_bits & (@as(u32, 1) << @truncate(i)) != 0 and mem_type.property_flags.contains(flags)) {
@@ -150,6 +159,29 @@ pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: 
         }
     }
     return error.NoSuitableMemoryType;
+}
+
+fn adapterDeviceType(device_type: vk.PhysicalDeviceType) core.AdapterDeviceType {
+    return switch (device_type) {
+        .integrated_gpu => .integrated_gpu,
+        .discrete_gpu => .discrete_gpu,
+        .virtual_gpu => .virtual_gpu,
+        .cpu => .cpu,
+        else => .unknown,
+    };
+}
+
+fn vendorName(vendor_id: u32) []const u8 {
+    return switch (vendor_id) {
+        0x1002 => "AMD",
+        0x1010 => "ImgTec",
+        0x106b => "Apple",
+        0x10de => "NVIDIA",
+        0x13b5 => "ARM",
+        0x5143 => "Qualcomm",
+        0x8086 => "Intel",
+        else => "",
+    };
 }
 
 pub fn allocate(self: GraphicsContext, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {

@@ -61,21 +61,25 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var vertex_buffer = try context.makeBuffer(.{
+    var device = context.device();
+    var queue = context.queue();
+    var swapchain = context.swapchain();
+
+    var vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(vertices[0..]),
         .usage = .{ .vertex = true },
         .storage_mode = .shared,
     });
     defer vertex_buffer.deinit();
 
-    var index_buffer = try context.makeBuffer(.{
+    var index_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(indices[0..]),
         .usage = .{ .index = true },
         .storage_mode = .shared,
     });
     defer index_buffer.deinit();
 
-    var texture = try context.makeTexture(.{
+    var texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = texture_width,
         .height = texture_height,
@@ -90,13 +94,13 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var texture_view = try texture.makeTextureView(.{});
     defer texture_view.deinit();
 
-    var sampler = try context.makeSamplerState(.{
+    var sampler = try device.makeSamplerState(.{
         .min_filter = .nearest,
         .mag_filter = .nearest,
     });
     defer sampler.deinit();
 
-    var compiled_shader = try context.compileRenderShader("sampled_texture", shader_source, .{
+    var compiled_shader = try device.compileRenderShader("sampled_texture", shader_source, .{
         .vertex_entry = "vs_main",
         .fragment_entry = "fs_main",
     });
@@ -118,7 +122,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer derived_bind_group_layouts.deinit();
     if (derived_bind_group_layouts.descriptors().len == 0) return error.MissingDerivedBindGroupLayout;
 
-    var bind_group_layout = try context.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
+    var bind_group_layout = try device.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
     defer bind_group_layout.deinit();
 
     const bind_group_entries = [_]vkmtl.BindGroupEntry{
@@ -131,7 +135,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
             .resource = .{ .sampler = &sampler },
         },
     };
-    var bind_group = try context.makeBindGroup(.{
+    var bind_group = try device.makeBindGroup(.{
         .layout = &bind_group_layout,
         .entries = bind_group_entries[0..],
     });
@@ -140,7 +144,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     const pipeline_bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
         bind_group_layout.descriptor(),
     };
-    var pipeline = try context.makeRenderPipelineState(.{
+    var pipeline = try device.makeRenderPipelineState(.{
         .vertex = stages.vertex,
         .fragment = stages.fragment,
         .vertex_descriptor = derived_vertex_descriptor.descriptor,
@@ -157,9 +161,9 @@ pub fn main(init: std.process.Init.Minimal) !void {
             continue;
         }
 
-        try context.resize(extent);
+        try swapchain.resize(extent);
 
-        var command_buffer = try context.makeCommandBuffer();
+        var command_buffer = try queue.makeCommandBuffer();
         var encoder = try command_buffer.makeRenderCommandEncoder(.{
             .color_attachments = &.{.{
                 .clear_color = .{

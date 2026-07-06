@@ -48,6 +48,7 @@ std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
 var device = context.device();
 var queue = context.queue();
+var swapchain = context.swapchain();
 ```
 
 On Apple platforms `.auto` prefers Metal when the surface is compatible. On
@@ -56,8 +57,10 @@ or `.metal` explicitly, and examples also accept the build-time `-Dvulkan`
 override for backend testing.
 
 `Device` is the long-term resource creation entry point. `Queue` is the
-long-term command-buffer and submit entry point. Existing `WindowContext.make*`
-methods still work, but they should gradually become compatibility helpers.
+long-term command-buffer and submit entry point. `Swapchain` is the current
+drawable resize and presentation-chain helper entry point. Existing
+`WindowContext.make*`, `resize(...)`, and `clear(...)` methods still work, but
+they should gradually become compatibility helpers.
 
 ## Compile Slang At Runtime
 
@@ -198,7 +201,7 @@ try command_buffer.presentDrawable();
 try command_buffer.commit();
 ```
 
-Call `context.resize(extent)` when the drawable size changes. The examples do
+Call `swapchain.resize(extent)` when the drawable size changes. The examples do
 this every frame after reading the framebuffer extent from the windowing layer.
 
 ## Transfer And Compute

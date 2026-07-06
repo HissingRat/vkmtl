@@ -44,13 +44,15 @@ std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
 var device = context.device();
 var queue = context.queue();
+var swapchain = context.swapchain();
 ```
 
 Apple 平台上，`.auto` 会优先选择 Metal。其他桌面平台优先 Vulkan。应用也可以显式请求
 `.vulkan` 或 `.metal`；示例还支持用于后端测试的 build-time `-Dvulkan` override。
 
-`Device` 是长期资源创建入口；`Queue` 是长期 command buffer / submit 入口。当前
-`WindowContext.make*` 方法仍然可用，但会逐步退成兼容 helper。
+`Device` 是长期资源创建入口；`Queue` 是长期 command buffer / submit 入口；
+`Swapchain` 是当前 drawable resize 和 presentation-chain helper 入口。当前
+`WindowContext.make*`、`resize(...)` 和 `clear(...)` 方法仍然可用，但会逐步退成兼容 helper。
 
 ## 运行时编译 Slang
 
@@ -189,7 +191,7 @@ try command_buffer.presentDrawable();
 try command_buffer.commit();
 ```
 
-Drawable 尺寸变化时调用 `context.resize(extent)`。示例会每帧从 windowing 层读取 framebuffer
+Drawable 尺寸变化时调用 `swapchain.resize(extent)`。示例会每帧从 windowing 层读取 framebuffer
 extent 后调用 resize。
 
 ## Transfer 与 Compute

@@ -200,7 +200,7 @@ closed one by one as vkmtl moves from prototype to library.
   patterns.
 - [ ] Audit public root exports and remove or rename remaining unstable aliases
   before a tagged release.
-- [ ] Decide which `WindowContext` entry points stay for early users and which
+- [x] Decide which `WindowContext` entry points stay for early users and which
   should move to future `Device` / `Queue` owners.
 - [ ] Add backend object debug labels where native APIs support them.
 - [ ] Add a CI build matrix for macOS and Linux.
@@ -225,17 +225,18 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add `WindowContext.device()` and `WindowContext.queue()`.
 - [x] Keep existing `WindowContext.make*` methods as compatibility forwards.
 - [x] Migrate examples from `WindowContext.make*` to `Device` / `Queue`.
-- [ ] Add explicit public `Surface` / `Swapchain` runtime wrappers.
-- [ ] Decide which `WindowContext` helpers remain after migration.
+- [x] Add explicit public `Surface` / `Swapchain` runtime wrappers.
+- [x] Decide which `WindowContext` helpers remain after migration.
 
 ## Period 2 Phase 2 Checklist
 
 - [x] Add selected-adapter info shape.
+- [x] Fill selected-adapter info from backend runtime queries where available.
 - [x] Add `DeviceFeatures`.
 - [x] Add `DeviceLimits`.
 - [x] Add `FormatCapabilities`.
 - [x] Add `device.features()`, `device.limits()`, and `device.getFormatCaps()`.
-- [ ] Add adapter enumeration.
+- [x] Add adapter enumeration.
 - [ ] Add explicit adapter selection.
 - [ ] Replace conservative default capabilities with backend-native queries.
 

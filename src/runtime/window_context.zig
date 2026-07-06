@@ -1267,90 +1267,133 @@ pub const RuntimeError = error{
     PresentRequiresCurrentDrawable,
 };
 
-pub const WindowContext = struct {
-    allocator: std.mem.Allocator,
-    tracker: *ResourceTracker,
+const BackendRuntime = union(core.Backend) {
+    vulkan: VulkanClearScreen,
+    metal: MetalClearScreen,
+};
+
+pub const Surface = struct {
     backend: core.Backend,
-    shader_cache_dir: ?[]const u8 = null,
-    owns_shader_cache_dir: bool = false,
-    slangc_path: ?[]const u8 = null,
-    impl: Impl,
+    descriptor_value: core.SurfaceDescriptor,
+    presentation: *core.PresentationDescriptor,
+    impl: *BackendRuntime,
 
-    const Impl = union(core.Backend) {
-        vulkan: VulkanClearScreen,
-        metal: MetalClearScreen,
-    };
-
-    pub fn init(allocator: std.mem.Allocator, options: WindowContextOptions) !WindowContext {
-        const tracker = try allocator.create(ResourceTracker);
-        errdefer allocator.destroy(tracker);
-        tracker.* = .{};
-
-        const resolved_shader_cache_dir = try resolveShaderCacheDir(allocator, options);
-        errdefer resolved_shader_cache_dir.deinit(allocator);
-
-        const backend_preference: core.BackendPreference = if (build_options.force_vulkan) .vulkan else options.backend;
-        const debug_backend_override: ?core.Backend = if (build_options.force_vulkan) null else options.debug_backend_override;
-        const backend = try core.selectBackend(.{
-            .preference = backend_preference,
-            .availability = presentationAvailability(options.surface),
-            .debug_override = debug_backend_override,
-        });
-
-        return switch (backend) {
-            .vulkan => .{
-                .allocator = allocator,
-                .tracker = tracker,
-                .backend = .vulkan,
-                .shader_cache_dir = resolved_shader_cache_dir.value,
-                .owns_shader_cache_dir = resolved_shader_cache_dir.owned,
-                .slangc_path = options.slangc_path,
-                .impl = .{
-                    .vulkan = try VulkanClearScreen.init(
-                        allocator,
-                        options.app_name,
-                        options.surface,
-                        options.presentation,
-                    ),
-                },
-            },
-            .metal => .{
-                .allocator = allocator,
-                .tracker = tracker,
-                .backend = .metal,
-                .shader_cache_dir = resolved_shader_cache_dir.value,
-                .owns_shader_cache_dir = resolved_shader_cache_dir.owned,
-                .slangc_path = options.slangc_path,
-                .impl = .{
-                    .metal = try MetalClearScreen.init(
-                        options.surface,
-                        options.presentation,
-                    ),
-                },
-            },
-        };
-    }
-
-    pub fn deinit(self: *WindowContext) void {
-        self.tracker.assertNoLeaks();
-        switch (self.impl) {
-            .vulkan => |*vulkan| vulkan.deinit(),
-            .metal => |*metal| metal.deinit(),
-        }
-        if (self.owns_shader_cache_dir) {
-            if (self.shader_cache_dir) |shader_cache_dir| {
-                self.allocator.free(shader_cache_dir);
-            }
-        }
-        self.allocator.destroy(self.tracker);
-    }
-
-    pub fn selectedBackend(self: WindowContext) core.Backend {
+    pub fn selectedBackend(self: Surface) core.Backend {
         return self.backend;
     }
 
+    pub fn descriptor(self: Surface) core.SurfaceDescriptor {
+        return self.descriptor_value;
+    }
+
+    pub fn provider(self: Surface) ?core.SurfaceProvider {
+        const source = self.descriptor_value.source orelse return null;
+        return source.provider;
+    }
+
+    pub fn swapchain(self: *Surface) Swapchain {
+        return .{
+            .backend = self.backend,
+            .presentation = self.presentation,
+            .impl = self.impl,
+        };
+    }
+};
+
+pub const Swapchain = struct {
+    backend: core.Backend,
+    presentation: *core.PresentationDescriptor,
+    impl: *BackendRuntime,
+
+    pub fn selectedBackend(self: Swapchain) core.Backend {
+        return self.backend;
+    }
+
+    pub fn presentationDescriptor(self: Swapchain) core.PresentationDescriptor {
+        return self.presentation.*;
+    }
+
+    pub fn extent(self: Swapchain) core.Extent2D {
+        return self.presentation.extent;
+    }
+
+    pub fn resize(self: *Swapchain, new_extent: core.Extent2D) !void {
+        switch (self.impl.*) {
+            .vulkan => |*vulkan| try vulkan.resize(new_extent),
+            .metal => |*metal| try metal.resize(new_extent),
+        }
+        if (!new_extent.isZero()) {
+            self.presentation.extent = new_extent;
+        }
+    }
+
+    pub fn clear(self: *Swapchain, color: ClearColor) !void {
+        switch (self.impl.*) {
+            .vulkan => |*vulkan| try vulkan.clear(color),
+            .metal => |*metal| try metal.clear(color),
+        }
+    }
+};
+
+pub const Queue = struct {
+    backend: core.Backend,
+    impl: *BackendRuntime,
+
+    pub fn selectedBackend(self: Queue) core.Backend {
+        return self.backend;
+    }
+
+    pub fn makeCommandBuffer(self: *Queue) !CommandBuffer {
+        const impl = switch (self.impl.*) {
+            .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
+            .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer() },
+        };
+        return .{
+            .backend = self.backend,
+            .impl = impl,
+        };
+    }
+};
+
+pub const Device = struct {
+    allocator: std.mem.Allocator,
+    tracker: *ResourceTracker,
+    backend: core.Backend,
+    impl: *BackendRuntime,
+    adapter_info: core.AdapterInfo,
+    shader_cache_dir: ?[]const u8 = null,
+    slangc_path: ?[]const u8 = null,
+
+    pub fn selectedBackend(self: Device) core.Backend {
+        return self.backend;
+    }
+
+    pub fn adapterInfo(self: Device) core.AdapterInfo {
+        return self.adapter_info;
+    }
+
+    pub fn features(self: Device) core.DeviceFeatures {
+        return core.defaultDeviceFeatures(self.backend);
+    }
+
+    pub fn limits(self: Device) core.DeviceLimits {
+        return core.defaultDeviceLimits(self.backend);
+    }
+
+    pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
+        _ = self;
+        return core.defaultFormatCapabilities(format);
+    }
+
+    pub fn queue(self: *Device) Queue {
+        return .{
+            .backend = self.backend,
+            .impl = self.impl,
+        };
+    }
+
     pub fn compileRenderShader(
-        self: *WindowContext,
+        self: *Device,
         name: []const u8,
         source: []const u8,
         options: ShaderCompiler.RenderShaderOptions,
@@ -1365,7 +1408,7 @@ pub const WindowContext = struct {
     }
 
     pub fn compileComputeShader(
-        self: *WindowContext,
+        self: *Device,
         name: []const u8,
         source: []const u8,
         options: ShaderCompiler.ComputeShaderOptions,
@@ -1379,131 +1422,70 @@ pub const WindowContext = struct {
         );
     }
 
-    fn shaderCompilerOptions(self: WindowContext) ShaderCompiler.CompilerOptions {
-        return .{
-            .slangc_path = self.slangc_path orelse build_options.slangc_path,
-            .cache_dir = self.shader_cache_dir,
-        };
-    }
-
-    pub fn resize(self: *WindowContext, extent: core.Extent2D) !void {
-        switch (self.impl) {
-            .vulkan => |*vulkan| try vulkan.resize(extent),
-            .metal => |*metal| try metal.resize(extent),
-        }
-    }
-
-    pub fn clear(self: *WindowContext, color: ClearColor) !void {
-        switch (self.impl) {
-            .vulkan => |*vulkan| try vulkan.clear(color),
-            .metal => |*metal| try metal.clear(color),
-        }
-    }
-
-    pub fn makeCommandBuffer(self: *WindowContext) !CommandBuffer {
-        const impl = switch (self.impl) {
-            .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
-            .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer() },
-        };
-        return .{
-            .backend = self.backend,
-            .impl = impl,
-        };
-    }
-
-    pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {
-        const impl = switch (self.impl) {
+    pub fn makeBuffer(self: *Device, descriptor: core.BufferDescriptor) !Buffer {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| Buffer.Impl{ .vulkan = try vulkan.makeBuffer(descriptor) },
             .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(descriptor) },
         };
         self.tracker.retain(.buffer);
-        return switch (self.impl) {
-            .vulkan => .{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .usage_value = descriptor.usage,
-                .impl = impl,
-            },
-            .metal => .{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .usage_value = descriptor.usage,
-                .impl = impl,
-            },
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .usage_value = descriptor.usage,
+            .impl = impl,
         };
     }
 
-    pub fn makeShaderModule(self: *WindowContext, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
-        const impl = switch (self.impl) {
+    pub fn makeShaderModule(self: *Device, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ShaderModule.Impl{ .vulkan = try vulkan.makeShaderModule(descriptor) },
             .metal => |*metal| ShaderModule.Impl{ .metal = try metal.makeShaderModule(self.allocator, descriptor) },
         };
         self.tracker.retain(.shader_module);
-        return switch (self.impl) {
-            .vulkan => .{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .impl = impl,
-            },
-            .metal => .{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .impl = impl,
-            },
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .impl = impl,
         };
     }
 
-    pub fn makeRenderPipelineState(self: *WindowContext, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
+    pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
         try descriptor.validate();
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
-        const impl = switch (self.impl) {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| RenderPipelineState.Impl{ .vulkan = try vulkan.makeRenderPipelineState(descriptor) },
             .metal => |*metal| RenderPipelineState.Impl{ .metal = try metal.makeRenderPipelineState(self.allocator, descriptor) },
         };
         self.tracker.retain(.render_pipeline_state);
-        return switch (self.impl) {
-            .vulkan => .{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .impl = impl,
-            },
-            .metal => .{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .impl = impl,
-            },
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .impl = impl,
         };
     }
 
-    pub fn makeComputePipelineState(self: *WindowContext, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
+    pub fn makeComputePipelineState(self: *Device, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
         try descriptor.validate();
         try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
-        const impl = switch (self.impl) {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ComputePipelineState.Impl{ .vulkan = try vulkan.makeComputePipelineState(descriptor) },
             .metal => |*metal| ComputePipelineState.Impl{ .metal = try metal.makeComputePipelineState(self.allocator, descriptor) },
         };
         self.tracker.retain(.compute_pipeline_state);
-        return switch (self.impl) {
-            .vulkan => .{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .impl = impl,
-            },
-            .metal => .{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .impl = impl,
-            },
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .impl = impl,
         };
     }
 
-    pub fn makeBindGroupLayout(self: *WindowContext, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
+    pub fn makeBindGroupLayout(self: *Device, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
         try descriptor.validate();
 
         const entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.entries);
         errdefer self.allocator.free(entries);
 
-        const impl = switch (self.impl) {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| BindGroupLayout.Impl{
                 .vulkan = try VulkanBindGroupBackend.VulkanBindGroupLayout.init(
                     vulkan.gc,
@@ -1529,11 +1511,11 @@ pub const WindowContext = struct {
         };
     }
 
-    pub fn makeBindGroup(self: *WindowContext, descriptor: BindGroupDescriptor) !BindGroup {
+    pub fn makeBindGroup(self: *Device, descriptor: BindGroupDescriptor) !BindGroup {
         const entries = try materializeBindGroupEntries(self.allocator, self.backend, descriptor);
         errdefer self.allocator.free(entries);
 
-        const impl = switch (self.impl) {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| bind_group_impl: {
                 const vulkan_entries = try materializeVulkanBindGroupEntries(self.allocator, descriptor.entries);
                 defer self.allocator.free(vulkan_entries);
@@ -1571,52 +1553,277 @@ pub const WindowContext = struct {
         };
     }
 
-    pub fn makeTexture(self: *WindowContext, descriptor: core.TextureDescriptor) !Texture {
-        const impl = switch (self.impl) {
+    pub fn makeTexture(self: *Device, descriptor: core.TextureDescriptor) !Texture {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| Texture.Impl{ .vulkan = try vulkan.makeTexture(descriptor) },
             .metal => |*metal| Texture.Impl{ .metal = try metal.makeTexture(descriptor) },
         };
         self.tracker.retain(.texture);
-        return switch (self.impl) {
-            .vulkan => .{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .dimension_value = descriptor.dimension,
-                .format_value = descriptor.format,
-                .usage_value = descriptor.usage,
-                .sample_count_value = descriptor.sample_count,
-                .impl = impl,
-            },
-            .metal => .{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .dimension_value = descriptor.dimension,
-                .format_value = descriptor.format,
-                .usage_value = descriptor.usage,
-                .sample_count_value = descriptor.sample_count,
-                .impl = impl,
-            },
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .dimension_value = descriptor.dimension,
+            .format_value = descriptor.format,
+            .usage_value = descriptor.usage,
+            .sample_count_value = descriptor.sample_count,
+            .impl = impl,
         };
     }
 
-    pub fn makeSamplerState(self: *WindowContext, descriptor: core.SamplerDescriptor) !SamplerState {
-        const impl = switch (self.impl) {
+    pub fn makeSamplerState(self: *Device, descriptor: core.SamplerDescriptor) !SamplerState {
+        const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| SamplerState.Impl{ .vulkan = try vulkan.makeSamplerState(descriptor) },
             .metal => |*metal| SamplerState.Impl{ .metal = try metal.makeSamplerState(descriptor) },
         };
         self.tracker.retain(.sampler_state);
-        return switch (self.impl) {
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .impl = impl,
+        };
+    }
+
+    fn shaderCompilerOptions(self: Device) ShaderCompiler.CompilerOptions {
+        return .{
+            .slangc_path = self.slangc_path orelse build_options.slangc_path,
+            .cache_dir = self.shader_cache_dir,
+        };
+    }
+};
+
+const ResolvedAdapterInfo = struct {
+    info: core.AdapterInfo,
+    owned_name: ?[]u8 = null,
+
+    fn deinit(self: ResolvedAdapterInfo, allocator: std.mem.Allocator) void {
+        if (self.owned_name) |name| {
+            allocator.free(name);
+        }
+    }
+};
+
+fn resolveAdapterInfo(allocator: std.mem.Allocator, impl: *BackendRuntime) !ResolvedAdapterInfo {
+    return switch (impl.*) {
+        .vulkan => |*vulkan| blk: {
+            const result = vulkan.adapterInfo();
+            break :blk .{
+                .info = result.info,
+                .owned_name = result.owned_name,
+            };
+        },
+        .metal => |*metal| blk: {
+            const result = try metal.adapterInfo(allocator);
+            break :blk .{
+                .info = result.info,
+                .owned_name = result.owned_name,
+            };
+        },
+    };
+}
+
+fn deinitBackendRuntime(impl: *BackendRuntime) void {
+    switch (impl.*) {
+        .vulkan => |*vulkan| vulkan.deinit(),
+        .metal => |*metal| metal.deinit(),
+    }
+}
+
+pub const WindowContext = struct {
+    allocator: std.mem.Allocator,
+    tracker: *ResourceTracker,
+    backend: core.Backend,
+    surface_descriptor: core.SurfaceDescriptor,
+    presentation_descriptor: core.PresentationDescriptor,
+    adapter_info: core.AdapterInfo,
+    owned_adapter_name: ?[]u8 = null,
+    shader_cache_dir: ?[]const u8 = null,
+    owns_shader_cache_dir: bool = false,
+    slangc_path: ?[]const u8 = null,
+    impl: BackendRuntime,
+
+    pub fn init(allocator: std.mem.Allocator, options: WindowContextOptions) !WindowContext {
+        const tracker = try allocator.create(ResourceTracker);
+        errdefer allocator.destroy(tracker);
+        tracker.* = .{};
+
+        const resolved_shader_cache_dir = try resolveShaderCacheDir(allocator, options);
+        errdefer resolved_shader_cache_dir.deinit(allocator);
+
+        const backend_preference: core.BackendPreference = if (build_options.force_vulkan) .vulkan else options.backend;
+        const debug_backend_override: ?core.Backend = if (build_options.force_vulkan) null else options.debug_backend_override;
+        const backend = try core.selectBackend(.{
+            .preference = backend_preference,
+            .availability = presentationAvailability(options.surface),
+            .debug_override = debug_backend_override,
+        });
+
+        var impl: BackendRuntime = switch (backend) {
             .vulkan => .{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .impl = impl,
+                .vulkan = try VulkanClearScreen.init(
+                    allocator,
+                    options.app_name,
+                    options.surface,
+                    options.presentation,
+                ),
             },
             .metal => .{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .impl = impl,
+                .metal = try MetalClearScreen.init(
+                    options.surface,
+                    options.presentation,
+                ),
             },
         };
+        errdefer deinitBackendRuntime(&impl);
+
+        const adapter_info = try resolveAdapterInfo(allocator, &impl);
+        errdefer adapter_info.deinit(allocator);
+
+        return .{
+            .allocator = allocator,
+            .tracker = tracker,
+            .backend = backend,
+            .surface_descriptor = options.surface,
+            .presentation_descriptor = options.presentation,
+            .adapter_info = adapter_info.info,
+            .owned_adapter_name = adapter_info.owned_name,
+            .shader_cache_dir = resolved_shader_cache_dir.value,
+            .owns_shader_cache_dir = resolved_shader_cache_dir.owned,
+            .slangc_path = options.slangc_path,
+            .impl = impl,
+        };
+    }
+
+    pub fn deinit(self: *WindowContext) void {
+        self.tracker.assertNoLeaks();
+        deinitBackendRuntime(&self.impl);
+        if (self.owned_adapter_name) |name| {
+            self.allocator.free(name);
+        }
+        if (self.owns_shader_cache_dir) {
+            if (self.shader_cache_dir) |shader_cache_dir| {
+                self.allocator.free(shader_cache_dir);
+            }
+        }
+        self.allocator.destroy(self.tracker);
+    }
+
+    pub fn selectedBackend(self: WindowContext) core.Backend {
+        return self.backend;
+    }
+
+    pub fn adapterInfo(self: WindowContext) core.AdapterInfo {
+        return self.adapter_info;
+    }
+
+    pub fn device(self: *WindowContext) Device {
+        return .{
+            .allocator = self.allocator,
+            .tracker = self.tracker,
+            .backend = self.backend,
+            .impl = &self.impl,
+            .adapter_info = self.adapter_info,
+            .shader_cache_dir = self.shader_cache_dir,
+            .slangc_path = self.slangc_path,
+        };
+    }
+
+    pub fn queue(self: *WindowContext) Queue {
+        return .{
+            .backend = self.backend,
+            .impl = &self.impl,
+        };
+    }
+
+    pub fn surface(self: *WindowContext) Surface {
+        return .{
+            .backend = self.backend,
+            .descriptor_value = self.surface_descriptor,
+            .presentation = &self.presentation_descriptor,
+            .impl = &self.impl,
+        };
+    }
+
+    pub fn swapchain(self: *WindowContext) Swapchain {
+        return .{
+            .backend = self.backend,
+            .presentation = &self.presentation_descriptor,
+            .impl = &self.impl,
+        };
+    }
+
+    pub fn compileRenderShader(
+        self: *WindowContext,
+        name: []const u8,
+        source: []const u8,
+        options: ShaderCompiler.RenderShaderOptions,
+    ) !ShaderCompiler.CompiledRenderShader {
+        var device_view = self.device();
+        return try device_view.compileRenderShader(name, source, options);
+    }
+
+    pub fn compileComputeShader(
+        self: *WindowContext,
+        name: []const u8,
+        source: []const u8,
+        options: ShaderCompiler.ComputeShaderOptions,
+    ) !ShaderCompiler.CompiledComputeShader {
+        var device_view = self.device();
+        return try device_view.compileComputeShader(name, source, options);
+    }
+
+    pub fn resize(self: *WindowContext, extent: core.Extent2D) !void {
+        var swapchain_view = self.swapchain();
+        return try swapchain_view.resize(extent);
+    }
+
+    pub fn clear(self: *WindowContext, color: ClearColor) !void {
+        var swapchain_view = self.swapchain();
+        return try swapchain_view.clear(color);
+    }
+
+    pub fn makeCommandBuffer(self: *WindowContext) !CommandBuffer {
+        var queue_view = self.queue();
+        return try queue_view.makeCommandBuffer();
+    }
+
+    pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {
+        var device_view = self.device();
+        return try device_view.makeBuffer(descriptor);
+    }
+
+    pub fn makeShaderModule(self: *WindowContext, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
+        var device_view = self.device();
+        return try device_view.makeShaderModule(descriptor);
+    }
+
+    pub fn makeRenderPipelineState(self: *WindowContext, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
+        var device_view = self.device();
+        return try device_view.makeRenderPipelineState(descriptor);
+    }
+
+    pub fn makeComputePipelineState(self: *WindowContext, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
+        var device_view = self.device();
+        return try device_view.makeComputePipelineState(descriptor);
+    }
+
+    pub fn makeBindGroupLayout(self: *WindowContext, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
+        var device_view = self.device();
+        return try device_view.makeBindGroupLayout(descriptor);
+    }
+
+    pub fn makeBindGroup(self: *WindowContext, descriptor: BindGroupDescriptor) !BindGroup {
+        var device_view = self.device();
+        return try device_view.makeBindGroup(descriptor);
+    }
+
+    pub fn makeTexture(self: *WindowContext, descriptor: core.TextureDescriptor) !Texture {
+        var device_view = self.device();
+        return try device_view.makeTexture(descriptor);
+    }
+
+    pub fn makeSamplerState(self: *WindowContext, descriptor: core.SamplerDescriptor) !SamplerState {
+        var device_view = self.device();
+        return try device_view.makeSamplerState(descriptor);
     }
 };
 
@@ -1872,6 +2079,71 @@ test "runtime rejects shader cache dir arg without value" {
         error.MissingShaderCacheDirValue,
         parseShaderCacheDirFromIterator(std.testing.allocator, &iterator),
     );
+}
+
+test "runtime device exposes adapter features limits and format caps" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+            .vendor = "Test Vendor",
+        },
+    };
+
+    try std.testing.expectEqual(core.Backend.metal, device.selectedBackend());
+    try std.testing.expectEqual(core.Backend.metal, device.adapterInfo().backend);
+    try std.testing.expectEqualStrings("test metal adapter", device.adapterInfo().name);
+    try std.testing.expect(device.features().runtime_slang);
+    try std.testing.expectEqual(core.default_max_bind_group_slots, device.limits().max_bind_group_slots);
+    try std.testing.expect(device.getFormatCaps(.rgba8_unorm).storage);
+    try std.testing.expect(device.getFormatCaps(.depth32_float).depth_stencil_attachment);
+}
+
+test "window context exposes device and queue views" {
+    var tracker = ResourceTracker{};
+    var context = WindowContext{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .surface_descriptor = .{
+            .source = .{
+                .provider = .external,
+                .window = @ptrFromInt(1),
+            },
+        },
+        .presentation_descriptor = .{
+            .extent = .{ .width = 640, .height = 480 },
+        },
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+            .vendor = "Test Vendor",
+        },
+        .impl = undefined,
+    };
+
+    const device = context.device();
+    const queue_view = context.queue();
+    var surface_view = context.surface();
+    const swapchain_view = context.swapchain();
+    const surface_swapchain_view = surface_view.swapchain();
+
+    try std.testing.expectEqual(core.Backend.vulkan, device.selectedBackend());
+    try std.testing.expectEqual(core.Backend.vulkan, queue_view.selectedBackend());
+    try std.testing.expectEqual(core.Backend.vulkan, surface_view.selectedBackend());
+    try std.testing.expectEqual(core.Backend.vulkan, swapchain_view.selectedBackend());
+    try std.testing.expectEqual(core.Backend.vulkan, surface_swapchain_view.selectedBackend());
+    try std.testing.expectEqual(core.Backend.vulkan, context.adapterInfo().backend);
+    try std.testing.expectEqualStrings("test vulkan adapter", device.adapterInfo().name);
+    try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
+    try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
+    try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
 }
 
 test "runtime bind group materialization validates resources against layout" {

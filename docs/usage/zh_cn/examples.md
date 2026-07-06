@@ -28,7 +28,8 @@ zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
 
 `examples/triangle` 是第一个后端无关渲染示例。它创建 GLFW surface，请求 `.auto` 后端选择，
 通过 `Device.makeBuffer` 上传 vertex data，通过 `Device.makeRenderPipelineState`
-创建 render pipeline，通过 `CommandBuffer` / `RenderCommandEncoder` 录制命令并呈现。
+创建 render pipeline，通过 `Swapchain.resize(...)` 处理 drawable resize，通过
+`CommandBuffer` / `RenderCommandEncoder` 录制命令并呈现。
 
 运行：
 

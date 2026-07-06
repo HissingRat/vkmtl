@@ -38,7 +38,10 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var output_buffer = try context.makeBuffer(.{
+    var device = context.device();
+    var queue = context.queue();
+
+    var output_buffer = try device.makeBuffer(.{
         .length = value_count * @sizeOf(u32),
         .usage = .{
             .copy_source = true,
@@ -48,14 +51,14 @@ pub fn main(init: std.process.Init.Minimal) !void {
     });
     defer output_buffer.deinit();
 
-    var readback_buffer = try context.makeBuffer(.{
+    var readback_buffer = try device.makeBuffer(.{
         .length = value_count * @sizeOf(u32),
         .usage = .{ .copy_destination = true },
         .storage_mode = .shared,
     });
     defer readback_buffer.deinit();
 
-    var output_texture = try context.makeTexture(.{
+    var output_texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = texture_width,
         .height = texture_height,
@@ -70,14 +73,14 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var output_texture_view = try output_texture.makeTextureView(.{});
     defer output_texture_view.deinit();
 
-    var texture_readback = try context.makeBuffer(.{
+    var texture_readback = try device.makeBuffer(.{
         .length = texture_pixels_len,
         .usage = .{ .copy_destination = true },
         .storage_mode = .shared,
     });
     defer texture_readback.deinit();
 
-    var compiled_shader = try context.compileComputeShader("compute_readback", shader_source, .{
+    var compiled_shader = try device.compileComputeShader("compute_readback", shader_source, .{
         .entry = "cs_main",
     });
     defer compiled_shader.deinit();
@@ -90,7 +93,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer derived_bind_group_layouts.deinit();
     if (derived_bind_group_layouts.descriptors().len == 0) return error.MissingDerivedBindGroupLayout;
 
-    var bind_group_layout = try context.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
+    var bind_group_layout = try device.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
     defer bind_group_layout.deinit();
 
     const bind_group_entries = [_]vkmtl.BindGroupEntry{
@@ -106,7 +109,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
             } },
         },
     };
-    var bind_group = try context.makeBindGroup(.{
+    var bind_group = try device.makeBindGroup(.{
         .layout = &bind_group_layout,
         .entries = bind_group_entries[0..],
     });
@@ -115,13 +118,13 @@ pub fn main(init: std.process.Init.Minimal) !void {
     const pipeline_bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
         bind_group_layout.descriptor(),
     };
-    var pipeline = try context.makeComputePipelineState(.{
+    var pipeline = try device.makeComputePipelineState(.{
         .compute = compute_stage,
         .bind_group_layouts = pipeline_bind_group_layouts[0..],
     });
     defer pipeline.deinit();
 
-    var compute_command_buffer = try context.makeCommandBuffer();
+    var compute_command_buffer = try queue.makeCommandBuffer();
     var compute = try compute_command_buffer.makeComputeCommandEncoder();
     try compute.setComputePipelineState(&pipeline);
     try compute.setBindGroup(&bind_group, .{ .index = 0 });
@@ -132,7 +135,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     try compute.endEncoding();
     try compute_command_buffer.commit();
 
-    var copy_command_buffer = try context.makeCommandBuffer();
+    var copy_command_buffer = try queue.makeCommandBuffer();
     var blit = try copy_command_buffer.makeBlitCommandEncoder();
     try blit.copyBufferToBuffer(&output_buffer, &readback_buffer, .{
         .size = value_count * @sizeOf(u32),

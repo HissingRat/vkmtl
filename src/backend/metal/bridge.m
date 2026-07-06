@@ -331,6 +331,34 @@ vkmtl_metal_status vkmtl_metal_clear_screen_draw(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
+    const vkmtl_metal_clear_screen *clear_screen,
+    char *buffer,
+    size_t buffer_len
+) {
+    if (clear_screen == NULL || clear_screen->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+    if (buffer == NULL || buffer_len == 0) {
+        return VKMTL_METAL_STATUS_NAME_BUFFER_TOO_SMALL;
+    }
+
+    @autoreleasepool {
+        const char *name = [[clear_screen->device name] UTF8String];
+        if (name == NULL) {
+            return VKMTL_METAL_STATUS_NO_DEVICE;
+        }
+
+        const size_t name_len = strlen(name);
+        if (name_len + 1 > buffer_len) {
+            return VKMTL_METAL_STATUS_NAME_BUFFER_TOO_SMALL;
+        }
+
+        memcpy(buffer, name, name_len + 1);
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 static MTLResourceOptions vkmtl_storage_options(vkmtl_metal_storage_mode storage_mode) {
     switch (storage_mode) {
         case VKMTL_METAL_STORAGE_MODE_MANAGED:

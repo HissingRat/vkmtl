@@ -49,14 +49,18 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var vertex_buffer = try context.makeBuffer(.{
+    var device = context.device();
+    var queue = context.queue();
+    var swapchain = context.swapchain();
+
+    var vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(vertices[0..]),
         .usage = .{ .vertex = true },
         .storage_mode = .shared,
     });
     defer vertex_buffer.deinit();
 
-    var compiled_shader = try context.compileRenderShader("triangle", shader_source, .{
+    var compiled_shader = try device.compileRenderShader("triangle", shader_source, .{
         .vertex_entry = "vs_main",
         .fragment_entry = "fs_main",
     });
@@ -70,7 +74,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     );
     defer derived_vertex_descriptor.deinit();
 
-    var pipeline = try context.makeRenderPipelineState(.{
+    var pipeline = try device.makeRenderPipelineState(.{
         .vertex = stages.vertex,
         .fragment = stages.fragment,
         .vertex_descriptor = derived_vertex_descriptor.descriptor,
@@ -86,9 +90,9 @@ pub fn main(init: std.process.Init.Minimal) !void {
             continue;
         }
 
-        try context.resize(extent);
+        try swapchain.resize(extent);
 
-        var command_buffer = try context.makeCommandBuffer();
+        var command_buffer = try queue.makeCommandBuffer();
         var encoder = try command_buffer.makeRenderCommandEncoder(.{
             .color_attachments = &.{.{
                 .clear_color = .{

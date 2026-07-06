@@ -13,13 +13,17 @@ examples.
 - Move command-buffer creation behind `Queue`.
 - Migrate examples to `device.make*` and `queue.makeCommandBuffer()` so the
   public sample code uses the new entry points.
+- Add runtime `Surface` and `Swapchain` view wrappers.
+- Move example resize calls to `swapchain.resize(...)`.
 
 ## Non-Goals
 
 - Do not remove `WindowContext.make*` yet.
-- Do not split presentation into a separate public swapchain owner yet.
+- Do not require standalone multi-surface ownership in this slice.
 
 ## Later Work
 
-- Add explicit `Surface` / `Swapchain` runtime wrappers.
-- Decide which `WindowContext` APIs stay as convenience helpers.
+- Keep `WindowContext.make*`, `compile*`, `resize(...)`, and `clear(...)` as
+  compatibility forwards during Period 2.
+- Decide when those forwards become deprecated after standalone `Device`,
+  `Surface`, and `Swapchain` owners are no longer views.
