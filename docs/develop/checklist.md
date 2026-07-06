@@ -356,6 +356,63 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Keep default resource creation independent from manual heaps.
 - [x] Document heap ownership and future backend mapping.
 
+## Period 4 Phase 0 Checklist
+
+- [x] Define shader and binding contract.
+- [x] Keep Slang as the only public shader source language.
+- [x] Keep advanced binding features capability-gated.
+- [x] Document validation-shape-first work for backend-sensitive features.
+
+## Period 4 Phase 1 Checklist
+
+- [ ] Add portable binding location shape.
+- [ ] Add binding resource classification helpers.
+- [ ] Add bind group layout introspection helpers.
+- [ ] Document backend mapping limits.
+
+## Period 4 Phase 2 Checklist
+
+- [ ] Add shader compile profile/options shape.
+- [ ] Add shader library descriptor and entry descriptors.
+- [ ] Define cache-key requirements.
+- [ ] Document that object cache implementation remains Period 8.
+
+## Period 4 Phase 3 Checklist
+
+- [ ] Add reflection schema version metadata.
+- [ ] Include schema version in generated JSON.
+- [ ] Accept older unversioned reflection artifacts for compatibility.
+- [ ] Document stable reflection schema.
+
+## Period 4 Phase 4 Checklist
+
+- [ ] Add compare sampler binding resource kind.
+- [ ] Add resource-array layout metadata.
+- [ ] Add dynamic buffer binding metadata.
+- [ ] Validate advanced layout metadata.
+- [ ] Document backend lowering limits.
+
+## Period 4 Phase 5 Checklist
+
+- [ ] Add dynamic offset descriptor shape and validation.
+- [ ] Add small constant descriptor shape and validation.
+- [ ] Validate alignment against `DeviceLimits`.
+- [ ] Document command-lowering limits.
+
+## Period 4 Phase 6 Checklist
+
+- [ ] Add root-constant feature and limit fields.
+- [ ] Add root-constant descriptor shapes.
+- [ ] Validate size, offset, and visibility.
+- [ ] Document Vulkan/Metal lowering direction.
+
+## Period 4 Phase 7 Checklist
+
+- [ ] Add shader specialization descriptor shapes.
+- [ ] Validate specialization value kinds and IDs.
+- [ ] Include specialization in cache-key requirements.
+- [ ] Document backend lowering limits.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
