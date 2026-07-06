@@ -477,6 +477,54 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Keep query lowering shape-only in this period.
 - [x] Document query support differences.
 
+## Period 6 Phase 1 Checklist
+
+- [x] Define command lifecycle scope before implementation.
+- [ ] Add command buffer descriptor and status helpers.
+- [ ] Keep command buffer creation compatible with existing examples.
+- [ ] Validate reset/reuse and post-submit state through debug state.
+- [ ] Document command lifecycle limits.
+
+## Period 6 Phase 2 Checklist
+
+- [x] Define blit completeness scope before implementation.
+- [ ] Add texture-to-texture copy and fill-buffer descriptor shapes.
+- [ ] Validate copy regions, resource usage, and buffer ranges.
+- [ ] Keep unsupported native blit operations behind typed errors.
+- [ ] Document transfer command limits.
+
+## Period 6 Phase 3 Checklist
+
+- [x] Define explicit barrier scope before implementation.
+- [ ] Add public buffer/texture barrier descriptor shapes.
+- [ ] Validate resource usage transitions and redundant barriers.
+- [ ] Keep manual barriers as an advanced feature gate.
+- [ ] Document automatic versus explicit synchronization rules.
+
+## Period 6 Phase 4 Checklist
+
+- [x] Define fence/event scope before implementation.
+- [ ] Add portable fence and event descriptor shapes.
+- [ ] Add wait/signal validation shapes.
+- [ ] Gate timeline semaphore and Metal shared-event style behavior.
+- [ ] Document CPU/GPU and GPU/GPU synchronization limits.
+
+## Period 6 Phase 5 Checklist
+
+- [x] Define multi-queue scope before implementation.
+- [ ] Add public queue kind/capability descriptors.
+- [ ] Preserve single graphics queue behavior by default.
+- [ ] Gate compute/transfer queue selection and ownership transfer.
+- [ ] Document cross-queue fallback rules.
+
+## Period 6 Phase 6 Checklist
+
+- [x] Define debug marker scope before implementation.
+- [ ] Add portable debug signpost descriptor shape.
+- [ ] Expose command-buffer and encoder signpost helpers.
+- [ ] Keep marker validation independent from backend-native lowering.
+- [ ] Document debug marker behavior and limits.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

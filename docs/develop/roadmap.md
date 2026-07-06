@@ -150,7 +150,7 @@ See `docs/develop/period5/`.
 
 ## Period 6: Command, Sync, Transfer
 
-Status: planned.
+Status: in progress.
 
 Goal: unify Vulkan's explicit synchronization needs with Metal's encoder model
 through portable defaults and explicit advanced escape hatches.
