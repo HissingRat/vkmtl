@@ -608,10 +608,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 5 Checklist
 
 - [x] Define compute pipeline cache scope before implementation.
-- [ ] Add unified compute pipeline cache-key descriptor shape.
-- [ ] Include compute shader identity, bind group layouts, and specialization.
-- [ ] Align with Period 7 compute cache requirements.
-- [ ] Document compute pipeline cache limits.
+- [x] Add unified compute pipeline cache-key descriptor shape.
+- [x] Include compute shader identity, bind group layouts, and specialization.
+- [x] Align with Period 7 compute cache requirements.
+- [x] Document compute pipeline cache limits.
 
 ## Period 8 Phase 6 Checklist
 

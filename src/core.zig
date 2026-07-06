@@ -1586,12 +1586,24 @@ pub const ComputePipelineCacheKeyDescriptor = struct {
     shader: ShaderLibraryCacheKeyDescriptor,
     entry_point: []const u8,
     bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
+    pipeline_layout: ?PipelineLayoutCacheKeyDescriptor = null,
 
-    pub fn validate(self: ComputePipelineCacheKeyDescriptor) (ShaderError || BindingError)!void {
+    pub fn validate(self: ComputePipelineCacheKeyDescriptor) (ShaderError || BindingError || SmallConstantError || RootConstantError)!void {
+        try self.validateForDevice(.{}, .{});
+    }
+
+    pub fn validateForDevice(
+        self: ComputePipelineCacheKeyDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (ShaderError || BindingError || SmallConstantError || RootConstantError)!void {
         try self.shader.validate();
         if (self.entry_point.len == 0) return ShaderError.EmptyShaderEntryPoint;
         for (self.bind_group_layouts) |layout| {
             try layout.validate();
+        }
+        if (self.pipeline_layout) |layout| {
+            try layout.validate(features, limits);
         }
     }
 };
@@ -5045,6 +5057,9 @@ test "shader library descriptor validates entries and cache keys" {
     const compute_layouts = [_]BindGroupLayoutDescriptor{
         .{ .entries = compute_layout_entries[0..] },
     };
+    const compute_layout_keys = [_]BindGroupLayoutCacheKeyDescriptor{
+        .{ .entries = compute_layout_entries[0..] },
+    };
     try (ComputePipelineCacheKeyDescriptor{
         .shader = .{
             .library_name = "compute",
@@ -5055,6 +5070,7 @@ test "shader library descriptor validates entries and cache keys" {
         },
         .entry_point = "cs_main",
         .bind_group_layouts = compute_layouts[0..],
+        .pipeline_layout = .{ .bind_group_layouts = compute_layout_keys[0..] },
     }).validate();
     try std.testing.expectError(ShaderError.EmptyShaderEntryPoint, (ComputePipelineCacheKeyDescriptor{
         .shader = .{

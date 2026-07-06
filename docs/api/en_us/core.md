@@ -432,9 +432,10 @@ from Slang source yet.
 
 `ComputePipelineCacheKeyDescriptor` defines the inputs that Period 8 object
 caches must include for compute pipelines: shader source identity, backend,
-compile profile, entry point, bind group layouts, and specialization constants.
-It is a validation shape only; native compute pipeline object caching is still
-future work.
+compile profile, entry point, bind group layouts, the unified
+`PipelineLayoutCacheKeyDescriptor`, and specialization constants. It is a
+validation shape only; native compute pipeline object caching is still future
+work.
 
 ## Debug Labels And Groups
 
