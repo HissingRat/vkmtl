@@ -1524,6 +1524,20 @@ pub const ComputePipelineDescriptor = struct {
     }
 };
 
+pub const ComputePipelineCacheKeyDescriptor = struct {
+    shader: ShaderLibraryCacheKeyDescriptor,
+    entry_point: []const u8,
+    bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
+
+    pub fn validate(self: ComputePipelineCacheKeyDescriptor) (ShaderError || BindingError)!void {
+        try self.shader.validate();
+        if (self.entry_point.len == 0) return ShaderError.EmptyShaderEntryPoint;
+        for (self.bind_group_layouts) |layout| {
+            try layout.validate();
+        }
+    }
+};
+
 pub const ShaderError = error{
     EmptyShaderSource,
     EmptyShaderArtifactPath,
@@ -4914,6 +4928,36 @@ test "shader library descriptor validates entries and cache keys" {
         .library_name = "basic",
         .source_hash = "",
         .backend = .metal,
+    }).validate());
+
+    const compute_layout_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .storage_buffer,
+            .visibility = .{ .compute = true },
+        },
+    };
+    const compute_layouts = [_]BindGroupLayoutDescriptor{
+        .{ .entries = compute_layout_entries[0..] },
+    };
+    try (ComputePipelineCacheKeyDescriptor{
+        .shader = .{
+            .library_name = "compute",
+            .source_hash = "abc",
+            .backend = .vulkan,
+            .profile = .release,
+            .specialization = specialization,
+        },
+        .entry_point = "cs_main",
+        .bind_group_layouts = compute_layouts[0..],
+    }).validate();
+    try std.testing.expectError(ShaderError.EmptyShaderEntryPoint, (ComputePipelineCacheKeyDescriptor{
+        .shader = .{
+            .library_name = "compute",
+            .source_hash = "abc",
+            .backend = .vulkan,
+        },
+        .entry_point = "",
     }).validate());
 }
 

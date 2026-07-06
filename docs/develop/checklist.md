@@ -560,10 +560,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 7 Phase 5 Checklist
 
 - [x] Define compute pipeline cache key scope before implementation.
-- [ ] Add compute pipeline cache-key descriptor shape.
-- [ ] Include shader identity, entry point, layouts, and specialization.
-- [ ] Leave object cache implementation to Period 8.
-- [ ] Document cache requirements.
+- [x] Add compute pipeline cache-key descriptor shape.
+- [x] Include shader identity, entry point, layouts, and specialization.
+- [x] Leave object cache implementation to Period 8.
+- [x] Document cache requirements.
 
 ## Period 7 Phase 6 Checklist
 

@@ -10,5 +10,7 @@ Phase 5 defines cache-key inputs without implementing the shared object cache.
 
 ## Current Limits
 
+- `ComputePipelineCacheKeyDescriptor` validates shader cache identity, compute
+  entry point, bind group layouts, profile, backend, and specialization shape.
 - Runtime shader artifact caching already exists.
 - Native compute pipeline object caching is still future work.

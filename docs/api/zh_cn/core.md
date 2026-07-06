@@ -363,6 +363,10 @@ Indirect buffer 使用 `BufferUsage.indirect`；runtime `dispatchThreadgroupsInd
 `DeviceLimits.max_compute_threadgroup_memory_bytes` gate 控制；vkmtl 还不会从 Slang source
 自动推断这些需求。
 
+`ComputePipelineCacheKeyDescriptor` 定义 Period 8 对 compute pipeline 做 object cache 时必须纳入
+key 的输入：shader source identity、backend、compile profile、entry point、bind group layout 和
+specialization constants。它目前只是 validation shape；native compute pipeline object cache 仍是后续工作。
+
 ## Debug Label 与 Group
 
 Runtime resource、command buffer 和 command encoder 都暴露借用字符串形式的 debug label：

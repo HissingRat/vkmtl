@@ -430,6 +430,12 @@ validation shapes gated by `DeviceFeatures.compute_atomics`,
 `DeviceLimits.max_compute_threadgroup_memory_bytes`; vkmtl does not infer them
 from Slang source yet.
 
+`ComputePipelineCacheKeyDescriptor` defines the inputs that Period 8 object
+caches must include for compute pipelines: shader source identity, backend,
+compile profile, entry point, bind group layouts, and specialization constants.
+It is a validation shape only; native compute pipeline object caching is still
+future work.
+
 ## Debug Labels And Groups
 
 Runtime resources, command buffers, and command encoders expose borrowed debug
