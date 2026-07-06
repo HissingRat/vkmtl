@@ -750,11 +750,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 11 Phase 1 Checklist
 
-- [ ] Define Vulkan capability query scope before implementation.
-- [ ] Query physical-device features, limits, extensions, queues, and format capabilities.
-- [ ] Map descriptor indexing, sparse, external interop, mesh, ray tracing, and pipeline cache support.
-- [ ] Document MoltenVK differences.
-- [ ] Add validation for the Vulkan query mapping.
+- [x] Define Vulkan capability query scope before implementation.
+- [x] Query physical-device features, limits, extensions, queues, and format capabilities.
+- [x] Map descriptor indexing, sparse, external interop, mesh, ray tracing, and pipeline cache support.
+- [x] Document MoltenVK differences.
+- [x] Add validation for the Vulkan query mapping.
 
 ## Period 11 Phase 2 Checklist
 

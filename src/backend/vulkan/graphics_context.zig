@@ -38,6 +38,9 @@ mem_props: vk.PhysicalDeviceMemoryProperties,
 dev: Device,
 graphics_queue: Queue,
 present_queue: Queue,
+features_value: core.DeviceFeatures,
+native_features_value: core.DeviceFeatures,
+limits_value: core.DeviceLimits,
 
 pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: core.VulkanSurfaceProvider) !GraphicsContext {
     var self: GraphicsContext = undefined;
@@ -124,6 +127,10 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     self.graphics_queue = Queue.init(self.dev, candidate.queues.graphics_family);
     self.present_queue = Queue.init(self.dev, candidate.queues.present_family);
     self.mem_props = self.instance.getPhysicalDeviceMemoryProperties(self.pdev);
+    self.native_features_value = try queryNativeFeatures(self.instance, self.pdev, allocator);
+    self.features_value = queryUsableFeatures(self.native_features_value);
+    self.limits_value = queryLimits(self.props, self.features_value);
+    self.limits_value.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
 
     return self;
 }
@@ -152,10 +159,22 @@ pub fn adapterInfo(self: *const GraphicsContext) core.AdapterInfo {
     };
 }
 
+pub fn features(self: GraphicsContext) core.DeviceFeatures {
+    return self.features_value;
+}
+
+pub fn nativeFeatures(self: GraphicsContext) core.DeviceFeatures {
+    return self.native_features_value;
+}
+
 pub fn limits(self: GraphicsContext) core.DeviceLimits {
-    var result = core.defaultDeviceLimits(.vulkan);
-    result.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
-    return result;
+    return self.limits_value;
+}
+
+pub fn formatCapabilities(self: GraphicsContext, format: core.TextureFormat) core.FormatCapabilities {
+    if (format == .automatic) return .{};
+    const props = self.instance.getPhysicalDeviceFormatProperties(self.pdev, imageFormat(format));
+    return formatCapabilitiesFromVulkanFeatures(props.optimal_tiling_features);
 }
 
 pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
@@ -218,6 +237,145 @@ fn maxSupportedSampleCount(self: GraphicsContext, format: core.TextureFormat) u3
         if (self.supportsSampleCount(format, sample_count)) return sample_count;
     }
     return 1;
+}
+
+fn queryNativeFeatures(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator) !core.DeviceFeatures {
+    var result = core.defaultDeviceFeatures(.vulkan);
+    const native = instance.getPhysicalDeviceFeatures(pdev);
+    const extensions = try queryExtensionSupport(instance, pdev, allocator);
+
+    result.sampler_anisotropy = native.sampler_anisotropy == .true;
+    result.independent_blend = native.independent_blend == .true;
+    result.tessellation = native.tessellation_shader == .true;
+    result.wireframe_fill_mode = native.fill_mode_non_solid == .true;
+    result.multi_draw = native.multi_draw_indirect == .true;
+    result.pipeline_statistics_queries = native.pipeline_statistics_query == .true;
+    result.sparse_buffers = native.sparse_binding == .true and native.sparse_residency_buffer == .true;
+    result.sparse_textures = native.sparse_binding == .true and
+        (native.sparse_residency_image_2d == .true or native.sparse_residency_image_3d == .true);
+    result.tiled_textures = result.sparse_textures;
+    result.descriptor_indexing = extensions.descriptor_indexing;
+    result.external_memory = extensions.external_memory;
+    result.external_semaphores = extensions.external_semaphore;
+    result.external_textures = extensions.external_memory;
+    result.mesh_shaders = extensions.mesh_shader;
+    result.task_shaders = extensions.mesh_shader;
+    result.acceleration_structures = extensions.acceleration_structure or extensions.ray_tracing_nv;
+    result.ray_tracing = (extensions.acceleration_structure and extensions.ray_tracing_pipeline) or extensions.ray_tracing_nv;
+    result.driver_pipeline_cache = true;
+    return result;
+}
+
+fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures {
+    var result = core.defaultDeviceFeatures(.vulkan);
+
+    result.sampler_anisotropy = false;
+    result.independent_blend = false;
+    result.tessellation = false;
+    result.wireframe_fill_mode = false;
+    result.multi_draw = false;
+    result.pipeline_statistics_queries = false;
+    result.sparse_buffers = false;
+    result.sparse_textures = false;
+    result.tiled_textures = false;
+    result.descriptor_indexing = false;
+    result.external_memory = false;
+    result.external_semaphores = false;
+    result.external_textures = false;
+    result.mesh_shaders = false;
+    result.task_shaders = false;
+    result.acceleration_structures = false;
+    result.ray_tracing = false;
+    result.driver_pipeline_cache = false;
+
+    result.native_handles = native_features.native_handles;
+    result.debug_labels = native_features.debug_labels;
+    return result;
+}
+
+fn queryLimits(props: vk.PhysicalDeviceProperties, queried_features: core.DeviceFeatures) core.DeviceLimits {
+    _ = queried_features;
+    var result = core.defaultDeviceLimits(.vulkan);
+    result.max_vertex_buffer_slots = @min(props.limits.max_vertex_input_bindings, core.default_max_vertex_buffer_slots);
+    result.max_color_attachments = @max(1, props.limits.max_fragment_output_attachments);
+    result.max_sampler_anisotropy = props.limits.max_sampler_anisotropy;
+    result.min_uniform_buffer_offset_alignment = props.limits.min_uniform_buffer_offset_alignment;
+    result.min_storage_buffer_offset_alignment = props.limits.min_storage_buffer_offset_alignment;
+    result.max_tessellation_control_points = props.limits.max_tessellation_patch_size;
+    result.max_compute_threadgroups_per_grid_x = props.limits.max_compute_work_group_count[0];
+    result.max_compute_threadgroups_per_grid_y = props.limits.max_compute_work_group_count[1];
+    result.max_compute_threadgroups_per_grid_z = props.limits.max_compute_work_group_count[2];
+    result.max_compute_threads_per_threadgroup_x = props.limits.max_compute_work_group_size[0];
+    result.max_compute_threads_per_threadgroup_y = props.limits.max_compute_work_group_size[1];
+    result.max_compute_threads_per_threadgroup_z = props.limits.max_compute_work_group_size[2];
+    result.max_compute_total_threads_per_threadgroup = props.limits.max_compute_work_group_invocations;
+    result.max_compute_threadgroup_memory_bytes = props.limits.max_compute_shared_memory_size;
+    result.max_driver_cache_identity_bytes = 4096;
+    return result;
+}
+
+const VulkanExtensionSupport = struct {
+    descriptor_indexing: bool = false,
+    external_memory: bool = false,
+    external_semaphore: bool = false,
+    acceleration_structure: bool = false,
+    ray_tracing_pipeline: bool = false,
+    ray_tracing_nv: bool = false,
+    mesh_shader: bool = false,
+};
+
+fn queryExtensionSupport(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator) !VulkanExtensionSupport {
+    const props = try instance.enumerateDeviceExtensionPropertiesAlloc(pdev, null, allocator);
+    defer allocator.free(props);
+
+    var support: VulkanExtensionSupport = .{};
+    for (props) |prop| {
+        support = mergeExtensionSupport(support, std.mem.sliceTo(&prop.extension_name, 0));
+    }
+    return support;
+}
+
+fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []const u8) VulkanExtensionSupport {
+    var result = current;
+    if (std.mem.eql(u8, extension_name, vk.extensions.ext_descriptor_indexing.name)) result.descriptor_indexing = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_external_memory.name)) result.external_memory = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_external_semaphore.name)) result.external_semaphore = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_acceleration_structure.name)) result.acceleration_structure = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_ray_tracing_pipeline.name)) result.ray_tracing_pipeline = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.nv_ray_tracing.name)) result.ray_tracing_nv = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.ext_mesh_shader.name) or
+        std.mem.eql(u8, extension_name, vk.extensions.nv_mesh_shader.name))
+    {
+        result.mesh_shader = true;
+    }
+    return result;
+}
+
+fn formatCapabilitiesFromVulkanFeatures(format_features: vk.FormatFeatureFlags) core.FormatCapabilities {
+    return .{
+        .sampled = format_features.sampled_image_bit,
+        .storage = format_features.storage_image_bit,
+        .color_attachment = format_features.color_attachment_bit,
+        .depth_stencil_attachment = format_features.depth_stencil_attachment_bit,
+        .filterable = format_features.sampled_image_bit,
+        .linear_filter = format_features.sampled_image_filter_linear_bit,
+        .mipmapped = format_features.blit_src_bit and format_features.blit_dst_bit,
+        .mipmap_generation = format_features.blit_src_bit and format_features.blit_dst_bit,
+        .blendable = format_features.color_attachment_blend_bit,
+        .copy_source = format_features.transfer_src_bit or format_features.blit_src_bit,
+        .copy_destination = format_features.transfer_dst_bit or format_features.blit_dst_bit,
+    };
+}
+
+fn imageFormat(format: core.TextureFormat) vk.Format {
+    return switch (format) {
+        .automatic => unreachable,
+        .bgra8_unorm => .b8g8r8a8_unorm,
+        .bgra8_unorm_srgb => .b8g8r8a8_srgb,
+        .rgba8_unorm => .r8g8b8a8_unorm,
+        .rgba8_unorm_srgb => .r8g8b8a8_srgb,
+        .depth32_float => .d32_sfloat,
+    };
 }
 
 pub const Queue = struct {
@@ -422,6 +580,65 @@ fn ensureDeviceDispatchAvailable(vkd: DeviceWrapper) !void {
 
 test "missing Vulkan base dispatch reports VulkanUnavailable" {
     try std.testing.expectError(error.VulkanUnavailable, ensureBaseDispatchAvailable(.{ .dispatch = .{} }));
+}
+
+test "Vulkan extension support maps optional backend capabilities" {
+    var support = VulkanExtensionSupport{};
+    support = mergeExtensionSupport(support, vk.extensions.ext_descriptor_indexing.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_external_memory.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_external_semaphore.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_acceleration_structure.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_ray_tracing_pipeline.name);
+    support = mergeExtensionSupport(support, vk.extensions.ext_mesh_shader.name);
+
+    try std.testing.expect(support.descriptor_indexing);
+    try std.testing.expect(support.external_memory);
+    try std.testing.expect(support.external_semaphore);
+    try std.testing.expect(support.acceleration_structure);
+    try std.testing.expect(support.ray_tracing_pipeline);
+    try std.testing.expect(support.mesh_shader);
+}
+
+test "Vulkan usable features stay conservative before backend lowering" {
+    const native = core.DeviceFeatures{
+        .descriptor_indexing = true,
+        .sparse_buffers = true,
+        .external_textures = true,
+        .tessellation = true,
+        .mesh_shaders = true,
+        .ray_tracing = true,
+        .driver_pipeline_cache = true,
+        .native_handles = true,
+        .debug_labels = true,
+    };
+    const usable = queryUsableFeatures(native);
+    try std.testing.expect(!usable.descriptor_indexing);
+    try std.testing.expect(!usable.sparse_buffers);
+    try std.testing.expect(!usable.external_textures);
+    try std.testing.expect(!usable.tessellation);
+    try std.testing.expect(!usable.mesh_shaders);
+    try std.testing.expect(!usable.ray_tracing);
+    try std.testing.expect(!usable.driver_pipeline_cache);
+    try std.testing.expect(usable.native_handles);
+    try std.testing.expect(usable.debug_labels);
+}
+
+test "Vulkan format feature mapping keeps copy and attachment caps separate" {
+    const caps = formatCapabilitiesFromVulkanFeatures(.{
+        .sampled_image_bit = true,
+        .storage_image_bit = true,
+        .color_attachment_bit = true,
+        .color_attachment_blend_bit = true,
+        .transfer_src_bit = true,
+        .transfer_dst_bit = true,
+    });
+    try std.testing.expect(caps.sampled);
+    try std.testing.expect(caps.storage);
+    try std.testing.expect(caps.color_attachment);
+    try std.testing.expect(caps.blendable);
+    try std.testing.expect(caps.copy_source);
+    try std.testing.expect(caps.copy_destination);
+    try std.testing.expect(!caps.depth_stencil_attachment);
 }
 
 fn debugCallback(
