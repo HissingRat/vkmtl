@@ -97,6 +97,9 @@ pub const DeviceFeatures = struct {
     draw_base_instance: bool = false,
     indirect_draw: bool = false,
     multi_draw: bool = false,
+    occlusion_queries: bool = false,
+    timestamp_queries: bool = false,
+    pipeline_statistics_queries: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -124,6 +127,7 @@ pub const DeviceLimits = struct {
     small_constant_alignment: u32 = 4,
     max_root_constant_bytes: u32 = 0,
     root_constant_alignment: u32 = 4,
+    query_result_alignment: u64 = 8,
 };
 
 pub const FormatCapabilities = struct {
@@ -372,6 +376,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedBaseInstance,
         error.UnsupportedIndirectDraw,
         error.UnsupportedMultiDraw,
+        error.UnsupportedOcclusionQueries,
+        error.UnsupportedTimestampQueries,
+        error.UnsupportedPipelineStatisticsQueries,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -420,6 +427,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidDrawCount,
         error.InvalidIndexBufferOffset,
         error.InvalidIndirectDrawStride,
+        error.InvalidQueryCount,
+        error.InvalidQueryRange,
+        error.InvalidQueryResultAlignment,
+        error.MissingPipelineStatistics,
         error.InvalidStencilClearValue,
         error.InvalidThreadgroupCount,
         error.InvalidCopySize,
@@ -1593,6 +1604,85 @@ fn validateIndirectDrawShape(draw_count: u32, stride: u32) CommandEncodingError!
     if (draw_count == 0) return CommandEncodingError.InvalidDrawCount;
     if (stride != 0 and stride % 4 != 0) return CommandEncodingError.InvalidIndirectDrawStride;
 }
+
+pub const QueryType = enum {
+    occlusion,
+    timestamp,
+    pipeline_statistics,
+};
+
+pub const PipelineStatisticFlags = struct {
+    vertex_invocations: bool = false,
+    fragment_invocations: bool = false,
+    compute_invocations: bool = false,
+
+    pub fn isEmpty(self: PipelineStatisticFlags) bool {
+        return !self.vertex_invocations and !self.fragment_invocations and !self.compute_invocations;
+    }
+};
+
+pub const QuerySetDescriptor = struct {
+    label: ?[]const u8 = null,
+    query_type: QueryType,
+    count: u32,
+    pipeline_statistics: PipelineStatisticFlags = .{},
+
+    pub fn validate(self: QuerySetDescriptor, features: DeviceFeatures) QueryError!void {
+        if (self.count == 0) return QueryError.InvalidQueryCount;
+        switch (self.query_type) {
+            .occlusion => if (!features.occlusion_queries) return QueryError.UnsupportedOcclusionQueries,
+            .timestamp => if (!features.timestamp_queries) return QueryError.UnsupportedTimestampQueries,
+            .pipeline_statistics => {
+                if (!features.pipeline_statistics_queries) return QueryError.UnsupportedPipelineStatisticsQueries;
+                if (self.pipeline_statistics.isEmpty()) return QueryError.MissingPipelineStatistics;
+            },
+        }
+    }
+};
+
+pub const QueryResolveDescriptor = struct {
+    first_query: u32 = 0,
+    query_count: u32 = 0,
+    destination_offset: u64 = 0,
+
+    pub fn validate(
+        self: QueryResolveDescriptor,
+        set: QuerySetDescriptor,
+        limits: DeviceLimits,
+    ) QueryError!void {
+        try validateQueryRange(self.first_query, self.query_count, set.count);
+        if (!isAlignedU64(self.destination_offset, limits.query_result_alignment)) {
+            return QueryError.InvalidQueryResultAlignment;
+        }
+    }
+};
+
+pub const QueryReadbackDescriptor = struct {
+    first_query: u32 = 0,
+    query_count: u32 = 0,
+    destination: []u64 = &.{},
+
+    pub fn validate(self: QueryReadbackDescriptor, set: QuerySetDescriptor) QueryError!void {
+        try validateQueryRange(self.first_query, self.query_count, set.count);
+        if (self.destination.len < self.query_count) return QueryError.InvalidQueryRange;
+    }
+};
+
+fn validateQueryRange(first_query: u32, query_count: u32, set_count: u32) QueryError!void {
+    if (query_count == 0) return QueryError.InvalidQueryCount;
+    const end = std.math.add(u32, first_query, query_count) catch return QueryError.InvalidQueryRange;
+    if (end > set_count) return QueryError.InvalidQueryRange;
+}
+
+pub const QueryError = error{
+    InvalidQueryCount,
+    InvalidQueryRange,
+    InvalidQueryResultAlignment,
+    MissingPipelineStatistics,
+    UnsupportedOcclusionQueries,
+    UnsupportedTimestampQueries,
+    UnsupportedPipelineStatisticsQueries,
+};
 
 pub const DispatchThreadgroupsDescriptor = struct {
     threadgroup_count_x: u32 = 0,
@@ -4671,6 +4761,57 @@ test "copy descriptors validate ranges and texture layouts" {
     try std.testing.expectError(CommandEncodingError.InvalidCopyBufferRange, (CopyTextureToBufferDescriptor{
         .source_region = .{ .size = .{ .width = 4, .height = 4 } },
     }).resolve(texture, 8));
+}
+
+test "query descriptors validate feature gates and ranges" {
+    const occlusion_set = QuerySetDescriptor{
+        .query_type = .occlusion,
+        .count = 4,
+    };
+    try occlusion_set.validate(.{ .occlusion_queries = true });
+    try std.testing.expectError(QueryError.UnsupportedOcclusionQueries, occlusion_set.validate(.{}));
+    try std.testing.expectError(QueryError.InvalidQueryCount, (QuerySetDescriptor{
+        .query_type = .timestamp,
+        .count = 0,
+    }).validate(.{ .timestamp_queries = true }));
+
+    const statistics_set = QuerySetDescriptor{
+        .query_type = .pipeline_statistics,
+        .count = 2,
+        .pipeline_statistics = .{ .vertex_invocations = true },
+    };
+    try statistics_set.validate(.{ .pipeline_statistics_queries = true });
+    try std.testing.expectError(QueryError.MissingPipelineStatistics, (QuerySetDescriptor{
+        .query_type = .pipeline_statistics,
+        .count = 2,
+    }).validate(.{ .pipeline_statistics_queries = true }));
+
+    try (QueryResolveDescriptor{
+        .first_query = 1,
+        .query_count = 2,
+        .destination_offset = 16,
+    }).validate(occlusion_set, .{ .query_result_alignment = 8 });
+    try std.testing.expectError(QueryError.InvalidQueryRange, (QueryResolveDescriptor{
+        .first_query = 3,
+        .query_count = 2,
+    }).validate(occlusion_set, .{ .query_result_alignment = 8 }));
+    try std.testing.expectError(QueryError.InvalidQueryResultAlignment, (QueryResolveDescriptor{
+        .first_query = 0,
+        .query_count = 1,
+        .destination_offset = 4,
+    }).validate(occlusion_set, .{ .query_result_alignment = 8 }));
+
+    var results = [_]u64{0} ** 2;
+    try (QueryReadbackDescriptor{
+        .first_query = 0,
+        .query_count = 2,
+        .destination = results[0..],
+    }).validate(occlusion_set);
+    try std.testing.expectError(QueryError.InvalidQueryRange, (QueryReadbackDescriptor{
+        .first_query = 0,
+        .query_count = 3,
+        .destination = results[0..],
+    }).validate(occlusion_set));
 }
 
 test "command debug state validates render pass ordering" {

@@ -336,6 +336,11 @@ unsupported errors. Indirect and multi-draw descriptor shapes are available, and
 `RenderCommandEncoder` exposes matching methods that validate inputs before
 returning unsupported until backend lowering exists.
 
+Query support is currently descriptor-only. `QuerySetDescriptor` covers
+occlusion, timestamp, and pipeline statistics queries with feature gates.
+`QueryResolveDescriptor` and `QueryReadbackDescriptor` validate query ranges and
+result alignment, but runtime query pools and encoder commands are future work.
+
 Transfer work uses a Metal-style blit encoder:
 
 ```zig

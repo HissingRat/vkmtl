@@ -471,11 +471,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 8 Checklist
 
-- [ ] Add query type and query set descriptor shapes.
-- [ ] Add query resolve/readback descriptor shapes.
-- [ ] Add query feature gates.
-- [ ] Keep query lowering shape-only in this period.
-- [ ] Document query support differences.
+- [x] Add query type and query set descriptor shapes.
+- [x] Add query resolve/readback descriptor shapes.
+- [x] Add query feature gates.
+- [x] Keep query lowering shape-only in this period.
+- [x] Document query support differences.
 
 ## First Backend-Independent Triangle Checklist
 

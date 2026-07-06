@@ -13,3 +13,7 @@ are introduced.
 ## Current Limits
 
 - Query support is descriptor/validation shape only in this period.
+- `QuerySetDescriptor` supports occlusion, timestamp, and pipeline statistics
+  query types with separate feature gates.
+- `QueryResolveDescriptor` and `QueryReadbackDescriptor` validate ranges and
+  result-buffer alignment, but no runtime query pool is created yet.
