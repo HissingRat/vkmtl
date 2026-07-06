@@ -235,15 +235,159 @@ default portable fallback unless explicitly designed.
 
 See `docs/develop/period10/`.
 
+## Period 11: Backend Capability Reality
+
+Status: planned.
+
+Goal: make feature and limit reports come from real Vulkan and Metal backend
+queries, then route unsupported advanced APIs through precise typed errors.
+
+- Phase 1: Vulkan capability query
+- Phase 2: Metal capability query
+- Phase 3: unified feature / limit fill path
+- Phase 4: unsupported feature validation
+- Phase 5: capability dump example
+- Phase 6: backend capability tests
+
+See `docs/develop/period11/`.
+
+## Period 12: Bindless / Argument Buffer Backend
+
+Status: planned.
+
+Goal: lower the Period 10 bindless binding API to Vulkan descriptor indexing
+and Metal argument buffers.
+
+- Phase 1: advanced binding layout lowering contract
+- Phase 2: Vulkan descriptor indexing lowering
+- Phase 3: Metal argument buffer lowering
+- Phase 4: Slang reflection bindless mapping
+- Phase 5: bindless texture example
+- Phase 6: bindless validation coverage
+
+See `docs/develop/period12/`.
+
+## Period 13: Multi-Surface / Presentation Backend
+
+Status: planned.
+
+Goal: make one device manage multiple presentation surfaces reliably across
+Vulkan swapchains and Metal drawable layers.
+
+- Phase 1: device-owned surface registry
+- Phase 2: multiple swapchain / drawable state
+- Phase 3: resize, minimize, and surface-lost handling
+- Phase 4: present mode and vsync configuration
+- Phase 5: frame pacing baseline
+- Phase 6: multi-window example
+
+See `docs/develop/period13/`.
+
+## Period 14: Native Interop / External Resources
+
+Status: planned.
+
+Goal: support explicit interop with platform APIs, engines, UI frameworks, and
+media pipelines without leaking native handles into the portable path.
+
+- Phase 1: native handle view stabilization
+- Phase 2: Vulkan external memory / image / semaphore interop
+- Phase 3: Metal texture / buffer / event interop
+- Phase 4: external texture creation path
+- Phase 5: native command insertion hooks
+- Phase 6: external texture example
+
+See `docs/develop/period14/`.
+
+## Period 15: Sparse / Tiled Resources Backend
+
+Status: planned.
+
+Goal: lower sparse and tiled resource descriptors to backend-native residency
+and page-commit mechanisms for large or streaming resources.
+
+- Phase 1: sparse buffer backend
+- Phase 2: sparse texture / tiled texture backend
+- Phase 3: residency map and page commit API
+- Phase 4: mip tail and alignment handling
+- Phase 5: streaming texture example
+- Phase 6: sparse validation coverage
+
+See `docs/develop/period15/`.
+
+## Period 16: Advanced Geometry Pipeline
+
+Status: planned.
+
+Goal: lower tessellation and mesh/task shader descriptors to real backend
+pipelines where supported.
+
+- Phase 1: Vulkan tessellation lowering
+- Phase 2: Metal tessellation lowering
+- Phase 3: Vulkan mesh/task shader lowering
+- Phase 4: Metal object/mesh function path
+- Phase 5: Slang entry/reflection alignment
+- Phase 6: tessellation and mesh examples
+
+See `docs/develop/period16/`.
+
+## Period 17: Ray Tracing Backend
+
+Status: planned.
+
+Goal: lower acceleration structures, ray tracing pipelines, and shader binding
+table descriptors to Vulkan and Metal ray tracing capabilities.
+
+- Phase 1: acceleration structure backend API
+- Phase 2: Vulkan ray tracing pipeline lowering
+- Phase 3: Metal acceleration structure and intersection lowering
+- Phase 4: shader binding table mapping
+- Phase 5: basic ray traced triangle example
+- Phase 6: ray tracing validation and matrix
+
+See `docs/develop/period17/`.
+
+## Period 18: Performance / Production Hardening
+
+Status: planned.
+
+Goal: turn the advanced backend slices from functional prototypes into
+production-ready paths with cache persistence, diagnostics, and long-run
+stability checks.
+
+- Phase 1: driver pipeline cache persistence
+- Phase 2: resource aliasing / transient allocator
+- Phase 3: upload and readback queue optimization
+- Phase 4: GPU timestamps and profiler markers
+- Phase 5: debug labels and capture-friendly naming
+- Phase 6: long-run stability tests
+
+See `docs/develop/period18/`.
+
+## Period 19: Voxel World Pressure Test
+
+Status: planned.
+
+Goal: build a Minecraft-like block world prototype under `examples/` as the
+final pressure test for the core render, resource, shader, binding, transfer,
+and presentation stack.
+
+- Phase 1: voxel example contract
+- Phase 2: chunk mesh data and CPU meshing
+- Phase 3: texture atlas and material binding
+- Phase 4: camera, input, and culling
+- Phase 5: chunk streaming and mesh rebuild loop
+- Phase 6: lighting and visibility polish
+- Phase 7: pressure-test report
+
+See `docs/develop/period19/`.
+
 ## Priority Notes
 
-- Period 2 is the next priority.
-- Period 2 must settle owner, lifetime, binding, sync, and capability-gate
-  rules before broad resource or pipeline expansion.
-- `features`, `limits`, and format capabilities should arrive early.
-- Binding and sync are the largest long-term risks; define specs before
-  expanding their implementations.
-- Advanced features should stay in optional, capability-gated modules.
+- Period 11 is the next priority after the Period 10 API expansion.
+- Feature gates must be truthful before advanced backend lowering begins.
+- Periods 12 through 18 should prioritize backend implementation over new API
+  surface unless a missing descriptor blocks lowering.
+- Period 19 intentionally comes after production hardening. The voxel example is
+  a pressure test, not the place to invent missing backend fundamentals.
 - Each period should include tests or examples that prove the new capability.
-  Period 9 organizes the matrix; it should not be the first proof that a
-  feature exists.

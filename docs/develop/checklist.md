@@ -748,6 +748,446 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Keep disk cache invalidation explicit.
 - [x] Update Period 10 status and docs.
 
+## Period 11 Phase 1 Checklist
+
+- [ ] Define Vulkan capability query scope before implementation.
+- [ ] Query physical-device features, limits, extensions, queues, and format capabilities.
+- [ ] Map descriptor indexing, sparse, external interop, mesh, ray tracing, and pipeline cache support.
+- [ ] Document MoltenVK differences.
+- [ ] Add validation for the Vulkan query mapping.
+
+## Period 11 Phase 2 Checklist
+
+- [ ] Define Metal capability query scope before implementation.
+- [ ] Query device families, argument-buffer tiers, sparse/tiled support, ray tracing, and binary archive support.
+- [ ] Keep platform-version and device-limit checks explicit.
+- [ ] Add conservative non-Apple fallback behavior.
+- [ ] Document Metal capability mapping limits.
+
+## Period 11 Phase 3 Checklist
+
+- [ ] Define the unified feature/limit fill path before implementation.
+- [ ] Route backend-native query results into public `DeviceFeatures`.
+- [ ] Route backend-native query results into public `DeviceLimits`.
+- [ ] Keep unknown values conservative.
+- [ ] Add tests that prevent hardcoded advanced support.
+
+## Period 11 Phase 4 Checklist
+
+- [ ] Define unsupported-feature validation scope before implementation.
+- [ ] Check advanced descriptors against selected-device features.
+- [ ] Check descriptor counts, alignments, page sizes, and stage visibility against limits.
+- [ ] Return precise typed errors for unsupported optional modules.
+- [ ] Add one unsupported-path test per advanced module.
+
+## Period 11 Phase 5 Checklist
+
+- [ ] Define capability dump example scope before implementation.
+- [ ] Add `examples/capability_dump`.
+- [ ] Print backend, adapter, features, limits, and selected format capabilities.
+- [ ] Keep the example on public vkmtl APIs only.
+- [ ] Document expected smoke-test usage.
+
+## Period 11 Phase 6 Checklist
+
+- [ ] Define backend capability test scope before implementation.
+- [ ] Add tests for conservative defaults.
+- [ ] Add tests for query mapping completeness.
+- [ ] Update backend matrix notes for device-dependent expectations.
+- [ ] Validate capability reporting in CI or local backend smoke runs where practical.
+
+## Period 12 Phase 1 Checklist
+
+- [ ] Define advanced binding layout lowering scope before implementation.
+- [ ] Define cache keys and ownership for advanced layouts.
+- [ ] Keep the portable bind group path unchanged.
+- [ ] Document when applications should use the advanced binding path.
+- [ ] Add layout compatibility tests.
+
+## Period 12 Phase 2 Checklist
+
+- [ ] Define Vulkan descriptor indexing lowering scope before implementation.
+- [ ] Enable required Vulkan features and extensions.
+- [ ] Create descriptor set layouts with descriptor indexing flags.
+- [ ] Support partially bound and runtime descriptor arrays where available.
+- [ ] Add Vulkan validation and smoke coverage.
+
+## Period 12 Phase 3 Checklist
+
+- [ ] Define Metal argument buffer lowering scope before implementation.
+- [ ] Create argument-buffer layout objects.
+- [ ] Bind argument buffers in render and compute encoders.
+- [ ] Respect argument-buffer tier limits.
+- [ ] Add Metal validation and smoke coverage.
+
+## Period 12 Phase 4 Checklist
+
+- [ ] Define Slang bindless reflection scope before implementation.
+- [ ] Parse resource-array metadata from reflection.
+- [ ] Derive advanced layout ranges from shader declarations.
+- [ ] Include advanced layout data in shader and pipeline cache keys.
+- [ ] Add reflection fixture tests.
+
+## Period 12 Phase 5 Checklist
+
+- [ ] Define bindless texture example scope before implementation.
+- [ ] Add `examples/bindless_textures`.
+- [ ] Load or generate multiple textures.
+- [ ] Select textures through bindless indices.
+- [ ] Provide clear unsupported-feature fallback output.
+
+## Period 12 Phase 6 Checklist
+
+- [ ] Define bindless validation scope before implementation.
+- [ ] Validate descriptor count limits.
+- [ ] Validate partially bound behavior and empty slots.
+- [ ] Validate render and compute stage visibility.
+- [ ] Add unit and backend smoke tests where practical.
+
+## Period 13 Phase 1 Checklist
+
+- [ ] Define device-owned surface registry scope before implementation.
+- [ ] Decide the owner of surface registry state.
+- [ ] Track surface handles, labels, native handles, and lifecycle state.
+- [ ] Validate stale handles and duplicate destruction.
+- [ ] Document multi-surface ownership.
+
+## Period 13 Phase 2 Checklist
+
+- [ ] Define multiple swapchain/drawable scope before implementation.
+- [ ] Support multiple Vulkan swapchains for one device.
+- [ ] Support multiple Metal drawable streams for one device.
+- [ ] Isolate per-surface extent, format, present mode, and frame state.
+- [ ] Add per-surface state tests.
+
+## Period 13 Phase 3 Checklist
+
+- [ ] Define resize/minimize/surface-lost scope before implementation.
+- [ ] Recreate presentation resources after resize.
+- [ ] Treat zero-sized surfaces as temporarily unavailable.
+- [ ] Return typed surface-lost errors for native failures.
+- [ ] Add resize and stale-generation tests.
+
+## Period 13 Phase 4 Checklist
+
+- [ ] Define present mode/vsync scope before implementation.
+- [ ] Map public present modes to Vulkan present modes.
+- [ ] Map vsync intent to Metal presentation settings.
+- [ ] Document non-equivalent backend behavior.
+- [ ] Add present-mode selection tests.
+
+## Period 13 Phase 5 Checklist
+
+- [ ] Define frame pacing scope before implementation.
+- [ ] Track frame serials per surface.
+- [ ] Avoid one blocked surface stalling unrelated surfaces where possible.
+- [ ] Keep pacing diagnostics inspectable.
+- [ ] Add multi-surface frame counter tests.
+
+## Period 13 Phase 6 Checklist
+
+- [ ] Define multi-window example scope before implementation.
+- [ ] Add `examples/multi_window`.
+- [ ] Use external windowing adapters, not vkmtl core windowing.
+- [ ] Render visibly different content per window.
+- [ ] Validate public API imports only.
+
+## Period 14 Phase 1 Checklist
+
+- [ ] Define native handle stabilization scope before implementation.
+- [ ] Stabilize backend-tagged native handle view payloads.
+- [ ] Document borrowed lifetime and invalidation rules.
+- [ ] Keep ordinary portable APIs free of native handles.
+- [ ] Add explicit native-handle API tests.
+
+## Period 14 Phase 2 Checklist
+
+- [ ] Define Vulkan external interop scope before implementation.
+- [ ] Detect external memory and semaphore handle types.
+- [ ] Import/export buffers and images through explicit descriptors.
+- [ ] Map external waits/signals into queue submission.
+- [ ] Add descriptor and backend smoke validation.
+
+## Period 14 Phase 3 Checklist
+
+- [ ] Define Metal interop scope before implementation.
+- [ ] Wrap existing Metal textures or buffers through explicit descriptors.
+- [ ] Support Metal shared events where available.
+- [ ] Preserve ownership boundaries with external owners.
+- [ ] Add macOS smoke coverage where practical.
+
+## Period 14 Phase 4 Checklist
+
+- [ ] Define external texture creation scope before implementation.
+- [ ] Create vkmtl textures from external texture descriptors.
+- [ ] Support texture views and sampler bindings for imported textures.
+- [ ] Validate format, usage, extent, and ownership compatibility.
+- [ ] Add rendering smoke coverage.
+
+## Period 14 Phase 5 Checklist
+
+- [ ] Define native command insertion scope before implementation.
+- [ ] Add explicit insertion points for render, compute, and blit encoders.
+- [ ] Expose backend-native command handles through callback descriptors.
+- [ ] Mark resource usage boundaries around native commands.
+- [ ] Document synchronization responsibility.
+
+## Period 14 Phase 6 Checklist
+
+- [ ] Define external texture example scope before implementation.
+- [ ] Add `examples/external_texture`.
+- [ ] Import or wrap a generated/platform-provided texture source.
+- [ ] Sample through normal vkmtl render APIs after import.
+- [ ] Provide clear unsupported-feature fallback output.
+
+## Period 15 Phase 1 Checklist
+
+- [ ] Define sparse buffer backend scope before implementation.
+- [ ] Query sparse buffer support and page size.
+- [ ] Create sparse buffers without full memory commitment.
+- [ ] Commit and uncommit buffer pages.
+- [ ] Add alignment and read/write smoke tests.
+
+## Period 15 Phase 2 Checklist
+
+- [ ] Define sparse/tiled texture backend scope before implementation.
+- [ ] Query sparse texture dimensions and page granularity.
+- [ ] Create sparse or tiled textures through explicit descriptors.
+- [ ] Commit and uncommit texture regions.
+- [ ] Add render smoke coverage for a committed tile.
+
+## Period 15 Phase 3 Checklist
+
+- [ ] Define residency map scope before implementation.
+- [ ] Track resident sparse buffer and texture regions.
+- [ ] Batch page commit operations.
+- [ ] Expose residency diagnostics.
+- [ ] Add duplicate and overlapping region tests.
+
+## Period 15 Phase 4 Checklist
+
+- [ ] Define mip tail and alignment scope before implementation.
+- [ ] Represent mip tail behavior in backend-neutral metadata.
+- [ ] Validate mip-level alignment and page dimensions.
+- [ ] Document backend differences.
+- [ ] Add small-mip and format-dependent page tests.
+
+## Period 15 Phase 5 Checklist
+
+- [ ] Define streaming texture example scope before implementation.
+- [ ] Add `examples/streaming_texture`.
+- [ ] Stream visible tiles or mip levels.
+- [ ] Show missing tiles or unsupported fallback clearly.
+- [ ] Record backend requirements.
+
+## Period 15 Phase 6 Checklist
+
+- [ ] Define sparse validation scope before implementation.
+- [ ] Validate page alignment, residency state, and usage flags.
+- [ ] Validate out-of-bounds sparse mapping descriptors.
+- [ ] Validate detectable non-resident access metadata.
+- [ ] Add commit/uncommit sequence tests.
+
+## Period 16 Phase 1 Checklist
+
+- [ ] Define Vulkan tessellation lowering scope before implementation.
+- [ ] Enable tessellation features on supported Vulkan devices.
+- [ ] Create pipelines with tessellation control/evaluation stages.
+- [ ] Map patch control points and partitioning descriptors.
+- [ ] Add Vulkan tessellation smoke coverage.
+
+## Period 16 Phase 2 Checklist
+
+- [ ] Define Metal tessellation lowering scope before implementation.
+- [ ] Map public tessellation descriptors to Metal pipeline state.
+- [ ] Handle patch control point and partition mode differences.
+- [ ] Document Metal-specific constraints.
+- [ ] Add Metal tessellation smoke coverage.
+
+## Period 16 Phase 3 Checklist
+
+- [ ] Define Vulkan mesh/task shader lowering scope before implementation.
+- [ ] Query and enable mesh shader features and limits.
+- [ ] Create mesh pipelines with optional task stages.
+- [ ] Dispatch mesh workloads through render encoders.
+- [ ] Add Vulkan mesh smoke coverage.
+
+## Period 16 Phase 4 Checklist
+
+- [ ] Define Metal object/mesh function scope before implementation.
+- [ ] Query Metal object/mesh function availability.
+- [ ] Map mesh pipeline descriptors to Metal functions.
+- [ ] Document unsupported Metal versions or devices.
+- [ ] Add Metal mesh-style smoke coverage.
+
+## Period 16 Phase 5 Checklist
+
+- [ ] Define Slang advanced geometry scope before implementation.
+- [ ] Add Slang metadata for tessellation, mesh, and task stages.
+- [ ] Include advanced geometry stages in cache keys.
+- [ ] Validate reflection output against pipeline descriptors.
+- [ ] Add reflection fixture tests.
+
+## Period 16 Phase 6 Checklist
+
+- [ ] Define tessellation/mesh example scope before implementation.
+- [ ] Add tessellation and mesh examples.
+- [ ] Provide clear unsupported-feature fallback output.
+- [ ] Keep examples on public vkmtl APIs.
+- [ ] Run at least one backend path before completion.
+
+## Period 17 Phase 1 Checklist
+
+- [ ] Define acceleration structure backend scope before implementation.
+- [ ] Create bottom-level and top-level acceleration structures.
+- [ ] Allocate build scratch resources.
+- [ ] Encode build and update commands.
+- [ ] Track usage and deferred destruction.
+
+## Period 17 Phase 2 Checklist
+
+- [ ] Define Vulkan ray tracing pipeline scope before implementation.
+- [ ] Enable required Vulkan ray tracing extensions.
+- [ ] Create ray tracing shader stages and groups.
+- [ ] Dispatch rays through command encoders.
+- [ ] Add Vulkan ray tracing smoke coverage.
+
+## Period 17 Phase 3 Checklist
+
+- [ ] Define Metal ray tracing lowering scope before implementation.
+- [ ] Create Metal acceleration structures where supported.
+- [ ] Map intersection functions and function tables.
+- [ ] Handle Metal resource usage and synchronization.
+- [ ] Add Metal ray tracing smoke coverage.
+
+## Period 17 Phase 4 Checklist
+
+- [ ] Define shader binding table mapping scope before implementation.
+- [ ] Build Vulkan shader binding tables with correct alignment.
+- [ ] Map public shader groups to Metal equivalents.
+- [ ] Include ray binding data in cache keys.
+- [ ] Add alignment and missing-group tests.
+
+## Period 17 Phase 5 Checklist
+
+- [ ] Define ray traced triangle example scope before implementation.
+- [ ] Add `examples/ray_traced_triangle`.
+- [ ] Build one acceleration structure.
+- [ ] Dispatch one ray generation shader and present the result.
+- [ ] Provide clear unsupported-feature fallback output.
+
+## Period 17 Phase 6 Checklist
+
+- [ ] Define ray tracing validation/matrix scope before implementation.
+- [ ] Add validation cases for acceleration structures, shader groups, recursion depth, and shader binding tables.
+- [ ] Extend the backend test matrix with ray tracing expectations.
+- [ ] Document optional support per backend and host.
+- [ ] Record which devices were smoke-tested.
+
+## Period 18 Phase 1 Checklist
+
+- [ ] Define driver cache persistence scope before implementation.
+- [ ] Save and load Vulkan pipeline cache blobs.
+- [ ] Save and load Metal binary archives where supported.
+- [ ] Validate backend, device, driver, shader, and vkmtl cache identity.
+- [ ] Add warm-cache smoke coverage.
+
+## Period 18 Phase 2 Checklist
+
+- [ ] Define transient allocator scope before implementation.
+- [ ] Add transient resource descriptors.
+- [ ] Reuse compatible temporary buffers and textures.
+- [ ] Respect backend alignment and hazard constraints.
+- [ ] Add aliasing eligibility tests.
+
+## Period 18 Phase 3 Checklist
+
+- [ ] Define upload/readback optimization scope before implementation.
+- [ ] Batch uploads through reusable staging resources.
+- [ ] Prefer transfer/blit queues where available and beneficial.
+- [ ] Improve readback scheduling without blocking unrelated render work.
+- [ ] Preserve deterministic readback tests.
+
+## Period 18 Phase 4 Checklist
+
+- [ ] Define GPU timestamp/profiler scope before implementation.
+- [ ] Add timestamp query support where available.
+- [ ] Add profiler marker descriptors.
+- [ ] Keep timing features capability-gated.
+- [ ] Add timing descriptor tests and smoke coverage.
+
+## Period 18 Phase 5 Checklist
+
+- [ ] Define debug label lowering scope before implementation.
+- [ ] Lower resource labels to Vulkan debug utils and Metal labels.
+- [ ] Lower command debug groups and signposts consistently.
+- [ ] Preserve readable names in examples and diagnostics.
+- [ ] Add capture notes.
+
+## Period 18 Phase 6 Checklist
+
+- [ ] Define long-run stability scope before implementation.
+- [ ] Add resource churn tests.
+- [ ] Add presentation resize/recreate loops.
+- [ ] Add shader/cache warm and cold loops.
+- [ ] Provide opt-in long-run commands.
+
+## Period 19 Phase 1 Checklist
+
+- [ ] Define voxel world example contract before implementation.
+- [ ] Add `examples/voxel_world` as a public API example target.
+- [ ] Keep gameplay, networking, save files, and full engine concerns out of scope.
+- [ ] List vkmtl features the example must exercise.
+- [ ] Document expected output and controls.
+
+## Period 19 Phase 2 Checklist
+
+- [ ] Define chunk mesh scope before implementation.
+- [ ] Define block IDs, chunk dimensions, vertex format, and index format.
+- [ ] Generate CPU chunk meshes with visible faces only.
+- [ ] Upload vertex and index buffers through public vkmtl APIs.
+- [ ] Add simple meshing tests.
+
+## Period 19 Phase 3 Checklist
+
+- [ ] Define texture atlas scope before implementation.
+- [ ] Add or generate a small block texture atlas.
+- [ ] Map block IDs to atlas regions.
+- [ ] Bind atlas texture and sampler through public vkmtl APIs.
+- [ ] Validate visibly different block faces.
+
+## Period 19 Phase 4 Checklist
+
+- [ ] Define camera/input/culling scope before implementation.
+- [ ] Add fly camera controls through an external input layer.
+- [ ] Upload view/projection uniforms per frame.
+- [ ] Add distance or frustum culling for chunks.
+- [ ] Validate camera motion and culling correctness.
+
+## Period 19 Phase 5 Checklist
+
+- [ ] Define chunk streaming/rebuild scope before implementation.
+- [ ] Maintain a chunk grid around the camera.
+- [ ] Generate chunks as the camera moves.
+- [ ] Rebuild changed chunk meshes without stalling unrelated work where possible.
+- [ ] Add diagnostics for rebuild and upload counts.
+
+## Period 19 Phase 6 Checklist
+
+- [ ] Define lighting/visibility polish scope before implementation.
+- [ ] Add simple directional lighting, vertex lighting, or baked ambient occlusion.
+- [ ] Keep transparent block rules optional and tightly scoped.
+- [ ] Preserve stable depth testing and face visibility.
+- [ ] Validate visual readability.
+
+## Period 19 Phase 7 Checklist
+
+- [ ] Define pressure-test report scope before implementation.
+- [ ] Record CPU mesh generation cost, upload behavior, draw counts, and frame pacing observations.
+- [ ] Identify vkmtl API friction found while building the example.
+- [ ] Identify backend bottlenecks exposed by chunk streaming.
+- [ ] Decide which findings become future periods or maintenance tasks.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

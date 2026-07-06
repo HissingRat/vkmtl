@@ -38,6 +38,15 @@ vkmtl documentation is organized by audience and purpose.
 - `develop/period8/`: pipeline and object cache
 - `develop/period9/`: examples, test matrix, and documentation
 - `develop/period10/`: advanced backend-gated features
+- `develop/period11/`: backend capability reality
+- `develop/period12/`: bindless and argument buffer backend lowering
+- `develop/period13/`: multi-surface and presentation backend work
+- `develop/period14/`: native interop and external resources
+- `develop/period15/`: sparse and tiled resource backend lowering
+- `develop/period16/`: tessellation and mesh pipeline backend lowering
+- `develop/period17/`: ray tracing backend lowering
+- `develop/period18/`: production hardening and performance
+- `develop/period19/`: voxel world pressure-test example
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 
