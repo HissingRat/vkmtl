@@ -304,6 +304,12 @@ attachments. Current runtime lowering supports one color attachment and returns
 typed unsupported errors for stencil, transient, and MRT paths until native
 lowering is implemented.
 
+Dynamic render state descriptors include `Viewport`, `ScissorRect`,
+`BlendColor`, `StencilReference`, and `DepthBiasDescriptor`.
+`RenderCommandEncoder` exposes matching setters. These setters currently
+validate their inputs and return `UnsupportedDynamicRenderState` until backend
+lowering is wired.
+
 Transfer work uses a Metal-style blit encoder:
 
 ```zig

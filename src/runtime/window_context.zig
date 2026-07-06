@@ -1647,6 +1647,36 @@ pub const RenderCommandEncoder = struct {
         };
     }
 
+    pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.setViewport(viewport);
+        return RuntimeError.UnsupportedDynamicRenderState;
+    }
+
+    pub fn setScissorRect(self: *RenderCommandEncoder, rect: core.ScissorRect) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.setScissorRect(rect);
+        return RuntimeError.UnsupportedDynamicRenderState;
+    }
+
+    pub fn setBlendColor(self: *RenderCommandEncoder, color: core.BlendColor) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.setBlendColor(color);
+        return RuntimeError.UnsupportedDynamicRenderState;
+    }
+
+    pub fn setStencilReference(self: *RenderCommandEncoder, reference: core.StencilReference) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.setStencilReference(reference);
+        return RuntimeError.UnsupportedDynamicRenderState;
+    }
+
+    pub fn setDepthBias(self: *RenderCommandEncoder, descriptor: core.DepthBiasDescriptor) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug.setDepthBias(descriptor);
+        return RuntimeError.UnsupportedDynamicRenderState;
+    }
+
     pub fn drawPrimitives(
         self: *RenderCommandEncoder,
         descriptor: core.DrawPrimitivesDescriptor,
@@ -1731,6 +1761,7 @@ pub const RuntimeError = error{
     UnsupportedMultipleRenderTargets,
     UnsupportedStencilAttachment,
     UnsupportedTransientAttachment,
+    UnsupportedDynamicRenderState,
     InvalidStorageTextureUsage,
     PresentRequiresCurrentDrawable,
 };
@@ -3025,6 +3056,40 @@ test "runtime render encoder validates bind group binding" {
     };
     try std.testing.expectError(RuntimeError.BackendMismatch, encoder.setBindGroup(&metal_bind_group, .{ .index = 0 }));
     try std.testing.expectError(error.InvalidBindGroupIndex, encoder.setBindGroup(&bind_group, .{ .index = 16 }));
+
+    try encoder.endEncoding();
+}
+
+test "runtime render encoder dynamic state methods are gated" {
+    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
+    var encoder = try command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = color_attachments[0..],
+    });
+
+    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setViewport(.{
+        .width = 640,
+        .height = 480,
+    }));
+    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setScissorRect(.{
+        .width = 640,
+        .height = 480,
+    }));
+    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setBlendColor(.{
+        .red = 1,
+        .alpha = 1,
+    }));
+    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setStencilReference(.{
+        .value = 1,
+    }));
+    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setDepthBias(.{
+        .enabled = true,
+        .constant = 1,
+    }));
+    try std.testing.expectError(core.CommandEncodingError.InvalidViewport, encoder.setViewport(.{
+        .width = 0,
+        .height = 480,
+    }));
 
     try encoder.endEncoding();
 }

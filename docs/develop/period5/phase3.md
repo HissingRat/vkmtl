@@ -14,3 +14,5 @@ pipeline recreation.
 
 - Dynamic render state methods validate input and then return typed unsupported
   errors for states that are not lowered yet.
+- Public methods are available on `RenderCommandEncoder`: `setViewport`,
+  `setScissorRect`, `setBlendColor`, `setStencilReference`, and `setDepthBias`.

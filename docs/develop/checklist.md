@@ -431,11 +431,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 3 Checklist
 
-- [ ] Add dynamic render state descriptor shapes.
-- [ ] Add render encoder dynamic-state methods.
-- [ ] Validate viewport, scissor, blend constants, stencil reference, and depth bias.
-- [ ] Return typed unsupported errors for non-lowered dynamic state.
-- [ ] Document dynamic-state limits.
+- [x] Add dynamic render state descriptor shapes.
+- [x] Add render encoder dynamic-state methods.
+- [x] Validate viewport, scissor, blend constants, stencil reference, and depth bias.
+- [x] Return typed unsupported errors for non-lowered dynamic state.
+- [x] Document dynamic-state limits.
 
 ## Period 5 Phase 4 Checklist
 

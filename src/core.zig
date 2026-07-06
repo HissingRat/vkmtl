@@ -354,6 +354,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedFillMode,
         error.UnsupportedDepthBias,
         error.UnsupportedConservativeRasterization,
+        error.UnsupportedDynamicRenderState,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -384,6 +385,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.MissingIndexBuffer,
         error.InvalidVertexBufferIndex,
         error.InvalidBindGroupIndex,
+        error.InvalidViewport,
+        error.InvalidScissorRect,
+        error.InvalidBlendColor,
+        error.InvalidStencilReference,
         error.EmptyDebugGroupLabel,
         error.DebugGroupStackOverflow,
         error.DebugGroupStackUnderflow,
@@ -998,12 +1003,12 @@ pub const DepthBiasDescriptor = struct {
     slope: f32 = 0,
     clamp: f32 = 0,
 
-    pub fn validate(self: DepthBiasDescriptor) PipelineError!void {
+    pub fn validate(self: DepthBiasDescriptor) error{InvalidDepthBias}!void {
         if (!std.math.isFinite(self.constant) or
             !std.math.isFinite(self.slope) or
             !std.math.isFinite(self.clamp))
         {
-            return PipelineError.InvalidDepthBias;
+            return error.InvalidDepthBias;
         }
     }
 };
@@ -1301,6 +1306,68 @@ pub const BindGroupBinding = struct {
     }
 };
 
+pub const Viewport = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    width: f32,
+    height: f32,
+    min_depth: f32 = 0,
+    max_depth: f32 = 1,
+
+    pub fn validate(self: Viewport) CommandEncodingError!void {
+        if (!std.math.isFinite(self.x) or
+            !std.math.isFinite(self.y) or
+            !std.math.isFinite(self.width) or
+            !std.math.isFinite(self.height) or
+            !std.math.isFinite(self.min_depth) or
+            !std.math.isFinite(self.max_depth) or
+            self.width <= 0 or
+            self.height <= 0 or
+            self.min_depth < 0 or
+            self.max_depth > 1 or
+            self.min_depth > self.max_depth)
+        {
+            return CommandEncodingError.InvalidViewport;
+        }
+    }
+};
+
+pub const ScissorRect = struct {
+    x: u32 = 0,
+    y: u32 = 0,
+    width: u32,
+    height: u32,
+
+    pub fn validate(self: ScissorRect) CommandEncodingError!void {
+        if (self.width == 0 or self.height == 0) return CommandEncodingError.InvalidScissorRect;
+    }
+};
+
+pub const BlendColor = struct {
+    red: f32 = 0,
+    green: f32 = 0,
+    blue: f32 = 0,
+    alpha: f32 = 0,
+
+    pub fn validate(self: BlendColor) CommandEncodingError!void {
+        if (!std.math.isFinite(self.red) or
+            !std.math.isFinite(self.green) or
+            !std.math.isFinite(self.blue) or
+            !std.math.isFinite(self.alpha))
+        {
+            return CommandEncodingError.InvalidBlendColor;
+        }
+    }
+};
+
+pub const StencilReference = struct {
+    value: u32 = 0,
+
+    pub fn validate(self: StencilReference) CommandEncodingError!void {
+        if (self.value > 0xff) return CommandEncodingError.InvalidStencilReference;
+    }
+};
+
 pub const DrawPrimitivesDescriptor = struct {
     primitive_type: PrimitiveTopology = .triangle,
     vertex_start: u32 = 0,
@@ -1470,6 +1537,46 @@ pub const RenderCommandEncoderDebugState = struct {
         self.bind_group_mask |= @as(u64, 1) << @intCast(binding.index);
     }
 
+    pub fn setViewport(
+        self: *RenderCommandEncoderDebugState,
+        viewport: Viewport,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try viewport.validate();
+    }
+
+    pub fn setScissorRect(
+        self: *RenderCommandEncoderDebugState,
+        rect: ScissorRect,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try rect.validate();
+    }
+
+    pub fn setBlendColor(
+        self: *RenderCommandEncoderDebugState,
+        color: BlendColor,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try color.validate();
+    }
+
+    pub fn setStencilReference(
+        self: *RenderCommandEncoderDebugState,
+        reference: StencilReference,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try reference.validate();
+    }
+
+    pub fn setDepthBias(
+        self: *RenderCommandEncoderDebugState,
+        descriptor: DepthBiasDescriptor,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try descriptor.validate();
+    }
+
     pub fn drawPrimitives(
         self: *RenderCommandEncoderDebugState,
         descriptor: DrawPrimitivesDescriptor,
@@ -1620,6 +1727,11 @@ pub const CommandEncodingError = error{
     MissingIndexBuffer,
     InvalidVertexBufferIndex,
     InvalidBindGroupIndex,
+    InvalidViewport,
+    InvalidScissorRect,
+    InvalidBlendColor,
+    InvalidStencilReference,
+    InvalidDepthBias,
     EmptyDebugGroupLabel,
     DebugGroupStackOverflow,
     DebugGroupStackUnderflow,
@@ -4112,6 +4224,34 @@ test "render pass descriptor validates depth attachment" {
 }
 
 test "draw descriptors validate counts and index alignment" {
+    try (Viewport{
+        .width = 640,
+        .height = 480,
+    }).validate();
+    try std.testing.expectError(CommandEncodingError.InvalidViewport, (Viewport{
+        .width = 0,
+        .height = 480,
+    }).validate());
+    try (ScissorRect{
+        .width = 640,
+        .height = 480,
+    }).validate();
+    try std.testing.expectError(CommandEncodingError.InvalidScissorRect, (ScissorRect{
+        .width = 0,
+        .height = 480,
+    }).validate());
+    try (BlendColor{
+        .red = 1,
+        .alpha = 1,
+    }).validate();
+    try std.testing.expectError(CommandEncodingError.InvalidBlendColor, (BlendColor{
+        .red = std.math.inf(f32),
+    }).validate());
+    try (StencilReference{ .value = 0xff }).validate();
+    try std.testing.expectError(CommandEncodingError.InvalidStencilReference, (StencilReference{
+        .value = 0x100,
+    }).validate());
+
     try (DrawPrimitivesDescriptor{
         .vertex_count = 3,
     }).validate();

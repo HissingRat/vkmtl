@@ -253,6 +253,11 @@ attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。De
 lowering 支持一个 color attachment，并会对 stencil、transient 和 MRT 路径返回 typed
 unsupported error，直到 native lowering 接上。
 
+Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`、
+`StencilReference` 和 `DepthBiasDescriptor`。`RenderCommandEncoder` 暴露对应 setter。
+这些 setter 当前会先校验输入，然后返回 `UnsupportedDynamicRenderState`，直到 backend
+lowering 接上。
+
 Transfer 使用 Metal 风格的 blit encoder：
 
 ```zig
