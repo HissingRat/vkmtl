@@ -641,11 +641,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 2 Checklist
 
 - [x] Define compute gallery scope before implementation.
-- [ ] Add compute gallery planning descriptors for image filter, particle
+- [x] Add compute gallery planning descriptors for image filter, particle
   simulation, prefix sum, readback, and storage texture coverage.
-- [ ] Keep deterministic `compute_readback` as the implemented compute example.
-- [ ] Document which compute examples are implemented versus planned.
-- [ ] Add validation that compute gallery metadata stays well-formed.
+- [x] Keep deterministic `compute_readback` as the implemented compute example.
+- [x] Document which compute examples are implemented versus planned.
+- [x] Add validation that compute gallery metadata stays well-formed.
 
 ## Period 9 Phase 3 Checklist
 

@@ -153,3 +153,16 @@ VKMTL_BACKEND=metal zig build run-compute-readback
 
 当前 compute 覆盖面刻意保持确定性：storage buffer 写入、storage texture 写入、transfer
 readback、reflection-derived bind group layout，以及退出前的 byte validation。
+
+## Compute Gallery
+
+Period 9 在 `src/development_matrix.zig` 里追踪更广的 compute gallery。当前状态：
+
+- implemented: `compute_readback`
+- planned: `image_filter`
+- planned: `particle_simulation`
+- planned: `prefix_sum`
+- planned: `storage_texture`
+
+计划中的 compute 示例应该尽量保留 deterministic readback 或 pixel validation，这样后续可以成为
+有用的 backend regression test。

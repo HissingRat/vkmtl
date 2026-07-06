@@ -5,6 +5,7 @@ pub const DevelopmentMatrixError = error{
     EmptyPath,
     EmptyRunStep,
     EmptyExpectation,
+    EmptyValidationGoal,
     MissingDeterministicOutput,
     DuplicateName,
 };
@@ -136,6 +137,92 @@ pub fn implementedExampleCount(entries: []const ExampleEntry) usize {
     return count;
 }
 
+pub const GalleryCaseStatus = enum {
+    implemented,
+    planned,
+};
+
+pub const ComputeGalleryKind = enum {
+    image_filter,
+    particle_simulation,
+    prefix_sum,
+    readback,
+    storage_texture,
+};
+
+pub const ComputeGalleryCase = struct {
+    name: []const u8,
+    kind: ComputeGalleryKind,
+    status: GalleryCaseStatus,
+    path: []const u8 = "",
+    run_step: []const u8 = "",
+    deterministic_output: ?[]const u8 = null,
+    validation_goal: []const u8,
+
+    pub fn validate(self: ComputeGalleryCase) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation_goal.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        if (self.status == .implemented) {
+            if (self.path.len == 0) return DevelopmentMatrixError.EmptyPath;
+            if (self.run_step.len == 0) return DevelopmentMatrixError.EmptyRunStep;
+            if (self.deterministic_output == null) return DevelopmentMatrixError.MissingDeterministicOutput;
+        }
+    }
+};
+
+pub const compute_gallery = [_]ComputeGalleryCase{
+    .{
+        .name = "compute_readback",
+        .kind = .readback,
+        .status = .implemented,
+        .path = "examples/compute_readback",
+        .run_step = "run-compute-readback",
+        .deterministic_output = "compute readback ok",
+        .validation_goal = "storage buffer and storage texture writes with deterministic readback",
+    },
+    .{
+        .name = "image_filter",
+        .kind = .image_filter,
+        .status = .planned,
+        .validation_goal = "sample an input texture, write a storage texture, and validate pixels",
+    },
+    .{
+        .name = "particle_simulation",
+        .kind = .particle_simulation,
+        .status = .planned,
+        .validation_goal = "update particle state in storage buffers and render or read back a deterministic subset",
+    },
+    .{
+        .name = "prefix_sum",
+        .kind = .prefix_sum,
+        .status = .planned,
+        .validation_goal = "exercise multi-dispatch compute dependencies and deterministic buffer readback",
+    },
+    .{
+        .name = "storage_texture",
+        .kind = .storage_texture,
+        .status = .planned,
+        .validation_goal = "visualize compute-written texture data through a render pass",
+    },
+};
+
+pub fn validateComputeGallery(cases: []const ComputeGalleryCase) DevelopmentMatrixError!void {
+    for (cases, 0..) |case, i| {
+        try case.validate();
+        for (cases[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, case.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
+pub fn implementedComputeGalleryCount(cases: []const ComputeGalleryCase) usize {
+    var count: usize = 0;
+    for (cases) |case| {
+        if (case.status == .implemented) count += 1;
+    }
+    return count;
+}
+
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
     try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
@@ -147,4 +234,9 @@ test "deterministic examples declare output markers" {
             try std.testing.expect(entry.deterministic_output != null);
         }
     }
+}
+
+test "compute gallery metadata is valid" {
+    try validateComputeGallery(compute_gallery[0..]);
+    try std.testing.expectEqual(@as(usize, 1), implementedComputeGalleryCount(compute_gallery[0..]));
 }

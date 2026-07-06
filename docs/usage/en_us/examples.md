@@ -303,3 +303,17 @@ examples/compute_readback/shaders/compute_readback.slang
 Current compute coverage is intentionally deterministic: storage buffer writes,
 storage texture writes, transfer readback, reflection-derived bind group
 layouts, and byte validation before process exit.
+
+## Compute Gallery
+
+Period 9 tracks the broader compute gallery in `src/development_matrix.zig`.
+Current status:
+
+- implemented: `compute_readback`
+- planned: `image_filter`
+- planned: `particle_simulation`
+- planned: `prefix_sum`
+- planned: `storage_texture`
+
+Planned compute examples should keep deterministic readback or pixel validation
+where practical so they can become useful backend regression tests.
