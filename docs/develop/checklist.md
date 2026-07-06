@@ -279,6 +279,14 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Document that native multi-swapchain support remains behind
   `DeviceFeatures.multi_surface`.
 
+## Period 2 Phase 7 Checklist
+
+- [x] Add backend-specific native handle structs.
+- [x] Add a tagged native handle union.
+- [x] Add an explicit `WindowContext.nativeHandles()` escape hatch.
+- [x] Keep native handle access out of ordinary portable APIs.
+- [x] Document borrowed-handle lifetime and portability risks.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

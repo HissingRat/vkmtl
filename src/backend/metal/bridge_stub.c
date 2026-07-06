@@ -82,6 +82,15 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_native_handles *out_handles
+) {
+    (void)clear_screen;
+    (void)out_handles;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_clear_screen *owner,
     size_t length,

@@ -129,6 +129,13 @@ typedef struct vkmtl_metal_vertex_attribute {
     unsigned int offset;
 } vkmtl_metal_vertex_attribute;
 
+typedef struct vkmtl_metal_native_handles {
+    void *device;
+    void *command_queue;
+    void *layer;
+    void *view;
+} vkmtl_metal_native_handles;
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe);
 void vkmtl_metal_probe_destroy(vkmtl_metal_probe *probe);
 vkmtl_metal_status vkmtl_metal_probe_copy_device_name(
@@ -160,6 +167,10 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
     const vkmtl_metal_clear_screen *clear_screen,
     char *buffer,
     size_t buffer_len
+);
+vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_native_handles *out_handles
 );
 
 vkmtl_metal_status vkmtl_metal_buffer_create(

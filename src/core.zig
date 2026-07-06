@@ -220,6 +220,27 @@ pub const ErrorCategory = enum {
     unknown,
 };
 
+pub const VulkanNativeHandles = struct {
+    instance: usize,
+    physical_device: usize,
+    device: usize,
+    surface: u64,
+    graphics_queue: usize,
+    present_queue: usize,
+};
+
+pub const MetalNativeHandles = struct {
+    device: *anyopaque,
+    command_queue: *anyopaque,
+    layer: *anyopaque,
+    view: *anyopaque,
+};
+
+pub const NativeHandles = union(Backend) {
+    vulkan: VulkanNativeHandles,
+    metal: MetalNativeHandles,
+};
+
 pub fn classifyError(err: anyerror) ErrorCategory {
     return switch (err) {
         error.DeviceLost => .device_lost,
@@ -2406,6 +2427,22 @@ test "error classifier groups public error categories" {
     try std.testing.expectEqual(ErrorCategory.surface_lost, classifyError(error.SurfaceLost));
     try std.testing.expectEqual(ErrorCategory.device_lost, classifyError(error.DeviceLost));
     try std.testing.expectEqual(ErrorCategory.shader_compilation, classifyError(error.SlangCompilationFailed));
+}
+
+test "native handle union carries backend-specific handles explicitly" {
+    const handles = NativeHandles{
+        .vulkan = .{
+            .instance = 1,
+            .physical_device = 2,
+            .device = 3,
+            .surface = 4,
+            .graphics_queue = 5,
+            .present_queue = 6,
+        },
+    };
+
+    try std.testing.expectEqual(Backend.vulkan, std.meta.activeTag(handles));
+    try std.testing.expectEqual(@as(usize, 3), handles.vulkan.device);
 }
 
 test "adapter enumeration follows auto backend order" {

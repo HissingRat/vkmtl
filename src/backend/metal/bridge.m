@@ -359,6 +359,25 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_native_handles *out_handles
+) {
+    if (clear_screen == NULL || out_handles == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_SURFACE;
+    }
+    if (clear_screen->device == nil || clear_screen->queue == nil ||
+        clear_screen->layer == nil || clear_screen->view == nil) {
+        return VKMTL_METAL_STATUS_INVALID_SURFACE;
+    }
+
+    out_handles->device = (void *)clear_screen->device;
+    out_handles->command_queue = (void *)clear_screen->queue;
+    out_handles->layer = (void *)clear_screen->layer;
+    out_handles->view = (void *)clear_screen->view;
+    return VKMTL_METAL_STATUS_OK;
+}
+
 static MTLResourceOptions vkmtl_storage_options(vkmtl_metal_storage_mode storage_mode) {
     switch (storage_mode) {
         case VKMTL_METAL_STORAGE_MODE_MANAGED:

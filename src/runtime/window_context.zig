@@ -1833,6 +1833,13 @@ pub const WindowContext = struct {
         return self.adapter_info;
     }
 
+    pub fn nativeHandles(self: *WindowContext) !core.NativeHandles {
+        return switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.nativeHandles(),
+            .metal => |*metal| try metal.nativeHandles(),
+        };
+    }
+
     pub fn device(self: *WindowContext) Device {
         return .{
             .allocator = self.allocator,

@@ -80,6 +80,23 @@ pub fn adapterInfo(self: *const MetalClearScreen, allocator: std.mem.Allocator) 
     };
 }
 
+pub fn nativeHandles(self: *const MetalClearScreen) !core.NativeHandles {
+    var handles: metal.vkmtl_metal_native_handles = undefined;
+    try check(metal.vkmtl_metal_clear_screen_get_native_handles(
+        self.handle,
+        &handles,
+    ));
+
+    return .{
+        .metal = .{
+            .device = handles.device orelse return Error.InvalidSurface,
+            .command_queue = handles.command_queue orelse return Error.InvalidSurface,
+            .layer = handles.layer orelse return Error.InvalidSurface,
+            .view = handles.view orelse return Error.InvalidSurface,
+        },
+    };
+}
+
 pub fn resize(self: *MetalClearScreen, extent: core.Extent2D) !void {
     if (extent.isZero()) return;
     if (self.extent.width == extent.width and self.extent.height == extent.height) return;

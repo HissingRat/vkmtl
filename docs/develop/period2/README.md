@@ -86,6 +86,8 @@ Decision notes: `phase6.md`.
 - Mark native handle access as unsafe or advanced.
 - Do not guarantee portability for code that uses native handles.
 
+Decision notes: `phase7.md`.
+
 ## Phase 8: Debug Labels / Markers / Diagnostics
 
 - Add resource debug labels.

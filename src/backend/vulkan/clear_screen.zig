@@ -91,6 +91,19 @@ pub fn adapterInfo(self: *const VulkanClearScreen) AdapterInfoResult {
     return .{ .info = self.gc.adapterInfo() };
 }
 
+pub fn nativeHandles(self: *const VulkanClearScreen) core.NativeHandles {
+    return .{
+        .vulkan = .{
+            .instance = @intFromEnum(self.gc.instance.handle),
+            .physical_device = @intFromEnum(self.gc.pdev),
+            .device = @intFromEnum(self.gc.dev.handle),
+            .surface = @intFromEnum(self.gc.surface),
+            .graphics_queue = @intFromEnum(self.gc.graphics_queue.handle),
+            .present_queue = @intFromEnum(self.gc.present_queue.handle),
+        },
+    };
+}
+
 pub fn deinit(self: *VulkanClearScreen) void {
     if (self.cmdbufs.len != 0) {
         self.gc.dev.freeCommandBuffers(self.pool, self.cmdbufs);

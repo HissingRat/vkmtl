@@ -215,3 +215,11 @@ const category = vkmtl.classifyError(err);
 
 当前分类包括 validation、unsupported feature、backend、device lost、surface lost、
 resource lifetime、shader compilation 和 unknown。
+
+## Native Handle Escape Hatch
+
+高级用户可以显式调用 `context.nativeHandles()` 获取 backend-native borrowed handles。这个 API
+返回 `NativeHandles` tagged union；Vulkan 分支暴露 instance/device/surface/queue handle 值，
+Metal 分支暴露 device/command queue/layer/view opaque pointer。
+
+这些 handle 只在 vkmtl owner 存活期间有效。使用它们的代码不再是 backend-neutral。

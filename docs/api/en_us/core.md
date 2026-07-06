@@ -252,3 +252,13 @@ const category = vkmtl.classifyError(err);
 
 Current categories include validation, unsupported feature, backend, device
 lost, surface lost, resource lifetime, shader compilation, and unknown.
+
+## Native Handle Escape Hatch
+
+Advanced users can explicitly call `context.nativeHandles()` to fetch borrowed
+backend-native handles. The API returns a `NativeHandles` tagged union. The
+Vulkan branch exposes instance/device/surface/queue handle values, and the
+Metal branch exposes device/command queue/layer/view opaque pointers.
+
+These handles are only valid while the vkmtl owner is alive. Code that uses
+them is no longer backend-neutral.
