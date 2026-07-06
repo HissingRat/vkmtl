@@ -81,8 +81,20 @@ pub fn adapterInfo(self: *const MetalClearScreen, allocator: std.mem.Allocator) 
 }
 
 pub fn limits(self: *const MetalClearScreen) core.DeviceLimits {
+    return limitsFromMetalCapabilities(self.queryCapabilities());
+}
+
+pub fn features(self: *const MetalClearScreen) core.DeviceFeatures {
+    return usableFeaturesFromMetalCapabilities(self.queryCapabilities());
+}
+
+pub fn nativeFeatures(self: *const MetalClearScreen) core.DeviceFeatures {
+    return nativeFeaturesFromMetalCapabilities(self.queryCapabilities());
+}
+
+pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFormat) core.FormatCapabilities {
     _ = self;
-    return core.defaultDeviceLimits(.metal);
+    return core.defaultFormatCapabilities(format);
 }
 
 pub fn nativeHandles(self: *const MetalClearScreen) !core.NativeHandles {
@@ -174,4 +186,94 @@ fn check(status: metal.vkmtl_metal_status) Error!void {
         metal.VKMTL_METAL_STATUS_COMMAND_FAILED => Error.CommandFailed,
         else => Error.UnexpectedMetalStatus,
     };
+}
+
+fn queryCapabilities(self: *const MetalClearScreen) metal.vkmtl_metal_device_capabilities {
+    var capabilities: metal.vkmtl_metal_device_capabilities = undefined;
+    const status = metal.vkmtl_metal_clear_screen_copy_capabilities(self.handle, &capabilities);
+    if (status != metal.VKMTL_METAL_STATUS_OK) {
+        return zeroCapabilities();
+    }
+    return capabilities;
+}
+
+fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
+    return .{
+        .argument_buffers = 0,
+        .argument_buffer_tier = 0,
+        .ray_tracing = 0,
+        .sparse_textures = 0,
+        .binary_archive = 0,
+        .max_threads_per_threadgroup_width = 0,
+        .max_threads_per_threadgroup_height = 0,
+        .max_threads_per_threadgroup_depth = 0,
+        .max_threads_per_threadgroup_total = 0,
+        .max_buffer_argument_table_entries = 0,
+        .max_texture_argument_table_entries = 0,
+        .max_sampler_argument_table_entries = 0,
+    };
+}
+
+fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
+    var result = core.defaultDeviceFeatures(.metal);
+    result.argument_buffers = capabilities.argument_buffers != 0;
+    result.descriptor_indexing = false;
+    result.sparse_textures = capabilities.sparse_textures != 0;
+    result.tiled_textures = capabilities.sparse_textures != 0;
+    result.acceleration_structures = capabilities.ray_tracing != 0;
+    result.ray_tracing = capabilities.ray_tracing != 0;
+    result.metal_binary_archive = capabilities.binary_archive != 0;
+    return result;
+}
+
+fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
+    _ = capabilities;
+    return core.defaultDeviceFeatures(.metal);
+}
+
+fn limitsFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceLimits {
+    var result = core.defaultDeviceLimits(.metal);
+    if (capabilities.max_threads_per_threadgroup_total != 0) {
+        result.max_compute_threads_per_threadgroup_x = capabilities.max_threads_per_threadgroup_width;
+        result.max_compute_threads_per_threadgroup_y = capabilities.max_threads_per_threadgroup_height;
+        result.max_compute_threads_per_threadgroup_z = capabilities.max_threads_per_threadgroup_depth;
+        result.max_compute_total_threads_per_threadgroup = capabilities.max_threads_per_threadgroup_total;
+    }
+    if (capabilities.max_texture_argument_table_entries != 0) {
+        result.max_bindless_descriptors_per_range = capabilities.max_texture_argument_table_entries;
+        result.max_bindless_ranges_per_layout = 1;
+    }
+    if (capabilities.binary_archive != 0) {
+        result.max_driver_cache_identity_bytes = 4096;
+    }
+    return result;
+}
+
+test "Metal native capabilities map argument buffers and ray tracing conservatively" {
+    const capabilities = metal.vkmtl_metal_device_capabilities{
+        .argument_buffers = 1,
+        .argument_buffer_tier = 2,
+        .ray_tracing = 1,
+        .sparse_textures = 1,
+        .binary_archive = 1,
+        .max_threads_per_threadgroup_width = 16,
+        .max_threads_per_threadgroup_height = 16,
+        .max_threads_per_threadgroup_depth = 1,
+        .max_threads_per_threadgroup_total = 256,
+        .max_buffer_argument_table_entries = 128,
+        .max_texture_argument_table_entries = 128,
+        .max_sampler_argument_table_entries = 16,
+    };
+
+    const native = nativeFeaturesFromMetalCapabilities(capabilities);
+    const usable = usableFeaturesFromMetalCapabilities(capabilities);
+    const queried_limits = limitsFromMetalCapabilities(capabilities);
+
+    try std.testing.expect(native.argument_buffers);
+    try std.testing.expect(native.ray_tracing);
+    try std.testing.expect(native.metal_binary_archive);
+    try std.testing.expect(!usable.argument_buffers);
+    try std.testing.expect(!usable.ray_tracing);
+    try std.testing.expectEqual(@as(u32, 256), queried_limits.max_compute_total_threads_per_threadgroup);
+    try std.testing.expectEqual(@as(u32, 128), queried_limits.max_bindless_descriptors_per_range);
 }

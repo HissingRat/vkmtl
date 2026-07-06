@@ -616,6 +616,56 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_device_capabilities *out_capabilities
+) {
+    if (clear_screen == NULL || clear_screen->device == nil || out_capabilities == NULL) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        memset(out_capabilities, 0, sizeof(vkmtl_metal_device_capabilities));
+
+        id<MTLDevice> device = clear_screen->device;
+        MTLSize max_threads = [device maxThreadsPerThreadgroup];
+        out_capabilities->max_threads_per_threadgroup_width = (unsigned int)max_threads.width;
+        out_capabilities->max_threads_per_threadgroup_height = (unsigned int)max_threads.height;
+        out_capabilities->max_threads_per_threadgroup_depth = (unsigned int)max_threads.depth;
+        out_capabilities->max_threads_per_threadgroup_total =
+            (unsigned int)(max_threads.width * max_threads.height * max_threads.depth);
+
+        if ([device respondsToSelector:@selector(argumentBuffersSupport)]) {
+            MTLArgumentBuffersTier tier = [device argumentBuffersSupport];
+            out_capabilities->argument_buffers = 1;
+            out_capabilities->argument_buffer_tier = (unsigned int)tier;
+            if (tier == MTLArgumentBuffersTier2) {
+                out_capabilities->max_buffer_argument_table_entries = 500000;
+                out_capabilities->max_texture_argument_table_entries = 500000;
+                out_capabilities->max_sampler_argument_table_entries = 1024;
+            } else {
+                out_capabilities->max_buffer_argument_table_entries = 31;
+                out_capabilities->max_texture_argument_table_entries = 31;
+                out_capabilities->max_sampler_argument_table_entries = 16;
+            }
+        }
+
+        if ([device respondsToSelector:@selector(supportsRaytracing)]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            NSNumber *value = [device performSelector:@selector(supportsRaytracing)];
+#pragma clang diagnostic pop
+            out_capabilities->ray_tracing = [value boolValue] ? 1u : 0u;
+        }
+
+        if ([device respondsToSelector:@selector(newBinaryArchiveWithDescriptor:error:)]) {
+            out_capabilities->binary_archive = 1;
+        }
+
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer) {
     if (buffer == NULL) {
         return;

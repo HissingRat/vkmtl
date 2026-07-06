@@ -14,3 +14,12 @@ Phase 2 makes Metal feature reporting backend-native instead of static.
 
 - Unit tests should cover conservative defaults for non-Apple targets.
 - macOS smoke tests should report the selected Metal device and feature gates.
+
+## Current Status
+
+- The Metal bridge exposes a small device capability snapshot for argument
+  buffer tier, ray tracing availability, binary archive availability, and thread
+  group limits.
+- Non-Apple stubs return unsupported with zeroed capabilities.
+- Zig maps queried Metal native capabilities separately from usable vkmtl
+  feature gates, so advanced lowering remains conservative until later periods.

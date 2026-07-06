@@ -758,11 +758,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 11 Phase 2 Checklist
 
-- [ ] Define Metal capability query scope before implementation.
-- [ ] Query device families, argument-buffer tiers, sparse/tiled support, ray tracing, and binary archive support.
-- [ ] Keep platform-version and device-limit checks explicit.
-- [ ] Add conservative non-Apple fallback behavior.
-- [ ] Document Metal capability mapping limits.
+- [x] Define Metal capability query scope before implementation.
+- [x] Query device families, argument-buffer tiers, sparse/tiled support, ray tracing, and binary archive support.
+- [x] Keep platform-version and device-limit checks explicit.
+- [x] Add conservative non-Apple fallback behavior.
+- [x] Document Metal capability mapping limits.
 
 ## Period 11 Phase 3 Checklist
 

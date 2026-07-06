@@ -136,6 +136,21 @@ typedef struct vkmtl_metal_native_handles {
     void *view;
 } vkmtl_metal_native_handles;
 
+typedef struct vkmtl_metal_device_capabilities {
+    unsigned int argument_buffers;
+    unsigned int argument_buffer_tier;
+    unsigned int ray_tracing;
+    unsigned int sparse_textures;
+    unsigned int binary_archive;
+    unsigned int max_threads_per_threadgroup_width;
+    unsigned int max_threads_per_threadgroup_height;
+    unsigned int max_threads_per_threadgroup_depth;
+    unsigned int max_threads_per_threadgroup_total;
+    unsigned int max_buffer_argument_table_entries;
+    unsigned int max_texture_argument_table_entries;
+    unsigned int max_sampler_argument_table_entries;
+} vkmtl_metal_device_capabilities;
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe);
 void vkmtl_metal_probe_destroy(vkmtl_metal_probe *probe);
 vkmtl_metal_status vkmtl_metal_probe_copy_device_name(
@@ -171,6 +186,10 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_name(
 vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
     const vkmtl_metal_clear_screen *clear_screen,
     vkmtl_metal_native_handles *out_handles
+);
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_device_capabilities *out_capabilities
 );
 
 vkmtl_metal_status vkmtl_metal_buffer_create(
