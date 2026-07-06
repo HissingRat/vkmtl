@@ -11,4 +11,6 @@ Phase 6 inventories validation cases and links them to existing focused tests.
 
 ## Current Limits
 
+- Validation cases are recorded in `src/development_matrix.zig`.
+- Human-readable coverage lives in `docs/develop/validation-matrix.md`.
 - Some cases remain unit-test only until native backend CI runners are wired.

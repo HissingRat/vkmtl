@@ -436,6 +436,78 @@ pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) Developmen
     }
 }
 
+pub const ValidationCaseKind = enum {
+    invalid_bind_group,
+    invalid_texture_format,
+    invalid_barrier,
+    resource_destroyed_while_in_use,
+    unsupported_feature,
+    shader_reflection_mismatch,
+};
+
+pub const ValidationCase = struct {
+    name: []const u8,
+    kind: ValidationCaseKind,
+    test_location: []const u8,
+    integration_gap: bool = false,
+    expectation: []const u8,
+
+    pub fn validate(self: ValidationCase) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.test_location.len == 0) return DevelopmentMatrixError.EmptyPath;
+        if (self.expectation.len == 0) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const validation_cases = [_]ValidationCase{
+    .{
+        .name = "invalid_bind_group",
+        .kind = .invalid_bind_group,
+        .test_location = "src/core.zig bind group descriptor validates entries against layout",
+        .expectation = "missing, extra, duplicate, and kind-mismatched bind group entries return typed validation errors",
+    },
+    .{
+        .name = "invalid_texture_format",
+        .kind = .invalid_texture_format,
+        .test_location = "src/core.zig texture descriptor rejects missing extent and automatic format",
+        .expectation = "automatic or unsupported texture formats fail before backend creation",
+    },
+    .{
+        .name = "invalid_barrier",
+        .kind = .invalid_barrier,
+        .test_location = "src/core.zig resource usage tracks hazards and explicit barriers",
+        .expectation = "redundant or mismatched barriers return command encoding errors",
+    },
+    .{
+        .name = "resource_destroyed_while_in_use",
+        .kind = .resource_destroyed_while_in_use,
+        .test_location = "src/runtime/window_context.zig resource tracker defers retirements until submitted work completes",
+        .integration_gap = true,
+        .expectation = "debug tracker retains pending retirements until submitted work completes",
+    },
+    .{
+        .name = "unsupported_feature",
+        .kind = .unsupported_feature,
+        .test_location = "src/runtime/window_context.zig runtime render pipeline rejects unsupported advanced state",
+        .expectation = "feature-gated APIs return typed unsupported errors instead of silently lowering incorrectly",
+    },
+    .{
+        .name = "shader_reflection_mismatch",
+        .kind = .shader_reflection_mismatch,
+        .test_location = "src/shader/reflection.zig reflection artifact validates bind group layout",
+        .expectation = "shader reflection layout, kind, visibility, and stage mismatch are reported before pipeline creation",
+    },
+};
+
+pub fn validateValidationCases(cases: []const ValidationCase) DevelopmentMatrixError!void {
+    for (cases, 0..) |case, i| {
+        try case.validate();
+        for (cases[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, case.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
     try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
@@ -480,4 +552,13 @@ test "backend test matrix metadata is valid" {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
     }
     try std.testing.expect(configured_optional >= 1);
+}
+
+test "validation case inventory is valid" {
+    try validateValidationCases(validation_cases[0..]);
+    var gap_count: usize = 0;
+    for (validation_cases) |case| {
+        if (case.integration_gap) gap_count += 1;
+    }
+    try std.testing.expect(gap_count >= 1);
 }

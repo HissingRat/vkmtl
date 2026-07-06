@@ -676,11 +676,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 6 Checklist
 
 - [x] Define validation test coverage scope before implementation.
-- [ ] Add validation case descriptors for invalid bind groups, texture formats,
+- [x] Add validation case descriptors for invalid bind groups, texture formats,
   barriers, resource lifetime, unsupported features, and reflection mismatch.
-- [ ] Link validation cases to existing unit-test coverage where available.
-- [ ] Document validation gaps that still need backend/integration tests.
-- [ ] Add tests that keep validation case metadata consistent.
+- [x] Link validation cases to existing unit-test coverage where available.
+- [x] Document validation gaps that still need backend/integration tests.
+- [x] Add tests that keep validation case metadata consistent.
 
 ## Period 9 Phase 7 Checklist
 
