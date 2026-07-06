@@ -143,3 +143,8 @@ zig build run-compute-readback
 VKMTL_BACKEND=vulkan zig build run-compute-readback
 VKMTL_BACKEND=metal zig build run-compute-readback
 ```
+
+当前 compute 覆盖面刻意保持确定性：storage buffer 写入、storage texture 写入、transfer
+readback、reflection-derived bind group layout，以及退出前的 byte validation。后续 compute
+gallery 目标包括 image filter、particle simulation、prefix sum、buffer reduction 和可视化
+storage-texture write 示例；这些更广的样例会放到 Period 9。

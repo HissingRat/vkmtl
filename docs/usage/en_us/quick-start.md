@@ -231,6 +231,10 @@ try compute.endEncoding();
 try command_buffer.commit();
 ```
 
+When it is clearer to think in total thread counts, use
+`dispatchThreads(...)`; vkmtl resolves the threadgroup count and applies the
+same device-limit checks.
+
 See `examples/transfer_readback` and `examples/compute_readback` for
 deterministic readback samples.
 

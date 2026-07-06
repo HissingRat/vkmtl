@@ -289,3 +289,10 @@ The Slang source lives beside the example:
 ```text
 examples/compute_readback/shaders/compute_readback.slang
 ```
+
+Current compute coverage is intentionally deterministic: storage buffer writes,
+storage texture writes, transfer readback, reflection-derived bind group
+layouts, and byte validation before process exit. Future compute gallery
+targets are image filtering, particle simulation, prefix sum, buffer reduction,
+and visual storage-texture write examples; those broader samples are tracked for
+Period 9.

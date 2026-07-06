@@ -221,6 +221,9 @@ try compute.endEncoding();
 try command_buffer.commit();
 ```
 
+如果用总线程数思考更自然，可以使用 `dispatchThreads(...)`；vkmtl 会 resolve threadgroup
+数量，并应用同一套 device-limit 校验。
+
 确定性 readback 示例见 `examples/transfer_readback` 和 `examples/compute_readback`。
 
 ## Shader Cache

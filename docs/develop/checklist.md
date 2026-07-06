@@ -568,10 +568,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 7 Phase 6 Checklist
 
 - [x] Define compute example coverage scope before implementation.
-- [ ] Document current compute examples and expected outputs.
-- [ ] Add example planning descriptors for future compute gallery cases.
-- [ ] Keep existing compute readback example as the deterministic first slice.
-- [ ] Document remaining example gaps.
+- [x] Document current compute examples and expected outputs.
+- [x] Add example planning descriptors for future compute gallery cases.
+- [x] Keep existing compute readback example as the deterministic first slice.
+- [x] Document remaining example gaps.
 
 ## First Backend-Independent Triangle Checklist
 
