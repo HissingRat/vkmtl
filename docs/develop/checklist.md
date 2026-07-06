@@ -496,10 +496,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 6 Phase 3 Checklist
 
 - [x] Define explicit barrier scope before implementation.
-- [ ] Add public buffer/texture barrier descriptor shapes.
-- [ ] Validate resource usage transitions and redundant barriers.
-- [ ] Keep manual barriers as an advanced feature gate.
-- [ ] Document automatic versus explicit synchronization rules.
+- [x] Add public buffer/texture barrier descriptor shapes.
+- [x] Validate resource usage transitions and redundant barriers.
+- [x] Keep manual barriers as an advanced feature gate.
+- [x] Document automatic versus explicit synchronization rules.
 
 ## Period 6 Phase 4 Checklist
 

@@ -14,5 +14,9 @@ usage tracker.
 
 - Runtime backends continue to manage the currently lowered transitions
   internally.
+- `BufferBarrierDescriptor` and `TextureBarrierDescriptor` are public
+  validation shapes gated by `DeviceFeatures.explicit_resource_barriers`.
+- `ResourceUsageState.applyExplicitBarrier(...)` validates the expected
+  `before` usage against tracked state and records a manual barrier.
 - Explicit barriers are descriptor/validation first; Vulkan image barriers and
   Metal resource fences are later backend work.

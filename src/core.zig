@@ -115,6 +115,7 @@ pub const DeviceFeatures = struct {
     debug_labels: bool = false,
     command_buffer_pooling: bool = false,
     command_buffer_reset: bool = false,
+    explicit_resource_barriers: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -232,6 +233,25 @@ pub const ResourceUsageState = struct {
             .requires_barrier = requires_barrier,
         };
     }
+
+    pub fn applyExplicitBarrier(
+        self: *ResourceUsageState,
+        before: ResourceUsageKind,
+        after: ResourceUsageKind,
+    ) CommandEncodingError!ResourceUsageTransition {
+        if (before == after) return CommandEncodingError.RedundantResourceBarrier;
+        if (self.current) |current| {
+            if (current != before) return CommandEncodingError.InvalidResourceBarrierState;
+        }
+        self.current = after;
+        self.barrier_count += 1;
+        return .{
+            .previous = before,
+            .next = after,
+            .hazard = resourceHazard(before, after),
+            .requires_barrier = true,
+        };
+    }
 };
 
 pub const CommandBufferDescriptor = struct {
@@ -249,6 +269,66 @@ pub const CommandBufferDescriptor = struct {
         if (self.reusable and !self.pooled) {
             return CommandEncodingError.UnsupportedCommandBufferReset;
         }
+    }
+};
+
+pub const BufferBarrierDescriptor = struct {
+    before: ResourceUsageKind,
+    after: ResourceUsageKind,
+    offset: u64 = 0,
+    size: ?u64 = null,
+
+    pub fn validate(
+        self: BufferBarrierDescriptor,
+        buffer_length: usize,
+        features: DeviceFeatures,
+    ) CommandEncodingError!void {
+        if (!features.explicit_resource_barriers) {
+            return CommandEncodingError.UnsupportedExplicitResourceBarrier;
+        }
+        if (self.before == self.after) return CommandEncodingError.RedundantResourceBarrier;
+        const size = self.size orelse std.math.sub(u64, buffer_length, self.offset) catch {
+            return CommandEncodingError.InvalidResourceBarrierRange;
+        };
+        if (size == 0) return CommandEncodingError.InvalidResourceBarrierRange;
+        const end = std.math.add(u64, self.offset, size) catch return CommandEncodingError.InvalidResourceBarrierRange;
+        if (end > buffer_length) return CommandEncodingError.InvalidResourceBarrierRange;
+    }
+};
+
+pub const TextureBarrierDescriptor = struct {
+    before: ResourceUsageKind,
+    after: ResourceUsageKind,
+    base_mip_level: u32 = 0,
+    mip_level_count: u32 = 1,
+    base_array_layer: u32 = 0,
+    array_layer_count: u32 = 1,
+
+    pub fn validate(
+        self: TextureBarrierDescriptor,
+        texture: TextureDescriptor,
+        features: DeviceFeatures,
+    ) CommandEncodingError!void {
+        if (!features.explicit_resource_barriers) {
+            return CommandEncodingError.UnsupportedExplicitResourceBarrier;
+        }
+        if (self.before == self.after) return CommandEncodingError.RedundantResourceBarrier;
+        texture.validate() catch return CommandEncodingError.InvalidResourceBarrierRange;
+        if (self.mip_level_count == 0 or self.array_layer_count == 0) {
+            return CommandEncodingError.InvalidResourceBarrierRange;
+        }
+        const mip_end = std.math.add(u32, self.base_mip_level, self.mip_level_count) catch {
+            return CommandEncodingError.InvalidResourceBarrierRange;
+        };
+        if (mip_end > texture.mip_level_count) return CommandEncodingError.InvalidResourceBarrierRange;
+        const layer_limit: u32 = switch (texture.dimension) {
+            .three_d => 1,
+            else => texture.depth_or_array_layers,
+        };
+        const layer_end = std.math.add(u32, self.base_array_layer, self.array_layer_count) catch {
+            return CommandEncodingError.InvalidResourceBarrierRange;
+        };
+        if (layer_end > layer_limit) return CommandEncodingError.InvalidResourceBarrierRange;
     }
 };
 
@@ -404,6 +484,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedCommandBufferReset,
         error.UnsupportedTextureToTextureCopy,
         error.UnsupportedFillBuffer,
+        error.UnsupportedExplicitResourceBarrier,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -462,6 +543,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidCopyTextureRegion,
         error.InvalidCopyTextureSlice,
         error.InvalidCopyBufferLayout,
+        error.RedundantResourceBarrier,
+        error.InvalidResourceBarrierState,
+        error.InvalidResourceBarrierRange,
         error.TextureCopySizeOverflow,
         error.MissingBindGroupLayoutEntry,
         error.EmptyShaderVisibility,
@@ -2153,6 +2237,10 @@ pub const CommandEncodingError = error{
     UnsupportedCommandBufferReset,
     UnsupportedTextureToTextureCopy,
     UnsupportedFillBuffer,
+    UnsupportedExplicitResourceBarrier,
+    RedundantResourceBarrier,
+    InvalidResourceBarrierState,
+    InvalidResourceBarrierRange,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -3908,6 +3996,62 @@ test "resource usage state records portable hazards" {
     try std.testing.expectEqual(ResourceHazard.write_after_read, transition.hazard);
     try std.testing.expect(transition.requires_barrier);
     try std.testing.expectEqual(@as(usize, 2), state.barrier_count);
+
+    try (BufferBarrierDescriptor{
+        .before = .copy_destination,
+        .after = .vertex_buffer,
+        .offset = 4,
+        .size = 4,
+    }).validate(16, .{ .explicit_resource_barriers = true });
+    try std.testing.expectError(CommandEncodingError.UnsupportedExplicitResourceBarrier, (BufferBarrierDescriptor{
+        .before = .copy_destination,
+        .after = .vertex_buffer,
+    }).validate(16, .{}));
+    try std.testing.expectError(CommandEncodingError.RedundantResourceBarrier, (BufferBarrierDescriptor{
+        .before = .copy_destination,
+        .after = .copy_destination,
+    }).validate(16, .{ .explicit_resource_barriers = true }));
+    try std.testing.expectError(CommandEncodingError.InvalidResourceBarrierRange, (BufferBarrierDescriptor{
+        .before = .copy_destination,
+        .after = .vertex_buffer,
+        .offset = 12,
+        .size = 8,
+    }).validate(16, .{ .explicit_resource_barriers = true }));
+
+    try (TextureBarrierDescriptor{
+        .before = .copy_destination,
+        .after = .sampled_texture,
+        .base_mip_level = 1,
+        .mip_level_count = 1,
+        .base_array_layer = 0,
+        .array_layer_count = 1,
+    }).validate(.{
+        .format = .rgba8_unorm,
+        .width = 4,
+        .height = 4,
+        .mip_level_count = 2,
+        .usage = .{ .copy_destination = true, .shader_read = true },
+    }, .{ .explicit_resource_barriers = true });
+    try std.testing.expectError(CommandEncodingError.InvalidResourceBarrierRange, (TextureBarrierDescriptor{
+        .before = .copy_destination,
+        .after = .sampled_texture,
+        .base_mip_level = 2,
+    }).validate(.{
+        .format = .rgba8_unorm,
+        .width = 4,
+        .height = 4,
+        .mip_level_count = 2,
+        .usage = .{ .copy_destination = true, .shader_read = true },
+    }, .{ .explicit_resource_barriers = true }));
+
+    var explicit_state = ResourceUsageState{};
+    _ = try explicit_state.applyExplicitBarrier(.copy_destination, .sampled_texture);
+    try std.testing.expectEqual(ResourceUsageKind.sampled_texture, explicit_state.current.?);
+    try std.testing.expectEqual(@as(usize, 1), explicit_state.barrier_count);
+    try std.testing.expectError(
+        CommandEncodingError.InvalidResourceBarrierState,
+        explicit_state.applyExplicitBarrier(.copy_destination, .vertex_buffer),
+    );
 }
 
 test "debug group stack validates labels and nesting" {

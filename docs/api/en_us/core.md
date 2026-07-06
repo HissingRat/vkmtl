@@ -136,6 +136,13 @@ write-after-write hazards. Blit copies, render attachments, vertex buffers, and
 index buffers already feed this state. Later Vulkan barrier lowering should
 consume these transitions.
 
+Manual barriers are an advanced escape hatch. `BufferBarrierDescriptor` and
+`TextureBarrierDescriptor` validate ranges and before/after usage transitions,
+and `ResourceUsageState.applyExplicitBarrier(...)` records an explicit tracked
+transition. Native explicit-barrier commands are gated by
+`DeviceFeatures.explicit_resource_barriers` and disabled by default; ordinary
+code should keep using the automatic usage-tracking path.
+
 ## Shaders And Pipelines
 
 Slang is the source language. Applications usually embed `.slang` files and

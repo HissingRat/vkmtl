@@ -111,6 +111,12 @@ Period 2 开始，runtime resource 会记录 portable usage state。当前 `Reso
 render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan
 barrier lowering 会消费这些 transition。
 
+手动 barrier 是高级 escape hatch。`BufferBarrierDescriptor` 和
+`TextureBarrierDescriptor` 会校验范围与 before/after usage transition；
+`ResourceUsageState.applyExplicitBarrier(...)` 会记录显式 tracked transition。Native
+explicit-barrier command 由 `DeviceFeatures.explicit_resource_barriers` gate 控制，默认关闭；
+普通代码应该继续走自动 usage-tracking 路径。
+
 ## Shader 与 Pipeline
 
 Slang 是唯一的 shader 源语言。应用通常用 `@embedFile(...)` 嵌入 `.slang` 文件，
