@@ -116,6 +116,10 @@ pub const DeviceFeatures = struct {
     command_buffer_pooling: bool = false,
     command_buffer_reset: bool = false,
     explicit_resource_barriers: bool = false,
+    fences: bool = false,
+    events: bool = false,
+    timeline_fences: bool = false,
+    shared_events: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -332,6 +336,66 @@ pub const TextureBarrierDescriptor = struct {
     }
 };
 
+pub const FenceKind = enum {
+    binary,
+    timeline,
+};
+
+pub const FenceDescriptor = struct {
+    label: ?[]const u8 = null,
+    kind: FenceKind = .binary,
+    initial_value: u64 = 0,
+
+    pub fn validate(self: FenceDescriptor, features: DeviceFeatures) CommandEncodingError!void {
+        if (!features.fences) return CommandEncodingError.UnsupportedFences;
+        switch (self.kind) {
+            .binary => if (self.initial_value > 1) return CommandEncodingError.InvalidFenceValue,
+            .timeline => if (!features.timeline_fences) return CommandEncodingError.UnsupportedTimelineFences,
+        }
+    }
+};
+
+pub const FenceSignalDescriptor = struct {
+    value: u64 = 1,
+
+    pub fn validate(self: FenceSignalDescriptor, fence: FenceDescriptor) CommandEncodingError!void {
+        switch (fence.kind) {
+            .binary => if (self.value != 1) return CommandEncodingError.InvalidFenceValue,
+            .timeline => if (self.value == 0) return CommandEncodingError.InvalidFenceValue,
+        }
+    }
+};
+
+pub const FenceWaitDescriptor = struct {
+    value: u64 = 1,
+    timeout_ns: ?u64 = null,
+
+    pub fn validate(self: FenceWaitDescriptor, fence: FenceDescriptor) CommandEncodingError!void {
+        switch (fence.kind) {
+            .binary => if (self.value != 1) return CommandEncodingError.InvalidFenceValue,
+            .timeline => if (self.value == 0) return CommandEncodingError.InvalidFenceValue,
+        }
+    }
+};
+
+pub const EventDescriptor = struct {
+    label: ?[]const u8 = null,
+    shared: bool = false,
+
+    pub fn validate(self: EventDescriptor, features: DeviceFeatures) CommandEncodingError!void {
+        if (!features.events) return CommandEncodingError.UnsupportedEvents;
+        if (self.shared and !features.shared_events) return CommandEncodingError.UnsupportedSharedEvents;
+    }
+};
+
+pub const EventSignalDescriptor = struct {
+    signaled: bool = true,
+};
+
+pub const EventWaitDescriptor = struct {
+    timeout_ns: ?u64 = null,
+};
+
 fn resourceHazard(previous: ?ResourceUsageKind, next: ResourceUsageKind) ResourceHazard {
     const prev = previous orelse return .none;
     const prev_access = prev.access();
@@ -485,6 +549,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTextureToTextureCopy,
         error.UnsupportedFillBuffer,
         error.UnsupportedExplicitResourceBarrier,
+        error.UnsupportedFences,
+        error.UnsupportedEvents,
+        error.UnsupportedTimelineFences,
+        error.UnsupportedSharedEvents,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -546,6 +614,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.RedundantResourceBarrier,
         error.InvalidResourceBarrierState,
         error.InvalidResourceBarrierRange,
+        error.InvalidFenceValue,
         error.TextureCopySizeOverflow,
         error.MissingBindGroupLayoutEntry,
         error.EmptyShaderVisibility,
@@ -2238,9 +2307,14 @@ pub const CommandEncodingError = error{
     UnsupportedTextureToTextureCopy,
     UnsupportedFillBuffer,
     UnsupportedExplicitResourceBarrier,
+    UnsupportedFences,
+    UnsupportedEvents,
+    UnsupportedTimelineFences,
+    UnsupportedSharedEvents,
     RedundantResourceBarrier,
     InvalidResourceBarrierState,
     InvalidResourceBarrierRange,
+    InvalidFenceValue,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -4052,6 +4126,39 @@ test "resource usage state records portable hazards" {
         CommandEncodingError.InvalidResourceBarrierState,
         explicit_state.applyExplicitBarrier(.copy_destination, .vertex_buffer),
     );
+}
+
+test "fence and event descriptors validate feature gates" {
+    try std.testing.expectError(CommandEncodingError.UnsupportedFences, (FenceDescriptor{}).validate(.{}));
+    const fence_features = DeviceFeatures{ .fences = true };
+    const binary_fence = FenceDescriptor{};
+    try binary_fence.validate(fence_features);
+    try std.testing.expectError(CommandEncodingError.InvalidFenceValue, (FenceDescriptor{
+        .initial_value = 2,
+    }).validate(fence_features));
+    try (FenceSignalDescriptor{}).validate(binary_fence);
+    try std.testing.expectError(CommandEncodingError.InvalidFenceValue, (FenceSignalDescriptor{
+        .value = 2,
+    }).validate(binary_fence));
+
+    const timeline_fence = FenceDescriptor{
+        .kind = .timeline,
+        .initial_value = 4,
+    };
+    try std.testing.expectError(CommandEncodingError.UnsupportedTimelineFences, timeline_fence.validate(fence_features));
+    try timeline_fence.validate(.{ .fences = true, .timeline_fences = true });
+    try std.testing.expectError(CommandEncodingError.InvalidFenceValue, (FenceWaitDescriptor{
+        .value = 0,
+    }).validate(timeline_fence));
+
+    try std.testing.expectError(CommandEncodingError.UnsupportedEvents, (EventDescriptor{}).validate(.{}));
+    try (EventDescriptor{}).validate(.{ .events = true });
+    try std.testing.expectError(CommandEncodingError.UnsupportedSharedEvents, (EventDescriptor{
+        .shared = true,
+    }).validate(.{ .events = true }));
+    try (EventDescriptor{
+        .shared = true,
+    }).validate(.{ .events = true, .shared_events = true });
 }
 
 test "debug group stack validates labels and nesting" {

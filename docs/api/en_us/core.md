@@ -143,6 +143,13 @@ transition. Native explicit-barrier commands are gated by
 `DeviceFeatures.explicit_resource_barriers` and disabled by default; ordinary
 code should keep using the automatic usage-tracking path.
 
+Fence and event synchronization is descriptor-only in this period.
+`FenceDescriptor`, `FenceSignalDescriptor`, and `FenceWaitDescriptor` validate
+binary and timeline-style fence values behind `DeviceFeatures.fences` and
+`DeviceFeatures.timeline_fences`. `EventDescriptor` plus event wait/signal
+descriptor shapes are gated by `DeviceFeatures.events` and
+`DeviceFeatures.shared_events`. Runtime fence/event objects are future work.
+
 ## Shaders And Pipelines
 
 Slang is the source language. Applications usually embed `.slang` files and

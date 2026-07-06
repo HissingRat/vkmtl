@@ -504,10 +504,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 6 Phase 4 Checklist
 
 - [x] Define fence/event scope before implementation.
-- [ ] Add portable fence and event descriptor shapes.
-- [ ] Add wait/signal validation shapes.
-- [ ] Gate timeline semaphore and Metal shared-event style behavior.
-- [ ] Document CPU/GPU and GPU/GPU synchronization limits.
+- [x] Add portable fence and event descriptor shapes.
+- [x] Add wait/signal validation shapes.
+- [x] Gate timeline semaphore and Metal shared-event style behavior.
+- [x] Document CPU/GPU and GPU/GPU synchronization limits.
 
 ## Period 6 Phase 5 Checklist
 

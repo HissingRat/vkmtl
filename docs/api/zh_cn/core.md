@@ -117,6 +117,12 @@ barrier lowering 会消费这些 transition。
 explicit-barrier command 由 `DeviceFeatures.explicit_resource_barriers` gate 控制，默认关闭；
 普通代码应该继续走自动 usage-tracking 路径。
 
+Fence 与 event synchronization 在这个 period 仍是 descriptor-only。
+`FenceDescriptor`、`FenceSignalDescriptor` 和 `FenceWaitDescriptor` 会在
+`DeviceFeatures.fences` 与 `DeviceFeatures.timeline_fences` 后面校验 binary/timeline fence
+值。`EventDescriptor` 以及 event wait/signal descriptor shape 由 `DeviceFeatures.events`
+和 `DeviceFeatures.shared_events` gate 控制。Runtime fence/event object 是后续工作。
+
 ## Shader 与 Pipeline
 
 Slang 是唯一的 shader 源语言。应用通常用 `@embedFile(...)` 嵌入 `.slang` 文件，
