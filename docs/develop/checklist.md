@@ -632,11 +632,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 1 Checklist
 
 - [x] Define example gallery cleanup scope before implementation.
-- [ ] Remove ignored workspace-only artifacts from `examples/`.
-- [ ] Add an example manifest that records names, run commands, kind, backend
+- [x] Remove ignored workspace-only artifacts from `examples/`.
+- [x] Add an example manifest that records names, run commands, kind, backend
   expectation, and deterministic output where applicable.
-- [ ] Document current examples against the manifest.
-- [ ] Keep examples importing public vkmtl APIs only.
+- [x] Document current examples against the manifest.
+- [x] Keep examples importing public vkmtl APIs only.
 
 ## Period 9 Phase 2 Checklist
 

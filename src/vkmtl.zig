@@ -1,4 +1,5 @@
 const core = @import("core.zig");
+const development_matrix = @import("development_matrix.zig");
 const shader_compiler = @import("shader/compiler.zig");
 pub const ShaderReflection = @import("shader/reflection.zig");
 
@@ -273,6 +274,10 @@ pub const Device = runtime.Device;
 pub const Queue = runtime.Queue;
 pub const Surface = runtime.Surface;
 pub const Swapchain = runtime.Swapchain;
+
+test {
+    _ = development_matrix;
+}
 
 test "resource tracker records retain and release counts" {
     var tracker = runtime.ResourceTracker{};

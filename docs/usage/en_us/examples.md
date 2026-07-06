@@ -14,6 +14,10 @@ Examples may import:
 If an example needs a backend feature that is not public yet, add the public
 vkmtl API first instead of reaching into a backend implementation.
 
+The current gallery metadata is tracked in `src/development_matrix.zig` so
+tests can keep names, paths, run steps, deterministic output markers, and
+backend expectations in sync with this document.
+
 Shader-backed examples embed their Slang source with `@embedFile(...)`, compile
 it through `Device.compileRenderShader(...)` or
 `Device.compileComputeShader(...)`, and attach runtime-generated reflection JSON
@@ -61,6 +65,12 @@ stage descriptors.
 
 `examples/clear_screen` is the presentation smoke test. It should stay small and
 focused on surface creation, resize, clear, and present behavior.
+
+Run it with:
+
+```sh
+zig build run-clear-screen
+```
 
 ## Uniform Buffer
 
@@ -292,7 +302,4 @@ examples/compute_readback/shaders/compute_readback.slang
 
 Current compute coverage is intentionally deterministic: storage buffer writes,
 storage texture writes, transfer readback, reflection-derived bind group
-layouts, and byte validation before process exit. Future compute gallery
-targets are image filtering, particle simulation, prefix sum, buffer reduction,
-and visual storage-texture write examples; those broader samples are tracked for
-Period 9.
+layouts, and byte validation before process exit.

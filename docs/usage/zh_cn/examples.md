@@ -12,6 +12,9 @@
 
 如果示例需要尚未公开的后端能力，应该先补 vkmtl 公开抽象，而不是绕进后端实现。
 
+当前 gallery metadata 记录在 `src/development_matrix.zig`，测试会用它校验名称、路径、
+run step、确定性输出 marker 和后端预期不要和文档漂移。
+
 带 shader 的示例用 `@embedFile(...)` 嵌入 Slang source，通过 `Device.compileRenderShader(...)`
 或 `Device.compileComputeShader(...)` 编译，并把运行时生成的 reflection JSON 附到 pipeline
 stage。单 buffer 渲染示例从 reflection 派生 vertex descriptor，shader-resource 示例也从
@@ -48,6 +51,10 @@ VKMTL_BACKEND=metal zig build run-triangle
 ## Clear Screen
 
 `examples/clear_screen` 是 presentation smoke test，专注于 surface 创建、resize、clear 和 present。
+
+```sh
+zig build run-clear-screen
+```
 
 ## Uniform Buffer
 
@@ -145,6 +152,4 @@ VKMTL_BACKEND=metal zig build run-compute-readback
 ```
 
 当前 compute 覆盖面刻意保持确定性：storage buffer 写入、storage texture 写入、transfer
-readback、reflection-derived bind group layout，以及退出前的 byte validation。后续 compute
-gallery 目标包括 image filter、particle simulation、prefix sum、buffer reduction 和可视化
-storage-texture write 示例；这些更广的样例会放到 Period 9。
+readback、reflection-derived bind group layout，以及退出前的 byte validation。
