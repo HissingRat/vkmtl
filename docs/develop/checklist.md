@@ -480,10 +480,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 6 Phase 1 Checklist
 
 - [x] Define command lifecycle scope before implementation.
-- [ ] Add command buffer descriptor and status helpers.
-- [ ] Keep command buffer creation compatible with existing examples.
-- [ ] Validate reset/reuse and post-submit state through debug state.
-- [ ] Document command lifecycle limits.
+- [x] Add command buffer descriptor and status helpers.
+- [x] Keep command buffer creation compatible with existing examples.
+- [x] Validate reset/reuse and post-submit state through debug state.
+- [x] Document command lifecycle limits.
 
 ## Period 6 Phase 2 Checklist
 

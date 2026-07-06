@@ -112,6 +112,7 @@ pub const QueryResolveDescriptor = core.QueryResolveDescriptor;
 pub const QueryReadbackDescriptor = core.QueryReadbackDescriptor;
 pub const QueryError = core.QueryError;
 pub const DispatchThreadgroupsDescriptor = core.DispatchThreadgroupsDescriptor;
+pub const CommandBufferDescriptor = core.CommandBufferDescriptor;
 pub const CopyBufferToBufferDescriptor = core.CopyBufferToBufferDescriptor;
 pub const BufferTextureCopyLayout = core.BufferTextureCopyLayout;
 pub const CopyBufferToTextureDescriptor = core.CopyBufferToTextureDescriptor;
@@ -276,4 +277,16 @@ test "runtime command wrappers expose Metal-style ordering" {
     try command_buffer.commit();
 
     try @import("std").testing.expect(!command_buffer.alive);
+}
+
+test "runtime command buffer exposes lifecycle status" {
+    var command_buffer = runtime.CommandBuffer{
+        .backend = .metal,
+        .label_value = "frame",
+    };
+
+    try @import("std").testing.expectEqual(core.CommandBufferState.ready, command_buffer.state());
+    try @import("std").testing.expectEqualStrings("frame", command_buffer.label().?);
+    try command_buffer.commit();
+    try @import("std").testing.expectEqual(core.CommandBufferState.committed, command_buffer.state());
 }

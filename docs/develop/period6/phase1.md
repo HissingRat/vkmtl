@@ -14,6 +14,9 @@ existing example path.
 ## Current Limits
 
 - Runtime command buffers are still one-shot after `commit()`.
+- `Queue.makeCommandBufferWithDescriptor(...)` accepts labels now, while
+  pooled/reusable command buffers are feature-gated and disabled by default.
+- `CommandBuffer.state()` reports portable lifecycle state for diagnostics.
 - Vulkan and Metal backends allocate native command buffers through the current
   per-submit path.
 - Command buffer pooling and native reset/reuse remain future backend work.

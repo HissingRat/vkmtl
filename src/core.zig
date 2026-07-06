@@ -113,6 +113,8 @@ pub const DeviceFeatures = struct {
     multi_surface: bool = false,
     native_handles: bool = false,
     debug_labels: bool = false,
+    command_buffer_pooling: bool = false,
+    command_buffer_reset: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -229,6 +231,24 @@ pub const ResourceUsageState = struct {
             .hazard = hazard,
             .requires_barrier = requires_barrier,
         };
+    }
+};
+
+pub const CommandBufferDescriptor = struct {
+    label: ?[]const u8 = null,
+    pooled: bool = false,
+    reusable: bool = false,
+
+    pub fn validate(self: CommandBufferDescriptor, features: DeviceFeatures) CommandEncodingError!void {
+        if (self.pooled and !features.command_buffer_pooling) {
+            return CommandEncodingError.UnsupportedCommandBufferPooling;
+        }
+        if (self.reusable and !features.command_buffer_reset) {
+            return CommandEncodingError.UnsupportedCommandBufferReset;
+        }
+        if (self.reusable and !self.pooled) {
+            return CommandEncodingError.UnsupportedCommandBufferReset;
+        }
     }
 };
 
@@ -380,6 +400,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTimestampQueries,
         error.UnsupportedPipelineStatisticsQueries,
         error.UnsupportedShaderReflectionSchema,
+        error.UnsupportedCommandBufferPooling,
+        error.UnsupportedCommandBufferReset,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -1740,6 +1762,28 @@ pub const RenderCommandEncoderState = enum {
 pub const CommandBufferDebugState = struct {
     state: CommandBufferState = .ready,
     presented: bool = false,
+    reusable: bool = false,
+
+    pub fn init(
+        descriptor: CommandBufferDescriptor,
+        features: DeviceFeatures,
+    ) CommandEncodingError!CommandBufferDebugState {
+        try descriptor.validate(features);
+        return .{
+            .reusable = descriptor.reusable,
+        };
+    }
+
+    pub fn status(self: CommandBufferDebugState) CommandBufferState {
+        return self.state;
+    }
+
+    pub fn reset(self: *CommandBufferDebugState) CommandEncodingError!void {
+        if (!self.reusable) return CommandEncodingError.UnsupportedCommandBufferReset;
+        if (self.state != .committed) return CommandEncodingError.InvalidCommandBufferState;
+        self.state = .ready;
+        self.presented = false;
+    }
 
     pub fn makeRenderCommandEncoder(
         self: *CommandBufferDebugState,
@@ -2072,6 +2116,8 @@ pub const CommandEncodingError = error{
     UnsupportedBaseInstance,
     UnsupportedIndirectDraw,
     UnsupportedMultiDraw,
+    UnsupportedCommandBufferPooling,
+    UnsupportedCommandBufferReset,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -4837,6 +4883,28 @@ test "command debug state validates render pass ordering" {
     try command_buffer.presentDrawable();
     try command_buffer.commit();
     try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.presentDrawable());
+}
+
+test "command buffer descriptor validates pooling and reset gates" {
+    try (CommandBufferDescriptor{}).validate(.{});
+    try std.testing.expectError(CommandEncodingError.UnsupportedCommandBufferPooling, (CommandBufferDescriptor{
+        .pooled = true,
+    }).validate(.{}));
+    try std.testing.expectError(CommandEncodingError.UnsupportedCommandBufferReset, (CommandBufferDescriptor{
+        .pooled = true,
+        .reusable = true,
+    }).validate(.{ .command_buffer_pooling = true }));
+
+    var debug = try CommandBufferDebugState.init(.{
+        .pooled = true,
+        .reusable = true,
+    }, .{
+        .command_buffer_pooling = true,
+        .command_buffer_reset = true,
+    });
+    try debug.commit();
+    try debug.reset();
+    try std.testing.expectEqual(CommandBufferState.ready, debug.status());
 }
 
 test "command debug state validates blit pass ordering" {

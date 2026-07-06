@@ -1322,6 +1322,10 @@ pub const CommandBuffer = struct {
         return self.label_value;
     }
 
+    pub fn state(self: CommandBuffer) core.CommandBufferState {
+        return self.debug.status();
+    }
+
     pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
         assertObjectAlive(self.alive, "command_buffer");
         self.label_value = label_value;
@@ -1888,6 +1892,17 @@ pub const Queue = struct {
     }
 
     pub fn makeCommandBuffer(self: *Queue) !CommandBuffer {
+        return try self.makeCommandBufferWithDescriptor(.{});
+    }
+
+    pub fn makeCommandBufferWithDescriptor(
+        self: *Queue,
+        descriptor: core.CommandBufferDescriptor,
+    ) !CommandBuffer {
+        const debug = try core.CommandBufferDebugState.init(
+            descriptor,
+            core.defaultDeviceFeatures(self.backend),
+        );
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
             .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer() },
@@ -1895,6 +1910,8 @@ pub const Queue = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
+            .debug = debug,
             .impl = impl,
         };
     }
@@ -2367,6 +2384,14 @@ pub const WindowContext = struct {
     pub fn makeCommandBuffer(self: *WindowContext) !CommandBuffer {
         var queue_view = self.queue();
         return try queue_view.makeCommandBuffer();
+    }
+
+    pub fn makeCommandBufferWithDescriptor(
+        self: *WindowContext,
+        descriptor: core.CommandBufferDescriptor,
+    ) !CommandBuffer {
+        var queue_view = self.queue();
+        return try queue_view.makeCommandBufferWithDescriptor(descriptor);
     }
 
     pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {

@@ -263,6 +263,12 @@ try command_buffer.presentDrawable();
 try command_buffer.commit();
 ```
 
+`Queue.makeCommandBufferWithDescriptor(...)` 接受 `CommandBufferDescriptor`，
+用于设置 borrowed label，并为后续 pooling/reuse hint 留出字段。默认
+`makeCommandBuffer()` 等价于空 descriptor。`CommandBuffer.state()` 可以查询可移植
+lifecycle state。当前 command buffer 在 `commit()` 后仍然是 one-shot；pooled 或 reusable
+command buffer 已经由 descriptor 表达，但在 native reset/pooling 接上前会被 feature gate 拒绝。
+
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime

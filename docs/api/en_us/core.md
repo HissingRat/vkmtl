@@ -316,6 +316,14 @@ try command_buffer.presentDrawable();
 try command_buffer.commit();
 ```
 
+`Queue.makeCommandBufferWithDescriptor(...)` accepts a
+`CommandBufferDescriptor` for a borrowed label and future pooling/reuse hints.
+The default `makeCommandBuffer()` path remains equivalent to an empty
+descriptor. `CommandBuffer.state()` reports the portable lifecycle state.
+Command buffers are still one-shot after `commit()`; pooled or reusable command
+buffers are represented by descriptor fields and rejected by feature gates until
+native reset/pooling is implemented.
+
 Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also
