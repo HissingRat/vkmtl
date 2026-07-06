@@ -167,7 +167,7 @@ See `docs/develop/period6/`.
 
 ## Period 7: Compute
 
-Status: planned.
+Status: in progress.
 
 Goal: make compute capable of supporting real workflows independently of render
 examples.

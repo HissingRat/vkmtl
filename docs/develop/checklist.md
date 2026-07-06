@@ -525,6 +525,54 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Keep marker validation independent from backend-native lowering.
 - [x] Document debug marker behavior and limits.
 
+## Period 7 Phase 1 Checklist
+
+- [x] Define compute dispatch completeness scope before implementation.
+- [ ] Add compute dispatch limits and validation helpers.
+- [ ] Add a dispatch-threads convenience descriptor.
+- [ ] Keep current dispatch-threadgroups backend lowering working.
+- [ ] Document compute dispatch limits.
+
+## Period 7 Phase 2 Checklist
+
+- [x] Define dispatch-indirect scope before implementation.
+- [ ] Add dispatch-indirect descriptor and alignment validation.
+- [ ] Add indirect buffer usage metadata.
+- [ ] Gate dispatch indirect until native lowering lands.
+- [ ] Document dispatch-indirect limits.
+
+## Period 7 Phase 3 Checklist
+
+- [x] Define storage resource rule scope before implementation.
+- [ ] Add storage access metadata for layout entries.
+- [ ] Validate storage buffer and storage texture access rules.
+- [ ] Record storage resource usage in compute bind paths.
+- [ ] Document storage resource limits.
+
+## Period 7 Phase 4 Checklist
+
+- [x] Define atomics/threadgroup memory scope before implementation.
+- [ ] Add atomic capability descriptor shapes.
+- [ ] Add threadgroup memory descriptor shapes.
+- [ ] Gate unsupported atomic and shared-memory behavior.
+- [ ] Document portable shader patterns and limits.
+
+## Period 7 Phase 5 Checklist
+
+- [x] Define compute pipeline cache key scope before implementation.
+- [ ] Add compute pipeline cache-key descriptor shape.
+- [ ] Include shader identity, entry point, layouts, and specialization.
+- [ ] Leave object cache implementation to Period 8.
+- [ ] Document cache requirements.
+
+## Period 7 Phase 6 Checklist
+
+- [x] Define compute example coverage scope before implementation.
+- [ ] Document current compute examples and expected outputs.
+- [ ] Add example planning descriptors for future compute gallery cases.
+- [ ] Keep existing compute readback example as the deterministic first slice.
+- [ ] Document remaining example gaps.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

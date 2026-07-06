@@ -1,5 +1,7 @@
 # Period 7: Compute
 
+Status: in progress.
+
 Goal: make compute capable of supporting real workflows independently of render
 examples.
 
@@ -15,12 +17,16 @@ work and readback.
 - Workgroup size queries.
 - Dispatch size validation.
 
+See `phase1.md`.
+
 ## Phase 2: Dispatch Indirect
 
 - Indirect buffer.
 - Indirect offset.
 - Argument alignment.
 - Backend capability gate.
+
+See `phase2.md`.
 
 ## Phase 3: Storage Resource Rules
 
@@ -31,12 +37,16 @@ work and readback.
 - Shader stage visibility.
 - Resource hazard tracking.
 
+See `phase3.md`.
+
 ## Phase 4: Atomics / Threadgroup Memory
 
 - Document atomic support differences.
 - Document threadgroup or shared memory usage.
 - Provide portable shader patterns.
 - Document backend limits.
+
+See `phase4.md`.
 
 ## Phase 5: Compute Pipeline Cache Requirements
 
@@ -47,6 +57,8 @@ work and readback.
 - Include debug and release compile options.
 - Leave shared cache implementation to Period 8.
 
+See `phase5.md`.
+
 ## Phase 6: Compute Examples
 
 - Image filter.
@@ -55,3 +67,5 @@ work and readback.
 - GPU readback.
 - Storage texture write.
 - Buffer reduction.
+
+See `phase6.md`.
