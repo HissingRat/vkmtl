@@ -236,6 +236,14 @@ per-dispatch constant data. It is gated by `DeviceFeatures.small_constants`,
 `DeviceLimits.small_constant_alignment`. Command encoder lowering is not wired
 yet.
 
+`RootConstantRange`, `RootConstantLayoutDescriptor`, and
+`RootConstantWriteDescriptor` define the push/root-constant equivalent. They
+are gated by `DeviceFeatures.root_constants`,
+`DeviceLimits.max_root_constant_bytes`, and
+`DeviceLimits.root_constant_alignment`. The current API validates ranges and
+writes, but command encoder lowering to Vulkan push constants or Metal inline
+constants is still future work.
+
 `BindGroupDescriptor` is the runtime descriptor that points at live resources.
 For pure descriptor validation or tests, root exports also expose the shape-only
 aliases `BindGroupResourceDescriptor`, `BindGroupEntryDescriptor`, and

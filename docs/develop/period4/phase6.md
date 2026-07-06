@@ -4,9 +4,12 @@ Phase 6 defines portable root-constant shape and capability gates.
 
 ## First Slice
 
-- Add feature and limit fields for root constants.
-- Add root-constant range and write descriptor shapes.
-- Validate size, offset, and visibility.
+- Add `DeviceFeatures.root_constants`.
+- Add `DeviceLimits.max_root_constant_bytes` and
+  `DeviceLimits.root_constant_alignment`.
+- Add `RootConstantRange`, `RootConstantLayoutDescriptor`, and
+  `RootConstantWriteDescriptor`.
+- Validate size, offset, visibility, alignment, and write containment.
 - Keep Vulkan push-constant and Metal inline-constant lowering for a later
   command-encoder implementation phase.
 

@@ -401,10 +401,10 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 6 Checklist
 
-- [ ] Add root-constant feature and limit fields.
-- [ ] Add root-constant descriptor shapes.
-- [ ] Validate size, offset, and visibility.
-- [ ] Document Vulkan/Metal lowering direction.
+- [x] Add root-constant feature and limit fields.
+- [x] Add root-constant descriptor shapes.
+- [x] Validate size, offset, and visibility.
+- [x] Document Vulkan/Metal lowering direction.
 
 ## Period 4 Phase 7 Checklist
 

@@ -201,6 +201,12 @@ binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` /
 它由 `DeviceFeatures.small_constants`、`DeviceLimits.max_small_constant_bytes` 和
 `DeviceLimits.small_constant_alignment` gate。当前还没有接入 command encoder lowering。
 
+`RootConstantRange`、`RootConstantLayoutDescriptor` 和
+`RootConstantWriteDescriptor` 定义 Vulkan push constants / Metal inline constants
+的 portable 等价 shape。它由 `DeviceFeatures.root_constants`、
+`DeviceLimits.max_root_constant_bytes` 和 `DeviceLimits.root_constant_alignment`
+gate。当前 API 会校验 range 和 write，但还没有 lowering 到 command encoder。
+
 Render 和 compute encoder 都通过 `setBindGroup(...)` 绑定资源。
 
 `BindGroupDescriptor` 是指向活资源的 runtime descriptor。对于纯 descriptor 校验或测试，

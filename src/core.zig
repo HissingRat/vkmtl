@@ -84,6 +84,7 @@ pub const DeviceFeatures = struct {
     sampler_border_color: bool = false,
     heaps: bool = false,
     small_constants: bool = false,
+    root_constants: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -109,6 +110,8 @@ pub const DeviceLimits = struct {
     min_storage_buffer_offset_alignment: u64 = 256,
     max_small_constant_bytes: u32 = 0,
     small_constant_alignment: u32 = 4,
+    max_root_constant_bytes: u32 = 0,
+    root_constant_alignment: u32 = 4,
 };
 
 pub const FormatCapabilities = struct {
@@ -339,6 +342,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSamplerBorderColor,
         error.UnsupportedHeaps,
         error.UnsupportedSmallConstants,
+        error.UnsupportedRootConstants,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -402,6 +406,13 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptySmallConstantData,
         error.SmallConstantDataTooLarge,
         error.InvalidSmallConstantAlignment,
+        error.MissingRootConstantRange,
+        error.EmptyRootConstantVisibility,
+        error.InvalidRootConstantRange,
+        error.RootConstantRangeTooLarge,
+        error.InvalidRootConstantAlignment,
+        error.EmptyRootConstantWrite,
+        error.RootConstantWriteOutOfRange,
         error.MissingSurfaceSource,
         error.InvalidSurfaceExtent,
         error.InvalidSurfaceHandle,
@@ -2347,6 +2358,97 @@ pub const SmallConstantError = error{
     EmptySmallConstantData,
     SmallConstantDataTooLarge,
     InvalidSmallConstantAlignment,
+};
+
+pub const RootConstantRange = struct {
+    visibility: ShaderVisibility,
+    offset: u32 = 0,
+    size: u32 = 0,
+
+    pub fn validate(
+        self: RootConstantRange,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) RootConstantError!void {
+        if (!features.root_constants) return RootConstantError.UnsupportedRootConstants;
+        if (self.visibility.isEmpty()) return RootConstantError.EmptyRootConstantVisibility;
+        if (self.size == 0) return RootConstantError.InvalidRootConstantRange;
+        const end = std.math.add(u32, self.offset, self.size) catch {
+            return RootConstantError.RootConstantRangeTooLarge;
+        };
+        if (end > limits.max_root_constant_bytes) return RootConstantError.RootConstantRangeTooLarge;
+
+        const alignment = limits.root_constant_alignment;
+        if (!isAlignedU32(self.offset, alignment) or !isAlignedU32(self.size, alignment)) {
+            return RootConstantError.InvalidRootConstantAlignment;
+        }
+    }
+
+    pub fn containsWrite(self: RootConstantRange, write: RootConstantWriteDescriptor) bool {
+        if (write.bytes.len == 0 or write.bytes.len > std.math.maxInt(u32)) return false;
+        const write_size: u32 = @intCast(write.bytes.len);
+        const range_end = std.math.add(u32, self.offset, self.size) catch return false;
+        const write_end = std.math.add(u32, write.offset, write_size) catch return false;
+        return write.offset >= self.offset and write_end <= range_end;
+    }
+};
+
+pub const RootConstantLayoutDescriptor = struct {
+    label: ?[]const u8 = null,
+    ranges: []const RootConstantRange = &.{},
+
+    pub fn validate(
+        self: RootConstantLayoutDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) RootConstantError!void {
+        if (!features.root_constants) return RootConstantError.UnsupportedRootConstants;
+        if (self.ranges.len == 0) return RootConstantError.MissingRootConstantRange;
+        for (self.ranges) |range| {
+            try range.validate(features, limits);
+        }
+    }
+
+    pub fn rangeContainingWrite(self: RootConstantLayoutDescriptor, write: RootConstantWriteDescriptor) ?RootConstantRange {
+        for (self.ranges) |range| {
+            if (range.containsWrite(write)) return range;
+        }
+        return null;
+    }
+};
+
+pub const RootConstantWriteDescriptor = struct {
+    offset: u32 = 0,
+    bytes: []const u8 = &.{},
+
+    pub fn validate(
+        self: RootConstantWriteDescriptor,
+        layout: RootConstantLayoutDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) RootConstantError!void {
+        try layout.validate(features, limits);
+        if (self.bytes.len == 0) return RootConstantError.EmptyRootConstantWrite;
+        if (self.bytes.len > std.math.maxInt(u32)) return RootConstantError.RootConstantRangeTooLarge;
+
+        const byte_count: u32 = @intCast(self.bytes.len);
+        const alignment = limits.root_constant_alignment;
+        if (!isAlignedU32(self.offset, alignment) or !isAlignedU32(byte_count, alignment)) {
+            return RootConstantError.InvalidRootConstantAlignment;
+        }
+        if (layout.rangeContainingWrite(self) == null) return RootConstantError.RootConstantWriteOutOfRange;
+    }
+};
+
+pub const RootConstantError = error{
+    UnsupportedRootConstants,
+    MissingRootConstantRange,
+    EmptyRootConstantVisibility,
+    InvalidRootConstantRange,
+    RootConstantRangeTooLarge,
+    InvalidRootConstantAlignment,
+    EmptyRootConstantWrite,
+    RootConstantWriteOutOfRange,
 };
 
 pub const BindingError = error{
@@ -4567,6 +4669,91 @@ test "small constant descriptor validates feature and limit gates" {
         .offset = 12,
         .bytes = bytes[0..8],
     }).validate(features, limits));
+}
+
+test "root constant descriptors validate ranges and writes" {
+    const bytes = [_]u8{0} ** 16;
+    const features = DeviceFeatures{ .root_constants = true };
+    const limits = DeviceLimits{
+        .max_root_constant_bytes = 32,
+        .root_constant_alignment = 4,
+    };
+    const ranges = [_]RootConstantRange{
+        .{
+            .visibility = .{ .vertex = true },
+            .offset = 0,
+            .size = 16,
+        },
+        .{
+            .visibility = .{ .fragment = true },
+            .offset = 16,
+            .size = 16,
+        },
+    };
+    const layout = RootConstantLayoutDescriptor{ .ranges = ranges[0..] };
+
+    try layout.validate(features, limits);
+    try (RootConstantWriteDescriptor{
+        .offset = 4,
+        .bytes = bytes[0..8],
+    }).validate(layout, features, limits);
+    try std.testing.expect(layout.rangeContainingWrite(.{
+        .offset = 20,
+        .bytes = bytes[0..8],
+    }) != null);
+
+    try std.testing.expectError(RootConstantError.UnsupportedRootConstants, layout.validate(.{}, limits));
+    try std.testing.expectError(RootConstantError.MissingRootConstantRange, (RootConstantLayoutDescriptor{}).validate(features, limits));
+
+    const empty_visibility_ranges = [_]RootConstantRange{.{
+        .visibility = .{},
+        .offset = 0,
+        .size = 4,
+    }};
+    try std.testing.expectError(RootConstantError.EmptyRootConstantVisibility, (RootConstantLayoutDescriptor{
+        .ranges = empty_visibility_ranges[0..],
+    }).validate(features, limits));
+
+    const empty_range = [_]RootConstantRange{.{
+        .visibility = .{ .vertex = true },
+        .offset = 0,
+        .size = 0,
+    }};
+    try std.testing.expectError(RootConstantError.InvalidRootConstantRange, (RootConstantLayoutDescriptor{
+        .ranges = empty_range[0..],
+    }).validate(features, limits));
+
+    const misaligned_range = [_]RootConstantRange{.{
+        .visibility = .{ .vertex = true },
+        .offset = 2,
+        .size = 4,
+    }};
+    try std.testing.expectError(RootConstantError.InvalidRootConstantAlignment, (RootConstantLayoutDescriptor{
+        .ranges = misaligned_range[0..],
+    }).validate(features, limits));
+
+    const oversized_range = [_]RootConstantRange{.{
+        .visibility = .{ .vertex = true },
+        .offset = 24,
+        .size = 16,
+    }};
+    try std.testing.expectError(RootConstantError.RootConstantRangeTooLarge, (RootConstantLayoutDescriptor{
+        .ranges = oversized_range[0..],
+    }).validate(features, limits));
+
+    try std.testing.expectError(RootConstantError.EmptyRootConstantWrite, (RootConstantWriteDescriptor{
+        .offset = 0,
+    }).validate(layout, features, limits));
+
+    try std.testing.expectError(RootConstantError.InvalidRootConstantAlignment, (RootConstantWriteDescriptor{
+        .offset = 2,
+        .bytes = bytes[0..4],
+    }).validate(layout, features, limits));
+
+    try std.testing.expectError(RootConstantError.RootConstantWriteOutOfRange, (RootConstantWriteDescriptor{
+        .offset = 12,
+        .bytes = bytes[0..8],
+    }).validate(layout, features, limits));
 }
 
 test "bind group layout rejects non-compute storage textures" {
