@@ -90,6 +90,14 @@ Format helper 包括 `textureFormatKind(...)`、`isColorFormat(...)`、`isDepthF
 `isSrgbFormat(...)` 和 `textureFormatBytesPerPixel(...)`。`FormatCapabilities` 会报告当前已实现
 portable format 的 sampled、storage、attachment、filter、mip、blend 和 copy 支持。
 
+Mipmap helper 包括 `mipDimension(...)`、`maxMipLevelCountForExtent(...)`、
+`TextureDescriptor.maxMipLevelCount()` 和 `TextureDescriptor.mipExtent(level)`。Texture descriptor
+会拒绝超过 texture extent 能支持的 mip count。`GenerateMipmapsDescriptor` 是 future automatic
+mipmap generation 的公开可验证 shape；当前 command encoder 仍需要应用显式 upload/copy 每个 mip level。
+
+Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和 layer range。可以通过
+`descriptor()`、`baseMipLevel()`、`mipLevelCount()`、`baseArrayLayer()`、`arrayLayerCount()` 查询。
+
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
 render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan

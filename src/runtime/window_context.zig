@@ -422,10 +422,15 @@ pub const Texture = struct {
                 .tracker = self.tracker,
                 .label_value = descriptor.label,
                 .format_value = resolved.format,
+                .dimension_value = resolved.dimension,
                 .usage_value = self.usage_value,
                 .sample_count_value = self.sample_count_value,
                 .width_value = mipDimension(self.width(), resolved.base_mip_level),
                 .height_value = mipDimension(self.height(), resolved.base_mip_level),
+                .base_mip_level_value = resolved.base_mip_level,
+                .mip_level_count_value = resolved.mip_level_count,
+                .base_array_layer_value = resolved.base_array_layer,
+                .array_layer_count_value = resolved.array_layer_count,
                 .impl = impl,
             },
             .metal => .{
@@ -433,10 +438,15 @@ pub const Texture = struct {
                 .tracker = self.tracker,
                 .label_value = descriptor.label,
                 .format_value = resolved.format,
+                .dimension_value = resolved.dimension,
                 .usage_value = self.usage_value,
                 .sample_count_value = self.sample_count_value,
                 .width_value = mipDimension(self.width(), resolved.base_mip_level),
                 .height_value = mipDimension(self.height(), resolved.base_mip_level),
+                .base_mip_level_value = resolved.base_mip_level,
+                .mip_level_count_value = resolved.mip_level_count,
+                .base_array_layer_value = resolved.base_array_layer,
+                .array_layer_count_value = resolved.array_layer_count,
                 .impl = impl,
             },
         };
@@ -469,10 +479,15 @@ pub const TextureView = struct {
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
     format_value: core.TextureFormat,
+    dimension_value: core.TextureViewDimension = .automatic,
     usage_value: core.TextureUsage,
     sample_count_value: u32,
     width_value: u32,
     height_value: u32,
+    base_mip_level_value: u32 = 0,
+    mip_level_count_value: u32 = 1,
+    base_array_layer_value: u32 = 0,
+    array_layer_count_value: u32 = 1,
     usage_state: core.ResourceUsageState = .{},
     alive: bool = true,
     impl: Impl,
@@ -507,6 +522,38 @@ pub const TextureView = struct {
 
     pub fn format(self: TextureView) core.TextureFormat {
         return self.format_value;
+    }
+
+    pub fn dimension(self: TextureView) core.TextureViewDimension {
+        return self.dimension_value;
+    }
+
+    pub fn baseMipLevel(self: TextureView) u32 {
+        return self.base_mip_level_value;
+    }
+
+    pub fn mipLevelCount(self: TextureView) u32 {
+        return self.mip_level_count_value;
+    }
+
+    pub fn baseArrayLayer(self: TextureView) u32 {
+        return self.base_array_layer_value;
+    }
+
+    pub fn arrayLayerCount(self: TextureView) u32 {
+        return self.array_layer_count_value;
+    }
+
+    pub fn descriptor(self: TextureView) core.ResolvedTextureViewDescriptor {
+        assertAlive(self.alive, .texture_view);
+        return .{
+            .format = self.format_value,
+            .dimension = self.dimension_value,
+            .base_mip_level = self.base_mip_level_value,
+            .mip_level_count = self.mip_level_count_value,
+            .base_array_layer = self.base_array_layer_value,
+            .array_layer_count = self.array_layer_count_value,
+        };
     }
 
     pub fn usage(self: TextureView) core.TextureUsage {
@@ -2796,6 +2843,32 @@ test "runtime buffers expose storage and cpu visibility" {
 
     try std.testing.expectEqual(core.ResourceStorageMode.private, buffer.storageMode());
     try std.testing.expect(!buffer.cpuVisible());
+}
+
+test "runtime texture views expose resolved ranges" {
+    var tracker = ResourceTracker{};
+    var view = TextureView{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .dimension_value = .two_d_array,
+        .usage_value = .{ .shader_read = true },
+        .sample_count_value = 1,
+        .width_value = 32,
+        .height_value = 16,
+        .base_mip_level_value = 2,
+        .mip_level_count_value = 3,
+        .base_array_layer_value = 1,
+        .array_layer_count_value = 2,
+        .impl = undefined,
+    };
+
+    try std.testing.expectEqual(core.TextureViewDimension.two_d_array, view.dimension());
+    try std.testing.expectEqual(@as(u32, 2), view.baseMipLevel());
+    try std.testing.expectEqual(@as(u32, 3), view.mipLevelCount());
+    try std.testing.expectEqual(@as(u32, 1), view.baseArrayLayer());
+    try std.testing.expectEqual(@as(u32, 2), view.arrayLayerCount());
+    try std.testing.expectEqual(core.TextureViewDimension.two_d_array, view.descriptor().dimension);
 }
 
 test "runtime command objects validate debug group balance" {

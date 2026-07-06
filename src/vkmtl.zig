@@ -106,6 +106,8 @@ pub const TextureRegion = core.TextureRegion;
 pub const TextureReplaceRegionDescriptor = core.TextureReplaceRegionDescriptor;
 pub const ResolvedTextureReplaceRegion = core.ResolvedTextureReplaceRegion;
 pub const TextureUpload2DDescriptor = core.TextureUpload2DDescriptor;
+pub const GenerateMipmapsDescriptor = core.GenerateMipmapsDescriptor;
+pub const ResolvedGenerateMipmapsDescriptor = core.ResolvedGenerateMipmapsDescriptor;
 pub const TextureError = core.TextureError;
 pub const SamplerMinMagFilter = core.SamplerMinMagFilter;
 pub const SamplerMipFilter = core.SamplerMipFilter;
@@ -153,6 +155,8 @@ pub const isStencilFormat = core.isStencilFormat;
 pub const isDepthStencilFormat = core.isDepthStencilFormat;
 pub const isCompressedFormat = core.isCompressedFormat;
 pub const isSrgbFormat = core.isSrgbFormat;
+pub const mipDimension = core.mipDimension;
+pub const maxMipLevelCountForExtent = core.maxMipLevelCountForExtent;
 
 pub const WindowContext = runtime.WindowContext;
 pub const WindowContextOptions = runtime.WindowContextOptions;

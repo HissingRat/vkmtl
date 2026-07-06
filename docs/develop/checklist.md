@@ -329,17 +329,17 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 3 Phase 4 Checklist
 
-- [ ] Add max mip-count and mip-dimension helpers.
-- [ ] Validate texture mip counts against extent.
-- [ ] Add public generate-mipmaps descriptor shape.
-- [ ] Document that automatic mip generation is not lowered yet.
+- [x] Add max mip-count and mip-dimension helpers.
+- [x] Validate texture mip counts against extent.
+- [x] Add public generate-mipmaps descriptor shape.
+- [x] Document that automatic mip generation is not lowered yet.
 
 ## Period 3 Phase 5 Checklist
 
-- [ ] Expose resolved texture view range on runtime `TextureView`.
-- [ ] Validate explicit view ranges and dimensions.
-- [ ] Keep format reinterpretation and aspect views gated for later.
-- [ ] Document current texture-view limits.
+- [x] Expose resolved texture view range on runtime `TextureView`.
+- [x] Validate explicit view ranges and dimensions.
+- [x] Keep format reinterpretation and aspect views gated for later.
+- [x] Document current texture-view limits.
 
 ## Period 3 Phase 6 Checklist
 

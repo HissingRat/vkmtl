@@ -9,6 +9,9 @@ Phase 5 makes texture view ranges inspectable and validates more view shapes.
 - Keep format reinterpretation disabled until format families are defined.
 - Keep cube view dimensions reserved until cube-specific backend lowering is
   complete.
+- Implemented through `TextureView.descriptor()`, `dimension()`,
+  `baseMipLevel()`, `mipLevelCount()`, `baseArrayLayer()`, and
+  `arrayLayerCount()`.
 
 ## Current Limits
 

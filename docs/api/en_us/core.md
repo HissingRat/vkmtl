@@ -109,6 +109,17 @@ Format helpers include `textureFormatKind(...)`, `isColorFormat(...)`,
 storage, attachment, filter, mip, blend, and copy support for the currently
 implemented portable formats.
 
+Mipmap helpers include `mipDimension(...)`,
+`maxMipLevelCountForExtent(...)`, `TextureDescriptor.maxMipLevelCount()`, and
+`TextureDescriptor.mipExtent(level)`. Texture descriptors reject mip counts
+larger than the texture extent can support. `GenerateMipmapsDescriptor` is a
+validated public shape for future automatic mip generation; current command
+encoders still require explicit upload or copy operations for each mip level.
+
+Runtime `TextureView` stores the resolved view format, dimension, mip range,
+and layer range. Query them with `descriptor()`, `baseMipLevel()`,
+`mipLevelCount()`, `baseArrayLayer()`, and `arrayLayerCount()`.
+
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and
 write-after-write hazards. Blit copies, render attachments, vertex buffers, and

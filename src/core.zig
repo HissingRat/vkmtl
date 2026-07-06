@@ -324,6 +324,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTextureCopyFormat,
         error.UnsupportedTextureViewDimension,
         error.UnsupportedTextureViewFormat,
+        error.UnsupportedMipmapGeneration,
         error.UnsupportedStorageTextureFormat,
         => .unsupported_feature,
 
@@ -1448,6 +1449,7 @@ pub const TextureDescriptor = struct {
             return TextureError.InvalidTextureExtent;
         }
         if (self.mip_level_count == 0) return TextureError.InvalidMipLevelCount;
+        if (self.mip_level_count > self.maxMipLevelCount()) return TextureError.InvalidMipLevelCount;
         try validateSampleCount(self.sample_count);
         if (self.sample_count != 1) {
             if (self.dimension != .two_d) return TextureError.UnsupportedSampleCount;
@@ -1501,6 +1503,31 @@ pub const TextureDescriptor = struct {
                 if (self.cubeCount() == 1) .cube_compatible else .cube_array_compatible
             else if (self.isArray()) .two_d_array else .two_d,
             .three_d => .three_d,
+        };
+    }
+
+    pub fn maxMipLevelCount(self: TextureDescriptor) u32 {
+        return switch (self.dimension) {
+            .one_d => maxMipLevelCountForExtent(self.width, 1, 1),
+            .two_d => maxMipLevelCountForExtent(self.width, self.height, 1),
+            .three_d => maxMipLevelCountForExtent(self.width, self.height, self.depth_or_array_layers),
+        };
+    }
+
+    pub fn mipExtent(self: TextureDescriptor, level: u32) TextureError!Size3D {
+        try self.validate();
+        if (level >= self.mip_level_count) return TextureError.InvalidMipLevelCount;
+        return switch (self.dimension) {
+            .one_d => .{ .width = mipDimension(self.width, level) },
+            .two_d => .{
+                .width = mipDimension(self.width, level),
+                .height = mipDimension(self.height, level),
+            },
+            .three_d => .{
+                .width = mipDimension(self.width, level),
+                .height = mipDimension(self.height, level),
+                .depth = mipDimension(self.depth_or_array_layers, level),
+            },
         };
     }
 };
@@ -1715,6 +1742,60 @@ pub const TextureUpload2DDescriptor = struct {
     }
 };
 
+pub const GenerateMipmapsDescriptor = struct {
+    base_mip_level: u32 = 0,
+    mip_level_count: u32 = 0,
+    base_array_layer: u32 = 0,
+    array_layer_count: u32 = 0,
+
+    pub fn resolveForTexture(
+        self: GenerateMipmapsDescriptor,
+        texture: TextureDescriptor,
+    ) TextureError!ResolvedGenerateMipmapsDescriptor {
+        try texture.validate();
+        const caps = defaultFormatCapabilities(texture.format);
+        if (!caps.mipmap_generation) return TextureError.UnsupportedMipmapGeneration;
+        if (texture.sample_count != 1) return TextureError.UnsupportedMipmapGeneration;
+        if (texture.mip_level_count < 2) return TextureError.InvalidMipLevelCount;
+
+        if (self.base_mip_level >= texture.mip_level_count - 1) return TextureError.InvalidMipLevelCount;
+        const mip_level_count = if (self.mip_level_count == 0)
+            texture.mip_level_count - self.base_mip_level
+        else
+            self.mip_level_count;
+        if (mip_level_count < 2 or self.base_mip_level + mip_level_count > texture.mip_level_count) {
+            return TextureError.InvalidMipLevelCount;
+        }
+
+        const layer_limit: u32 = switch (texture.dimension) {
+            .one_d, .two_d => texture.depth_or_array_layers,
+            .three_d => 1,
+        };
+        if (self.base_array_layer >= layer_limit) return TextureError.InvalidTextureViewRange;
+        const array_layer_count = if (self.array_layer_count == 0)
+            layer_limit - self.base_array_layer
+        else
+            self.array_layer_count;
+        if (array_layer_count == 0 or self.base_array_layer + array_layer_count > layer_limit) {
+            return TextureError.InvalidTextureViewRange;
+        }
+
+        return .{
+            .base_mip_level = self.base_mip_level,
+            .mip_level_count = mip_level_count,
+            .base_array_layer = self.base_array_layer,
+            .array_layer_count = array_layer_count,
+        };
+    }
+};
+
+pub const ResolvedGenerateMipmapsDescriptor = struct {
+    base_mip_level: u32,
+    mip_level_count: u32,
+    base_array_layer: u32,
+    array_layer_count: u32,
+};
+
 pub const BufferTextureCopyLayout = struct {
     buffer_offset: u64 = 0,
     bytes_per_row: usize = 0,
@@ -1792,6 +1873,7 @@ pub const TextureError = error{
     UploadBytesTooSmall,
     TextureUploadSizeOverflow,
     UnsupportedTextureUploadFormat,
+    UnsupportedMipmapGeneration,
 };
 
 pub const SamplerMinMagFilter = enum {
@@ -2039,13 +2121,22 @@ fn validateRange(origin: u32, size: u32, limit: u32) TextureError!void {
     if (end > limit) return TextureError.InvalidTextureRegion;
 }
 
-fn mipDimension(base: u32, level: u32) u32 {
+pub fn mipDimension(base: u32, level: u32) u32 {
     var value = base;
     var i: u32 = 0;
     while (i < level and value > 1) : (i += 1) {
         value /= 2;
     }
     return value;
+}
+
+pub fn maxMipLevelCountForExtent(width: u32, height: u32, depth: u32) u32 {
+    var largest = @max(width, @max(height, depth));
+    var count: u32 = 1;
+    while (largest > 1) : (count += 1) {
+        largest /= 2;
+    }
+    return count;
 }
 
 pub fn textureFormatBytesPerPixel(format: TextureFormat) usize {
@@ -3543,6 +3634,30 @@ test "texture descriptor validates dimension shape and sample count" {
     }).validate());
 }
 
+test "texture descriptor validates and resolves mip ranges" {
+    const texture = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 4,
+        .mip_level_count = 4,
+    };
+
+    try std.testing.expectEqual(@as(u32, 4), texture.maxMipLevelCount());
+    try std.testing.expectEqual(@as(u32, 4), maxMipLevelCountForExtent(8, 4, 1));
+    try std.testing.expectEqual(@as(u32, 2), mipDimension(8, 2));
+
+    const mip = try texture.mipExtent(2);
+    try std.testing.expectEqual(@as(u32, 2), mip.width);
+    try std.testing.expectEqual(@as(u32, 1), mip.height);
+
+    try std.testing.expectError(TextureError.InvalidMipLevelCount, (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 4,
+        .mip_level_count = 5,
+    }).validate());
+}
+
 test "texture usage can detect empty usage" {
     try std.testing.expect((TextureUsage{}).isEmpty());
     try std.testing.expect(!(TextureUsage{ .shader_read = true }).isEmpty());
@@ -3950,6 +4065,33 @@ test "texture upload 2d descriptor converts to replace region descriptor" {
     try std.testing.expectEqual(@as(u32, 2), replace.slice);
     try std.testing.expectEqual(@as(usize, 8), replace.bytes_per_row);
     try std.testing.expectEqual(@as(usize, 0), replace.bytes_per_image);
+}
+
+test "generate mipmaps descriptor resolves mip and layer ranges" {
+    const texture = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .depth_or_array_layers = 2,
+        .mip_level_count = 4,
+    };
+
+    const resolved = try (GenerateMipmapsDescriptor{
+        .base_mip_level = 1,
+        .base_array_layer = 1,
+        .array_layer_count = 1,
+    }).resolveForTexture(texture);
+    try std.testing.expectEqual(@as(u32, 1), resolved.base_mip_level);
+    try std.testing.expectEqual(@as(u32, 3), resolved.mip_level_count);
+    try std.testing.expectEqual(@as(u32, 1), resolved.base_array_layer);
+    try std.testing.expectEqual(@as(u32, 1), resolved.array_layer_count);
+
+    try std.testing.expectError(TextureError.UnsupportedMipmapGeneration, (GenerateMipmapsDescriptor{}).resolveForTexture(.{
+        .format = .depth32_float,
+        .width = 8,
+        .height = 8,
+        .mip_level_count = 4,
+    }));
 }
 
 test "default adapter info tracks selected backend" {

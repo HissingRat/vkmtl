@@ -10,6 +10,9 @@ Phase 4 completes public mipmap validation and range helpers.
 - Keep explicit upload/copy-to-mip paths.
 - Add a future-facing generate-mipmaps descriptor shape behind capability
   checks.
+- Implemented as `mipDimension(...)`, `maxMipLevelCountForExtent(...)`,
+  `TextureDescriptor.maxMipLevelCount()`, `TextureDescriptor.mipExtent(...)`,
+  and `GenerateMipmapsDescriptor`.
 
 ## Current Limits
 
