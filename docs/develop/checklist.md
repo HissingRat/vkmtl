@@ -573,6 +573,62 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Keep existing compute readback example as the deterministic first slice.
 - [x] Document remaining example gaps.
 
+## Period 8 Phase 1 Checklist
+
+- [x] Define shader module cache scope before implementation.
+- [ ] Add shader module cache-key descriptor shape.
+- [ ] Include source, compile option, entry point, and backend identity.
+- [ ] Keep existing runtime shader artifact cache behavior intact.
+- [ ] Document shader module object-cache limits.
+
+## Period 8 Phase 2 Checklist
+
+- [x] Define bind group layout cache scope before implementation.
+- [ ] Add bind group layout cache-key descriptor shape.
+- [ ] Include visibility, resource type, dynamic offset, array count, and storage access.
+- [ ] Validate keys with existing layout validation.
+- [ ] Document bind group layout cache limits.
+
+## Period 8 Phase 3 Checklist
+
+- [x] Define pipeline layout cache scope before implementation.
+- [ ] Add pipeline layout cache-key descriptor shape.
+- [ ] Include bind group layout list and small/root constant layout inputs.
+- [ ] Keep native pipeline layout reuse as future backend work.
+- [ ] Document pipeline layout cache limits.
+
+## Period 8 Phase 4 Checklist
+
+- [x] Define render pipeline cache scope before implementation.
+- [ ] Add render pipeline cache-key descriptor shape.
+- [ ] Include shader identities, render target formats, raster, blend, depth/stencil, vertex layout, and specialization.
+- [ ] Validate through existing render pipeline descriptor validation.
+- [ ] Document render pipeline cache limits.
+
+## Period 8 Phase 5 Checklist
+
+- [x] Define compute pipeline cache scope before implementation.
+- [ ] Add unified compute pipeline cache-key descriptor shape.
+- [ ] Include compute shader identity, bind group layouts, and specialization.
+- [ ] Align with Period 7 compute cache requirements.
+- [ ] Document compute pipeline cache limits.
+
+## Period 8 Phase 6 Checklist
+
+- [x] Define sampler cache scope before implementation.
+- [ ] Add sampler cache-key descriptor shape and opt-out policy.
+- [ ] Validate keys with existing sampler descriptor validation.
+- [ ] Keep native sampler reuse as future backend work.
+- [ ] Document sampler cache limits.
+
+## Period 8 Phase 7 Checklist
+
+- [x] Define cache diagnostics scope before implementation.
+- [ ] Add cache policy and diagnostic statistic shapes.
+- [ ] Track repeated equivalent runtime object creation.
+- [ ] Expose diagnostics through runtime device/context views.
+- [ ] Document diagnostics limits.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

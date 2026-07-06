@@ -184,7 +184,7 @@ See `docs/develop/period7/`.
 
 ## Period 8: Pipeline / Object Cache
 
-Status: planned.
+Status: in progress.
 
 Goal: manage expensive native objects so real applications do not repeatedly
 create equivalent shader modules, layouts, pipelines, and samplers.
