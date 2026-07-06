@@ -192,6 +192,15 @@ binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` /
 `UnsupportedDynamicBinding` 错误拒绝 dynamic-offset layout；后续 backend lowering 阶段
 再接上真正的数组和动态 offset 支持。
 
+`DynamicOffset` 和 `DynamicOffsetList` 是后续动态 offset 命令路径的公开校验 shape。
+它会校验每个 dynamic buffer binding 都有一个 offset、非 dynamic binding 没有收到 offset，
+并根据 `DeviceLimits.min_uniform_buffer_offset_alignment` 或
+`DeviceLimits.min_storage_buffer_offset_alignment` 检查对齐。
+
+`SmallConstantDescriptor` 是小块 per-draw / per-dispatch 常量数据的第一版 portable shape。
+它由 `DeviceFeatures.small_constants`、`DeviceLimits.max_small_constant_bytes` 和
+`DeviceLimits.small_constant_alignment` gate。当前还没有接入 command encoder lowering。
+
 Render 和 compute encoder 都通过 `setBindGroup(...)` 绑定资源。
 
 `BindGroupDescriptor` 是指向活资源的 runtime descriptor。对于纯 descriptor 校验或测试，

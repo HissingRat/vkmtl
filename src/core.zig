@@ -83,6 +83,7 @@ pub const DeviceFeatures = struct {
     sampler_anisotropy: bool = false,
     sampler_border_color: bool = false,
     heaps: bool = false,
+    small_constants: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -106,6 +107,8 @@ pub const DeviceLimits = struct {
     max_sampler_anisotropy: f32 = 1,
     min_uniform_buffer_offset_alignment: u64 = 256,
     min_storage_buffer_offset_alignment: u64 = 256,
+    max_small_constant_bytes: u32 = 0,
+    small_constant_alignment: u32 = 4,
 };
 
 pub const FormatCapabilities = struct {
@@ -335,6 +338,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSamplerAnisotropy,
         error.UnsupportedSamplerBorderColor,
         error.UnsupportedHeaps,
+        error.UnsupportedSmallConstants,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -391,6 +395,13 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidDynamicBindingResource,
         error.UnsupportedResourceArray,
         error.UnsupportedDynamicBinding,
+        error.MissingDynamicOffset,
+        error.ExtraDynamicOffset,
+        error.InvalidDynamicOffsetAlignment,
+        error.EmptySmallConstantVisibility,
+        error.EmptySmallConstantData,
+        error.SmallConstantDataTooLarge,
+        error.InvalidSmallConstantAlignment,
         error.MissingSurfaceSource,
         error.InvalidSurfaceExtent,
         error.InvalidSurfaceHandle,
@@ -2248,6 +2259,96 @@ pub const BindGroupDescriptor = struct {
     }
 };
 
+pub const DynamicOffset = struct {
+    binding: u32,
+    offset: u64 = 0,
+};
+
+pub const DynamicOffsetList = struct {
+    offsets: []const DynamicOffset = &.{},
+
+    pub fn validate(
+        self: DynamicOffsetList,
+        layout: BindGroupLayoutDescriptor,
+        limits: DeviceLimits,
+    ) BindingError!void {
+        try layout.validate();
+
+        for (self.offsets, 0..) |offset, i| {
+            for (self.offsets[i + 1 ..]) |other| {
+                if (offset.binding == other.binding) return BindingError.DuplicateBinding;
+            }
+
+            const layout_entry = layout.entryForBinding(offset.binding) orelse {
+                return BindingError.ExtraDynamicOffset;
+            };
+            if (!layout_entry.dynamic_offset) return BindingError.ExtraDynamicOffset;
+            if (!layout_entry.resource.isBuffer()) return BindingError.InvalidDynamicBindingResource;
+
+            const alignment = dynamicOffsetAlignment(layout_entry.resource, limits);
+            if (!isAlignedU64(offset.offset, alignment)) return BindingError.InvalidDynamicOffsetAlignment;
+        }
+
+        for (layout.entries) |layout_entry| {
+            if (layout_entry.dynamic_offset and self.offsetForBinding(layout_entry.binding) == null) {
+                return BindingError.MissingDynamicOffset;
+            }
+        }
+    }
+
+    pub fn offsetForBinding(self: DynamicOffsetList, binding: u32) ?u64 {
+        for (self.offsets) |offset| {
+            if (offset.binding == binding) return offset.offset;
+        }
+        return null;
+    }
+};
+
+fn dynamicOffsetAlignment(kind: BindingResourceKind, limits: DeviceLimits) u64 {
+    return switch (kind) {
+        .uniform_buffer => limits.min_uniform_buffer_offset_alignment,
+        .storage_buffer => limits.min_storage_buffer_offset_alignment,
+        .storage_texture, .sampled_texture, .sampler, .compare_sampler => 1,
+    };
+}
+
+pub const SmallConstantDescriptor = struct {
+    label: ?[]const u8 = null,
+    visibility: ShaderVisibility,
+    offset: u32 = 0,
+    bytes: []const u8 = &.{},
+
+    pub fn validate(
+        self: SmallConstantDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) SmallConstantError!void {
+        if (!features.small_constants) return SmallConstantError.UnsupportedSmallConstants;
+        if (self.visibility.isEmpty()) return SmallConstantError.EmptySmallConstantVisibility;
+        if (self.bytes.len == 0) return SmallConstantError.EmptySmallConstantData;
+        if (self.bytes.len > std.math.maxInt(u32)) return SmallConstantError.SmallConstantDataTooLarge;
+
+        const byte_count: u32 = @intCast(self.bytes.len);
+        const end = std.math.add(u32, self.offset, byte_count) catch {
+            return SmallConstantError.SmallConstantDataTooLarge;
+        };
+        if (end > limits.max_small_constant_bytes) return SmallConstantError.SmallConstantDataTooLarge;
+
+        const alignment = limits.small_constant_alignment;
+        if (!isAlignedU32(self.offset, alignment) or !isAlignedU32(byte_count, alignment)) {
+            return SmallConstantError.InvalidSmallConstantAlignment;
+        }
+    }
+};
+
+pub const SmallConstantError = error{
+    UnsupportedSmallConstants,
+    EmptySmallConstantVisibility,
+    EmptySmallConstantData,
+    SmallConstantDataTooLarge,
+    InvalidSmallConstantAlignment,
+};
+
 pub const BindingError = error{
     MissingBindGroupLayoutEntry,
     EmptyShaderVisibility,
@@ -2261,7 +2362,18 @@ pub const BindingError = error{
     InvalidDynamicBindingResource,
     UnsupportedResourceArray,
     UnsupportedDynamicBinding,
+    MissingDynamicOffset,
+    ExtraDynamicOffset,
+    InvalidDynamicOffsetAlignment,
 };
+
+fn isAlignedU32(value: u32, alignment: u32) bool {
+    return alignment == 0 or value % alignment == 0;
+}
+
+fn isAlignedU64(value: u64, alignment: u64) bool {
+    return alignment == 0 or value % alignment == 0;
+}
 
 fn defaultViewDimension(texture: TextureDescriptor) TextureViewDimension {
     return switch (texture.dimension) {
@@ -4350,6 +4462,111 @@ test "bind group descriptor accepts compute storage textures" {
 
     try bind_group.validate();
     try std.testing.expectEqual(BindingResourceKind.storage_texture, bind_group.entryForBinding(0).?.resource.resourceKind());
+}
+
+test "dynamic offset list validates dynamic buffer bindings" {
+    const layout_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .uniform_buffer,
+            .visibility = .{ .vertex = true },
+            .dynamic_offset = true,
+        },
+        .{
+            .binding = 1,
+            .resource = .storage_buffer,
+            .visibility = .{ .compute = true },
+            .dynamic_offset = true,
+        },
+        .{
+            .binding = 2,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+        },
+    };
+    const layout = BindGroupLayoutDescriptor{ .entries = layout_entries[0..] };
+    const limits = DeviceLimits{
+        .min_uniform_buffer_offset_alignment = 256,
+        .min_storage_buffer_offset_alignment = 64,
+    };
+    const offsets = [_]DynamicOffset{
+        .{ .binding = 0, .offset = 256 },
+        .{ .binding = 1, .offset = 128 },
+    };
+    const dynamic_offsets = DynamicOffsetList{ .offsets = offsets[0..] };
+
+    try dynamic_offsets.validate(layout, limits);
+    try std.testing.expectEqual(@as(u64, 128), dynamic_offsets.offsetForBinding(1).?);
+    try std.testing.expect(dynamic_offsets.offsetForBinding(9) == null);
+
+    try std.testing.expectError(BindingError.MissingDynamicOffset, (DynamicOffsetList{
+        .offsets = offsets[0..1],
+    }).validate(layout, limits));
+
+    const misaligned_offsets = [_]DynamicOffset{
+        .{ .binding = 0, .offset = 128 },
+        .{ .binding = 1, .offset = 128 },
+    };
+    try std.testing.expectError(BindingError.InvalidDynamicOffsetAlignment, (DynamicOffsetList{
+        .offsets = misaligned_offsets[0..],
+    }).validate(layout, limits));
+
+    const extra_offsets = [_]DynamicOffset{
+        .{ .binding = 0, .offset = 256 },
+        .{ .binding = 1, .offset = 128 },
+        .{ .binding = 2, .offset = 0 },
+    };
+    try std.testing.expectError(BindingError.ExtraDynamicOffset, (DynamicOffsetList{
+        .offsets = extra_offsets[0..],
+    }).validate(layout, limits));
+
+    const duplicate_offsets = [_]DynamicOffset{
+        .{ .binding = 0, .offset = 256 },
+        .{ .binding = 0, .offset = 512 },
+    };
+    try std.testing.expectError(BindingError.DuplicateBinding, (DynamicOffsetList{
+        .offsets = duplicate_offsets[0..],
+    }).validate(layout, limits));
+}
+
+test "small constant descriptor validates feature and limit gates" {
+    const bytes = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8 };
+    const features = DeviceFeatures{ .small_constants = true };
+    const limits = DeviceLimits{
+        .max_small_constant_bytes = 16,
+        .small_constant_alignment = 4,
+    };
+    try (SmallConstantDescriptor{
+        .visibility = .{ .vertex = true },
+        .offset = 4,
+        .bytes = bytes[0..],
+    }).validate(features, limits);
+
+    try std.testing.expectError(SmallConstantError.UnsupportedSmallConstants, (SmallConstantDescriptor{
+        .visibility = .{ .vertex = true },
+        .bytes = bytes[0..4],
+    }).validate(.{}, limits));
+
+    try std.testing.expectError(SmallConstantError.EmptySmallConstantVisibility, (SmallConstantDescriptor{
+        .visibility = .{},
+        .bytes = bytes[0..4],
+    }).validate(features, limits));
+
+    try std.testing.expectError(SmallConstantError.EmptySmallConstantData, (SmallConstantDescriptor{
+        .visibility = .{ .fragment = true },
+    }).validate(features, limits));
+
+    try std.testing.expectError(SmallConstantError.InvalidSmallConstantAlignment, (SmallConstantDescriptor{
+        .visibility = .{ .fragment = true },
+        .offset = 2,
+        .bytes = bytes[0..4],
+    }).validate(features, limits));
+
+    try std.testing.expectError(SmallConstantError.SmallConstantDataTooLarge, (SmallConstantDescriptor{
+        .visibility = .{ .compute = true },
+        .offset = 12,
+        .bytes = bytes[0..8],
+    }).validate(features, limits));
 }
 
 test "bind group layout rejects non-compute storage textures" {

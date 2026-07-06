@@ -224,6 +224,18 @@ typed `UnsupportedResourceArray` / `UnsupportedDynamicBinding` errors until the
 later backend lowering phases. Render and compute encoders expose
 `setBindGroup(...)` for debug-validated command recording.
 
+`DynamicOffset` and `DynamicOffsetList` are the public validation shape for the
+future dynamic-offset command path. They validate that every dynamic buffer
+binding has one offset, that no non-dynamic binding receives an offset, and that
+offsets satisfy `DeviceLimits.min_uniform_buffer_offset_alignment` or
+`DeviceLimits.min_storage_buffer_offset_alignment`.
+
+`SmallConstantDescriptor` is the first portable shape for small per-draw or
+per-dispatch constant data. It is gated by `DeviceFeatures.small_constants`,
+`DeviceLimits.max_small_constant_bytes`, and
+`DeviceLimits.small_constant_alignment`. Command encoder lowering is not wired
+yet.
+
 `BindGroupDescriptor` is the runtime descriptor that points at live resources.
 For pure descriptor validation or tests, root exports also expose the shape-only
 aliases `BindGroupResourceDescriptor`, `BindGroupEntryDescriptor`, and

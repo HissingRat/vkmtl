@@ -394,10 +394,10 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 5 Checklist
 
-- [ ] Add dynamic offset descriptor shape and validation.
-- [ ] Add small constant descriptor shape and validation.
-- [ ] Validate alignment against `DeviceLimits`.
-- [ ] Document command-lowering limits.
+- [x] Add dynamic offset descriptor shape and validation.
+- [x] Add small constant descriptor shape and validation.
+- [x] Validate alignment against `DeviceLimits`.
+- [x] Document command-lowering limits.
 
 ## Period 4 Phase 6 Checklist
 
