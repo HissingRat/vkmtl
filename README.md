@@ -14,7 +14,7 @@ runtime wrappers. Examples live under `examples/` and use the vkmtl API instead
 of calling Vulkan or Metal directly.
 
 Shader authoring uses Slang. Applications embed Slang source and compile it
-through `WindowContext` at runtime; vkmtl caches SPIR-V for Vulkan, MSL for
+through `Device` at runtime; vkmtl caches SPIR-V for Vulkan, MSL for
 Metal, and reflection JSON that can validate or derive bind group layouts. The
 public API should only expose vkmtl concepts, not raw Vulkan or Metal handles
 except through explicit debug/native-handle escape hatches.

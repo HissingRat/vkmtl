@@ -25,8 +25,15 @@ vkmtl documentation is organized by audience and purpose.
 - `develop/roadmap.md`: route, stages, and what comes next
 - `develop/checklist.md`: checkable tasks and phase gates
 - `develop/period1/`: core library slice, phases 0 through 9
-- `develop/period2/`: future broader application coverage stage
-- `develop/period3/`: future stabilization and parity stage
+- `develop/period2/`: runtime architecture and specs
+- `develop/period3/`: resource coverage
+- `develop/period4/`: shader and binding
+- `develop/period5/`: render pipeline
+- `develop/period6/`: command, sync, and transfer
+- `develop/period7/`: compute
+- `develop/period8/`: pipeline and object cache
+- `develop/period9/`: examples, test matrix, and documentation
+- `develop/period10/`: advanced backend-gated features
 
 The usage and API documents are the current user-facing source of truth. The
 period notes preserve development context and may describe temporary states from

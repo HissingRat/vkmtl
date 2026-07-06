@@ -93,9 +93,9 @@ instead of baking backend-specific branches into user-facing code.
 ## Shader Direction
 
 Slang is the shader source language. Public examples should embed `.slang`
-files with `@embedFile(...)` and compile them through
-`WindowContext.compileRenderShader(...)` or
-`WindowContext.compileComputeShader(...)`.
+files with `@embedFile(...)` and compile them through the runtime `Device`
+returned by `WindowContext.device()`, using `Device.compileRenderShader(...)`
+or `Device.compileComputeShader(...)`.
 
 The shader compilation pipeline is:
 

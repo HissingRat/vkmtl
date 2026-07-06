@@ -12,10 +12,10 @@
 
 如果示例需要尚未公开的后端能力，应该先补 vkmtl 公开抽象，而不是绕进后端实现。
 
-带 shader 的示例用 `@embedFile(...)` 嵌入 Slang source，通过
-`WindowContext.compileRenderShader(...)` 或 `WindowContext.compileComputeShader(...)` 编译，并把
-运行时生成的 reflection JSON 附到 pipeline stage。单 buffer 渲染示例从 reflection 派生 vertex
-descriptor，shader-resource 示例也从 reflection 派生 bind group layout。
+带 shader 的示例用 `@embedFile(...)` 嵌入 Slang source，通过 `Device.compileRenderShader(...)`
+或 `Device.compileComputeShader(...)` 编译，并把运行时生成的 reflection JSON 附到 pipeline
+stage。单 buffer 渲染示例从 reflection 派生 vertex descriptor，shader-resource 示例也从
+reflection 派生 bind group layout。
 
 runtime shader artifact cache 由 vkmtl 自动管理。示例把进程参数交给 `WindowContext`，所以用户可以
 直接传 vkmtl runtime 参数，示例代码不需要解析：
@@ -27,7 +27,7 @@ zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
 ## Triangle
 
 `examples/triangle` 是第一个后端无关渲染示例。它创建 GLFW surface，请求 `.auto` 后端选择，
-通过 `WindowContext.makeBuffer` 上传 vertex data，通过 `WindowContext.makeRenderPipelineState`
+通过 `Device.makeBuffer` 上传 vertex data，通过 `Device.makeRenderPipelineState`
 创建 render pipeline，通过 `CommandBuffer` / `RenderCommandEncoder` 录制命令并呈现。
 
 运行：
@@ -103,7 +103,7 @@ zig build run-rainbow-cube
 
 它只使用公开资源和命令 API：
 
-- `WindowContext.makeBuffer(...)` 创建 vertex/index/uniform buffer
+- `Device.makeBuffer(...)` 创建 vertex/index/uniform buffer
 - `uniform_buffer.replaceBytes(...)` 每帧更新 uniform
 - `texture.replaceAll2D(...)` 上传 texture
 - reflection 派生 bind group layout

@@ -5,8 +5,12 @@ destroyed by calling `deinit()` before destroying its owner.
 
 ## Current Owner
 
-`WindowContext` is the current runtime owner for examples. It owns backend
-presentation state and tracks resources created through:
+`WindowContext` still owns backend presentation state and the debug tracker.
+Starting in Period 2, `WindowContext.device()` returns a runtime `Device` view,
+and resource creation goes through `Device`. Existing `WindowContext.make*`
+methods remain as compatibility forwards.
+
+Resources created through `Device` and tracked by the debug tracker include:
 
 - `makeBuffer(...)`
 - `makeTexture(...)`
@@ -26,10 +30,11 @@ Destroy child resources before destroying the context:
 ```zig
 defer context.deinit();
 
-var buffer = try context.makeBuffer(descriptor);
+var device = context.device();
+var buffer = try device.makeBuffer(descriptor);
 defer buffer.deinit();
 
-var pipeline = try context.makeRenderPipelineState(pipeline_descriptor);
+var pipeline = try device.makeRenderPipelineState(pipeline_descriptor);
 defer pipeline.deinit();
 ```
 
@@ -52,9 +57,9 @@ short-lived recording objects. Encoders must be ended with `endEncoding()`.
 A command buffer is consumed by `commit()`, which submits/presents work and
 releases the native command buffer wrapper.
 
-## Future Owner Model
+## Owner Migration Direction
 
-The planned ownership tree is still:
+The target ownership tree is:
 
 ```text
 Context
@@ -65,5 +70,6 @@ Context
       -> resources and pipelines
 ```
 
-When runtime `Device` exists, resource creation should move from `WindowContext`
-to `Device` without changing the public descriptors.
+`Device` and `Queue` are now exposed as views. Later Period 2 phases should add
+explicit `Surface` / `Swapchain` owners and decide which `WindowContext` helpers
+remain long term.

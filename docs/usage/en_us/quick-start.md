@@ -25,11 +25,12 @@ The repository examples use `zig_glfw` and keep the adapter code in
 
 ## Create A Window Context
 
-The current runtime owner is `WindowContext`. It owns the selected backend,
-presentation chain, resources, shader cache settings, and command creation for
-the first public slices. To enable vkmtl runtime arguments, the application's
-`main` can accept `std.process.Init.Minimal` and pass `init.args` to the
-context.
+The current window convenience owner is `WindowContext`. It owns backend
+selection, the presentation chain, and shader-cache configuration. Resource
+creation goes through the `Device` returned by `context.device()`, and command
+buffers go through the `Queue` returned by `context.queue()`. To enable vkmtl
+runtime arguments, the application's `main` can accept
+`std.process.Init.Minimal` and pass `init.args` to the context.
 
 ```zig
 const vkmtl = @import("vkmtl");
@@ -44,6 +45,9 @@ var context = try vkmtl.WindowContext.init(allocator, .{
 defer context.deinit();
 
 std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
+
+var device = context.device();
+var queue = context.queue();
 ```
 
 On Apple platforms `.auto` prefers Metal when the surface is compatible. On
@@ -51,15 +55,19 @@ other desktop platforms it prefers Vulkan. Applications can request `.vulkan`
 or `.metal` explicitly, and examples also accept the build-time `-Dvulkan`
 override for backend testing.
 
+`Device` is the long-term resource creation entry point. `Queue` is the
+long-term command-buffer and submit entry point. Existing `WindowContext.make*`
+methods still work, but they should gradually become compatibility helpers.
+
 ## Compile Slang At Runtime
 
-Applications embed Slang source and compile it through the context. vkmtl writes
+Applications embed Slang source and compile it through the device. vkmtl writes
 SPIR-V, MSL, and reflection JSON into the runtime shader cache.
 
 ```zig
 const shader_source = @embedFile("shaders/triangle.slang");
 
-var compiled = try context.compileRenderShader("triangle", shader_source, .{
+var compiled = try device.compileRenderShader("triangle", shader_source, .{
     .vertex_entry = "vs_main",
     .fragment_entry = "fs_main",
 });
@@ -71,7 +79,7 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 Use those stage descriptors in a render pipeline:
 
 ```zig
-var pipeline = try context.makeRenderPipelineState(.{
+var pipeline = try device.makeRenderPipelineState(.{
     .vertex = stages.vertex,
     .fragment = stages.fragment,
     .color_attachments = &.{
@@ -84,7 +92,7 @@ defer pipeline.deinit();
 Compute shaders use the compute-specific helper:
 
 ```zig
-var compiled_compute = try context.compileComputeShader("compute", shader_source, .{
+var compiled_compute = try device.compileComputeShader("compute", shader_source, .{
     .entry = "cs_main",
 });
 defer compiled_compute.deinit();
@@ -103,7 +111,7 @@ defers. Zig runs defers in last-in, first-out order, so resources are released
 before the context.
 
 ```zig
-var vertex_buffer = try context.makeBuffer(.{
+var vertex_buffer = try device.makeBuffer(.{
     .label = "vertices",
     .length = @sizeOf([3]Vertex),
     .usage = .{ .vertex = true },
@@ -116,7 +124,7 @@ defer vertex_buffer.deinit();
 Textures use Metal-style upload naming:
 
 ```zig
-var texture = try context.makeTexture(.{
+var texture = try device.makeTexture(.{
     .label = "checker",
     .format = .rgba8_unorm,
     .width = 2,
@@ -130,7 +138,7 @@ try texture.replaceAll2D(.{ .bytes = pixels[0..] });
 var texture_view = try texture.makeTextureView(.{});
 defer texture_view.deinit();
 
-var sampler = try context.makeSamplerState(.{
+var sampler = try device.makeSamplerState(.{
     .min_filter = .linear,
     .mag_filter = .linear,
 });
@@ -150,10 +158,10 @@ var layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
 );
 defer layouts.deinit();
 
-var bind_group_layout = try context.makeBindGroupLayout(layouts.descriptors()[0]);
+var bind_group_layout = try device.makeBindGroupLayout(layouts.descriptors()[0]);
 defer bind_group_layout.deinit();
 
-var bind_group = try context.makeBindGroup(.{
+var bind_group = try device.makeBindGroup(.{
     .layout = &bind_group_layout,
     .entries = &.{
         .{ .binding = 0, .resource = .{ .sampled_texture = &texture_view } },
@@ -171,7 +179,7 @@ lifetimes, backend match, buffer ranges, and storage-texture usage.
 Rendering uses Metal-style command names:
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var command_buffer = try queue.makeCommandBuffer();
 var encoder = try command_buffer.makeRenderCommandEncoder(.{
     .color_attachments = &.{
         .{
@@ -198,7 +206,7 @@ this every frame after reading the framebuffer extent from the windowing layer.
 Use a blit encoder for explicit copies:
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var command_buffer = try queue.makeCommandBuffer();
 var blit = try command_buffer.makeBlitCommandEncoder();
 try blit.copyBufferToBuffer(&source, &destination, .{ .size = byte_count });
 try blit.endEncoding();
@@ -208,7 +216,7 @@ try command_buffer.commit();
 Use a compute encoder for dispatch:
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var command_buffer = try queue.makeCommandBuffer();
 var compute = try command_buffer.makeComputeCommandEncoder();
 try compute.setComputePipelineState(&pipeline);
 try compute.setBindGroup(&bind_group, .{ .index = 0 });

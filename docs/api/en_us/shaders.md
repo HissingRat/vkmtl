@@ -18,7 +18,7 @@ examples/compute_readback/shaders/compute_readback.slang
 ```
 
 Examples embed those `.slang` files and compile them at runtime through
-`WindowContext`. Runtime artifacts are cached under vkmtl's automatically
+`Device`. Runtime artifacts are cached under vkmtl's automatically
 managed cache root:
 
 ```text
@@ -88,12 +88,13 @@ cs_main
 
 ## Runtime Consumption
 
-Applications embed Slang source and ask `WindowContext` to compile it:
+Applications embed Slang source and ask `Device` to compile it:
 
 ```zig
 const shader_source = @embedFile("shaders/glow.slang");
 
-var compiled = try context.compileRenderShader("glow", shader_source, .{
+var device = context.device();
+var compiled = try device.compileRenderShader("glow", shader_source, .{
     .vertex_entry = "vs_main",
     .fragment_entry = "fs_main",
 });
@@ -107,7 +108,8 @@ Compute shaders use the compute-specific entry point:
 ```zig
 const source = @embedFile("shaders/compute.slang");
 
-var compiled = try context.compileComputeShader("compute", source, .{
+var device = context.device();
+var compiled = try device.compileComputeShader("compute", source, .{
     .entry = "cs_main",
 });
 defer compiled.deinit();

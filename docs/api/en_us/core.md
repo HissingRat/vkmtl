@@ -4,9 +4,12 @@ vkmtl exposes backend-neutral descriptors and runtime wrappers through the
 public `vkmtl` module. User code should not import `backend/vulkan`,
 `backend/metal`, raw Vulkan bindings, or Metal bridge headers.
 
-The current runtime entry point for windowed examples is `WindowContext`.
-Longer term, resource creation should move to runtime `Device` / queue objects,
-but `WindowContext` owns the first working vertical slices today.
+Windowed examples still use `WindowContext` to assemble backend selection,
+surfaces, presentation, and shader-cache configuration. Starting in Period 2,
+the long-term resource entry point is `Device`, and the long-term
+command-buffer / submit entry point is `Queue`. `WindowContext` remains a
+window convenience owner and forwards resource and command helpers to those
+views.
 
 ## Backend Selection
 
@@ -34,11 +37,21 @@ backend. Examples pass the resulting descriptors to `WindowContext.init(...)`.
 
 ## Resources
 
-Current public resource creation goes through `WindowContext`:
+Starting in Period 2, the long-term resource creation entry point is the runtime
+`Device`. `WindowContext.device()` returns a device view for the current
+context. Existing `WindowContext.make*` methods remain as compatibility
+forwards.
 
 - `makeBuffer(BufferDescriptor)`
 - `makeTexture(TextureDescriptor)`
 - `makeSamplerState(SamplerDescriptor)`
+
+`Device` also exposes the first capability-query shape:
+
+- `adapterInfo()`
+- `features()`
+- `limits()`
+- `getFormatCaps(TextureFormat)`
 
 Buffers created with CPU-visible storage can be updated with
 `buffer.replaceBytes(...)` and read back with `buffer.readBytes(...)`. Textures
@@ -48,11 +61,12 @@ create views through `texture.makeTextureView(...)`, and upload helpers include
 ## Shaders And Pipelines
 
 Slang is the source language. Applications usually embed `.slang` files and
-compile them through `WindowContext` at startup:
+compile them through `Device` at startup:
 
 ```zig
 const source = @embedFile("shaders/glow.slang");
-var compiled = try context.compileRenderShader("glow", source, .{
+var device = context.device();
+var compiled = try device.compileRenderShader("glow", source, .{
     .vertex_entry = "vs_main",
     .fragment_entry = "fs_main",
 });
@@ -152,7 +166,8 @@ resource calls based on each layout entry's `ShaderVisibility`.
 Rendering uses Metal-like command names:
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var queue = context.queue();
+var command_buffer = try queue.makeCommandBuffer();
 var encoder = try command_buffer.makeRenderCommandEncoder(render_pass);
 try encoder.setRenderPipelineState(&pipeline);
 try encoder.setVertexBuffer(&vertex_buffer, .{ .index = 0 });
@@ -169,7 +184,8 @@ Texture-backed color attachments can also provide a single-sample
 Transfer work uses a Metal-style blit encoder:
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var queue = context.queue();
+var command_buffer = try queue.makeCommandBuffer();
 var blit = try command_buffer.makeBlitCommandEncoder();
 try blit.copyBufferToBuffer(&source, &destination, .{ .size = byte_count });
 try blit.endEncoding();
@@ -182,7 +198,8 @@ texture-to-buffer copies.
 Compute work uses a Metal-style compute encoder:
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var queue = context.queue();
+var command_buffer = try queue.makeCommandBuffer();
 var compute = try command_buffer.makeComputeCommandEncoder();
 try compute.setComputePipelineState(&pipeline);
 try compute.setBindGroup(&bind_group, .{ .index = 0 });

@@ -15,11 +15,11 @@ If an example needs a backend feature that is not public yet, add the public
 vkmtl API first instead of reaching into a backend implementation.
 
 Shader-backed examples embed their Slang source with `@embedFile(...)`, compile
-it through `WindowContext.compileRenderShader(...)` or
-`WindowContext.compileComputeShader(...)`, and attach runtime-generated
-reflection JSON to pipeline stages. Single-buffer rendering examples derive
-their vertex descriptors from reflection. Shader-resource examples also derive
-bind group layouts from reflection.
+it through `Device.compileRenderShader(...)` or
+`Device.compileComputeShader(...)`, and attach runtime-generated reflection JSON
+to pipeline stages. Single-buffer rendering examples derive their vertex
+descriptors from reflection. Shader-resource examples also derive bind group
+layouts from reflection.
 
 vkmtl manages the runtime shader artifact cache automatically. Examples pass
 process arguments to `WindowContext`, so users can pass vkmtl runtime arguments
@@ -33,8 +33,8 @@ zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
 
 `examples/triangle` is the first backend-independent rendering sample. It
 creates a GLFW surface, requests `.auto` backend selection, uploads vertex data
-through `WindowContext.makeBuffer`, creates a render pipeline through
-`WindowContext.makeRenderPipelineState`, records commands with
+through `Device.makeBuffer`, creates a render pipeline through
+`Device.makeRenderPipelineState`, records commands with
 `CommandBuffer`/`RenderCommandEncoder`, and presents through the public command
 API.
 
@@ -65,7 +65,7 @@ focused on surface creation, resize, clear, and present behavior.
 ## Uniform Buffer
 
 `examples/uniform_buffer` is the first shader-resource binding sample. It
-creates a uniform buffer through `WindowContext.makeBuffer`, wraps it in a bind
+creates a uniform buffer through `Device.makeBuffer`, wraps it in a bind
 group, derives the matching bind group layout from shader reflection, and
 records `setBindGroup(...)` before drawing.
 
@@ -226,7 +226,7 @@ zig build run-rainbow-cube
 
 The example uses only public resource and command APIs:
 
-- vertex, index, and uniform buffers through `WindowContext.makeBuffer(...)`
+- vertex, index, and uniform buffers through `Device.makeBuffer(...)`
 - per-frame uniform updates through `uniform_buffer.replaceBytes(...)`
 - texture upload through `texture.replaceAll2D(...)`
 - uniform, sampled texture, and sampler bindings through a public bind group

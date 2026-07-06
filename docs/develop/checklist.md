@@ -210,6 +210,35 @@ closed one by one as vkmtl moves from prototype to library.
   render target, transfer, and compute coverage.
 - [ ] Review example names, run commands, and expected output/screenshots.
 
+## Period 2 Phase 0 Checklist
+
+- [x] Define `Device`, `Queue`, `Surface`, `Swapchain`, and `CommandBuffer`
+  owner boundaries.
+- [x] Write the first resource lifetime model.
+- [x] Write binding terminology for later shader and pipeline work.
+- [x] Write command usage and synchronization principles.
+- [x] Define capability-gate rules for future optional features.
+
+## Period 2 Phase 1 Checklist
+
+- [x] Add runtime `Device` and `Queue` wrapper names without breaking examples.
+- [x] Add `WindowContext.device()` and `WindowContext.queue()`.
+- [x] Keep existing `WindowContext.make*` methods as compatibility forwards.
+- [x] Migrate examples from `WindowContext.make*` to `Device` / `Queue`.
+- [ ] Add explicit public `Surface` / `Swapchain` runtime wrappers.
+- [ ] Decide which `WindowContext` helpers remain after migration.
+
+## Period 2 Phase 2 Checklist
+
+- [x] Add selected-adapter info shape.
+- [x] Add `DeviceFeatures`.
+- [x] Add `DeviceLimits`.
+- [x] Add `FormatCapabilities`.
+- [x] Add `device.features()`, `device.limits()`, and `device.getFormatCaps()`.
+- [ ] Add adapter enumeration.
+- [ ] Add explicit adapter selection.
+- [ ] Replace conservative default capabilities with backend-native queries.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
@@ -231,3 +260,16 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add an examples guide once `examples/triangle` exists.
 - [x] Keep `docs/develop/roadmap.md` focused on phases and this file focused
   on checkable work.
+
+## Future Phase Gate
+
+Before starting any future phase from Period 2 onward, add or update a
+checklist for that phase. The checklist should cover:
+
+- [ ] Design decisions that must be settled before implementation.
+- [ ] Public API names and ownership boundaries.
+- [ ] Vulkan backend mapping.
+- [ ] Metal backend mapping.
+- [ ] Feature, limit, and format capability gates.
+- [ ] Validation, tests, examples, or screenshots that prove the slice works.
+- [ ] User-facing and developer documentation updates.

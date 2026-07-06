@@ -17,7 +17,7 @@ examples/rainbow_cube/shaders/rainbow_cube.slang
 examples/compute_readback/shaders/compute_readback.slang
 ```
 
-示例通过 `@embedFile(...)` 嵌入这些 `.slang` 文件，并在运行时通过 `WindowContext`
+示例通过 `@embedFile(...)` 嵌入这些 `.slang` 文件，并在运行时通过 `Device`
 编译。运行时产物缓存到 vkmtl 自动管理的 cache root：
 
 ```text
@@ -81,12 +81,13 @@ cs_main
 
 ## 运行时消费
 
-应用嵌入 Slang source，然后要求 `WindowContext` 编译：
+应用嵌入 Slang source，然后要求 `Device` 编译：
 
 ```zig
 const shader_source = @embedFile("shaders/glow.slang");
 
-var compiled = try context.compileRenderShader("glow", shader_source, .{
+var device = context.device();
+var compiled = try device.compileRenderShader("glow", shader_source, .{
     .vertex_entry = "vs_main",
     .fragment_entry = "fs_main",
 });
@@ -100,7 +101,8 @@ Compute shader 使用 compute 专用入口：
 ```zig
 const source = @embedFile("shaders/compute.slang");
 
-var compiled = try context.compileComputeShader("compute", source, .{
+var device = context.device();
+var compiled = try device.compileComputeShader("compute", source, .{
     .entry = "cs_main",
 });
 defer compiled.deinit();

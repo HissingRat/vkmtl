@@ -23,8 +23,9 @@ adapter 代码放在 `examples/common.zig`。
 
 ## 创建 WindowContext
 
-当前 runtime owner 是 `WindowContext`。它拥有后端选择、presentation chain、资源、shader cache
-配置和 command 创建能力。需要启用 vkmtl runtime 参数时，应用的 `main` 可以接受
+当前窗口 convenience owner 是 `WindowContext`。它负责后端选择、presentation chain 和 shader
+cache 配置；资源创建从 `context.device()` 取得的 `Device` 进入，command buffer 从
+`context.queue()` 取得的 `Queue` 进入。需要启用 vkmtl runtime 参数时，应用的 `main` 可以接受
 `std.process.Init.Minimal`，并把 `init.args` 传给 context。
 
 ```zig
@@ -40,20 +41,26 @@ var context = try vkmtl.WindowContext.init(allocator, .{
 defer context.deinit();
 
 std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
+
+var device = context.device();
+var queue = context.queue();
 ```
 
 Apple 平台上，`.auto` 会优先选择 Metal。其他桌面平台优先 Vulkan。应用也可以显式请求
 `.vulkan` 或 `.metal`；示例还支持用于后端测试的 build-time `-Dvulkan` override。
 
+`Device` 是长期资源创建入口；`Queue` 是长期 command buffer / submit 入口。当前
+`WindowContext.make*` 方法仍然可用，但会逐步退成兼容 helper。
+
 ## 运行时编译 Slang
 
-应用嵌入 Slang source，并通过 context 编译。vkmtl 会把 SPIR-V、MSL 和 reflection JSON 写入
+应用嵌入 Slang source，并通过 device 编译。vkmtl 会把 SPIR-V、MSL 和 reflection JSON 写入
 runtime shader cache。
 
 ```zig
 const shader_source = @embedFile("shaders/triangle.slang");
 
-var compiled = try context.compileRenderShader("triangle", shader_source, .{
+var compiled = try device.compileRenderShader("triangle", shader_source, .{
     .vertex_entry = "vs_main",
     .fragment_entry = "fs_main",
 });
@@ -65,7 +72,7 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 把这些 stage descriptor 用在 render pipeline 中：
 
 ```zig
-var pipeline = try context.makeRenderPipelineState(.{
+var pipeline = try device.makeRenderPipelineState(.{
     .vertex = stages.vertex,
     .fragment = stages.fragment,
     .color_attachments = &.{
@@ -78,7 +85,7 @@ defer pipeline.deinit();
 Compute shader 使用 compute 专用 helper：
 
 ```zig
-var compiled_compute = try context.compileComputeShader("compute", shader_source, .{
+var compiled_compute = try device.compileComputeShader("compute", shader_source, .{
     .entry = "cs_main",
 });
 defer compiled_compute.deinit();
@@ -95,7 +102,7 @@ const compute_stage = compiled_compute.stageDescriptor(context.selectedBackend()
 会以后进先出顺序执行 defer，因此资源会先释放，context 最后释放。
 
 ```zig
-var vertex_buffer = try context.makeBuffer(.{
+var vertex_buffer = try device.makeBuffer(.{
     .label = "vertices",
     .length = @sizeOf([3]Vertex),
     .usage = .{ .vertex = true },
@@ -108,7 +115,7 @@ defer vertex_buffer.deinit();
 Texture 上传使用接近 Metal 的命名：
 
 ```zig
-var texture = try context.makeTexture(.{
+var texture = try device.makeTexture(.{
     .label = "checker",
     .format = .rgba8_unorm,
     .width = 2,
@@ -122,7 +129,7 @@ try texture.replaceAll2D(.{ .bytes = pixels[0..] });
 var texture_view = try texture.makeTextureView(.{});
 defer texture_view.deinit();
 
-var sampler = try context.makeSamplerState(.{
+var sampler = try device.makeSamplerState(.{
     .min_filter = .linear,
     .mag_filter = .linear,
 });
@@ -142,10 +149,10 @@ var layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
 );
 defer layouts.deinit();
 
-var bind_group_layout = try context.makeBindGroupLayout(layouts.descriptors()[0]);
+var bind_group_layout = try device.makeBindGroupLayout(layouts.descriptors()[0]);
 defer bind_group_layout.deinit();
 
-var bind_group = try context.makeBindGroup(.{
+var bind_group = try device.makeBindGroup(.{
     .layout = &bind_group_layout,
     .entries = &.{
         .{ .binding = 0, .resource = .{ .sampled_texture = &texture_view } },
@@ -163,7 +170,7 @@ storage-texture usage。
 渲染命令使用 Metal 风格命名：
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var command_buffer = try queue.makeCommandBuffer();
 var encoder = try command_buffer.makeRenderCommandEncoder(.{
     .color_attachments = &.{
         .{
@@ -190,7 +197,7 @@ extent 后调用 resize。
 显式 copy 使用 blit encoder：
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var command_buffer = try queue.makeCommandBuffer();
 var blit = try command_buffer.makeBlitCommandEncoder();
 try blit.copyBufferToBuffer(&source, &destination, .{ .size = byte_count });
 try blit.endEncoding();
@@ -200,7 +207,7 @@ try command_buffer.commit();
 Compute dispatch 使用 compute encoder：
 
 ```zig
-var command_buffer = try context.makeCommandBuffer();
+var command_buffer = try queue.makeCommandBuffer();
 var compute = try command_buffer.makeComputeCommandEncoder();
 try compute.setComputePipelineState(&pipeline);
 try compute.setBindGroup(&bind_group, .{ .index = 0 });
