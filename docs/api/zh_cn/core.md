@@ -221,6 +221,11 @@ Shader 资源绑定从公开描述符开始：
 - `ShaderVisibility`
 - `BindingResourceKind`
 
+高级 binding shape 由 capability gate 控制。`DescriptorIndexingLayoutDescriptor`
+和 `DescriptorIndexingRange` 描述 future Vulkan descriptor indexing 或 Metal argument buffer
+lowering 需要的 bindless-style range。它们会校验 descriptor count、shader visibility 和选择的
+`AdvancedBindingModel`，但 backend lowering 还没有实现。
+
 当前资源类别包括 uniform buffer、storage buffer、storage texture、sampled texture、
 sampler 和 compare sampler。Layout entry 也包含 `array_count` 和 `dynamic_offset`
 元数据。Descriptor 层会校验 array count 非零、dynamic offset 只用于 buffer，以及

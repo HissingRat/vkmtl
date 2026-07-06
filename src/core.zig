@@ -104,6 +104,8 @@ pub const DeviceFeatures = struct {
     compute_pipelines: bool = true,
     compute_dispatch_indirect: bool = false,
     bind_groups: bool = true,
+    descriptor_indexing: bool = false,
+    argument_buffers: bool = false,
     transfer_commands: bool = true,
     storage_buffers: bool = true,
     storage_textures: bool = true,
@@ -152,6 +154,8 @@ pub const DeviceLimits = struct {
     max_compute_total_threads_per_threadgroup: u32 = 1024,
     max_compute_threadgroup_memory_bytes: u32 = 0,
     dispatch_indirect_alignment: u64 = 4,
+    max_bindless_descriptors_per_range: u32 = 0,
+    max_bindless_ranges_per_layout: u32 = 0,
 };
 
 pub const FormatCapabilities = struct {
@@ -559,6 +563,15 @@ pub const ObjectCacheError = error{
     MissingObjectCacheLayout,
 };
 
+pub const AdvancedFeatureError = error{
+    UnsupportedDescriptorIndexing,
+    UnsupportedArgumentBuffers,
+    MissingDescriptorIndexingRange,
+    EmptyDescriptorIndexingVisibility,
+    InvalidDescriptorIndexingCount,
+    DescriptorIndexingRangeCountExceeded,
+};
+
 pub const ObjectCacheMode = enum {
     enabled,
     disabled,
@@ -771,6 +784,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedDispatchIndirect,
         error.UnsupportedComputeAtomics,
         error.UnsupportedThreadgroupMemory,
+        error.UnsupportedDescriptorIndexing,
+        error.UnsupportedArgumentBuffers,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -919,6 +934,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptyObjectCacheKey,
         error.InvalidObjectCacheKey,
         error.MissingObjectCacheLayout,
+        error.MissingDescriptorIndexingRange,
+        error.EmptyDescriptorIndexingVisibility,
+        error.InvalidDescriptorIndexingCount,
+        error.DescriptorIndexingRangeCountExceeded,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -3586,6 +3605,52 @@ pub const BindGroupLayoutDescriptor = struct {
             if (entry.resource == kind) count += 1;
         }
         return count;
+    }
+};
+
+pub const AdvancedBindingModel = enum {
+    descriptor_indexing,
+    argument_buffer,
+};
+
+pub const DescriptorIndexingRange = struct {
+    binding: u32,
+    resource: BindingResourceKind,
+    visibility: ShaderVisibility,
+    descriptor_count: u32 = 1,
+    partially_bound: bool = false,
+    update_after_bind: bool = false,
+
+    pub fn validate(self: DescriptorIndexingRange, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (self.visibility.isEmpty()) return AdvancedFeatureError.EmptyDescriptorIndexingVisibility;
+        if (self.descriptor_count == 0) return AdvancedFeatureError.InvalidDescriptorIndexingCount;
+        if (limits.max_bindless_descriptors_per_range != 0 and self.descriptor_count > limits.max_bindless_descriptors_per_range) {
+            return AdvancedFeatureError.InvalidDescriptorIndexingCount;
+        }
+    }
+};
+
+pub const DescriptorIndexingLayoutDescriptor = struct {
+    label: ?[]const u8 = null,
+    model: AdvancedBindingModel = .descriptor_indexing,
+    ranges: []const DescriptorIndexingRange = &.{},
+
+    pub fn validate(
+        self: DescriptorIndexingLayoutDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!void {
+        switch (self.model) {
+            .descriptor_indexing => if (!features.descriptor_indexing) return AdvancedFeatureError.UnsupportedDescriptorIndexing,
+            .argument_buffer => if (!features.argument_buffers) return AdvancedFeatureError.UnsupportedArgumentBuffers,
+        }
+        if (self.ranges.len == 0) return AdvancedFeatureError.MissingDescriptorIndexingRange;
+        if (limits.max_bindless_ranges_per_layout != 0 and self.ranges.len > limits.max_bindless_ranges_per_layout) {
+            return AdvancedFeatureError.DescriptorIndexingRangeCountExceeded;
+        }
+        for (self.ranges) |range| {
+            try range.validate(limits);
+        }
     }
 };
 
@@ -6550,6 +6615,27 @@ test "bind group layout descriptor validates resource bindings" {
     try std.testing.expectError(BindingError.InvalidDynamicBindingResource, (BindGroupLayoutDescriptor{
         .entries = invalid_dynamic_entries[0..],
     }).validate());
+
+    const bindless_ranges = [_]DescriptorIndexingRange{.{
+        .binding = 8,
+        .resource = .sampled_texture,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 16,
+        .partially_bound = true,
+    }};
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedDescriptorIndexing, (DescriptorIndexingLayoutDescriptor{
+        .ranges = bindless_ranges[0..],
+    }).validate(.{}, .{}));
+    try (DescriptorIndexingLayoutDescriptor{
+        .ranges = bindless_ranges[0..],
+    }).validate(.{ .descriptor_indexing = true }, .{ .max_bindless_descriptors_per_range = 16 });
+    try std.testing.expectError(AdvancedFeatureError.InvalidDescriptorIndexingCount, (DescriptorIndexingLayoutDescriptor{
+        .ranges = bindless_ranges[0..],
+    }).validate(.{ .descriptor_indexing = true }, .{ .max_bindless_descriptors_per_range = 4 }));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedArgumentBuffers, (DescriptorIndexingLayoutDescriptor{
+        .model = .argument_buffer,
+        .ranges = bindless_ranges[0..],
+    }).validate(.{}, .{}));
 
     const valid_dynamic_entries = [_]BindGroupLayoutEntry{
         .{

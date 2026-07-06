@@ -22,3 +22,6 @@ vkmtl 优先覆盖 portable Vulkan 和 Metal workflow；高级能力放在显式
 Period 10 的 advanced features 先提供 descriptor/API shape。Descriptor indexing、sparse
 resources、external texture interop、tessellation、mesh shader、ray tracing 和 driver-level
 pipeline cache 都会保持 gated，直到 backend lowering 实现。
+
+Descriptor indexing 未来映射到 Vulkan descriptor indexing，argument buffer 未来映射到 Metal
+argument buffer。两者目前都通过 `DescriptorIndexingLayoutDescriptor` 表达，默认关闭。

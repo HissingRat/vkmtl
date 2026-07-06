@@ -694,10 +694,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 1 Checklist
 
 - [x] Define descriptor indexing / argument buffer scope before implementation.
-- [ ] Add feature gates and descriptor shapes.
-- [ ] Validate descriptor counts, bindless ranges, and visibility.
-- [ ] Keep backend lowering unsupported until native implementation lands.
-- [ ] Document Vulkan descriptor indexing and Metal argument buffer mapping
+- [x] Add feature gates and descriptor shapes.
+- [x] Validate descriptor counts, bindless ranges, and visibility.
+- [x] Keep backend lowering unsupported until native implementation lands.
+- [x] Document Vulkan descriptor indexing and Metal argument buffer mapping
   direction.
 
 ## Period 10 Phase 2 Checklist

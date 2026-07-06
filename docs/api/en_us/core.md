@@ -258,6 +258,12 @@ Shader resource binding starts with public descriptors:
 - `ShaderVisibility`
 - `BindingResourceKind`
 
+Advanced binding shapes are capability-gated. `DescriptorIndexingLayoutDescriptor`
+and `DescriptorIndexingRange` describe bindless-style ranges for future Vulkan
+descriptor indexing or Metal argument buffer lowering. They validate descriptor
+counts, shader visibility, and the selected `AdvancedBindingModel`, but backend
+lowering is not implemented yet.
+
 The first resource classes are uniform buffers, storage buffers, storage
 textures, sampled textures, samplers, and compare samplers. Layout entries also
 carry `array_count` and `dynamic_offset` metadata. The descriptor layer

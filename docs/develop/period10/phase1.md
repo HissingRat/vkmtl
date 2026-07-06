@@ -11,5 +11,9 @@ backend-gated feature.
 
 ## Current Limits
 
+- `DeviceFeatures.descriptor_indexing` and `DeviceFeatures.argument_buffers`
+  default to false.
+- `DescriptorIndexingLayoutDescriptor` validates bindless-style ranges and
+  backend model selection.
 - Vulkan descriptor indexing and Metal argument buffer lowering remain future
   backend work.

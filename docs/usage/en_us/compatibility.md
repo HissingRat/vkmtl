@@ -25,3 +25,7 @@ Period 10 advanced features are descriptor/API shape first. Descriptor indexing,
 sparse resources, external texture interop, tessellation, mesh shaders, ray
 tracing, and driver-level pipeline caches remain gated until backend lowering is
 implemented.
+
+Descriptor indexing maps toward Vulkan descriptor indexing. Argument buffers map
+toward Metal argument buffers. Both are represented by
+`DescriptorIndexingLayoutDescriptor` and remain disabled by default.
