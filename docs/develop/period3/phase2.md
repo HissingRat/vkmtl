@@ -9,6 +9,8 @@ Phase 2 makes texture shape classification explicit.
 - Expose shape support through features and format capabilities.
 - Keep cube and cube-array as 2D-array-compatible shapes until a dedicated view
   dimension is implemented.
+- Implemented as `TextureDescriptor.shape()`, `isArray()`,
+  `isCubeCompatible()`, `cubeCount()`, and `isMultisampled()`.
 
 ## Current Limits
 

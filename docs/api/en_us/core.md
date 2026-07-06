@@ -98,6 +98,16 @@ CPU-visible; upload or readback for those resources should use transfer paths.
 
 Textures create views through `texture.makeTextureView(...)`, and upload
 helpers include `texture.replaceRegion(...)` and `texture.replaceAll2D(...)`.
+`TextureDescriptor.shape()` classifies 1D, 2D, 3D, array,
+cube-compatible, cube-array-compatible, and multisampled textures.
+Cube textures are currently represented as 2D textures with six layers per
+cube; cube-specific view dimensions are reserved for the texture-view phase.
+
+Format helpers include `textureFormatKind(...)`, `isColorFormat(...)`,
+`isDepthFormat(...)`, `isSrgbFormat(...)`, and
+`textureFormatBytesPerPixel(...)`. `FormatCapabilities` reports sampled,
+storage, attachment, filter, mip, blend, and copy support for the currently
+implemented portable formats.
 
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and

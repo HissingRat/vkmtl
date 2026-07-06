@@ -9,6 +9,10 @@ Phase 3 expands format classification and capability queries.
 - Add format capability fields for mips, linear filtering, and blend/storage
   usage.
 - Keep unsupported format use as typed validation errors.
+- Implemented as helpers over the current portable format set:
+  `textureFormatKind(...)`, `isColorFormat(...)`, `isDepthFormat(...)`,
+  `isStencilFormat(...)`, `isDepthStencilFormat(...)`, `isCompressedFormat(...)`,
+  `isSrgbFormat(...)`, and `textureFormatBytesPerPixel(...)`.
 
 ## Current Limits
 

@@ -72,6 +72,12 @@ pub const DeviceFeatures = struct {
     shader_reflection: bool = true,
     buffers: bool = true,
     textures: bool = true,
+    texture_1d: bool = true,
+    texture_2d: bool = true,
+    texture_3d: bool = true,
+    texture_arrays: bool = true,
+    cube_textures: bool = true,
+    multisample_textures: bool = true,
     samplers: bool = true,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
@@ -103,6 +109,9 @@ pub const FormatCapabilities = struct {
     color_attachment: bool = false,
     depth_stencil_attachment: bool = false,
     filterable: bool = false,
+    linear_filter: bool = false,
+    mipmapped: bool = false,
+    mipmap_generation: bool = false,
     blendable: bool = false,
     copy_source: bool = false,
     copy_destination: bool = false,
@@ -113,6 +122,12 @@ pub const FormatCapabilities = struct {
             (!usage.render_attachment or self.color_attachment or self.depth_stencil_attachment) and
             (!usage.copy_source or self.copy_source) and
             (!usage.copy_destination or self.copy_destination);
+    }
+
+    pub fn supportsTextureDescriptor(self: FormatCapabilities, descriptor: TextureDescriptor) bool {
+        if (!self.supportsTextureUsage(descriptor.usage)) return false;
+        if (descriptor.mip_level_count > 1 and !self.mipmapped) return false;
+        return true;
     }
 };
 
@@ -509,6 +524,15 @@ pub const TextureFormat = enum {
     depth32_float,
 };
 
+pub const TextureFormatKind = enum {
+    invalid,
+    color,
+    depth,
+    stencil,
+    depth_stencil,
+    compressed,
+};
+
 pub fn defaultAdapterInfo(backend: Backend) AdapterInfo {
     return .{
         .backend = backend,
@@ -593,6 +617,9 @@ pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
             .sampled = true,
             .color_attachment = true,
             .filterable = true,
+            .linear_filter = true,
+            .mipmapped = true,
+            .mipmap_generation = true,
             .blendable = true,
             .copy_source = true,
             .copy_destination = true,
@@ -602,12 +629,16 @@ pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
             .storage = true,
             .color_attachment = true,
             .filterable = true,
+            .linear_filter = true,
+            .mipmapped = true,
+            .mipmap_generation = true,
             .blendable = true,
             .copy_source = true,
             .copy_destination = true,
         },
         .depth32_float => .{
             .depth_stencil_attachment = true,
+            .mipmapped = true,
             .copy_source = true,
             .copy_destination = true,
         },
@@ -1363,6 +1394,17 @@ pub const TextureDimension = enum {
     three_d,
 };
 
+pub const TextureShape = enum {
+    one_d,
+    one_d_array,
+    two_d,
+    two_d_array,
+    three_d,
+    cube_compatible,
+    cube_array_compatible,
+    multisampled,
+};
+
 pub const TextureViewDimension = enum {
     automatic,
     one_d,
@@ -1429,6 +1471,37 @@ pub const TextureDescriptor = struct {
             .two_d => {},
             .three_d => {},
         }
+    }
+
+    pub fn isArray(self: TextureDescriptor) bool {
+        return self.dimension != .three_d and self.depth_or_array_layers > 1;
+    }
+
+    pub fn isMultisampled(self: TextureDescriptor) bool {
+        return self.sample_count > 1;
+    }
+
+    pub fn isCubeCompatible(self: TextureDescriptor) bool {
+        return self.dimension == .two_d and
+            self.width == self.height and
+            self.depth_or_array_layers >= 6 and
+            self.depth_or_array_layers % 6 == 0;
+    }
+
+    pub fn cubeCount(self: TextureDescriptor) u32 {
+        if (!self.isCubeCompatible()) return 0;
+        return self.depth_or_array_layers / 6;
+    }
+
+    pub fn shape(self: TextureDescriptor) TextureShape {
+        if (self.isMultisampled()) return .multisampled;
+        return switch (self.dimension) {
+            .one_d => if (self.isArray()) .one_d_array else .one_d,
+            .two_d => if (self.isCubeCompatible())
+                if (self.cubeCount() == 1) .cube_compatible else .cube_array_compatible
+            else if (self.isArray()) .two_d_array else .two_d,
+            .three_d => .three_d,
+        };
     }
 };
 
@@ -1975,7 +2048,7 @@ fn mipDimension(base: u32, level: u32) u32 {
     return value;
 }
 
-fn textureFormatBytesPerPixel(format: TextureFormat) usize {
+pub fn textureFormatBytesPerPixel(format: TextureFormat) usize {
     return switch (format) {
         .automatic => unreachable,
         .bgra8_unorm,
@@ -1987,27 +2060,47 @@ fn textureFormatBytesPerPixel(format: TextureFormat) usize {
     };
 }
 
-pub fn isColorFormat(format: TextureFormat) bool {
+pub fn textureFormatKind(format: TextureFormat) TextureFormatKind {
     return switch (format) {
+        .automatic => .invalid,
         .bgra8_unorm,
         .bgra8_unorm_srgb,
         .rgba8_unorm,
         .rgba8_unorm_srgb,
-        => true,
-        .automatic,
-        .depth32_float,
-        => false,
+        => .color,
+        .depth32_float => .depth,
     };
 }
 
+pub fn isColorFormat(format: TextureFormat) bool {
+    return textureFormatKind(format) == .color;
+}
+
 pub fn isDepthFormat(format: TextureFormat) bool {
+    return textureFormatKind(format) == .depth;
+}
+
+pub fn isStencilFormat(format: TextureFormat) bool {
+    return textureFormatKind(format) == .stencil;
+}
+
+pub fn isDepthStencilFormat(format: TextureFormat) bool {
+    return textureFormatKind(format) == .depth_stencil;
+}
+
+pub fn isCompressedFormat(format: TextureFormat) bool {
+    return textureFormatKind(format) == .compressed;
+}
+
+pub fn isSrgbFormat(format: TextureFormat) bool {
     return switch (format) {
-        .depth32_float => true,
+        .bgra8_unorm_srgb,
+        .rgba8_unorm_srgb,
+        => true,
         .automatic,
         .bgra8_unorm,
-        .bgra8_unorm_srgb,
         .rgba8_unorm,
-        .rgba8_unorm_srgb,
+        .depth32_float,
         => false,
     };
 }
@@ -3455,6 +3548,41 @@ test "texture usage can detect empty usage" {
     try std.testing.expect(!(TextureUsage{ .shader_read = true }).isEmpty());
 }
 
+test "texture descriptor classifies resource shapes" {
+    try std.testing.expectEqual(TextureShape.one_d_array, (TextureDescriptor{
+        .dimension = .one_d,
+        .format = .rgba8_unorm,
+        .width = 64,
+        .depth_or_array_layers = 3,
+    }).shape());
+
+    const cube = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .depth_or_array_layers = 6,
+    };
+    try std.testing.expect(cube.isArray());
+    try std.testing.expect(cube.isCubeCompatible());
+    try std.testing.expectEqual(@as(u32, 1), cube.cubeCount());
+    try std.testing.expectEqual(TextureShape.cube_compatible, cube.shape());
+
+    try std.testing.expectEqual(TextureShape.cube_array_compatible, (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .depth_or_array_layers = 12,
+    }).shape());
+    try std.testing.expectEqual(TextureShape.multisampled, (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+        .usage = .{ .render_attachment = true },
+        .storage_mode = .private,
+    }).shape());
+}
+
 test "texture view descriptor resolves defaults from texture" {
     const resolved = try (TextureViewDescriptor{}).resolveForTexture(.{
         .format = .rgba8_unorm,
@@ -3843,6 +3971,12 @@ test "default device features expose completed period 2 gates" {
 
     try std.testing.expect(features.native_handles);
     try std.testing.expect(features.debug_labels);
+    try std.testing.expect(features.texture_1d);
+    try std.testing.expect(features.texture_2d);
+    try std.testing.expect(features.texture_3d);
+    try std.testing.expect(features.texture_arrays);
+    try std.testing.expect(features.cube_textures);
+    try std.testing.expect(features.multisample_textures);
     try std.testing.expect(!features.multi_surface);
 }
 
@@ -3851,6 +3985,9 @@ test "default format capabilities describe current portable formats" {
     try std.testing.expect(color.sampled);
     try std.testing.expect(color.storage);
     try std.testing.expect(color.color_attachment);
+    try std.testing.expect(color.linear_filter);
+    try std.testing.expect(color.mipmapped);
+    try std.testing.expect(color.mipmap_generation);
     try std.testing.expect(color.supportsTextureUsage(.{
         .shader_read = true,
         .shader_write = true,
@@ -3863,4 +4000,22 @@ test "default format capabilities describe current portable formats" {
     try std.testing.expect(!depth.color_attachment);
     try std.testing.expect(depth.depth_stencil_attachment);
     try std.testing.expect(depth.supportsTextureUsage(.{ .render_attachment = true }));
+    try std.testing.expect(!depth.supportsTextureDescriptor(.{
+        .format = .depth32_float,
+        .width = 16,
+        .height = 16,
+        .usage = .{ .shader_read = true },
+    }));
+}
+
+test "texture format helpers classify current portable formats" {
+    try std.testing.expectEqual(TextureFormatKind.color, textureFormatKind(.rgba8_unorm));
+    try std.testing.expectEqual(TextureFormatKind.depth, textureFormatKind(.depth32_float));
+    try std.testing.expect(isColorFormat(.bgra8_unorm));
+    try std.testing.expect(isDepthFormat(.depth32_float));
+    try std.testing.expect(!isStencilFormat(.depth32_float));
+    try std.testing.expect(!isDepthStencilFormat(.depth32_float));
+    try std.testing.expect(!isCompressedFormat(.rgba8_unorm));
+    try std.testing.expect(isSrgbFormat(.rgba8_unorm_srgb));
+    try std.testing.expectEqual(@as(usize, 4), textureFormatBytesPerPixel(.rgba8_unorm));
 }

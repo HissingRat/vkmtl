@@ -315,17 +315,17 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 3 Phase 2 Checklist
 
-- [ ] Add texture shape classification helpers.
-- [ ] Validate array, 3D, cube-compatible, and multisample constraints.
-- [ ] Report texture-shape support through features or format caps.
-- [ ] Document cube texture representation limits.
+- [x] Add texture shape classification helpers.
+- [x] Validate array, 3D, cube-compatible, and multisample constraints.
+- [x] Report texture-shape support through features or format caps.
+- [x] Document cube texture representation limits.
 
 ## Period 3 Phase 3 Checklist
 
-- [ ] Add expanded format classification helpers.
-- [ ] Add mip/filter/blend/storage capability fields.
-- [ ] Keep unsupported formats behind typed validation errors.
-- [ ] Document implemented versus classified-only formats.
+- [x] Add expanded format classification helpers.
+- [x] Add mip/filter/blend/storage capability fields.
+- [x] Keep unsupported formats behind typed validation errors.
+- [x] Document implemented versus classified-only formats.
 
 ## Period 3 Phase 4 Checklist
 

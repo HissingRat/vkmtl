@@ -81,7 +81,14 @@ const bytes = mapped.bytes();
 读回应该走 transfer 路径。
 
 Texture 通过 `texture.makeTextureView(...)` 创建 view，上传 helper 包括
-`texture.replaceRegion(...)` 和 `texture.replaceAll2D(...)`。
+`texture.replaceRegion(...)` 和 `texture.replaceAll2D(...)`。`TextureDescriptor.shape()` 可以把
+texture 归类为 1D、2D、3D、array、cube-compatible、cube-array-compatible 和 multisampled。
+Cube texture 当前表示为每个 cube 六层的 2D texture；cube-specific view dimension 留到 texture-view
+阶段。
+
+Format helper 包括 `textureFormatKind(...)`、`isColorFormat(...)`、`isDepthFormat(...)`、
+`isSrgbFormat(...)` 和 `textureFormatBytesPerPixel(...)`。`FormatCapabilities` 会报告当前已实现
+portable format 的 sampled、storage、attachment、filter、mip、blend 和 copy 支持。
 
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
