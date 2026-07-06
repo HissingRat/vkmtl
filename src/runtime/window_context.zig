@@ -1372,6 +1372,8 @@ pub const RuntimeError = error{
     UnsupportedSurfaceProvider,
     UnsupportedBackendForPresentation,
     BackendMismatch,
+    DeviceLost,
+    SurfaceLost,
     InvalidRenderPassAttachment,
     InvalidStorageTextureUsage,
     PresentRequiresCurrentDrawable,

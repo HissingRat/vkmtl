@@ -16,6 +16,7 @@ pub const FormatCapabilities = core.FormatCapabilities;
 pub const BackendAvailability = core.BackendAvailability;
 pub const BackendSelectionOptions = core.BackendSelectionOptions;
 pub const BackendSelectionError = core.BackendSelectionError;
+pub const ErrorCategory = core.ErrorCategory;
 pub const ContextOptions = core.ContextOptions;
 pub const Context = core.Context;
 pub const Adapter = core.Adapter;
@@ -127,6 +128,7 @@ pub const BufferReadDescriptor = core.BufferReadDescriptor;
 pub const BufferError = core.BufferError;
 pub const selectBackend = core.selectBackend;
 pub const enumerateAdapters = core.enumerateAdapters;
+pub const classifyError = core.classifyError;
 
 pub const WindowContext = runtime.WindowContext;
 pub const WindowContextOptions = runtime.WindowContextOptions;

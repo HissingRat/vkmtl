@@ -68,6 +68,8 @@ Decision notes: `phase4.md`.
 - Reduce runtime checks in release builds where appropriate.
 - Convert backend errors into a unified public error model.
 
+Decision notes: `phase5.md`.
+
 ## Phase 6: Multi-Surface / Multi-Window
 
 - Support multiple presentation surfaces from one `Device`.

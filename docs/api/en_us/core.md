@@ -234,3 +234,15 @@ try command_buffer.commit();
 
 The first compute slice supports storage-buffer and storage-texture
 write/readback validation.
+
+## Error Classification
+
+vkmtl keeps precise Zig error names. Applications that need broader handling can
+call:
+
+```zig
+const category = vkmtl.classifyError(err);
+```
+
+Current categories include validation, unsupported feature, backend, device
+lost, surface lost, resource lifetime, shader compilation, and unknown.

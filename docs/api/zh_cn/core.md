@@ -200,3 +200,14 @@ try command_buffer.commit();
 ```
 
 第一版 compute slice 支持 storage-buffer 和 storage-texture 写入/读回验证。
+
+## Error 分类
+
+vkmtl 保留精确 Zig error name。应用如果需要更粗粒度的处理，可以调用：
+
+```zig
+const category = vkmtl.classifyError(err);
+```
+
+当前分类包括 validation、unsupported feature、backend、device lost、surface lost、
+resource lifetime、shader compilation 和 unknown。

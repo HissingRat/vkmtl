@@ -209,6 +209,134 @@ pub const BackendSelectionError = error{
     NoSupportedBackend,
 };
 
+pub const ErrorCategory = enum {
+    validation,
+    unsupported_feature,
+    backend,
+    device_lost,
+    surface_lost,
+    resource_lifetime,
+    shader_compilation,
+    unknown,
+};
+
+pub fn classifyError(err: anyerror) ErrorCategory {
+    return switch (err) {
+        error.DeviceLost => .device_lost,
+        error.SurfaceLost,
+        error.SwapchainCreationFailed,
+        error.InvalidSurfaceDimensions,
+        error.NoDrawable,
+        => .surface_lost,
+
+        error.VulkanUnavailable,
+        error.MetalUnavailable,
+        error.NoSuitableDevice,
+        error.MissingVulkanSurfaceExtensions,
+        error.BackendMismatch,
+        error.CommandFailed,
+        error.UnexpectedMetalStatus,
+        error.MetalUnsupported,
+        error.NoMetalDevice,
+        => .backend,
+
+        error.NoSupportedBackend,
+        error.UnsupportedSurfaceProvider,
+        error.UnsupportedBackendForPresentation,
+        error.UnsupportedSampleCount,
+        error.UnsupportedTextureUploadFormat,
+        error.UnsupportedTextureCopyFormat,
+        error.UnsupportedTextureViewDimension,
+        error.UnsupportedTextureViewFormat,
+        error.UnsupportedStorageTextureFormat,
+        => .unsupported_feature,
+
+        error.EmptyShaderSource,
+        error.EmptyShaderArtifactPath,
+        error.EmptyShaderReflectionPath,
+        error.EmptyShaderEntryPoint,
+        error.UnexpectedShaderStage,
+        error.InvalidShaderReflection,
+        error.ShaderReflectionStageMismatch,
+        error.ShaderReflectionEntryPointMismatch,
+        error.ShaderReflectionMissingBindGroupLayout,
+        error.ShaderReflectionMissingBinding,
+        error.ShaderReflectionBindingKindMismatch,
+        error.ShaderReflectionVisibilityMismatch,
+        error.InvalidVertexStride,
+        error.InvalidVertexAttributeOffset,
+        error.InvalidColorAttachmentFormat,
+        error.MissingColorAttachment,
+        error.InvalidDepthStencilFormat,
+        error.InvalidCommandBufferState,
+        error.InvalidRenderCommandEncoderState,
+        error.InvalidBlitCommandEncoderState,
+        error.InvalidComputeCommandEncoderState,
+        error.MissingRenderPipelineState,
+        error.MissingComputePipelineState,
+        error.MissingIndexBuffer,
+        error.InvalidVertexBufferIndex,
+        error.InvalidBindGroupIndex,
+        error.InvalidVertexCount,
+        error.InvalidIndexCount,
+        error.InvalidInstanceCount,
+        error.InvalidIndexBufferOffset,
+        error.InvalidThreadgroupCount,
+        error.InvalidCopySize,
+        error.InvalidCopyBufferRange,
+        error.InvalidCopyTextureRegion,
+        error.InvalidCopyTextureSlice,
+        error.InvalidCopyBufferLayout,
+        error.TextureCopySizeOverflow,
+        error.MissingBindGroupLayoutEntry,
+        error.EmptyShaderVisibility,
+        error.DuplicateBinding,
+        error.MissingBindGroupEntry,
+        error.ExtraBindGroupEntry,
+        error.BindingResourceKindMismatch,
+        error.InvalidBufferBindingRange,
+        error.InvalidStorageTextureVisibility,
+        error.MissingSurfaceSource,
+        error.InvalidSurfaceExtent,
+        error.InvalidBufferLength,
+        error.InitialDataTooLarge,
+        error.InitialDataRequiresCpuVisibleStorage,
+        error.InvalidBufferWriteRange,
+        error.InvalidBufferReadRange,
+        error.BufferNotCpuVisible,
+        error.InvalidTextureFormat,
+        error.InvalidTextureExtent,
+        error.InvalidTextureViewRange,
+        error.InvalidTextureRegion,
+        error.InvalidBytesPerRow,
+        error.InvalidBytesPerImage,
+        error.UploadBytesTooSmall,
+        error.TextureUploadSizeOverflow,
+        error.InvalidLodRange,
+        error.InvalidRenderPassAttachment,
+        error.InvalidStorageTextureUsage,
+        error.PresentRequiresCurrentDrawable,
+        error.InvalidSurface,
+        error.InvalidBuffer,
+        error.InvalidTexture,
+        error.InvalidTextureView,
+        error.InvalidSampler,
+        error.InvalidShader,
+        error.InvalidPipeline,
+        error.InvalidCommand,
+        error.MissingShaderCacheDirValue,
+        => .validation,
+
+        error.SlangCompilationFailed,
+        error.SlangReflectionFailed,
+        error.InvalidSlangArtifact,
+        => .shader_compilation,
+
+        error.UseAfterFree => .resource_lifetime,
+        else => .unknown,
+    };
+}
+
 pub const ContextOptions = struct {
     backend: BackendPreference = .auto,
     availability: BackendAvailability = .{},
@@ -2177,6 +2305,15 @@ test "resource usage state records portable hazards" {
     try std.testing.expectEqual(ResourceHazard.write_after_read, transition.hazard);
     try std.testing.expect(transition.requires_barrier);
     try std.testing.expectEqual(@as(usize, 2), state.barrier_count);
+}
+
+test "error classifier groups public error categories" {
+    try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.InvalidBufferLength));
+    try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedSampleCount));
+    try std.testing.expectEqual(ErrorCategory.backend, classifyError(error.VulkanUnavailable));
+    try std.testing.expectEqual(ErrorCategory.surface_lost, classifyError(error.SurfaceLost));
+    try std.testing.expectEqual(ErrorCategory.device_lost, classifyError(error.DeviceLost));
+    try std.testing.expectEqual(ErrorCategory.shader_compilation, classifyError(error.SlangCompilationFailed));
 }
 
 test "adapter enumeration follows auto backend order" {

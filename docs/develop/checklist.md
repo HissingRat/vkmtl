@@ -260,6 +260,15 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Document current limits for bind groups and backend-native barrier
   lowering.
 
+## Period 2 Phase 5 Checklist
+
+- [x] Add public error categories.
+- [x] Add `classifyError(anyerror)`.
+- [x] Separate validation, unsupported feature, backend, device-lost, and
+  surface-lost categories.
+- [x] Export the classifier from the public root module.
+- [x] Document that precise Zig errors remain the primary low-level signal.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
