@@ -202,7 +202,7 @@ See `docs/develop/period8/`.
 
 ## Period 9: Examples / Test Matrix / Documentation
 
-Status: planned.
+Status: completed.
 
 Goal: make the library maintainable and verifiable across examples, backends,
 validation tests, and documentation.

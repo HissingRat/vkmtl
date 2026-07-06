@@ -508,6 +508,86 @@ pub fn validateValidationCases(cases: []const ValidationCase) DevelopmentMatrixE
     }
 }
 
+pub const DocumentationStatus = enum {
+    present,
+    planned,
+};
+
+pub const DocumentationTopic = struct {
+    name: []const u8,
+    path: []const u8,
+    status: DocumentationStatus = .present,
+    expectation: []const u8,
+
+    pub fn validate(self: DocumentationTopic) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.path.len == 0) return DevelopmentMatrixError.EmptyPath;
+        if (self.expectation.len == 0) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const documentation_topics = [_]DocumentationTopic{
+    .{
+        .name = "getting_started",
+        .path = "docs/usage/en_us/quick-start.md",
+        .expectation = "first runnable app path and runtime shader compile flow",
+    },
+    .{
+        .name = "configuration",
+        .path = "docs/usage/en_us/configuration.md",
+        .expectation = "backend selection, Slang tool, Vulkan runtime, and shader cache configuration",
+    },
+    .{
+        .name = "examples",
+        .path = "docs/usage/en_us/examples.md",
+        .expectation = "current example gallery and planned gallery rows",
+    },
+    .{
+        .name = "core_api",
+        .path = "docs/api/en_us/core.md",
+        .expectation = "Device, Surface, Queue, resources, bindings, commands, capabilities, and diagnostics",
+    },
+    .{
+        .name = "shader_authoring",
+        .path = "docs/api/en_us/shaders.md",
+        .expectation = "Slang-only shader authoring and reflection expectations",
+    },
+    .{
+        .name = "resource_lifetime",
+        .path = "docs/api/en_us/resource-lifetime.md",
+        .expectation = "ownership, destruction order, and deferred retirement rules",
+    },
+    .{
+        .name = "backend_test_matrix",
+        .path = "docs/develop/backend-test-matrix.md",
+        .expectation = "backend and host validation rows",
+    },
+    .{
+        .name = "validation_matrix",
+        .path = "docs/develop/validation-matrix.md",
+        .expectation = "validation case inventory and integration gaps",
+    },
+    .{
+        .name = "performance_guide",
+        .path = "docs/usage/en_us/performance.md",
+        .expectation = "cache, resource lifetime, shader compile, and command recording guidance",
+    },
+    .{
+        .name = "compatibility_table",
+        .path = "docs/usage/en_us/compatibility.md",
+        .expectation = "current platform/backend capability expectations",
+    },
+};
+
+pub fn validateDocumentationTopics(topics: []const DocumentationTopic) DevelopmentMatrixError!void {
+    for (topics, 0..) |topic, i| {
+        try topic.validate();
+        for (topics[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, topic.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
     try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
@@ -561,4 +641,11 @@ test "validation case inventory is valid" {
         if (case.integration_gap) gap_count += 1;
     }
     try std.testing.expect(gap_count >= 1);
+}
+
+test "documentation topic inventory is valid" {
+    try validateDocumentationTopics(documentation_topics[0..]);
+    for (documentation_topics) |topic| {
+        try std.testing.expectEqual(DocumentationStatus.present, topic.status);
+    }
 }

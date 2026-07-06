@@ -7,9 +7,13 @@ vkmtl documentation is organized by audience and purpose.
 - `usage/zh_cn/quick-start.md`: 中文快速开始
 - `usage/zh_cn/configuration.md`: 中文配置项
 - `usage/zh_cn/examples.md`: 中文示例目录
+- `usage/zh_cn/performance.md`: 中文性能指南
+- `usage/zh_cn/compatibility.md`: 中文兼容性说明
 - `usage/en_us/quick-start.md`: English quick start
 - `usage/en_us/configuration.md`: English configuration
 - `usage/en_us/examples.md`: English examples
+- `usage/en_us/performance.md`: English performance guide
+- `usage/en_us/compatibility.md`: English compatibility notes
 
 ## API
 
@@ -34,6 +38,8 @@ vkmtl documentation is organized by audience and purpose.
 - `develop/period8/`: pipeline and object cache
 - `develop/period9/`: examples, test matrix, and documentation
 - `develop/period10/`: advanced backend-gated features
+- `develop/backend-test-matrix.md`: backend/host validation matrix
+- `develop/validation-matrix.md`: validation coverage inventory
 
 The usage and API documents are the current user-facing source of truth. The
 period notes preserve development context and may describe temporary states from

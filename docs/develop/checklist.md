@@ -685,11 +685,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 7 Checklist
 
 - [x] Define documentation completeness scope before implementation.
-- [ ] Add documentation completeness descriptors.
-- [ ] Cover getting started, architecture, lifetime, binding, command/sync,
+- [x] Add documentation completeness descriptors.
+- [x] Cover getting started, architecture, lifetime, binding, command/sync,
   capabilities, backend notes, performance, and compatibility.
-- [ ] Update docs index and Period 9 status.
-- [ ] Add validation for documentation completeness metadata.
+- [x] Update docs index and Period 9 status.
+- [x] Add validation for documentation completeness metadata.
 
 ## Period 10 Phase 1 Checklist
 
