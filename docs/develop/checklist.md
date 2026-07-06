@@ -386,11 +386,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 4 Checklist
 
-- [ ] Add compare sampler binding resource kind.
-- [ ] Add resource-array layout metadata.
-- [ ] Add dynamic buffer binding metadata.
-- [ ] Validate advanced layout metadata.
-- [ ] Document backend lowering limits.
+- [x] Add compare sampler binding resource kind.
+- [x] Add resource-array layout metadata.
+- [x] Add dynamic buffer binding metadata.
+- [x] Validate advanced layout metadata.
+- [x] Document backend lowering limits.
 
 ## Period 4 Phase 5 Checklist
 

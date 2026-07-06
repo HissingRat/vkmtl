@@ -211,11 +211,18 @@ Shader resource binding starts with public descriptors:
 - `BindingResourceKind`
 
 The first resource classes are uniform buffers, storage buffers, storage
-textures, sampled textures, and samplers. Runtime bind group creation validates
-layout shape, resource class, backend match, whether referenced resources are
-alive, and whether storage textures were created with `shader_write` usage.
-Render and compute encoders expose `setBindGroup(...)` for debug-validated
-command recording.
+textures, sampled textures, samplers, and compare samplers. Layout entries also
+carry `array_count` and `dynamic_offset` metadata. The descriptor layer
+validates that array counts are non-zero, dynamic offsets are used only with
+buffers, and storage textures are compute-only.
+
+Runtime bind group creation validates layout shape, resource class, backend
+match, whether referenced resources are alive, and whether storage textures
+were created with `shader_write` usage. Current native lowering supports only
+single resources (`array_count = 1`) and rejects dynamic-offset layouts with
+typed `UnsupportedResourceArray` / `UnsupportedDynamicBinding` errors until the
+later backend lowering phases. Render and compute encoders expose
+`setBindGroup(...)` for debug-validated command recording.
 
 `BindGroupDescriptor` is the runtime descriptor that points at live resources.
 For pure descriptor validation or tests, root exports also expose the shape-only

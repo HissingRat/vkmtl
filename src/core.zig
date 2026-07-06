@@ -387,6 +387,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.BindingResourceKindMismatch,
         error.InvalidBufferBindingRange,
         error.InvalidStorageTextureVisibility,
+        error.InvalidBindingArrayCount,
+        error.InvalidDynamicBindingResource,
+        error.UnsupportedResourceArray,
+        error.UnsupportedDynamicBinding,
         error.MissingSurfaceSource,
         error.InvalidSurfaceExtent,
         error.InvalidSurfaceHandle,
@@ -2075,29 +2079,30 @@ pub const BindingResourceKind = enum {
     storage_texture,
     sampled_texture,
     sampler,
+    compare_sampler,
 
     pub fn isBuffer(self: BindingResourceKind) bool {
         return switch (self) {
             .uniform_buffer, .storage_buffer => true,
-            .storage_texture, .sampled_texture, .sampler => false,
+            .storage_texture, .sampled_texture, .sampler, .compare_sampler => false,
         };
     }
 
     pub fn isTexture(self: BindingResourceKind) bool {
         return switch (self) {
             .storage_texture, .sampled_texture => true,
-            .uniform_buffer, .storage_buffer, .sampler => false,
+            .uniform_buffer, .storage_buffer, .sampler, .compare_sampler => false,
         };
     }
 
     pub fn isSampler(self: BindingResourceKind) bool {
-        return self == .sampler;
+        return self == .sampler or self == .compare_sampler;
     }
 
     pub fn isWritable(self: BindingResourceKind) bool {
         return switch (self) {
             .storage_buffer, .storage_texture => true,
-            .uniform_buffer, .sampled_texture, .sampler => false,
+            .uniform_buffer, .sampled_texture, .sampler, .compare_sampler => false,
         };
     }
 };
@@ -2106,6 +2111,17 @@ pub const BindGroupLayoutEntry = struct {
     binding: u32,
     resource: BindingResourceKind,
     visibility: ShaderVisibility,
+    array_count: u32 = 1,
+    dynamic_offset: bool = false,
+
+    pub fn validate(self: BindGroupLayoutEntry) BindingError!void {
+        if (self.visibility.isEmpty()) return BindingError.EmptyShaderVisibility;
+        if (self.array_count == 0) return BindingError.InvalidBindingArrayCount;
+        if (self.dynamic_offset and !self.resource.isBuffer()) return BindingError.InvalidDynamicBindingResource;
+        if (self.resource == .storage_texture and (self.visibility.vertex or self.visibility.fragment or !self.visibility.compute)) {
+            return BindingError.InvalidStorageTextureVisibility;
+        }
+    }
 };
 
 pub const BindGroupLayoutDescriptor = struct {
@@ -2116,10 +2132,7 @@ pub const BindGroupLayoutDescriptor = struct {
         if (self.entries.len == 0) return BindingError.MissingBindGroupLayoutEntry;
 
         for (self.entries, 0..) |entry, i| {
-            if (entry.visibility.isEmpty()) return BindingError.EmptyShaderVisibility;
-            if (entry.resource == .storage_texture and (entry.visibility.vertex or entry.visibility.fragment or !entry.visibility.compute)) {
-                return BindingError.InvalidStorageTextureVisibility;
-            }
+            try entry.validate();
             for (self.entries[i + 1 ..]) |other| {
                 if (entry.binding == other.binding) return BindingError.DuplicateBinding;
             }
@@ -2172,6 +2185,7 @@ pub const BindGroupResource = union(BindingResourceKind) {
     storage_texture: TextureViewBindingDescriptor,
     sampled_texture: TextureViewBindingDescriptor,
     sampler: SamplerBindingDescriptor,
+    compare_sampler: SamplerBindingDescriptor,
 
     pub fn resourceKind(self: BindGroupResource) BindingResourceKind {
         return switch (self) {
@@ -2180,13 +2194,14 @@ pub const BindGroupResource = union(BindingResourceKind) {
             .storage_texture => .storage_texture,
             .sampled_texture => .sampled_texture,
             .sampler => .sampler,
+            .compare_sampler => .compare_sampler,
         };
     }
 
     pub fn validate(self: BindGroupResource) BindingError!void {
         switch (self) {
             .uniform_buffer, .storage_buffer => |buffer| try buffer.validate(),
-            .storage_texture, .sampled_texture, .sampler => {},
+            .storage_texture, .sampled_texture, .sampler, .compare_sampler => {},
         }
     }
 };
@@ -2242,6 +2257,10 @@ pub const BindingError = error{
     BindingResourceKindMismatch,
     InvalidBufferBindingRange,
     InvalidStorageTextureVisibility,
+    InvalidBindingArrayCount,
+    InvalidDynamicBindingResource,
+    UnsupportedResourceArray,
+    UnsupportedDynamicBinding,
 };
 
 fn defaultViewDimension(texture: TextureDescriptor) TextureViewDimension {
@@ -4049,6 +4068,11 @@ test "bind group layout descriptor validates resource bindings" {
             .resource = .sampler,
             .visibility = .{ .fragment = true },
         },
+        .{
+            .binding = 3,
+            .resource = .compare_sampler,
+            .visibility = .{ .fragment = true },
+        },
     };
     const layout = BindGroupLayoutDescriptor{ .entries = layout_entries[0..] };
 
@@ -4059,9 +4083,11 @@ test "bind group layout descriptor validates resource bindings" {
     try std.testing.expectEqual(BindingLocation{ .group = 3, .binding = 1 }, layout.locationForBinding(3, 1).?);
     try std.testing.expect(layout.locationForBinding(3, 9) == null);
     try std.testing.expectEqual(@as(usize, 1), layout.resourceCount(.sampler));
+    try std.testing.expectEqual(@as(usize, 1), layout.resourceCount(.compare_sampler));
     try std.testing.expect(BindingResourceKind.storage_buffer.isBuffer());
     try std.testing.expect(BindingResourceKind.sampled_texture.isTexture());
     try std.testing.expect(BindingResourceKind.sampler.isSampler());
+    try std.testing.expect(BindingResourceKind.compare_sampler.isSampler());
     try std.testing.expect(BindingResourceKind.storage_texture.isWritable());
 
     try std.testing.expectError(BindingError.MissingBindGroupLayoutEntry, (BindGroupLayoutDescriptor{}).validate());
@@ -4092,6 +4118,42 @@ test "bind group layout descriptor validates resource bindings" {
     try std.testing.expectError(BindingError.DuplicateBinding, (BindGroupLayoutDescriptor{
         .entries = duplicate_entries[0..],
     }).validate());
+
+    const invalid_array_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .uniform_buffer,
+            .visibility = .{ .vertex = true },
+            .array_count = 0,
+        },
+    };
+    try std.testing.expectError(BindingError.InvalidBindingArrayCount, (BindGroupLayoutDescriptor{
+        .entries = invalid_array_entries[0..],
+    }).validate());
+
+    const invalid_dynamic_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .dynamic_offset = true,
+        },
+    };
+    try std.testing.expectError(BindingError.InvalidDynamicBindingResource, (BindGroupLayoutDescriptor{
+        .entries = invalid_dynamic_entries[0..],
+    }).validate());
+
+    const valid_dynamic_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .storage_buffer,
+            .visibility = .{ .compute = true },
+            .dynamic_offset = true,
+        },
+    };
+    try (BindGroupLayoutDescriptor{
+        .entries = valid_dynamic_entries[0..],
+    }).validate();
 }
 
 test "bind group descriptor validates entries against layout" {
@@ -4242,6 +4304,29 @@ test "bind group descriptor accepts compute storage buffers" {
 
     try bind_group.validate();
     try std.testing.expectEqual(BindingResourceKind.storage_buffer, bind_group.entryForBinding(0).?.resource.resourceKind());
+}
+
+test "bind group descriptor accepts compare samplers" {
+    const layout_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .compare_sampler,
+            .visibility = .{ .fragment = true },
+        },
+    };
+    const entries = [_]BindGroupEntry{
+        .{
+            .binding = 0,
+            .resource = .{ .compare_sampler = .{} },
+        },
+    };
+    const bind_group = BindGroupDescriptor{
+        .layout = .{ .entries = layout_entries[0..] },
+        .entries = entries[0..],
+    };
+
+    try bind_group.validate();
+    try std.testing.expectEqual(BindingResourceKind.compare_sampler, bind_group.entryForBinding(0).?.resource.resourceKind());
 }
 
 test "bind group descriptor accepts compute storage textures" {

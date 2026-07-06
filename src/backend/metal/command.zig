@@ -237,7 +237,7 @@ pub const ComputeCommandEncoder = struct {
                     texture_view,
                     layout_entry.binding,
                 ),
-                .sampler => |sampler_state| try self.setSamplerResource(
+                .sampler, .compare_sampler => |sampler_state| try self.setSamplerResource(
                     sampler_state,
                     layout_entry.binding,
                 ),
@@ -367,7 +367,7 @@ pub const RenderCommandEncoder = struct {
                     layout_entry.binding,
                     layout_entry.visibility,
                 ),
-                .sampler => |sampler_state| try self.setSamplerResource(
+                .sampler, .compare_sampler => |sampler_state| try self.setSamplerResource(
                     sampler_state,
                     layout_entry.binding,
                     layout_entry.visibility,

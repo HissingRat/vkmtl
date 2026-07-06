@@ -181,9 +181,16 @@ Shader 资源绑定从公开描述符开始：
 - `ShaderVisibility`
 - `BindingResourceKind`
 
-当前资源类别包括 uniform buffer、storage buffer、storage texture、sampled texture 和
-sampler。Runtime bind group 创建会校验 layout shape、资源类别、后端是否匹配、资源是否
-还活着，以及 storage texture 是否带有 `shader_write` usage。
+当前资源类别包括 uniform buffer、storage buffer、storage texture、sampled texture、
+sampler 和 compare sampler。Layout entry 也包含 `array_count` 和 `dynamic_offset`
+元数据。Descriptor 层会校验 array count 非零、dynamic offset 只用于 buffer，以及
+storage texture 只允许 compute visibility。
+
+Runtime bind group 创建会校验 layout shape、资源类别、后端是否匹配、资源是否还活着，
+以及 storage texture 是否带有 `shader_write` usage。当前 native lowering 只支持单资源
+binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` /
+`UnsupportedDynamicBinding` 错误拒绝 dynamic-offset layout；后续 backend lowering 阶段
+再接上真正的数组和动态 offset 支持。
 
 Render 和 compute encoder 都通过 `setBindGroup(...)` 绑定资源。
 

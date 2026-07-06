@@ -821,6 +821,7 @@ fn bindingKindName(kind: core.BindingResourceKind) []const u8 {
         .storage_texture => "storage_texture",
         .sampled_texture => "sampled_texture",
         .sampler => "sampler",
+        .compare_sampler => "compare_sampler",
     };
 }
 

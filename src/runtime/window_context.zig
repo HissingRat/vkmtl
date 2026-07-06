@@ -785,6 +785,7 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
     storage_texture: *TextureView,
     sampled_texture: *TextureView,
     sampler: *SamplerState,
+    compare_sampler: *SamplerState,
 
     fn resourceKind(self: BindGroupResource) core.BindingResourceKind {
         return switch (self) {
@@ -793,6 +794,7 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
             .storage_texture => .storage_texture,
             .sampled_texture => .sampled_texture,
             .sampler => .sampler,
+            .compare_sampler => .compare_sampler,
         };
     }
 
@@ -811,7 +813,7 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
                 assertAlive(texture_view.alive, .texture_view);
                 try expectSameBackend(expected_backend, texture_view.backend);
             },
-            .sampler => |sampler_state| {
+            .sampler, .compare_sampler => |sampler_state| {
                 assertAlive(sampler_state.alive, .sampler_state);
                 try expectSameBackend(expected_backend, sampler_state.backend);
             },
@@ -835,6 +837,7 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
             .storage_texture => .{ .storage_texture = .{} },
             .sampled_texture => .{ .sampled_texture = .{} },
             .sampler => .{ .sampler = .{} },
+            .compare_sampler => .{ .compare_sampler = .{} },
         };
     }
 };
@@ -1896,6 +1899,7 @@ pub const Device = struct {
 
     pub fn makeBindGroupLayout(self: *Device, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
         try descriptor.validate();
+        try validateFirstSliceBindGroupLayout(descriptor);
 
         const entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.entries);
         errdefer self.allocator.free(entries);
@@ -2271,6 +2275,7 @@ fn materializeBindGroupEntries(
 ) ![]core.BindGroupEntry {
     assertAlive(descriptor.layout.alive, .bind_group_layout);
     try expectSameBackend(backend, descriptor.layout.backend);
+    try validateFirstSliceBindGroupLayout(descriptor.layout.descriptor());
 
     const entries = try allocator.alloc(core.BindGroupEntry, descriptor.entries.len);
     errdefer allocator.free(entries);
@@ -2289,6 +2294,13 @@ fn materializeBindGroupEntries(
     }).validate();
 
     return entries;
+}
+
+fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor) core.BindingError!void {
+    for (descriptor.entries) |entry| {
+        if (entry.array_count != 1) return core.BindingError.UnsupportedResourceArray;
+        if (entry.dynamic_offset) return core.BindingError.UnsupportedDynamicBinding;
+    }
 }
 
 fn materializeVulkanBindGroupEntries(
@@ -2323,6 +2335,9 @@ fn materializeVulkanBindGroupEntries(
                 },
                 .sampler => |sampler_state| .{
                     .sampler = &sampler_state.impl.vulkan,
+                },
+                .compare_sampler => |sampler_state| .{
+                    .compare_sampler = &sampler_state.impl.vulkan,
                 },
             },
         };
@@ -2363,6 +2378,9 @@ fn materializeMetalBindGroupEntries(
                 },
                 .sampler => |sampler_state| .{
                     .sampler = &sampler_state.impl.metal,
+                },
+                .compare_sampler => |sampler_state| .{
+                    .compare_sampler = &sampler_state.impl.metal,
                 },
             },
         };
@@ -2735,6 +2753,34 @@ test "runtime bind group materialization validates resources against layout" {
     try std.testing.expectEqual(@as(u64, 16), materialized[0].resource.uniform_buffer.offset);
     try std.testing.expectEqual(@as(?u64, 64), materialized[0].resource.uniform_buffer.size);
 
+    const compare_layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .compare_sampler,
+            .visibility = .{ .fragment = true },
+        },
+    };
+    const copied_compare_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, compare_layout_entries[0..]);
+    var compare_layout = BindGroupLayout{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = allocator,
+        .entries = copied_compare_layout_entries,
+    };
+    tracker.retain(.bind_group_layout);
+    defer compare_layout.deinit();
+
+    const compare_entries = [_]BindGroupEntry{.{
+        .binding = 0,
+        .resource = .{ .compare_sampler = &sampler },
+    }};
+    const materialized_compare = try materializeBindGroupEntries(allocator, .vulkan, .{
+        .layout = &compare_layout,
+        .entries = compare_entries[0..],
+    });
+    defer allocator.free(materialized_compare);
+    try std.testing.expectEqual(core.BindingResourceKind.compare_sampler, materialized_compare[0].resource.resourceKind());
+
     try std.testing.expectError(core.BindingError.MissingBindGroupEntry, materializeBindGroupEntries(allocator, .vulkan, .{
         .layout = &layout,
         .entries = entries[0..2],
@@ -2782,6 +2828,50 @@ test "runtime bind group materialization validates resources against layout" {
     try std.testing.expectError(RuntimeError.BackendMismatch, materializeBindGroupEntries(allocator, .vulkan, .{
         .layout = &layout,
         .entries = backend_mismatch_entries[0..],
+    }));
+
+    const array_layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+            .array_count = 2,
+        },
+    };
+    const copied_array_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, array_layout_entries[0..]);
+    var array_layout = BindGroupLayout{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = allocator,
+        .entries = copied_array_layout_entries,
+    };
+    tracker.retain(.bind_group_layout);
+    defer array_layout.deinit();
+    try std.testing.expectError(core.BindingError.UnsupportedResourceArray, materializeBindGroupEntries(allocator, .vulkan, .{
+        .layout = &array_layout,
+        .entries = entries[0..0],
+    }));
+
+    const dynamic_layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .uniform_buffer,
+            .visibility = .{ .vertex = true },
+            .dynamic_offset = true,
+        },
+    };
+    const copied_dynamic_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, dynamic_layout_entries[0..]);
+    var dynamic_layout = BindGroupLayout{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = allocator,
+        .entries = copied_dynamic_layout_entries,
+    };
+    tracker.retain(.bind_group_layout);
+    defer dynamic_layout.deinit();
+    try std.testing.expectError(core.BindingError.UnsupportedDynamicBinding, materializeBindGroupEntries(allocator, .vulkan, .{
+        .layout = &dynamic_layout,
+        .entries = entries[0..0],
     }));
 }
 

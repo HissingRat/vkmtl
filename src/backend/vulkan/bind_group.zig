@@ -72,6 +72,7 @@ pub const VulkanBindGroup = struct {
         storage_texture: *const VulkanTextureView,
         sampled_texture: *const VulkanTextureView,
         sampler: *const VulkanSamplerState,
+        compare_sampler: *const VulkanSamplerState,
     };
 
     pub const Entry = struct {
@@ -132,7 +133,7 @@ fn createDescriptorPool(
             .storage_buffer => storage_buffers += 1,
             .storage_texture => storage_textures += 1,
             .sampled_texture => sampled_textures += 1,
-            .sampler => samplers += 1,
+            .sampler, .compare_sampler => samplers += 1,
         }
     }
 
@@ -231,7 +232,7 @@ fn updateDescriptorSet(
                 };
                 write.p_image_info = @ptrCast(&image_infos[i]);
             },
-            .sampler => |sampler_state| {
+            .sampler, .compare_sampler => |sampler_state| {
                 image_infos[i] = .{
                     .sampler = sampler_state.handle,
                     .image_view = .null_handle,
@@ -251,7 +252,7 @@ fn descriptorTypeForKind(kind: core.BindingResourceKind) vk.DescriptorType {
         .storage_buffer => .storage_buffer,
         .storage_texture => .storage_image,
         .sampled_texture => .sampled_image,
-        .sampler => .sampler,
+        .sampler, .compare_sampler => .sampler,
     };
 }
 
@@ -262,6 +263,7 @@ fn descriptorTypeForResource(resource: VulkanBindGroup.Resource) vk.DescriptorTy
         .storage_texture => core.BindingResourceKind.storage_texture,
         .sampled_texture => core.BindingResourceKind.sampled_texture,
         .sampler => core.BindingResourceKind.sampler,
+        .compare_sampler => core.BindingResourceKind.compare_sampler,
     });
 }
 

@@ -42,6 +42,7 @@ pub const MetalBindGroup = struct {
         storage_texture: *const MetalTextureView,
         sampled_texture: *const MetalTextureView,
         sampler: *const MetalSamplerState,
+        compare_sampler: *const MetalSamplerState,
     };
 
     pub const Entry = struct {

@@ -601,6 +601,7 @@ fn parseResourceKind(value: std.json.Value) !core.BindingResourceKind {
     if (std.mem.eql(u8, kind, "storage_texture")) return .storage_texture;
     if (std.mem.eql(u8, kind, "sampled_texture")) return .sampled_texture;
     if (std.mem.eql(u8, kind, "sampler")) return .sampler;
+    if (std.mem.eql(u8, kind, "compare_sampler")) return .compare_sampler;
     return core.ShaderError.InvalidShaderReflection;
 }
 
