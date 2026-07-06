@@ -10,9 +10,13 @@ capability-gated.
 - Add border-color descriptor shape.
 - Validate unsupported combinations through sampler errors.
 - Report sampler support through features and limits.
+- Implemented as `SamplerDescriptor.compare_function`, `max_anisotropy`, and
+  `border_color`, validated by `validateForDevice(...)`.
 
 ## Current Limits
 
 - Border colors are descriptor-level only until both backend mappings are
   implemented.
 - Anisotropy is gated by `DeviceFeatures.sampler_anisotropy`.
+- Compare samplers and border colors are also feature-gated and disabled by
+  default.

@@ -9,6 +9,8 @@ memory manually.
 - Document that default resource creation still owns memory internally.
 - Keep heap allocation optional and advanced.
 - Keep native heap handles out of default resource descriptors.
+- Implemented as `DeviceFeatures.heaps`, `HeapStorageMode`,
+  `HeapDescriptor`, and `HeapError`.
 
 ## Current Limits
 

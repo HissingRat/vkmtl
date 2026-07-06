@@ -1989,6 +1989,7 @@ pub const Device = struct {
     }
 
     pub fn makeSamplerState(self: *Device, descriptor: core.SamplerDescriptor) !SamplerState {
+        try descriptor.validateForDevice(self.features(), self.limits());
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| SamplerState.Impl{ .vulkan = try vulkan.makeSamplerState(descriptor) },
             .metal => |*metal| SamplerState.Impl{ .metal = try metal.makeSamplerState(descriptor) },

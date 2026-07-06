@@ -79,6 +79,10 @@ pub const DeviceFeatures = struct {
     cube_textures: bool = true,
     multisample_textures: bool = true,
     samplers: bool = true,
+    sampler_compare: bool = false,
+    sampler_anisotropy: bool = false,
+    sampler_border_color: bool = false,
+    heaps: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -99,6 +103,7 @@ pub const DeviceLimits = struct {
     max_bind_group_slots: u32 = default_max_bind_group_slots,
     max_color_attachments: u32 = 4,
     max_sample_count: u32 = 4,
+    max_sampler_anisotropy: f32 = 1,
     min_uniform_buffer_offset_alignment: u64 = 256,
     min_storage_buffer_offset_alignment: u64 = 256,
 };
@@ -326,6 +331,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTextureViewFormat,
         error.UnsupportedMipmapGeneration,
         error.UnsupportedStorageTextureFormat,
+        error.UnsupportedCompareSampler,
+        error.UnsupportedSamplerAnisotropy,
+        error.UnsupportedSamplerBorderColor,
+        error.UnsupportedHeaps,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -397,6 +406,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UploadBytesTooSmall,
         error.TextureUploadSizeOverflow,
         error.InvalidLodRange,
+        error.InvalidMaxAnisotropy,
+        error.InvalidHeapSize,
         error.InvalidRenderPassAttachment,
         error.InvalidStorageTextureUsage,
         error.PresentRequiresCurrentDrawable,
@@ -1893,6 +1904,12 @@ pub const SamplerAddressMode = enum {
     mirror_repeat,
 };
 
+pub const SamplerBorderColor = enum {
+    transparent_black,
+    opaque_black,
+    opaque_white,
+};
+
 pub const SamplerDescriptor = struct {
     label: ?[]const u8 = null,
     min_filter: SamplerMinMagFilter = .nearest,
@@ -1903,14 +1920,62 @@ pub const SamplerDescriptor = struct {
     address_mode_w: SamplerAddressMode = .clamp_to_edge,
     lod_min_clamp: f32 = 0,
     lod_max_clamp: f32 = 32,
+    compare_function: ?CompareFunction = null,
+    max_anisotropy: f32 = 1,
+    border_color: ?SamplerBorderColor = null,
 
     pub fn validate(self: SamplerDescriptor) SamplerError!void {
         if (self.lod_min_clamp > self.lod_max_clamp) return SamplerError.InvalidLodRange;
+        if (self.max_anisotropy < 1) return SamplerError.InvalidMaxAnisotropy;
+    }
+
+    pub fn validateForDevice(
+        self: SamplerDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) SamplerError!void {
+        try self.validate();
+        if (self.compare_function != null and !features.sampler_compare) {
+            return SamplerError.UnsupportedCompareSampler;
+        }
+        if (self.max_anisotropy > 1) {
+            if (!features.sampler_anisotropy) return SamplerError.UnsupportedSamplerAnisotropy;
+            if (self.max_anisotropy > limits.max_sampler_anisotropy) return SamplerError.InvalidMaxAnisotropy;
+        }
+        if (self.border_color != null and !features.sampler_border_color) {
+            return SamplerError.UnsupportedSamplerBorderColor;
+        }
     }
 };
 
 pub const SamplerError = error{
     InvalidLodRange,
+    InvalidMaxAnisotropy,
+    UnsupportedCompareSampler,
+    UnsupportedSamplerAnisotropy,
+    UnsupportedSamplerBorderColor,
+};
+
+pub const HeapStorageMode = enum {
+    automatic,
+    device_local,
+    cpu_visible,
+};
+
+pub const HeapDescriptor = struct {
+    label: ?[]const u8 = null,
+    size: u64 = 0,
+    storage_mode: HeapStorageMode = .automatic,
+
+    pub fn validate(self: HeapDescriptor, features: DeviceFeatures) HeapError!void {
+        if (!features.heaps) return HeapError.UnsupportedHeaps;
+        if (self.size == 0) return HeapError.InvalidHeapSize;
+    }
+};
+
+pub const HeapError = error{
+    InvalidHeapSize,
+    UnsupportedHeaps,
 };
 
 pub const ShaderVisibility = struct {
@@ -3744,6 +3809,42 @@ test "sampler descriptor validates lod range" {
         .lod_min_clamp = 4,
         .lod_max_clamp = 1,
     }).validate());
+    try std.testing.expectError(SamplerError.InvalidMaxAnisotropy, (SamplerDescriptor{
+        .max_anisotropy = 0.5,
+    }).validate());
+}
+
+test "sampler descriptor validates feature-gated fields" {
+    const default_features = defaultDeviceFeatures(.metal);
+    const default_limits = defaultDeviceLimits(.metal);
+
+    try std.testing.expectError(SamplerError.UnsupportedCompareSampler, (SamplerDescriptor{
+        .compare_function = .less,
+    }).validateForDevice(default_features, default_limits));
+    try std.testing.expectError(SamplerError.UnsupportedSamplerAnisotropy, (SamplerDescriptor{
+        .max_anisotropy = 4,
+    }).validateForDevice(default_features, default_limits));
+    try std.testing.expectError(SamplerError.UnsupportedSamplerBorderColor, (SamplerDescriptor{
+        .border_color = .opaque_black,
+    }).validateForDevice(default_features, default_limits));
+
+    try (SamplerDescriptor{
+        .max_anisotropy = 4,
+    }).validateForDevice(.{ .sampler_anisotropy = true }, .{ .max_sampler_anisotropy = 8 });
+    try std.testing.expectError(SamplerError.InvalidMaxAnisotropy, (SamplerDescriptor{
+        .max_anisotropy = 16,
+    }).validateForDevice(.{ .sampler_anisotropy = true }, .{ .max_sampler_anisotropy = 8 }));
+}
+
+test "heap descriptor is gated by device features" {
+    try std.testing.expectError(HeapError.UnsupportedHeaps, (HeapDescriptor{
+        .size = 1024,
+    }).validate(defaultDeviceFeatures(.vulkan)));
+    try std.testing.expectError(HeapError.InvalidHeapSize, (HeapDescriptor{}).validate(.{ .heaps = true }));
+    try (HeapDescriptor{
+        .size = 4096,
+        .storage_mode = .device_local,
+    }).validate(.{ .heaps = true });
 }
 
 test "bind group layout descriptor validates resource bindings" {
@@ -4119,6 +4220,10 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.texture_arrays);
     try std.testing.expect(features.cube_textures);
     try std.testing.expect(features.multisample_textures);
+    try std.testing.expect(!features.sampler_compare);
+    try std.testing.expect(!features.sampler_anisotropy);
+    try std.testing.expect(!features.sampler_border_color);
+    try std.testing.expect(!features.heaps);
     try std.testing.expect(!features.multi_surface);
 }
 

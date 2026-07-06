@@ -98,6 +98,14 @@ mipmap generation 的公开可验证 shape；当前 command encoder 仍需要应
 Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和 layer range。可以通过
 `descriptor()`、`baseMipLevel()`、`mipLevelCount()`、`baseArrayLayer()`、`arrayLayerCount()` 查询。
 
+`SamplerDescriptor` 包含 compare、anisotropy 和 border-color 字段。这些高级字段通过
+`DeviceFeatures.sampler_compare`、`DeviceFeatures.sampler_anisotropy`、
+`DeviceFeatures.sampler_border_color` 和 `DeviceLimits.max_sampler_anisotropy` gate。当前默认关闭，
+直到后端 mapping 实现。
+
+`HeapDescriptor` 定义 future advanced memory/heap shape。默认资源创建仍由 vkmtl 内部管理 memory；
+`DeviceFeatures.heaps` 在显式 Vulkan/Metal heap allocation 实现前保持 false。
+
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
 render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan

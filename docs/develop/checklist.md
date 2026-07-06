@@ -343,18 +343,18 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 3 Phase 6 Checklist
 
-- [ ] Add compare sampler descriptor shape.
-- [ ] Add anisotropy descriptor shape and validation.
-- [ ] Add border-color descriptor shape.
-- [ ] Report sampler support through features/limits.
-- [ ] Document backend mapping limits.
+- [x] Add compare sampler descriptor shape.
+- [x] Add anisotropy descriptor shape and validation.
+- [x] Add border-color descriptor shape.
+- [x] Report sampler support through features/limits.
+- [x] Document backend mapping limits.
 
 ## Period 3 Phase 7 Checklist
 
-- [ ] Add heap/memory advanced capability shape.
-- [ ] Add public heap descriptor shape.
-- [ ] Keep default resource creation independent from manual heaps.
-- [ ] Document heap ownership and future backend mapping.
+- [x] Add heap/memory advanced capability shape.
+- [x] Add public heap descriptor shape.
+- [x] Keep default resource creation independent from manual heaps.
+- [x] Document heap ownership and future backend mapping.
 
 ## First Backend-Independent Triangle Checklist
 

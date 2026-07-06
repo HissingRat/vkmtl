@@ -120,6 +120,16 @@ Runtime `TextureView` stores the resolved view format, dimension, mip range,
 and layer range. Query them with `descriptor()`, `baseMipLevel()`,
 `mipLevelCount()`, `baseArrayLayer()`, and `arrayLayerCount()`.
 
+`SamplerDescriptor` includes compare, anisotropy, and border-color fields.
+Those advanced fields are capability-gated by `DeviceFeatures.sampler_compare`,
+`DeviceFeatures.sampler_anisotropy`, `DeviceFeatures.sampler_border_color`, and
+`DeviceLimits.max_sampler_anisotropy`. They are disabled by default until the
+backend mappings are implemented.
+
+`HeapDescriptor` defines the future advanced memory/heap shape. Default
+resource creation still owns memory internally, and `DeviceFeatures.heaps` is
+false until explicit Vulkan/Metal heap allocation is implemented.
+
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and
 write-after-write hazards. Blit copies, render attachments, vertex buffers, and
