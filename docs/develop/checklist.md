@@ -408,10 +408,10 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 7 Checklist
 
-- [ ] Add shader specialization descriptor shapes.
-- [ ] Validate specialization value kinds and IDs.
-- [ ] Include specialization in cache-key requirements.
-- [ ] Document backend lowering limits.
+- [x] Add shader specialization descriptor shapes.
+- [x] Validate specialization value kinds and IDs.
+- [x] Include specialization in cache-key requirements.
+- [x] Document backend lowering limits.
 
 ## First Backend-Independent Triangle Checklist
 

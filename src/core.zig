@@ -85,6 +85,7 @@ pub const DeviceFeatures = struct {
     heaps: bool = false,
     small_constants: bool = false,
     root_constants: bool = false,
+    shader_specialization: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -343,6 +344,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedHeaps,
         error.UnsupportedSmallConstants,
         error.UnsupportedRootConstants,
+        error.UnsupportedShaderSpecialization,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -439,8 +441,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptyShaderLibraryEntryName,
         error.EmptyShaderIncludePath,
         error.EmptyShaderSourceHash,
+        error.EmptyShaderSpecializationName,
         error.MissingShaderLibraryEntry,
         error.DuplicateShaderLibraryEntry,
+        error.DuplicateShaderSpecializationConstant,
         error.InvalidRenderPassAttachment,
         error.InvalidStorageTextureUsage,
         error.PresentRequiresCurrentDrawable,
@@ -781,10 +785,77 @@ pub const ShaderLibraryCacheKeyDescriptor = struct {
     source_hash: []const u8,
     profile: ShaderCompileProfile = .debug,
     backend: Backend,
+    specialization: ShaderSpecializationDescriptor = .{},
 
     pub fn validate(self: ShaderLibraryCacheKeyDescriptor) ShaderError!void {
         if (self.library_name.len == 0) return ShaderError.EmptyShaderLibraryName;
         if (self.source_hash.len == 0) return ShaderError.EmptyShaderSourceHash;
+        try self.specialization.validateShape();
+    }
+};
+
+pub const ShaderSpecializationValueKind = enum {
+    bool,
+    i32,
+    u32,
+    f32,
+};
+
+pub const ShaderSpecializationValue = union(ShaderSpecializationValueKind) {
+    bool: bool,
+    i32: i32,
+    u32: u32,
+    f32: f32,
+
+    pub fn kind(self: ShaderSpecializationValue) ShaderSpecializationValueKind {
+        return switch (self) {
+            .bool => .bool,
+            .i32 => .i32,
+            .u32 => .u32,
+            .f32 => .f32,
+        };
+    }
+};
+
+pub const ShaderSpecializationConstant = struct {
+    id: u32,
+    name: ?[]const u8 = null,
+    value: ShaderSpecializationValue,
+
+    pub fn validate(self: ShaderSpecializationConstant) ShaderError!void {
+        if (self.name) |name| {
+            if (name.len == 0) return ShaderError.EmptyShaderSpecializationName;
+        }
+    }
+};
+
+pub const ShaderSpecializationDescriptor = struct {
+    constants: []const ShaderSpecializationConstant = &.{},
+
+    pub fn validateShape(self: ShaderSpecializationDescriptor) ShaderError!void {
+        for (self.constants, 0..) |constant, i| {
+            try constant.validate();
+            for (self.constants[i + 1 ..]) |other| {
+                if (constant.id == other.id) return ShaderError.DuplicateShaderSpecializationConstant;
+                if (constant.name != null and other.name != null and std.mem.eql(u8, constant.name.?, other.name.?)) {
+                    return ShaderError.DuplicateShaderSpecializationConstant;
+                }
+            }
+        }
+    }
+
+    pub fn validate(self: ShaderSpecializationDescriptor, features: DeviceFeatures) ShaderError!void {
+        if (self.constants.len != 0 and !features.shader_specialization) {
+            return ShaderError.UnsupportedShaderSpecialization;
+        }
+        try self.validateShape();
+    }
+
+    pub fn constantForId(self: ShaderSpecializationDescriptor, id: u32) ?ShaderSpecializationConstant {
+        for (self.constants) |constant| {
+            if (constant.id == id) return constant;
+        }
+        return null;
     }
 };
 
@@ -834,12 +905,14 @@ pub const ProgrammableStageDescriptor = struct {
     stage: ShaderStage,
     entry_point: []const u8 = "main",
     reflection: ?ShaderReflectionSource = null,
+    specialization: ShaderSpecializationDescriptor = .{},
 
     pub fn validate(self: ProgrammableStageDescriptor, expected_stage: ShaderStage) ShaderError!void {
         try self.module.validate();
         if (self.stage != expected_stage) return ShaderError.UnexpectedShaderStage;
         if (self.entry_point.len == 0) return ShaderError.EmptyShaderEntryPoint;
         if (self.reflection) |reflection| try reflection.validate();
+        try self.specialization.validateShape();
     }
 };
 
@@ -1003,6 +1076,9 @@ pub const ShaderError = error{
     ShaderReflectionBindingKindMismatch,
     ShaderReflectionVisibilityMismatch,
     UnexpectedShaderStage,
+    UnsupportedShaderSpecialization,
+    EmptyShaderSpecializationName,
+    DuplicateShaderSpecializationConstant,
 };
 
 pub const PipelineError = error{
@@ -3500,6 +3576,39 @@ test "shader library descriptor validates entries and cache keys" {
         .source_hash = "abc",
         .backend = .metal,
     }).validate();
+
+    const specialization_constants = [_]ShaderSpecializationConstant{
+        .{ .id = 0, .name = "use_lighting", .value = .{ .bool = true } },
+        .{ .id = 1, .name = "sample_count", .value = .{ .u32 = 4 } },
+    };
+    const specialization = ShaderSpecializationDescriptor{
+        .constants = specialization_constants[0..],
+    };
+    try specialization.validate(.{ .shader_specialization = true });
+    try std.testing.expectEqual(ShaderSpecializationValueKind.u32, specialization.constantForId(1).?.value.kind());
+    try (ShaderLibraryCacheKeyDescriptor{
+        .library_name = "basic",
+        .source_hash = "abc",
+        .backend = .vulkan,
+        .specialization = specialization,
+    }).validate();
+
+    try std.testing.expectError(ShaderError.UnsupportedShaderSpecialization, specialization.validate(.{}));
+    try std.testing.expectError(ShaderError.EmptyShaderSpecializationName, (ShaderSpecializationDescriptor{
+        .constants = &.{.{ .id = 0, .name = "", .value = .{ .i32 = -1 } }},
+    }).validateShape());
+    try std.testing.expectError(ShaderError.DuplicateShaderSpecializationConstant, (ShaderSpecializationDescriptor{
+        .constants = &.{
+            .{ .id = 0, .name = "a", .value = .{ .f32 = 1 } },
+            .{ .id = 0, .name = "b", .value = .{ .f32 = 2 } },
+        },
+    }).validateShape());
+    try std.testing.expectError(ShaderError.DuplicateShaderSpecializationConstant, (ShaderSpecializationDescriptor{
+        .constants = &.{
+            .{ .id = 0, .name = "same", .value = .{ .bool = true } },
+            .{ .id = 1, .name = "same", .value = .{ .bool = false } },
+        },
+    }).validateShape());
     try std.testing.expectError(ShaderError.EmptyShaderSourceHash, (ShaderLibraryCacheKeyDescriptor{
         .library_name = "basic",
         .source_hash = "",

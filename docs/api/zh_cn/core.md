@@ -170,6 +170,13 @@ var vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescr
 defer vertex_descriptor.deinit();
 ```
 
+`ProgrammableStageDescriptor.specialization` 可以携带
+`ShaderSpecializationDescriptor`，为后续 shader variants 预留。
+`ShaderLibraryCacheKeyDescriptor` 也包含 specialization 输入，这样未来 variant cache
+可以区分不同 specialization。Descriptor 层会校验重复 ID、重复名称和空名称。当前
+runtime pipeline 创建会用 `UnsupportedShaderSpecialization` 拒绝非空 specialization，
+而不是静默忽略。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

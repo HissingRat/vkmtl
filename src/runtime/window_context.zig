@@ -1867,6 +1867,8 @@ pub const Device = struct {
 
     pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
         try descriptor.validate();
+        try validateRuntimeSpecialization(descriptor.vertex);
+        if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment);
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| RenderPipelineState.Impl{ .vulkan = try vulkan.makeRenderPipelineState(descriptor) },
@@ -1883,6 +1885,7 @@ pub const Device = struct {
 
     pub fn makeComputePipelineState(self: *Device, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
         try descriptor.validate();
+        try validateRuntimeSpecialization(descriptor.compute);
         try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ComputePipelineState.Impl{ .vulkan = try vulkan.makeComputePipelineState(descriptor) },
@@ -2301,6 +2304,10 @@ fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor)
         if (entry.array_count != 1) return core.BindingError.UnsupportedResourceArray;
         if (entry.dynamic_offset) return core.BindingError.UnsupportedDynamicBinding;
     }
+}
+
+fn validateRuntimeSpecialization(stage: core.ProgrammableStageDescriptor) core.ShaderError!void {
+    if (stage.specialization.constants.len != 0) return core.ShaderError.UnsupportedShaderSpecialization;
 }
 
 fn materializeVulkanBindGroupEntries(
@@ -2872,6 +2879,19 @@ test "runtime bind group materialization validates resources against layout" {
     try std.testing.expectError(core.BindingError.UnsupportedDynamicBinding, materializeBindGroupEntries(allocator, .vulkan, .{
         .layout = &dynamic_layout,
         .entries = entries[0..0],
+    }));
+}
+
+test "runtime specialization gate rejects non-empty specialization descriptors" {
+    const constants = [_]core.ShaderSpecializationConstant{.{
+        .id = 0,
+        .name = "variant",
+        .value = .{ .u32 = 1 },
+    }};
+    try std.testing.expectError(core.ShaderError.UnsupportedShaderSpecialization, validateRuntimeSpecialization(.{
+        .module = .{ .source = .{ .slang = "shader source" } },
+        .stage = .vertex,
+        .specialization = .{ .constants = constants[0..] },
     }));
 }
 

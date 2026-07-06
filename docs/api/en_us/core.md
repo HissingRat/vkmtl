@@ -199,6 +199,14 @@ var vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescr
 defer vertex_descriptor.deinit();
 ```
 
+`ProgrammableStageDescriptor.specialization` accepts
+`ShaderSpecializationDescriptor` data for future shader variants.
+`ShaderLibraryCacheKeyDescriptor` also includes specialization inputs so future
+variant caches can distinguish them. The descriptor layer validates duplicate
+IDs, duplicate names, and empty names. Runtime pipeline creation currently
+rejects non-empty specialization data with `UnsupportedShaderSpecialization`
+instead of ignoring it.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:
