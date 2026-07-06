@@ -667,11 +667,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 9 Phase 5 Checklist
 
 - [x] Define backend test matrix scope before implementation.
-- [ ] Add backend matrix descriptors for supported host/backend combinations.
-- [ ] Include macOS Metal, macOS MoltenVK testing, Linux Vulkan, Windows
+- [x] Add backend matrix descriptors for supported host/backend combinations.
+- [x] Include macOS Metal, macOS MoltenVK testing, Linux Vulkan, Windows
   Vulkan, optional iOS Metal, and headless/offscreen expectations.
-- [ ] Document required commands and optional runtime configuration.
-- [ ] Add validation for backend matrix entries.
+- [x] Document required commands and optional runtime configuration.
+- [x] Add validation for backend matrix entries.
 
 ## Period 9 Phase 6 Checklist
 

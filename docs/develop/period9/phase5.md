@@ -11,5 +11,7 @@ Phase 5 defines a backend/host test matrix for examples and validation steps.
 
 ## Current Limits
 
+- Backend matrix entries are recorded in `src/development_matrix.zig`.
+- Human-readable commands live in `docs/develop/backend-test-matrix.md`.
 - CI automation may use this matrix later. The first slice makes the matrix
   explicit and testable in metadata.

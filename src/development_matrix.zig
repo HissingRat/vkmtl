@@ -351,6 +351,91 @@ pub fn validateNativeInteropGallery(cases: []const NativeInteropExampleCase) Dev
     }
 }
 
+pub const MatrixHost = enum {
+    macos,
+    linux,
+    windows,
+    ios,
+    headless,
+};
+
+pub const BackendMatrixEntry = struct {
+    name: []const u8,
+    host: MatrixHost,
+    backend: ?core.Backend,
+    required: bool,
+    command: []const u8,
+    requires_runtime_configuration: bool = false,
+    expectation: []const u8,
+
+    pub fn validate(self: BackendMatrixEntry) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.command.len == 0) return DevelopmentMatrixError.EmptyRunStep;
+        if (self.expectation.len == 0) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const backend_test_matrix = [_]BackendMatrixEntry{
+    .{
+        .name = "macos_metal_default",
+        .host = .macos,
+        .backend = .metal,
+        .required = true,
+        .command = "zig build test && zig build",
+        .expectation = "default Apple path builds tests and examples through Metal-capable runtime",
+    },
+    .{
+        .name = "macos_moltenvk_forced",
+        .host = .macos,
+        .backend = .vulkan,
+        .required = false,
+        .command = "zig build -Dvulkan -Dvulkan-loader-dir=/path/to/vulkan/lib -Dvulkan-icd=/path/to/MoltenVK_icd.json",
+        .requires_runtime_configuration = true,
+        .expectation = "forced Vulkan path builds when loader and ICD are explicitly configured",
+    },
+    .{
+        .name = "linux_vulkan",
+        .host = .linux,
+        .backend = .vulkan,
+        .required = true,
+        .command = "zig build test && zig build -Dvulkan",
+        .expectation = "Linux Vulkan builds tests and examples with a system Vulkan loader",
+    },
+    .{
+        .name = "windows_vulkan",
+        .host = .windows,
+        .backend = .vulkan,
+        .required = true,
+        .command = "zig build test && zig build -Dvulkan",
+        .expectation = "Windows Vulkan builds tests and examples with a system Vulkan loader",
+    },
+    .{
+        .name = "ios_metal_optional",
+        .host = .ios,
+        .backend = .metal,
+        .required = false,
+        .command = "zig build -Dtarget=aarch64-ios",
+        .expectation = "optional future Metal target once iOS surface packaging is designed",
+    },
+    .{
+        .name = "headless_deterministic",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build run-transfer-readback && zig build run-compute-readback",
+        .expectation = "deterministic transfer and compute readback examples complete without visual inspection",
+    },
+};
+
+pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, entry.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
     try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
@@ -386,4 +471,13 @@ test "native interop gallery keeps explicit feature gates" {
         try std.testing.expect(case.required_feature.enabled(.{ .native_handles = true }) == (case.required_feature == .native_handles));
     }
     try std.testing.expectEqual(@as(usize, 2), native_handle_cases);
+}
+
+test "backend test matrix metadata is valid" {
+    try validateBackendTestMatrix(backend_test_matrix[0..]);
+    var configured_optional: usize = 0;
+    for (backend_test_matrix) |entry| {
+        if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
+    }
+    try std.testing.expect(configured_optional >= 1);
 }
