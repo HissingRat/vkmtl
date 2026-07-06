@@ -1,0 +1,17 @@
+# Phase 4: Blend State
+
+Phase 4 expands color attachment pipeline state for common blending patterns.
+
+## First Slice
+
+- Add blend factors.
+- Add blend operations.
+- Add color and alpha blend descriptors.
+- Validate format blendability.
+- Keep independent blending explicit through per-attachment descriptors.
+
+## Current Limits
+
+- Color write masks are already part of the pipeline descriptor.
+- Non-empty blending state is validation/API shape first until Metal and Vulkan
+  lowering are completed together.

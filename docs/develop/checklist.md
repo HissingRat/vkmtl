@@ -413,6 +413,70 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Include specialization in cache-key requirements.
 - [x] Document backend lowering limits.
 
+## Period 5 Phase 1 Checklist
+
+- [ ] Add stencil attachment descriptor shape.
+- [ ] Add transient attachment metadata.
+- [ ] Keep multiple color attachments represented in public descriptors.
+- [ ] Validate unsupported attachment lowering through typed errors.
+- [ ] Document attachment model limits.
+
+## Period 5 Phase 2 Checklist
+
+- [ ] Add fill-mode descriptor shape.
+- [ ] Add depth-bias descriptor shape.
+- [ ] Add conservative rasterization feature gate.
+- [ ] Validate unsupported raster-state lowering through typed errors.
+- [ ] Document raster-state limits.
+
+## Period 5 Phase 3 Checklist
+
+- [ ] Add dynamic render state descriptor shapes.
+- [ ] Add render encoder dynamic-state methods.
+- [ ] Validate viewport, scissor, blend constants, stencil reference, and depth bias.
+- [ ] Return typed unsupported errors for non-lowered dynamic state.
+- [ ] Document dynamic-state limits.
+
+## Period 5 Phase 4 Checklist
+
+- [ ] Add blend factors and operations.
+- [ ] Add color/alpha blend descriptor shape.
+- [ ] Validate format blendability.
+- [ ] Keep independent blend state per color attachment.
+- [ ] Document blend lowering limits.
+
+## Period 5 Phase 5 Checklist
+
+- [ ] Add stencil operation descriptor shape.
+- [ ] Add stencil read/write masks.
+- [ ] Validate depth/stencil state.
+- [ ] Return typed unsupported errors for stencil lowering.
+- [ ] Document depth/stencil limits.
+
+## Period 5 Phase 6 Checklist
+
+- [ ] Add explicit vertex buffer indices.
+- [ ] Add instance step-rate metadata.
+- [ ] Validate duplicate vertex attributes and buffer indices.
+- [ ] Validate vertex layout limits.
+- [ ] Document vertex layout limits.
+
+## Period 5 Phase 7 Checklist
+
+- [ ] Add base vertex/base instance draw fields.
+- [ ] Add indirect draw descriptor shapes.
+- [ ] Add multi-draw descriptor shapes and feature gate.
+- [ ] Return typed unsupported errors for non-lowered draw forms.
+- [ ] Document draw command limits.
+
+## Period 5 Phase 8 Checklist
+
+- [ ] Add query type and query set descriptor shapes.
+- [ ] Add query resolve/readback descriptor shapes.
+- [ ] Add query feature gates.
+- [ ] Keep query lowering shape-only in this period.
+- [ ] Document query support differences.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
