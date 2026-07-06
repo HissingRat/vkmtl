@@ -167,7 +167,8 @@ See `docs/develop/period6/`.
 
 ## Period 7: Compute
 
-Status: in progress.
+Status: completed validation/API expansion, with advanced compute features and
+example gallery growth gated for later backend/example work.
 
 Goal: make compute capable of supporting real workflows independently of render
 examples.
