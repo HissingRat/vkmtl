@@ -244,11 +244,11 @@ does not need to handle that argument itself.
 
 ## Current Limits
 
-- Resource creation currently lives on `WindowContext`; a future `Device` owner
-  should replace that temporary entry point.
+- `Device` and `Queue` are the long-term creation and command-entry views.
+  `WindowContext.make*` helpers remain compatibility forwards.
 - vkmtl does not decode images, load meshes, or render text. Applications should
   provide pixel data and higher-level asset systems.
 - GLFW is not part of vkmtl core. Use an external window adapter, like the
   example `zig_glfw` glue, to provide surface descriptors.
-- Debug labels exist on public descriptors, but backend object labeling is still
-  a Phase 9 polish item.
+- Runtime wrappers store borrowed debug labels and validate portable debug
+  groups. Native backend marker lowering is still future work.

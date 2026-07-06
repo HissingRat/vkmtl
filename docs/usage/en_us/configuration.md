@@ -13,6 +13,18 @@ explicit. Examples expose the same knobs where possible.
 
 The selected backend is reported by `selectedBackend()`.
 
+`AdapterSelectionDescriptor` can narrow selection further:
+
+```zig
+.adapter_selection = .{
+    .backend = .metal,
+    .name = "Apple M-series",
+}
+```
+
+`backend` forces the backend used for adapter creation. `name` is validated
+against the resolved runtime adapter name after backend initialization.
+
 ## Build-Time Override
 
 `zig build ... -Dvulkan` forces `WindowContext` to request Vulkan, even if the
@@ -24,14 +36,19 @@ created for the selected surface.
 
 The pure selection logic in `core.selectBackend(...)` follows this order:
 
-1. Explicit `.vulkan` or `.metal` preferences win.
-2. `debug_override` applies only when preference is `.auto`.
-3. `.auto` prefers Metal on Apple platforms when Metal is available.
-4. `.auto` prefers Vulkan elsewhere.
-5. `.auto` may fall back to the other available backend.
-6. If no backend is available, selection returns `NoSupportedBackend`.
+1. `adapter_selection.backend` forces that backend.
+2. Explicit `.vulkan` or `.metal` preferences win when no adapter backend was
+   specified.
+3. Conflicting backend preference and adapter backend return
+   `AdapterSelectionConflict`.
+4. `debug_override` applies only when preference is `.auto`.
+5. `.auto` prefers Metal on Apple platforms when Metal is available.
+6. `.auto` prefers Vulkan elsewhere.
+7. `.auto` may fall back to the other available backend.
+8. If no backend is available, selection returns `NoSupportedBackend`.
 
 Forced unavailable backends return `VulkanUnavailable` or `MetalUnavailable`.
+An adapter name mismatch returns `AdapterNotFound` during `WindowContext.init`.
 
 ## Runtime Surface Availability
 

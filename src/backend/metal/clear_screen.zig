@@ -80,6 +80,11 @@ pub fn adapterInfo(self: *const MetalClearScreen, allocator: std.mem.Allocator) 
     };
 }
 
+pub fn limits(self: *const MetalClearScreen) core.DeviceLimits {
+    _ = self;
+    return core.defaultDeviceLimits(.metal);
+}
+
 pub fn nativeHandles(self: *const MetalClearScreen) !core.NativeHandles {
     var handles: metal.vkmtl_metal_native_handles = undefined;
     try check(metal.vkmtl_metal_clear_screen_get_native_handles(

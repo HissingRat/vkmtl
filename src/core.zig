@@ -33,6 +33,22 @@ pub const AdapterInfo = struct {
     device_type: AdapterDeviceType = .unknown,
 };
 
+pub const AdapterSelectionDescriptor = struct {
+    backend: ?Backend = null,
+    name: ?[]const u8 = null,
+    power_preference: AdapterPowerPreference = .default,
+
+    pub fn matches(self: AdapterSelectionDescriptor, adapter: AdapterInfo) bool {
+        if (self.backend) |backend| {
+            if (adapter.backend != backend) return false;
+        }
+        if (self.name) |name| {
+            if (!std.mem.eql(u8, adapter.name, name)) return false;
+        }
+        return true;
+    }
+};
+
 pub const AdapterList = struct {
     allocator: std.mem.Allocator,
     adapters: []AdapterInfo,
@@ -191,6 +207,26 @@ fn resourceHazard(previous: ?ResourceUsageKind, next: ResourceUsageKind) Resourc
     };
 }
 
+pub const DebugGroupStack = struct {
+    depth: u32 = 0,
+    max_depth: u32 = 64,
+
+    pub fn push(self: *DebugGroupStack, label: []const u8) CommandEncodingError!void {
+        if (label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        if (self.depth >= self.max_depth) return CommandEncodingError.DebugGroupStackOverflow;
+        self.depth += 1;
+    }
+
+    pub fn pop(self: *DebugGroupStack) CommandEncodingError!void {
+        if (self.depth == 0) return CommandEncodingError.DebugGroupStackUnderflow;
+        self.depth -= 1;
+    }
+
+    pub fn requireEmpty(self: DebugGroupStack) CommandEncodingError!void {
+        if (self.depth != 0) return CommandEncodingError.UnclosedDebugGroup;
+    }
+};
+
 pub const BackendAvailability = struct {
     vulkan: bool = true,
     metal: bool = builtin.os.tag.isDarwin(),
@@ -198,6 +234,7 @@ pub const BackendAvailability = struct {
 
 pub const BackendSelectionOptions = struct {
     preference: BackendPreference = .auto,
+    adapter_selection: AdapterSelectionDescriptor = .{},
     os_tag: std.Target.Os.Tag = builtin.os.tag,
     availability: BackendAvailability = .{},
     debug_override: ?Backend = null,
@@ -207,6 +244,8 @@ pub const BackendSelectionError = error{
     VulkanUnavailable,
     MetalUnavailable,
     NoSupportedBackend,
+    AdapterSelectionConflict,
+    AdapterNotFound,
 };
 
 pub const ErrorCategory = enum {
@@ -253,6 +292,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.VulkanUnavailable,
         error.MetalUnavailable,
         error.NoSuitableDevice,
+        error.AdapterNotFound,
         error.MissingVulkanSurfaceExtensions,
         error.BackendMismatch,
         error.CommandFailed,
@@ -298,6 +338,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.MissingIndexBuffer,
         error.InvalidVertexBufferIndex,
         error.InvalidBindGroupIndex,
+        error.EmptyDebugGroupLabel,
+        error.DebugGroupStackOverflow,
+        error.DebugGroupStackUnderflow,
+        error.UnclosedDebugGroup,
         error.InvalidVertexCount,
         error.InvalidIndexCount,
         error.InvalidInstanceCount,
@@ -338,6 +382,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidRenderPassAttachment,
         error.InvalidStorageTextureUsage,
         error.PresentRequiresCurrentDrawable,
+        error.AdapterSelectionConflict,
         error.InvalidSurface,
         error.InvalidBuffer,
         error.InvalidTexture,
@@ -361,6 +406,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
 
 pub const ContextOptions = struct {
     backend: BackendPreference = .auto,
+    adapter_selection: AdapterSelectionDescriptor = .{},
     availability: BackendAvailability = .{},
     debug_backend_override: ?Backend = null,
 };
@@ -371,6 +417,7 @@ pub const Context = struct {
     pub fn init(options: ContextOptions) BackendSelectionError!Context {
         const backend = try selectBackend(.{
             .preference = options.backend,
+            .adapter_selection = options.adapter_selection,
             .availability = options.availability,
             .debug_override = options.debug_backend_override,
         });
@@ -477,33 +524,39 @@ pub fn enumerateAdapters(
     var backends: [2]Backend = undefined;
     var backend_count: usize = 0;
 
-    switch (options.preference) {
-        .vulkan => {
-            backends[0] = try requireBackend(.vulkan, options.availability);
-            backend_count = 1;
-        },
-        .metal => {
-            backends[0] = try requireBackend(.metal, options.availability);
-            backend_count = 1;
-        },
-        .auto => {
-            if (options.debug_override) |override| {
-                backends[0] = try requireBackend(override, options.availability);
+    if (options.adapter_selection.backend) |adapter_backend| {
+        try ensureBackendPreferenceAllowsAdapter(options.preference, adapter_backend);
+        backends[0] = try requireBackend(adapter_backend, options.availability);
+        backend_count = 1;
+    } else {
+        switch (options.preference) {
+            .vulkan => {
+                backends[0] = try requireBackend(.vulkan, options.availability);
                 backend_count = 1;
-            } else {
-                const first: Backend = if (options.os_tag.isDarwin()) .metal else .vulkan;
-                const second: Backend = if (first == .metal) .vulkan else .metal;
-                if (isAvailable(first, options.availability)) {
-                    backends[backend_count] = first;
-                    backend_count += 1;
+            },
+            .metal => {
+                backends[0] = try requireBackend(.metal, options.availability);
+                backend_count = 1;
+            },
+            .auto => {
+                if (options.debug_override) |override| {
+                    backends[0] = try requireBackend(override, options.availability);
+                    backend_count = 1;
+                } else {
+                    const first: Backend = if (options.os_tag.isDarwin()) .metal else .vulkan;
+                    const second: Backend = if (first == .metal) .vulkan else .metal;
+                    if (isAvailable(first, options.availability)) {
+                        backends[backend_count] = first;
+                        backend_count += 1;
+                    }
+                    if (isAvailable(second, options.availability)) {
+                        backends[backend_count] = second;
+                        backend_count += 1;
+                    }
+                    if (backend_count == 0) return BackendSelectionError.NoSupportedBackend;
                 }
-                if (isAvailable(second, options.availability)) {
-                    backends[backend_count] = second;
-                    backend_count += 1;
-                }
-                if (backend_count == 0) return BackendSelectionError.NoSupportedBackend;
-            }
-        },
+            },
+        }
     }
 
     const adapters = try allocator.alloc(AdapterInfo, backend_count);
@@ -518,7 +571,10 @@ pub fn enumerateAdapters(
 }
 
 pub fn defaultDeviceFeatures(_: Backend) DeviceFeatures {
-    return .{};
+    return .{
+        .native_handles = true,
+        .debug_labels = true,
+    };
 }
 
 pub fn defaultDeviceLimits(_: Backend) DeviceLimits {
@@ -1276,6 +1332,10 @@ pub const CommandEncodingError = error{
     MissingIndexBuffer,
     InvalidVertexBufferIndex,
     InvalidBindGroupIndex,
+    EmptyDebugGroupLabel,
+    DebugGroupStackOverflow,
+    DebugGroupStackUnderflow,
+    UnclosedDebugGroup,
     InvalidDepthClearValue,
     DepthStateRenderPassMismatch,
     SampleCountRenderPassMismatch,
@@ -2299,6 +2359,11 @@ pub const SurfaceCollection = struct {
 };
 
 pub fn selectBackend(options: BackendSelectionOptions) BackendSelectionError!Backend {
+    if (options.adapter_selection.backend) |adapter_backend| {
+        try ensureBackendPreferenceAllowsAdapter(options.preference, adapter_backend);
+        return requireBackend(adapter_backend, options.availability);
+    }
+
     const requested = switch (options.preference) {
         .vulkan => return requireBackend(.vulkan, options.availability),
         .metal => return requireBackend(.metal, options.availability),
@@ -2315,6 +2380,14 @@ pub fn selectBackend(options: BackendSelectionOptions) BackendSelectionError!Bac
     if (isAvailable(first, options.availability)) return first;
     if (isAvailable(second, options.availability)) return second;
     return BackendSelectionError.NoSupportedBackend;
+}
+
+fn ensureBackendPreferenceAllowsAdapter(preference: BackendPreference, adapter_backend: Backend) BackendSelectionError!void {
+    switch (preference) {
+        .auto => {},
+        .vulkan => if (adapter_backend != .vulkan) return BackendSelectionError.AdapterSelectionConflict,
+        .metal => if (adapter_backend != .metal) return BackendSelectionError.AdapterSelectionConflict,
+    }
 }
 
 fn requireBackend(backend: Backend, availability: BackendAvailability) BackendSelectionError!Backend {
@@ -2384,6 +2457,41 @@ test "explicit preference does not fall back" {
     }));
 }
 
+test "adapter selection can force backend or report conflicts" {
+    try std.testing.expectEqual(Backend.vulkan, try selectBackend(.{
+        .preference = .auto,
+        .os_tag = .macos,
+        .availability = .{ .vulkan = true, .metal = true },
+        .adapter_selection = .{ .backend = .vulkan },
+    }));
+    try std.testing.expectError(BackendSelectionError.AdapterSelectionConflict, selectBackend(.{
+        .preference = .metal,
+        .availability = .{ .vulkan = true, .metal = true },
+        .adapter_selection = .{ .backend = .vulkan },
+    }));
+}
+
+test "adapter selection matches backend and name" {
+    const adapter = AdapterInfo{
+        .backend = .metal,
+        .name = "Apple GPU",
+        .vendor = "Apple",
+    };
+
+    try std.testing.expect((AdapterSelectionDescriptor{
+        .backend = .metal,
+        .name = "Apple GPU",
+    }).matches(adapter));
+    try std.testing.expect(!(AdapterSelectionDescriptor{
+        .backend = .vulkan,
+        .name = "Apple GPU",
+    }).matches(adapter));
+    try std.testing.expect(!(AdapterSelectionDescriptor{
+        .backend = .metal,
+        .name = "Other GPU",
+    }).matches(adapter));
+}
+
 test "debug override only affects auto selection" {
     try std.testing.expectEqual(Backend.vulkan, try selectBackend(.{
         .preference = .auto,
@@ -2418,6 +2526,24 @@ test "resource usage state records portable hazards" {
     try std.testing.expectEqual(ResourceHazard.write_after_read, transition.hazard);
     try std.testing.expect(transition.requires_barrier);
     try std.testing.expectEqual(@as(usize, 2), state.barrier_count);
+}
+
+test "debug group stack validates labels and nesting" {
+    var stack = DebugGroupStack{ .max_depth = 1 };
+
+    try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, stack.push(""));
+    try stack.push("frame");
+    try std.testing.expectEqual(@as(u32, 1), stack.depth);
+    try std.testing.expectError(CommandEncodingError.DebugGroupStackOverflow, stack.push("too deep"));
+
+    try stack.pop();
+    try std.testing.expectEqual(@as(u32, 0), stack.depth);
+    try std.testing.expectError(CommandEncodingError.DebugGroupStackUnderflow, stack.pop());
+
+    try stack.push("frame");
+    try std.testing.expectError(CommandEncodingError.UnclosedDebugGroup, stack.requireEmpty());
+    try stack.pop();
+    try stack.requireEmpty();
 }
 
 test "error classifier groups public error categories" {
@@ -3650,6 +3776,14 @@ test "default device limits expose public slot constants" {
 
     try std.testing.expectEqual(default_max_vertex_buffer_slots, limits.max_vertex_buffer_slots);
     try std.testing.expectEqual(default_max_bind_group_slots, limits.max_bind_group_slots);
+}
+
+test "default device features expose completed period 2 gates" {
+    const features = defaultDeviceFeatures(.metal);
+
+    try std.testing.expect(features.native_handles);
+    try std.testing.expect(features.debug_labels);
+    try std.testing.expect(!features.multi_surface);
 }
 
 test "default format capabilities describe current portable formats" {

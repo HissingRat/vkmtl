@@ -91,6 +91,10 @@ pub fn adapterInfo(self: *const VulkanClearScreen) AdapterInfoResult {
     return .{ .info = self.gc.adapterInfo() };
 }
 
+pub fn limits(self: *const VulkanClearScreen) core.DeviceLimits {
+    return self.gc.limits();
+}
+
 pub fn nativeHandles(self: *const VulkanClearScreen) core.NativeHandles {
     return .{
         .vulkan = .{

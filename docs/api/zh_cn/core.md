@@ -50,15 +50,18 @@ Period 2 开始，长期资源创建入口是 runtime `Device`。`WindowContext.
 `Device` 也暴露第一版 capability 查询：
 
 - `vkmtl.enumerateAdapters(allocator, BackendSelectionOptions)`
+- `AdapterSelectionDescriptor`
 - `adapterInfo()`
 - `features()`
 - `limits()`
 - `getFormatCaps(TextureFormat)`
 
 当前 adapter enumeration 使用和 backend selection 一致的可用性与排序规则，返回每个可用后端的
-保守 `AdapterInfo`。创建 runtime context 后，`context.adapterInfo()` 和 `device.adapterInfo()`
-会尽量返回后端查询到的 selected adapter 名称/vendor/type。Backend-native limits 和 format
-capability 会在后续 Period 2 phase 逐步替换当前默认值。
+保守 `AdapterInfo`。`AdapterSelectionDescriptor.backend` 会强制所选后端，
+`AdapterSelectionDescriptor.name` 会和 runtime 解析出的 adapter 名称做精确校验。创建 runtime
+context 后，`context.adapterInfo()` 和 `device.adapterInfo()` 会尽量返回后端查询到的 selected
+adapter 名称/vendor/type。`Device.limits()` 现在会询问当前 runtime 后端的已知 limits；format
+capability 仍使用 portable 默认表，后续可以继续接 backend-specific format query。
 
 CPU 可见 buffer 可以用 `buffer.replaceBytes(...)` 更新，也可以用
 `buffer.readBytes(...)` 读回。Texture 通过 `texture.makeTextureView(...)` 创建 view，
@@ -204,6 +207,23 @@ try command_buffer.commit();
 ```
 
 第一版 compute slice 支持 storage-buffer 和 storage-texture 写入/读回验证。
+
+## Debug Label 与 Group
+
+Runtime resource、command buffer 和 command encoder 都暴露借用字符串形式的 debug label：
+
+```zig
+buffer.setLabel("vertices");
+try render_encoder.pushDebugGroup("opaque pass");
+try render_encoder.popDebugGroup();
+```
+
+资源或 pipeline 创建时，descriptor 里的 label 会写入 runtime wrapper。`label()` 返回当前借用
+label，`setLabel(null)` 会清空 label。
+
+Debug group 现在先做可移植验证：空 label、stack underflow、stack overflow、未闭合 group 都会变成
+`CommandEncodingError`。后续可以在不改用户代码的前提下，把这层 API 下沉到 Vulkan debug-utils
+marker 或 Metal debug group。
 
 ## Error 分类
 

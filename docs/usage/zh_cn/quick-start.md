@@ -231,7 +231,7 @@ vkmtl 会自动缓存 runtime shader artifact。cache key 包含 embedded source
 
 ## 当前限制
 
-- 资源创建当前仍在 `WindowContext` 上；未来稳定的 `Device` owner 应该替代这个临时入口。
+- `Device` 和 `Queue` 已经是长期资源创建与 command 入口；`WindowContext.make*` helper 仍作为兼容转发保留。
 - vkmtl 不负责图片解码、mesh 加载或文字渲染。应用应该提供像素数据和更高层 asset 系统。
 - GLFW 不属于 vkmtl core。使用外部 window adapter，比如示例里的 `zig_glfw` glue。
-- 公开 descriptor 已有 debug label，但 native 后端对象 label 仍是 Phase 9 polish 项。
+- Runtime wrapper 会保存借用形式的 debug label，并验证 portable debug group；native 后端 marker 下沉仍是后续工作。

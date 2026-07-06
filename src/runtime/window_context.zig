@@ -153,6 +153,7 @@ pub const ResourceTracker = struct {
 pub const Buffer = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     length_value: usize,
     usage_value: core.BufferUsage = .{},
     usage_state: core.ResourceUsageState = .{},
@@ -180,6 +181,15 @@ pub const Buffer = struct {
 
     pub fn length(self: Buffer) usize {
         return self.length_value;
+    }
+
+    pub fn label(self: Buffer) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *Buffer, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .buffer);
+        self.label_value = label_value;
     }
 
     pub fn usage(self: Buffer) core.BufferUsage {
@@ -228,6 +238,7 @@ pub const Buffer = struct {
 pub const Texture = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     dimension_value: core.TextureDimension = .two_d,
     format_value: core.TextureFormat,
     usage_value: core.TextureUsage,
@@ -253,6 +264,15 @@ pub const Texture = struct {
 
     pub fn selectedBackend(self: Texture) core.Backend {
         return self.backend;
+    }
+
+    pub fn label(self: Texture) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *Texture, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .texture);
+        self.label_value = label_value;
     }
 
     pub fn format(self: Texture) core.TextureFormat {
@@ -339,6 +359,7 @@ pub const Texture = struct {
             .vulkan => .{
                 .backend = .vulkan,
                 .tracker = self.tracker,
+                .label_value = descriptor.label,
                 .format_value = resolved.format,
                 .usage_value = self.usage_value,
                 .sample_count_value = self.sample_count_value,
@@ -349,6 +370,7 @@ pub const Texture = struct {
             .metal => .{
                 .backend = .metal,
                 .tracker = self.tracker,
+                .label_value = descriptor.label,
                 .format_value = resolved.format,
                 .usage_value = self.usage_value,
                 .sample_count_value = self.sample_count_value,
@@ -384,6 +406,7 @@ pub const Texture = struct {
 pub const TextureView = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     format_value: core.TextureFormat,
     usage_value: core.TextureUsage,
     sample_count_value: u32,
@@ -410,6 +433,15 @@ pub const TextureView = struct {
 
     pub fn selectedBackend(self: TextureView) core.Backend {
         return self.backend;
+    }
+
+    pub fn label(self: TextureView) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *TextureView, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .texture_view);
+        self.label_value = label_value;
     }
 
     pub fn format(self: TextureView) core.TextureFormat {
@@ -448,6 +480,7 @@ pub const TextureView = struct {
 pub const SamplerState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     impl: Impl,
 
@@ -469,11 +502,21 @@ pub const SamplerState = struct {
     pub fn selectedBackend(self: SamplerState) core.Backend {
         return self.backend;
     }
+
+    pub fn label(self: SamplerState) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *SamplerState, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .sampler_state);
+        self.label_value = label_value;
+    }
 };
 
 pub const ShaderModule = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     impl: Impl,
 
@@ -495,11 +538,21 @@ pub const ShaderModule = struct {
     pub fn selectedBackend(self: ShaderModule) core.Backend {
         return self.backend;
     }
+
+    pub fn label(self: ShaderModule) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *ShaderModule, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .shader_module);
+        self.label_value = label_value;
+    }
 };
 
 pub const RenderPipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     impl: Impl,
 
@@ -521,11 +574,21 @@ pub const RenderPipelineState = struct {
     pub fn selectedBackend(self: RenderPipelineState) core.Backend {
         return self.backend;
     }
+
+    pub fn label(self: RenderPipelineState) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .render_pipeline_state);
+        self.label_value = label_value;
+    }
 };
 
 pub const ComputePipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     impl: Impl,
 
@@ -547,12 +610,22 @@ pub const ComputePipelineState = struct {
     pub fn selectedBackend(self: ComputePipelineState) core.Backend {
         return self.backend;
     }
+
+    pub fn label(self: ComputePipelineState) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *ComputePipelineState, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .compute_pipeline_state);
+        self.label_value = label_value;
+    }
 };
 
 pub const BindGroupLayout = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     entries: []core.BindGroupLayoutEntry,
     impl: ?Impl = null,
@@ -577,9 +650,18 @@ pub const BindGroupLayout = struct {
         return self.backend;
     }
 
+    pub fn label(self: BindGroupLayout) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *BindGroupLayout, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .bind_group_layout);
+        self.label_value = label_value;
+    }
+
     pub fn descriptor(self: BindGroupLayout) core.BindGroupLayoutDescriptor {
         assertAlive(self.alive, .bind_group_layout);
-        return .{ .entries = self.entries };
+        return .{ .label = self.label_value, .entries = self.entries };
     }
 };
 
@@ -664,6 +746,7 @@ pub const BindGroup = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     entries: []core.BindGroupEntry,
     impl: ?Impl = null,
@@ -686,6 +769,15 @@ pub const BindGroup = struct {
 
     pub fn selectedBackend(self: BindGroup) core.Backend {
         return self.backend;
+    }
+
+    pub fn label(self: BindGroup) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *BindGroup, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .bind_group);
+        self.label_value = label_value;
     }
 
     pub fn entryForBinding(self: BindGroup, binding: u32) ?core.BindGroupEntry {
@@ -957,9 +1049,11 @@ fn recordRenderPassUsage(descriptor: RenderPassDescriptor) void {
 pub const CommandBuffer = struct {
     backend: core.Backend,
     tracker: ?*ResourceTracker = null,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     uses_current_drawable_pass: bool = false,
     debug: core.CommandBufferDebugState = .{},
+    debug_groups: core.DebugGroupStack = .{},
     impl: ?Impl = null,
 
     const Impl = union(core.Backend) {
@@ -997,6 +1091,7 @@ pub const CommandBuffer = struct {
         return .{
             .backend = self.backend,
             .command_buffer = self,
+            .label_value = descriptor.label,
             .debug = debug_encoder,
             .impl = encoder_impl,
         };
@@ -1052,8 +1147,28 @@ pub const CommandBuffer = struct {
         }
     }
 
+    pub fn label(self: CommandBuffer) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "command_buffer");
+        self.label_value = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "command_buffer");
+        try self.debug_groups.push(label_value);
+    }
+
+    pub fn popDebugGroup(self: *CommandBuffer) !void {
+        assertObjectAlive(self.alive, "command_buffer");
+        try self.debug_groups.pop();
+    }
+
     pub fn commit(self: *CommandBuffer) !void {
         assertObjectAlive(self.alive, "command_buffer");
+        try self.debug_groups.requireEmpty();
         try self.debug.commit();
         const work_serial = if (self.tracker) |tracker| tracker.submitWork() else 0;
         switch (self.impl orelse {
@@ -1082,8 +1197,10 @@ pub const CommandBuffer = struct {
 pub const BlitCommandEncoder = struct {
     backend: core.Backend,
     command_buffer: *CommandBuffer,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     debug: core.BlitCommandEncoderDebugState = .{},
+    debug_groups: core.DebugGroupStack = .{},
     impl: ?Impl = null,
 
     const Impl = union(core.Backend) {
@@ -1159,6 +1276,7 @@ pub const BlitCommandEncoder = struct {
 
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
+        try self.debug_groups.requireEmpty();
         try self.debug.endEncoding(&self.command_buffer.debug);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.endEncoding(),
@@ -1170,6 +1288,25 @@ pub const BlitCommandEncoder = struct {
         self.alive = false;
     }
 
+    pub fn label(self: BlitCommandEncoder) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *BlitCommandEncoder, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        self.label_value = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *BlitCommandEncoder, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        try self.debug_groups.push(label_value);
+    }
+
+    pub fn popDebugGroup(self: *BlitCommandEncoder) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        try self.debug_groups.pop();
+    }
+
     pub fn selectedBackend(self: BlitCommandEncoder) core.Backend {
         return self.backend;
     }
@@ -1178,8 +1315,10 @@ pub const BlitCommandEncoder = struct {
 pub const ComputeCommandEncoder = struct {
     backend: core.Backend,
     command_buffer: *CommandBuffer,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     debug: core.ComputeCommandEncoderDebugState = .{},
+    debug_groups: core.DebugGroupStack = .{},
     impl: ?Impl = null,
 
     const Impl = union(core.Backend) {
@@ -1230,6 +1369,7 @@ pub const ComputeCommandEncoder = struct {
 
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
+        try self.debug_groups.requireEmpty();
         try self.debug.endEncoding(&self.command_buffer.debug);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.endEncoding(),
@@ -1241,6 +1381,25 @@ pub const ComputeCommandEncoder = struct {
         self.alive = false;
     }
 
+    pub fn label(self: ComputeCommandEncoder) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *ComputeCommandEncoder, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        self.label_value = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *ComputeCommandEncoder, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        try self.debug_groups.push(label_value);
+    }
+
+    pub fn popDebugGroup(self: *ComputeCommandEncoder) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        try self.debug_groups.pop();
+    }
+
     pub fn selectedBackend(self: ComputeCommandEncoder) core.Backend {
         return self.backend;
     }
@@ -1249,8 +1408,10 @@ pub const ComputeCommandEncoder = struct {
 pub const RenderCommandEncoder = struct {
     backend: core.Backend,
     command_buffer: *CommandBuffer,
+    label_value: ?[]const u8 = null,
     alive: bool = true,
     debug: core.RenderCommandEncoderDebugState = .{},
+    debug_groups: core.DebugGroupStack = .{},
     impl: ?Impl = null,
 
     const Impl = union(core.Backend) {
@@ -1341,6 +1502,7 @@ pub const RenderCommandEncoder = struct {
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug_groups.requireEmpty();
         try self.debug.endEncoding(&self.command_buffer.debug);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.endEncoding(),
@@ -1352,6 +1514,25 @@ pub const RenderCommandEncoder = struct {
         self.alive = false;
     }
 
+    pub fn label(self: RenderCommandEncoder) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *RenderCommandEncoder, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        self.label_value = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *RenderCommandEncoder, label_value: []const u8) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug_groups.push(label_value);
+    }
+
+    pub fn popDebugGroup(self: *RenderCommandEncoder) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try self.debug_groups.pop();
+    }
+
     pub fn selectedBackend(self: RenderCommandEncoder) core.Backend {
         return self.backend;
     }
@@ -1360,6 +1541,7 @@ pub const RenderCommandEncoder = struct {
 pub const WindowContextOptions = struct {
     app_name: [*:0]const u8,
     backend: core.BackendPreference = .auto,
+    adapter_selection: core.AdapterSelectionDescriptor = .{},
     debug_backend_override: ?core.Backend = null,
     process_args: ?std.process.Args = null,
     shader_cache_dir: ?[]const u8 = null,
@@ -1491,7 +1673,10 @@ pub const Device = struct {
     }
 
     pub fn limits(self: Device) core.DeviceLimits {
-        return core.defaultDeviceLimits(self.backend);
+        return switch (self.impl.*) {
+            .vulkan => |*vulkan| vulkan.limits(),
+            .metal => |*metal| metal.limits(),
+        };
     }
 
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
@@ -1547,6 +1732,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
             .length_value = length,
             .usage_value = descriptor.usage,
             .impl = impl,
@@ -1562,6 +1748,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
             .impl = impl,
         };
     }
@@ -1577,6 +1764,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
             .impl = impl,
         };
     }
@@ -1592,6 +1780,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
             .impl = impl,
         };
     }
@@ -1623,6 +1812,7 @@ pub const Device = struct {
             .backend = self.backend,
             .tracker = self.tracker,
             .allocator = self.allocator,
+            .label_value = descriptor.label,
             .entries = entries,
             .impl = impl,
         };
@@ -1665,6 +1855,7 @@ pub const Device = struct {
             .backend = self.backend,
             .tracker = self.tracker,
             .allocator = self.allocator,
+            .label_value = descriptor.label,
             .entries = entries,
             .impl = impl,
         };
@@ -1679,6 +1870,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
             .dimension_value = descriptor.dimension,
             .format_value = descriptor.format,
             .usage_value = descriptor.usage,
@@ -1696,6 +1888,7 @@ pub const Device = struct {
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
+            .label_value = descriptor.label,
             .impl = impl,
         };
     }
@@ -1738,6 +1931,10 @@ fn resolveAdapterInfo(allocator: std.mem.Allocator, impl: *BackendRuntime) !Reso
     };
 }
 
+fn validateAdapterSelection(selection: core.AdapterSelectionDescriptor, adapter: core.AdapterInfo) core.BackendSelectionError!void {
+    if (!selection.matches(adapter)) return core.BackendSelectionError.AdapterNotFound;
+}
+
 fn deinitBackendRuntime(impl: *BackendRuntime) void {
     switch (impl.*) {
         .vulkan => |*vulkan| vulkan.deinit(),
@@ -1767,9 +1964,12 @@ pub const WindowContext = struct {
         errdefer resolved_shader_cache_dir.deinit(allocator);
 
         const backend_preference: core.BackendPreference = if (build_options.force_vulkan) .vulkan else options.backend;
+        var adapter_selection = options.adapter_selection;
+        if (build_options.force_vulkan) adapter_selection.backend = .vulkan;
         const debug_backend_override: ?core.Backend = if (build_options.force_vulkan) null else options.debug_backend_override;
         const backend = try core.selectBackend(.{
             .preference = backend_preference,
+            .adapter_selection = adapter_selection,
             .availability = presentationAvailability(options.surface),
             .debug_override = debug_backend_override,
         });
@@ -1794,6 +1994,7 @@ pub const WindowContext = struct {
 
         const adapter_info = try resolveAdapterInfo(allocator, &impl);
         errdefer adapter_info.deinit(allocator);
+        try validateAdapterSelection(adapter_selection, adapter_info.info);
 
         return .{
             .allocator = allocator,
@@ -2263,7 +2464,12 @@ test "runtime blit encoder records buffer usage transitions" {
 
 test "runtime device exposes adapter features limits and format caps" {
     var tracker = ResourceTracker{};
-    var backend_runtime: BackendRuntime = undefined;
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
     const device = Device{
         .allocator = std.testing.allocator,
         .tracker = &tracker,
@@ -2283,6 +2489,20 @@ test "runtime device exposes adapter features limits and format caps" {
     try std.testing.expectEqual(core.default_max_bind_group_slots, device.limits().max_bind_group_slots);
     try std.testing.expect(device.getFormatCaps(.rgba8_unorm).storage);
     try std.testing.expect(device.getFormatCaps(.depth32_float).depth_stencil_attachment);
+}
+
+test "runtime adapter selection validates resolved adapter info" {
+    const adapter = core.AdapterInfo{
+        .backend = .metal,
+        .name = "Apple GPU",
+        .vendor = "Apple",
+    };
+
+    try validateAdapterSelection(.{ .backend = .metal, .name = "Apple GPU" }, adapter);
+    try std.testing.expectError(core.BackendSelectionError.AdapterNotFound, validateAdapterSelection(.{
+        .backend = .metal,
+        .name = "Other GPU",
+    }, adapter));
 }
 
 test "window context exposes device and queue views" {
@@ -2483,6 +2703,47 @@ test "runtime render encoder validates bind group binding" {
     try std.testing.expectError(error.InvalidBindGroupIndex, encoder.setBindGroup(&bind_group, .{ .index = 16 }));
 
     try encoder.endEncoding();
+}
+
+test "runtime resources keep borrowed debug labels" {
+    var tracker = ResourceTracker{};
+    var buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .label_value = "vertices",
+        .length_value = 16,
+        .impl = undefined,
+    };
+
+    try std.testing.expectEqualStrings("vertices", buffer.label().?);
+    buffer.setLabel("renamed vertices");
+    try std.testing.expectEqualStrings("renamed vertices", buffer.label().?);
+    buffer.setLabel(null);
+    try std.testing.expect(buffer.label() == null);
+}
+
+test "runtime command objects validate debug group balance" {
+    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    command_buffer.setLabel("frame commands");
+    try std.testing.expectEqualStrings("frame commands", command_buffer.label().?);
+
+    try command_buffer.pushDebugGroup("frame");
+    try std.testing.expectError(core.CommandEncodingError.UnclosedDebugGroup, command_buffer.commit());
+    try command_buffer.popDebugGroup();
+
+    const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
+    var encoder = try command_buffer.makeRenderCommandEncoder(.{
+        .label = "main render",
+        .color_attachments = color_attachments[0..],
+    });
+    try std.testing.expectEqualStrings("main render", encoder.label().?);
+
+    try encoder.pushDebugGroup("draws");
+    try std.testing.expectError(core.CommandEncodingError.UnclosedDebugGroup, encoder.endEncoding());
+    try encoder.popDebugGroup();
+    try encoder.endEncoding();
+
+    try command_buffer.commit();
 }
 
 test "runtime render pass descriptor accepts texture-backed color targets" {

@@ -96,3 +96,5 @@ Decision notes: `phase7.md`.
 - Use Vulkan debug utils where available.
 - Use Metal labels and debug groups where available.
 - Report unreleased resources in debug builds.
+
+Decision notes: `phase8.md`.

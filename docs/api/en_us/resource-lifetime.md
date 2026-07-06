@@ -59,10 +59,12 @@ non-idle submission can attach native destroys to the same serial model.
 
 ## Command Objects
 
-Command buffers, render command encoders, and blit command encoders are
-short-lived recording objects. Encoders must be ended with `endEncoding()`.
-A command buffer is consumed by `commit()`, which submits/presents work and
-releases the native command buffer wrapper.
+Command buffers, render command encoders, blit command encoders, and compute
+command encoders are short-lived recording objects. Encoders must be ended with
+`endEncoding()`. A command buffer is consumed by `commit()`, which
+submits/presents work and releases the native command buffer wrapper.
+
+Debug groups must be balanced before `endEncoding()` or `commit()`.
 
 ## Owner Migration Direction
 

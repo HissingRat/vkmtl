@@ -237,8 +237,9 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add `FormatCapabilities`.
 - [x] Add `device.features()`, `device.limits()`, and `device.getFormatCaps()`.
 - [x] Add adapter enumeration.
-- [ ] Add explicit adapter selection.
-- [ ] Replace conservative default capabilities with backend-native queries.
+- [x] Add explicit adapter selection by backend and resolved adapter name.
+- [x] Route selected-runtime limits through backend-native queries where
+  currently available.
 
 ## Period 2 Phase 3 Checklist
 
@@ -286,6 +287,16 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add an explicit `WindowContext.nativeHandles()` escape hatch.
 - [x] Keep native handle access out of ordinary portable APIs.
 - [x] Document borrowed-handle lifetime and portability risks.
+
+## Period 2 Phase 8 Checklist
+
+- [x] Add runtime resource debug labels.
+- [x] Add command buffer and command encoder labels.
+- [x] Add portable push/pop debug groups.
+- [x] Validate empty, unbalanced, overflow, and underflow debug groups.
+- [x] Keep backend-native debug-utils and Metal marker lowering as a later
+  implementation detail.
+- [x] Document borrowed label lifetime and current diagnostics limits.
 
 ## First Backend-Independent Triangle Checklist
 

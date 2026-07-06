@@ -62,6 +62,7 @@ forwards.
 `Device` also exposes the first capability-query shape:
 
 - `vkmtl.enumerateAdapters(allocator, BackendSelectionOptions)`
+- `AdapterSelectionDescriptor`
 - `adapterInfo()`
 - `features()`
 - `limits()`
@@ -69,10 +70,13 @@ forwards.
 
 Current adapter enumeration uses the same availability and ordering rules as
 backend selection and returns conservative `AdapterInfo` values for each
-available backend. After runtime context creation, `context.adapterInfo()` and
-`device.adapterInfo()` try to return backend-queried selected-adapter
-name/vendor/type. Backend-native limits and format capabilities should replace
-the current defaults in later Period 2 phases.
+available backend. `AdapterSelectionDescriptor.backend` forces the selected
+backend, while `AdapterSelectionDescriptor.name` is validated against the
+resolved runtime adapter name. After runtime context creation,
+`context.adapterInfo()` and `device.adapterInfo()` try to return
+backend-queried selected-adapter name/vendor/type. `Device.limits()` now asks
+the selected runtime backend for known limits; format capabilities still use the
+portable default table until backend-specific format queries are added.
 
 Buffers created with CPU-visible storage can be updated with
 `buffer.replaceBytes(...)` and read back with `buffer.readBytes(...)`. Textures
@@ -240,6 +244,25 @@ try command_buffer.commit();
 
 The first compute slice supports storage-buffer and storage-texture
 write/readback validation.
+
+## Debug Labels And Groups
+
+Runtime resources, command buffers, and command encoders expose borrowed debug
+labels:
+
+```zig
+buffer.setLabel("vertices");
+try render_encoder.pushDebugGroup("opaque pass");
+try render_encoder.popDebugGroup();
+```
+
+Descriptor labels are copied into runtime wrappers when resources or pipelines
+are created. `label()` returns the current borrowed label, and `setLabel(null)`
+clears it.
+
+Debug groups are validated portably. Empty labels, underflow, overflow, and
+unclosed groups become `CommandEncodingError` values. Native Vulkan debug-utils
+markers and Metal debug groups can be lowered behind this API later.
 
 ## Error Classification
 

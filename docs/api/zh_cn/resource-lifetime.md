@@ -53,9 +53,11 @@ wait-idle 时，native destroy 会接到同一套 serial 模型上。
 
 ## Command Object
 
-Command buffer、render command encoder 和 blit command encoder 都是短生命周期 recording object。
-Encoder 必须用 `endEncoding()` 结束。Command buffer 会被 `commit()` 消费；`commit()` 会提交/呈现
-工作并释放 native command buffer wrapper。
+Command buffer、render command encoder、blit command encoder 和 compute command encoder 都是短生命周期
+recording object。Encoder 必须用 `endEncoding()` 结束。Command buffer 会被 `commit()` 消费；
+`commit()` 会提交/呈现工作并释放 native command buffer wrapper。
+
+Debug group 必须在 `endEncoding()` 或 `commit()` 前保持 push/pop 平衡。
 
 ## Owner 迁移方向
 

@@ -152,6 +152,12 @@ pub fn adapterInfo(self: *const GraphicsContext) core.AdapterInfo {
     };
 }
 
+pub fn limits(self: GraphicsContext) core.DeviceLimits {
+    var result = core.defaultDeviceLimits(.vulkan);
+    result.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
+    return result;
+}
+
 pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
     for (self.mem_props.memory_types[0..self.mem_props.memory_type_count], 0..) |mem_type, i| {
         if (memory_type_bits & (@as(u32, 1) << @truncate(i)) != 0 and mem_type.property_flags.contains(flags)) {
@@ -204,6 +210,14 @@ pub fn supportsSampleCount(self: GraphicsContext, format: core.TextureFormat, sa
         8 => flags.@"8_bit",
         else => false,
     };
+}
+
+fn maxSupportedSampleCount(self: GraphicsContext, format: core.TextureFormat) u32 {
+    const candidates = [_]u32{ 8, 4, 2 };
+    for (candidates) |sample_count| {
+        if (self.supportsSampleCount(format, sample_count)) return sample_count;
+    }
+    return 1;
 }
 
 pub const Queue = struct {
