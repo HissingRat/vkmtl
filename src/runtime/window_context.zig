@@ -2426,6 +2426,9 @@ fn validateRuntimeRenderPipelineShape(
             first_blend = blend;
         }
     }
+    if (descriptor.depth_stencil) |depth_stencil| {
+        if (depth_stencil.stencil.enabled and !features.stencil_state) return core.PipelineError.UnsupportedStencilState;
+    }
 }
 
 fn materializeVulkanBindGroupEntries(
@@ -3058,6 +3061,14 @@ test "runtime render pipeline gate rejects unsupported raster state" {
     independent.color_attachments = independent_blend_attachments[0..];
     try std.testing.expectError(core.PipelineError.UnsupportedIndependentBlend, validateRuntimeRenderPipelineShape(independent, .{ .blend_state = true }));
     try validateRuntimeRenderPipelineShape(independent, .{ .blend_state = true, .independent_blend = true });
+
+    var stencil = descriptor;
+    stencil.depth_stencil = .{
+        .format = .depth32_float,
+        .stencil = .{ .enabled = true },
+    };
+    try std.testing.expectError(core.PipelineError.UnsupportedStencilState, validateRuntimeRenderPipelineShape(stencil, .{}));
+    try validateRuntimeRenderPipelineShape(stencil, .{ .stencil_state = true });
 }
 
 test "runtime render encoder validates bind group binding" {

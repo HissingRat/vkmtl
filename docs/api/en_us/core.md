@@ -220,6 +220,12 @@ Non-empty blend state is currently feature-gated by `DeviceFeatures.blend_state`
 different per-attachment blend descriptors also require
 `DeviceFeatures.independent_blend`.
 
+Depth/stencil state includes `depth_test_enabled`, depth compare/write fields,
+and a `StencilDescriptor` with front/back operations plus read/write masks.
+Depth state is part of the lowered first slice. Stencil state is represented and
+validated, but the current format list has no stencil-capable format yet, so
+stencil-enabled descriptors are rejected until that format support lands.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:

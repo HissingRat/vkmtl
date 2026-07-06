@@ -188,6 +188,11 @@ operation，每个 attachment 都可以有自己的 descriptor。非空 blend st
 `DeviceFeatures.blend_state` gate；每个 attachment 使用不同 blend descriptor 还需要
 `DeviceFeatures.independent_blend`。
 
+Depth/stencil state 包含 `depth_test_enabled`、depth compare/write 字段，以及带 front/back
+operation 和 read/write mask 的 `StencilDescriptor`。Depth state 已在第一版 lowering
+路径里。Stencil state 已经可以表达和校验，但当前 format 列表还没有 stencil-capable format，
+所以启用 stencil 的 descriptor 会先被校验拒绝，直到 format support 补上。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

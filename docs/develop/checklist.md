@@ -447,11 +447,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 5 Checklist
 
-- [ ] Add stencil operation descriptor shape.
-- [ ] Add stencil read/write masks.
-- [ ] Validate depth/stencil state.
-- [ ] Return typed unsupported errors for stencil lowering.
-- [ ] Document depth/stencil limits.
+- [x] Add stencil operation descriptor shape.
+- [x] Add stencil read/write masks.
+- [x] Validate depth/stencil state.
+- [x] Return typed unsupported errors for stencil lowering.
+- [x] Document depth/stencil limits.
 
 ## Period 5 Phase 6 Checklist
 

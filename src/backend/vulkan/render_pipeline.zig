@@ -439,7 +439,7 @@ fn makeDepthStencilState(descriptor: core.DepthStencilDescriptor) vk.PipelineDep
     };
 
     return .{
-        .depth_test_enable = .true,
+        .depth_test_enable = if (descriptor.depth_test_enabled) .true else .false,
         .depth_write_enable = if (descriptor.depth_write_enabled) .true else .false,
         .depth_compare_op = compareOp(descriptor.depth_compare_function),
         .depth_bounds_test_enable = .false,

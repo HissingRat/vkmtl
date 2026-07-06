@@ -91,6 +91,7 @@ pub const DeviceFeatures = struct {
     conservative_rasterization: bool = false,
     blend_state: bool = false,
     independent_blend: bool = false,
+    stencil_state: bool = false,
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     bind_groups: bool = true,
@@ -360,6 +361,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedBlendState,
         error.UnsupportedIndependentBlend,
         error.UnsupportedBlendFormat,
+        error.UnsupportedStencilState,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -378,6 +380,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidVertexStride,
         error.InvalidVertexAttributeOffset,
         error.InvalidDepthBias,
+        error.InvalidStencilMask,
         error.InvalidColorAttachmentFormat,
         error.MissingColorAttachment,
         error.InvalidDepthStencilFormat,
@@ -1079,13 +1082,50 @@ pub const CompareFunction = enum {
     always,
 };
 
+pub const StencilOperation = enum {
+    keep,
+    zero,
+    replace,
+    increment_clamp,
+    decrement_clamp,
+    invert,
+    increment_wrap,
+    decrement_wrap,
+};
+
+pub const StencilFaceDescriptor = struct {
+    stencil_fail_operation: StencilOperation = .keep,
+    depth_fail_operation: StencilOperation = .keep,
+    depth_stencil_pass_operation: StencilOperation = .keep,
+    stencil_compare_function: CompareFunction = .always,
+};
+
+pub const StencilDescriptor = struct {
+    enabled: bool = false,
+    front: StencilFaceDescriptor = .{},
+    back: StencilFaceDescriptor = .{},
+    read_mask: u32 = 0xff,
+    write_mask: u32 = 0xff,
+
+    pub fn validate(self: StencilDescriptor) PipelineError!void {
+        if (self.read_mask > 0xff or self.write_mask > 0xff) return PipelineError.InvalidStencilMask;
+    }
+};
+
 pub const DepthStencilDescriptor = struct {
     format: TextureFormat = .automatic,
+    depth_test_enabled: bool = true,
     depth_compare_function: CompareFunction = .always,
     depth_write_enabled: bool = false,
+    stencil: StencilDescriptor = .{},
 
     pub fn validate(self: DepthStencilDescriptor) PipelineError!void {
-        if (!isDepthFormat(self.format)) return PipelineError.InvalidDepthStencilFormat;
+        try self.stencil.validate();
+        const requires_depth = self.depth_test_enabled or self.depth_write_enabled;
+        const requires_stencil = self.stencil.enabled;
+        if (requires_depth and !isDepthFormat(self.format)) return PipelineError.InvalidDepthStencilFormat;
+        if (requires_stencil and !isStencilFormat(self.format)) return PipelineError.InvalidDepthStencilFormat;
+        if (!requires_depth and !requires_stencil) return PipelineError.InvalidDepthStencilFormat;
     }
 };
 
@@ -1193,6 +1233,8 @@ pub const PipelineError = error{
     UnsupportedBlendState,
     UnsupportedIndependentBlend,
     UnsupportedBlendFormat,
+    InvalidStencilMask,
+    UnsupportedStencilState,
 };
 
 pub fn validateProgrammableStageReflection(
@@ -4130,6 +4172,34 @@ test "render pipeline descriptor validates depth state" {
         },
         .color_attachments = color_attachments[0..],
         .depth_stencil = .{ .format = .rgba8_unorm },
+    }).validate());
+
+    try std.testing.expectError(PipelineError.InvalidStencilMask, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .color_attachments = color_attachments[0..],
+        .depth_stencil = .{
+            .format = .depth32_float,
+            .stencil = .{ .read_mask = 0x100 },
+        },
+    }).validate());
+
+    try std.testing.expectError(PipelineError.InvalidDepthStencilFormat, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .color_attachments = color_attachments[0..],
+        .depth_stencil = .{
+            .format = .depth32_float,
+            .stencil = .{
+                .enabled = true,
+                .front = .{ .stencil_compare_function = .less_equal },
+                .back = .{ .stencil_compare_function = .greater_equal },
+            },
+        },
     }).validate());
 }
 
