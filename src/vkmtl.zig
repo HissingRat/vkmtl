@@ -95,6 +95,7 @@ pub const StencilDescriptor = core.StencilDescriptor;
 pub const DepthStencilDescriptor = core.DepthStencilDescriptor;
 pub const RenderPipelineColorAttachmentDescriptor = core.RenderPipelineColorAttachmentDescriptor;
 pub const RenderPipelineDescriptor = core.RenderPipelineDescriptor;
+pub const RenderPipelineCacheKeyDescriptor = core.RenderPipelineCacheKeyDescriptor;
 pub const ComputePipelineDescriptor = core.ComputePipelineDescriptor;
 pub const ComputePipelineCacheKeyDescriptor = core.ComputePipelineCacheKeyDescriptor;
 pub const ShaderError = core.ShaderError;

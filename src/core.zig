@@ -555,6 +555,7 @@ pub const ObjectCacheError = error{
     EmptyObjectCacheOptionsHash,
     EmptyObjectCacheEntryPoint,
     EmptyObjectCacheKey,
+    InvalidObjectCacheKey,
     MissingObjectCacheLayout,
 };
 
@@ -798,6 +799,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptyObjectCacheOptionsHash,
         error.EmptyObjectCacheEntryPoint,
         error.EmptyObjectCacheKey,
+        error.InvalidObjectCacheKey,
         error.MissingObjectCacheLayout,
         => .validation,
 
@@ -1535,6 +1537,34 @@ pub const RenderPipelineDescriptor = struct {
             try attachment.validate();
         }
         if (self.depth_stencil) |depth_stencil| try depth_stencil.validate();
+    }
+};
+
+pub const RenderPipelineCacheKeyDescriptor = struct {
+    pipeline: RenderPipelineDescriptor,
+    vertex_shader: ShaderModuleCacheKeyDescriptor,
+    fragment_shader: ?ShaderModuleCacheKeyDescriptor = null,
+    pipeline_layout: ?PipelineLayoutCacheKeyDescriptor = null,
+
+    pub fn validate(
+        self: RenderPipelineCacheKeyDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (ShaderError || PipelineError || BindingError || ObjectCacheError || SmallConstantError || RootConstantError)!void {
+        try self.pipeline.validate();
+        try self.vertex_shader.validate();
+        if (self.vertex_shader.stage != .vertex) return ObjectCacheError.InvalidObjectCacheKey;
+
+        if ((self.pipeline.fragment == null) != (self.fragment_shader == null)) {
+            return ObjectCacheError.InvalidObjectCacheKey;
+        }
+        if (self.fragment_shader) |fragment_shader| {
+            try fragment_shader.validate();
+            if (fragment_shader.stage != .fragment) return ObjectCacheError.InvalidObjectCacheKey;
+        }
+        if (self.pipeline_layout) |layout| {
+            try layout.validate(features, limits);
+        }
     }
 };
 
@@ -5063,7 +5093,7 @@ test "render pipeline descriptor validates shader stages and color targets" {
         .{ .entries = bind_group_entries[0..] },
     };
 
-    try (RenderPipelineDescriptor{
+    const render_pipeline = RenderPipelineDescriptor{
         .vertex = .{
             .module = vertex_module,
             .stage = .vertex,
@@ -5077,7 +5107,42 @@ test "render pipeline descriptor validates shader stages and color targets" {
         .vertex_descriptor = .{ .buffers = vertex_buffers[0..] },
         .bind_group_layouts = bind_group_layouts[0..],
         .color_attachments = color_attachments[0..],
-    }).validate();
+    };
+    try render_pipeline.validate();
+    try (RenderPipelineCacheKeyDescriptor{
+        .pipeline = render_pipeline,
+        .vertex_shader = .{
+            .source_hash = "vs-source",
+            .compile_options_hash = "debug",
+            .entry_point = "vs_main",
+            .backend = .metal,
+            .stage = .vertex,
+        },
+        .fragment_shader = .{
+            .source_hash = "fs-source",
+            .compile_options_hash = "debug",
+            .entry_point = "fs_main",
+            .backend = .metal,
+            .stage = .fragment,
+        },
+    }).validate(.{}, .{});
+    try std.testing.expectError(ObjectCacheError.InvalidObjectCacheKey, (RenderPipelineCacheKeyDescriptor{
+        .pipeline = render_pipeline,
+        .vertex_shader = .{
+            .source_hash = "vs-source",
+            .compile_options_hash = "debug",
+            .entry_point = "vs_main",
+            .backend = .metal,
+            .stage = .fragment,
+        },
+        .fragment_shader = .{
+            .source_hash = "fs-source",
+            .compile_options_hash = "debug",
+            .entry_point = "fs_main",
+            .backend = .metal,
+            .stage = .fragment,
+        },
+    }).validate(.{}, .{}));
 
     try (RenderPipelineDescriptor{
         .vertex = .{

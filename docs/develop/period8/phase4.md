@@ -11,4 +11,8 @@ Phase 4 defines render pipeline cache identity.
 
 ## Current Limits
 
+- `RenderPipelineCacheKeyDescriptor` combines a validated
+  `RenderPipelineDescriptor` with vertex/fragment shader module identities.
+- Shader stage identity must agree with the programmable stages on the render
+  pipeline descriptor.
 - Native render pipeline state reuse remains future runtime/backend work.

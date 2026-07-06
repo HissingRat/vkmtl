@@ -600,10 +600,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 4 Checklist
 
 - [x] Define render pipeline cache scope before implementation.
-- [ ] Add render pipeline cache-key descriptor shape.
-- [ ] Include shader identities, render target formats, raster, blend, depth/stencil, vertex layout, and specialization.
-- [ ] Validate through existing render pipeline descriptor validation.
-- [ ] Document render pipeline cache limits.
+- [x] Add render pipeline cache-key descriptor shape.
+- [x] Include shader identities, render target formats, raster, blend, depth/stencil, vertex layout, and specialization.
+- [x] Validate through existing render pipeline descriptor validation.
+- [x] Document render pipeline cache limits.
 
 ## Period 8 Phase 5 Checklist
 
