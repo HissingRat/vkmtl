@@ -40,3 +40,7 @@ portable resource creation.
 
 Tessellation is represented by `TessellationDescriptor` and remains an optional
 render pipeline extension, not a default portable render path.
+
+Mesh/task shaders are represented by `MeshPipelineDescriptor`. Vulkan mesh
+shader and Metal object/mesh-like paths are treated as backend-gated advanced
+features.

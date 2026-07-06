@@ -93,6 +93,8 @@ pub const DeviceFeatures = struct {
     independent_blend: bool = false,
     stencil_state: bool = false,
     tessellation: bool = false,
+    mesh_shaders: bool = false,
+    task_shaders: bool = false,
     vertex_instance_step_rate: bool = false,
     draw_base_vertex: bool = false,
     draw_base_instance: bool = false,
@@ -164,6 +166,8 @@ pub const DeviceLimits = struct {
     max_bindless_descriptors_per_range: u32 = 0,
     max_bindless_ranges_per_layout: u32 = 0,
     max_tessellation_control_points: u32 = 0,
+    max_mesh_threads_per_threadgroup: u32 = 0,
+    max_task_threads_per_threadgroup: u32 = 0,
     sparse_buffer_page_size: u64 = 0,
     sparse_texture_page_width: u32 = 0,
     sparse_texture_page_height: u32 = 0,
@@ -597,6 +601,10 @@ pub const AdvancedFeatureError = error{
     UnsupportedTessellation,
     InvalidPatchControlPointCount,
     MissingTessellationStage,
+    UnsupportedMeshShaders,
+    UnsupportedTaskShaders,
+    MissingMeshStage,
+    InvalidMeshThreadgroupSize,
 };
 
 pub const ObjectCacheMode = enum {
@@ -820,6 +828,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedExternalTextures,
         error.UnsupportedExternalSemaphores,
         error.UnsupportedTessellation,
+        error.UnsupportedMeshShaders,
+        error.UnsupportedTaskShaders,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -979,6 +989,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ExternalHandleBackendMismatch,
         error.InvalidPatchControlPointCount,
         error.MissingTessellationStage,
+        error.MissingMeshStage,
+        error.InvalidMeshThreadgroupSize,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -1570,6 +1582,31 @@ pub const TessellationDescriptor = struct {
         if (self.control_point_count == 0) return AdvancedFeatureError.InvalidPatchControlPointCount;
         if (limits.max_tessellation_control_points != 0 and self.control_point_count > limits.max_tessellation_control_points) {
             return AdvancedFeatureError.InvalidPatchControlPointCount;
+        }
+    }
+};
+
+pub const MeshPipelineDescriptor = struct {
+    label: ?[]const u8 = null,
+    mesh_entry_point: []const u8,
+    task_entry_point: ?[]const u8 = null,
+    mesh_threads_per_threadgroup: u32 = 1,
+    task_threads_per_threadgroup: u32 = 1,
+
+    pub fn validate(self: MeshPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.mesh_shaders) return AdvancedFeatureError.UnsupportedMeshShaders;
+        if (self.mesh_entry_point.len == 0) return AdvancedFeatureError.MissingMeshStage;
+        if (self.mesh_threads_per_threadgroup == 0) return AdvancedFeatureError.InvalidMeshThreadgroupSize;
+        if (limits.max_mesh_threads_per_threadgroup != 0 and self.mesh_threads_per_threadgroup > limits.max_mesh_threads_per_threadgroup) {
+            return AdvancedFeatureError.InvalidMeshThreadgroupSize;
+        }
+        if (self.task_entry_point) |entry| {
+            if (!features.task_shaders) return AdvancedFeatureError.UnsupportedTaskShaders;
+            if (entry.len == 0) return AdvancedFeatureError.MissingMeshStage;
+            if (self.task_threads_per_threadgroup == 0) return AdvancedFeatureError.InvalidMeshThreadgroupSize;
+            if (limits.max_task_threads_per_threadgroup != 0 and self.task_threads_per_threadgroup > limits.max_task_threads_per_threadgroup) {
+                return AdvancedFeatureError.InvalidMeshThreadgroupSize;
+            }
         }
     }
 };
@@ -5549,6 +5586,29 @@ test "render pipeline descriptor validates shader stages and color targets" {
         .has_control_stage = true,
         .has_evaluation_stage = true,
     }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 });
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedMeshShaders, (MeshPipelineDescriptor{
+        .mesh_entry_point = "ms_main",
+    }).validate(.{}, .{}));
+    try std.testing.expectError(AdvancedFeatureError.MissingMeshStage, (MeshPipelineDescriptor{
+        .mesh_entry_point = "",
+    }).validate(.{ .mesh_shaders = true }, .{}));
+    try std.testing.expectError(AdvancedFeatureError.InvalidMeshThreadgroupSize, (MeshPipelineDescriptor{
+        .mesh_entry_point = "ms_main",
+        .mesh_threads_per_threadgroup = 128,
+    }).validate(.{ .mesh_shaders = true }, .{ .max_mesh_threads_per_threadgroup = 64 }));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedTaskShaders, (MeshPipelineDescriptor{
+        .mesh_entry_point = "ms_main",
+        .task_entry_point = "ts_main",
+    }).validate(.{ .mesh_shaders = true }, .{}));
+    try (MeshPipelineDescriptor{
+        .mesh_entry_point = "ms_main",
+        .task_entry_point = "ts_main",
+        .mesh_threads_per_threadgroup = 32,
+        .task_threads_per_threadgroup = 16,
+    }).validate(.{ .mesh_shaders = true, .task_shaders = true }, .{
+        .max_mesh_threads_per_threadgroup = 64,
+        .max_task_threads_per_threadgroup = 32,
+    });
 
     const bind_group_entries = [_]BindGroupLayoutEntry{
         .{

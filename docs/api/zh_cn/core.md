@@ -225,6 +225,10 @@ index、重复 attribute location、非法 stride/offset，以及为 0 的 insta
 `DeviceFeatures.tessellation` gate，校验 patch control point count 和 required stage presence，
 并且在 backend lowering 设计完成前不会进入 base render pipeline path。
 
+`MeshPipelineDescriptor` 表示 future mesh/task shader pipeline metadata。它由
+`DeviceFeatures.mesh_shaders` 和 `DeviceFeatures.task_shaders` gate，校验 mesh entry point、
+可选 task entry point 和 workgroup limits，并且保持在 base render pipeline 之外。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

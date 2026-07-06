@@ -727,10 +727,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 5 Checklist
 
 - [x] Define mesh shader scope before implementation.
-- [ ] Add feature gates and mesh pipeline descriptor shapes.
-- [ ] Validate task/mesh stage requirements and workgroup limits.
-- [ ] Keep mesh shader lowering unsupported until backend work lands.
-- [ ] Document Vulkan/Metal portability differences.
+- [x] Add feature gates and mesh pipeline descriptor shapes.
+- [x] Validate task/mesh stage requirements and workgroup limits.
+- [x] Keep mesh shader lowering unsupported until backend work lands.
+- [x] Document Vulkan/Metal portability differences.
 
 ## Period 10 Phase 6 Checklist
 

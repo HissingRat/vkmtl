@@ -265,6 +265,11 @@ state. It is gated by `DeviceFeatures.tessellation`, validates patch control
 point counts and required stage presence, and is intentionally separate from the
 base render pipeline path until backend lowering is designed.
 
+`MeshPipelineDescriptor` represents future mesh/task shader pipeline metadata.
+It is gated by `DeviceFeatures.mesh_shaders` and `DeviceFeatures.task_shaders`,
+validates mesh and optional task entry points plus workgroup limits, and remains
+outside the base render pipeline.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:

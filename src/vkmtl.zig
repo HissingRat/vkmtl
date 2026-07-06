@@ -93,6 +93,7 @@ pub const TriangleFillMode = core.TriangleFillMode;
 pub const TessellationDomain = core.TessellationDomain;
 pub const TessellationPartitionMode = core.TessellationPartitionMode;
 pub const TessellationDescriptor = core.TessellationDescriptor;
+pub const MeshPipelineDescriptor = core.MeshPipelineDescriptor;
 pub const DepthBiasDescriptor = core.DepthBiasDescriptor;
 pub const ColorWriteMask = core.ColorWriteMask;
 pub const BlendFactor = core.BlendFactor;

@@ -34,3 +34,6 @@ handle escape hatch 相关，但不属于普通 portable resource creation。
 
 Tessellation 由 `TessellationDescriptor` 表示，仍然是 optional render pipeline extension，不是默认
 portable render path。
+
+Mesh/task shader 由 `MeshPipelineDescriptor` 表示。Vulkan mesh shader 和 Metal object/mesh-like
+path 都被视为 backend-gated advanced feature。

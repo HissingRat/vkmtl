@@ -10,5 +10,9 @@ Phase 5 defines mesh/task shader pipeline metadata as an optional module.
 
 ## Current Limits
 
+- `MeshPipelineDescriptor` validates mesh entry point, optional task entry
+  point, and workgroup limits.
+- `DeviceFeatures.mesh_shaders` and `DeviceFeatures.task_shaders` default to
+  false.
 - Vulkan mesh shader and Metal object/mesh-like paths are backend-specific and
   remain future lowering work.
