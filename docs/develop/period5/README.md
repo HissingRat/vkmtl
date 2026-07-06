@@ -3,6 +3,11 @@
 Goal: cover common graphics rendering features without baking backend-specific
 state into user code.
 
+Status: Period 5 public descriptors, validation, and runtime gates are in
+place. Existing first-slice lowering remains compatible, while advanced render
+pipeline states return typed unsupported errors until backend-specific lowering
+is implemented.
+
 Viewport and scissor are dynamic encoder state, not pipeline raster state. That
 keeps the API closer to both Metal's encoder model and Vulkan's dynamic-state
 path.

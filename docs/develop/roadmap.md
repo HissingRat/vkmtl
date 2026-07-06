@@ -96,7 +96,8 @@ See `docs/develop/period2/`.
 
 ## Period 3: Resource Coverage
 
-Status: planned.
+Status: completed validation/API expansion, with advanced backend lowering
+gated behind typed unsupported errors.
 
 Goal: cover Metal and Vulkan buffer, texture, sampler, and memory fundamentals.
 
@@ -112,7 +113,8 @@ See `docs/develop/period3/`.
 
 ## Period 4: Shader And Binding
 
-Status: planned.
+Status: completed validation/API expansion, with advanced shader and binding
+features gated behind typed unsupported errors until lowering lands.
 
 Goal: make Slang, reflection, and the binding model strong enough for real
 projects.
@@ -129,7 +131,8 @@ See `docs/develop/period4/`.
 
 ## Period 5: Render Pipeline
 
-Status: planned.
+Status: completed validation/API expansion, with advanced render pipeline
+features gated behind typed unsupported errors until lowering lands.
 
 Goal: cover common graphics rendering features without baking backend-specific
 state into user code.
