@@ -92,6 +92,7 @@ pub const DeviceFeatures = struct {
     blend_state: bool = false,
     independent_blend: bool = false,
     stencil_state: bool = false,
+    tessellation: bool = false,
     vertex_instance_step_rate: bool = false,
     draw_base_vertex: bool = false,
     draw_base_instance: bool = false,
@@ -162,6 +163,7 @@ pub const DeviceLimits = struct {
     dispatch_indirect_alignment: u64 = 4,
     max_bindless_descriptors_per_range: u32 = 0,
     max_bindless_ranges_per_layout: u32 = 0,
+    max_tessellation_control_points: u32 = 0,
     sparse_buffer_page_size: u64 = 0,
     sparse_texture_page_width: u32 = 0,
     sparse_texture_page_height: u32 = 0,
@@ -592,6 +594,9 @@ pub const AdvancedFeatureError = error{
     UnsupportedExternalSemaphores,
     InvalidExternalHandle,
     ExternalHandleBackendMismatch,
+    UnsupportedTessellation,
+    InvalidPatchControlPointCount,
+    MissingTessellationStage,
 };
 
 pub const ObjectCacheMode = enum {
@@ -814,6 +819,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedExternalMemory,
         error.UnsupportedExternalTextures,
         error.UnsupportedExternalSemaphores,
+        error.UnsupportedTessellation,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -971,6 +977,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.SparseRegionCountExceeded,
         error.InvalidExternalHandle,
         error.ExternalHandleBackendMismatch,
+        error.InvalidPatchControlPointCount,
+        error.MissingTessellationStage,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -1535,6 +1543,35 @@ pub const CullMode = enum {
 pub const TriangleFillMode = enum {
     fill,
     lines,
+};
+
+pub const TessellationDomain = enum {
+    triangle,
+    quad,
+    isoline,
+};
+
+pub const TessellationPartitionMode = enum {
+    integer,
+    fractional_even,
+    fractional_odd,
+};
+
+pub const TessellationDescriptor = struct {
+    control_point_count: u32,
+    domain: TessellationDomain = .triangle,
+    partition_mode: TessellationPartitionMode = .integer,
+    has_control_stage: bool = false,
+    has_evaluation_stage: bool = false,
+
+    pub fn validate(self: TessellationDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.tessellation) return AdvancedFeatureError.UnsupportedTessellation;
+        if (!self.has_control_stage or !self.has_evaluation_stage) return AdvancedFeatureError.MissingTessellationStage;
+        if (self.control_point_count == 0) return AdvancedFeatureError.InvalidPatchControlPointCount;
+        if (limits.max_tessellation_control_points != 0 and self.control_point_count > limits.max_tessellation_control_points) {
+            return AdvancedFeatureError.InvalidPatchControlPointCount;
+        }
+    }
 };
 
 pub const DepthBiasDescriptor = struct {
@@ -5493,6 +5530,26 @@ test "render pipeline descriptor validates shader stages and color targets" {
     const color_attachments = [_]RenderPipelineColorAttachmentDescriptor{
         .{ .format = .bgra8_unorm_srgb },
     };
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedTessellation, (TessellationDescriptor{
+        .control_point_count = 3,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    }).validate(.{}, .{}));
+    try std.testing.expectError(AdvancedFeatureError.MissingTessellationStage, (TessellationDescriptor{
+        .control_point_count = 3,
+        .has_control_stage = true,
+    }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidPatchControlPointCount, (TessellationDescriptor{
+        .control_point_count = 64,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 }));
+    try (TessellationDescriptor{
+        .control_point_count = 3,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 });
+
     const bind_group_entries = [_]BindGroupLayoutEntry{
         .{
             .binding = 0,

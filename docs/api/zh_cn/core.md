@@ -221,6 +221,10 @@ Vertex layout 支持多个 buffer 和 attribute。`VertexBufferLayoutDescriptor`
 index、重复 attribute location、非法 stride/offset，以及为 0 的 instance step rate。
 非默认 `instance_step_rate` 已能表达，但要等 backend lowering 接上。
 
+`TessellationDescriptor` 表示 future tessellation pipeline extension state。它由
+`DeviceFeatures.tessellation` gate，校验 patch control point count 和 required stage presence，
+并且在 backend lowering 设计完成前不会进入 base render pipeline path。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：

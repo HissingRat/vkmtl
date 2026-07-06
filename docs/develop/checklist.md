@@ -719,10 +719,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 4 Checklist
 
 - [x] Define tessellation scope before implementation.
-- [ ] Add feature gates and tessellation descriptor shapes.
-- [ ] Validate patch control point counts and shader stage requirements.
-- [ ] Keep tessellation out of the base render path.
-- [ ] Document backend-gated behavior.
+- [x] Add feature gates and tessellation descriptor shapes.
+- [x] Validate patch control point counts and shader stage requirements.
+- [x] Keep tessellation out of the base render path.
+- [x] Document backend-gated behavior.
 
 ## Period 10 Phase 5 Checklist
 

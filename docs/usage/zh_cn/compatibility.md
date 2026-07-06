@@ -31,3 +31,6 @@ Sparse buffer/texture 未来映射到 Vulkan sparse resource 和 Metal tiled/spa
 
 External texture 和 semaphore interop 使用显式 platform/backend handle descriptor。它和 native
 handle escape hatch 相关，但不属于普通 portable resource creation。
+
+Tessellation 由 `TessellationDescriptor` 表示，仍然是 optional render pipeline extension，不是默认
+portable render path。

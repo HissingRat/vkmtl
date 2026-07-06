@@ -260,6 +260,11 @@ rejects duplicate resolved buffer indices, duplicate attribute locations,
 invalid strides/offsets, and zero instance step rates. Non-default
 `instance_step_rate` is represented but gated until backend lowering is wired.
 
+`TessellationDescriptor` represents future tessellation pipeline extension
+state. It is gated by `DeviceFeatures.tessellation`, validates patch control
+point counts and required stage presence, and is intentionally separate from the
+base render pipeline path until backend lowering is designed.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:

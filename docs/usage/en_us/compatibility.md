@@ -37,3 +37,6 @@ intent only.
 External texture and semaphore interop uses explicit platform/backend handle
 descriptors. It is related to native handles, but it is not part of ordinary
 portable resource creation.
+
+Tessellation is represented by `TessellationDescriptor` and remains an optional
+render pipeline extension, not a default portable render path.
