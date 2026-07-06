@@ -227,10 +227,16 @@ sampler 和 compare sampler。Layout entry 也包含 `array_count` 和 `dynamic_
 storage texture 只允许 compute visibility。
 
 Runtime bind group 创建会校验 layout shape、资源类别、后端是否匹配、资源是否还活着，
-以及 storage texture 是否带有 `shader_write` usage。当前 native lowering 只支持单资源
+以及 storage resource usage 是否满足访问意图。当前 native lowering 只支持单资源
 binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` /
 `UnsupportedDynamicBinding` 错误拒绝 dynamic-offset layout；后续 backend lowering 阶段
 再接上真正的数组和动态 offset 支持。
+
+Storage resource 可以在 `BindGroupLayoutEntry.storage_access` 上声明 `.read`、`.write` 或
+`.read_write`。这个 metadata 只允许用于 storage buffer 和 storage texture。Storage buffer 默认
+read-write，storage texture 为了兼容现有 compute readback 示例默认 write。Runtime bind group
+creation 会按这个访问意图检查 buffer `storage` usage，以及 texture `shader_read` /
+`shader_write` usage，并记录 portable storage read/write usage transition。
 
 `DynamicOffset` 和 `DynamicOffsetList` 是后续动态 offset 命令路径的公开校验 shape。
 它会校验每个 dynamic buffer binding 都有一个 offset、非 dynamic binding 没有收到 offset，

@@ -544,10 +544,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 7 Phase 3 Checklist
 
 - [x] Define storage resource rule scope before implementation.
-- [ ] Add storage access metadata for layout entries.
-- [ ] Validate storage buffer and storage texture access rules.
-- [ ] Record storage resource usage in compute bind paths.
-- [ ] Document storage resource limits.
+- [x] Add storage access metadata for layout entries.
+- [x] Validate storage buffer and storage texture access rules.
+- [x] Record storage resource usage in compute bind paths.
+- [x] Document storage resource limits.
 
 ## Period 7 Phase 4 Checklist
 

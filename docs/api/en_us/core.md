@@ -272,6 +272,13 @@ typed `UnsupportedResourceArray` / `UnsupportedDynamicBinding` errors until the
 later backend lowering phases. Render and compute encoders expose
 `setBindGroup(...)` for debug-validated command recording.
 
+Storage resources can specify `BindGroupLayoutEntry.storage_access` as
+`.read`, `.write`, or `.read_write`. The metadata is valid only for storage
+buffers and storage textures. Storage buffers default to read-write access;
+storage textures default to write access. Runtime bind group creation checks
+buffer `storage` usage and texture `shader_read` / `shader_write` usage against
+that access intent and records portable storage read/write usage transitions.
+
 `DynamicOffset` and `DynamicOffsetList` are the public validation shape for the
 future dynamic-offset command path. They validate that every dynamic buffer
 binding has one offset, that no non-dynamic binding receives an offset, and that

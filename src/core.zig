@@ -714,6 +714,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.BindingResourceKindMismatch,
         error.InvalidBufferBindingRange,
         error.InvalidStorageTextureVisibility,
+        error.InvalidStorageAccess,
         error.InvalidBindingArrayCount,
         error.InvalidDynamicBindingResource,
         error.UnsupportedResourceArray,
@@ -763,6 +764,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.DuplicateShaderLibraryEntry,
         error.DuplicateShaderSpecializationConstant,
         error.InvalidRenderPassAttachment,
+        error.InvalidStorageBufferUsage,
         error.InvalidStorageTextureUsage,
         error.PresentRequiresCurrentDrawable,
         error.AdapterSelectionConflict,
@@ -3220,20 +3222,46 @@ pub const BindingResourceKind = enum {
     }
 };
 
+pub const StorageAccess = enum {
+    read,
+    write,
+    read_write,
+
+    pub fn requiresRead(self: StorageAccess) bool {
+        return self == .read or self == .read_write;
+    }
+
+    pub fn requiresWrite(self: StorageAccess) bool {
+        return self == .write or self == .read_write;
+    }
+};
+
 pub const BindGroupLayoutEntry = struct {
     binding: u32,
     resource: BindingResourceKind,
     visibility: ShaderVisibility,
     array_count: u32 = 1,
     dynamic_offset: bool = false,
+    storage_access: ?StorageAccess = null,
 
     pub fn validate(self: BindGroupLayoutEntry) BindingError!void {
         if (self.visibility.isEmpty()) return BindingError.EmptyShaderVisibility;
         if (self.array_count == 0) return BindingError.InvalidBindingArrayCount;
         if (self.dynamic_offset and !self.resource.isBuffer()) return BindingError.InvalidDynamicBindingResource;
+        if (self.storage_access != null and self.resource != .storage_buffer and self.resource != .storage_texture) {
+            return BindingError.InvalidStorageAccess;
+        }
         if (self.resource == .storage_texture and (self.visibility.vertex or self.visibility.fragment or !self.visibility.compute)) {
             return BindingError.InvalidStorageTextureVisibility;
         }
+    }
+
+    pub fn resolvedStorageAccess(self: BindGroupLayoutEntry) ?StorageAccess {
+        return switch (self.resource) {
+            .storage_buffer => self.storage_access orelse .read_write,
+            .storage_texture => self.storage_access orelse .write,
+            .uniform_buffer, .sampled_texture, .sampler, .compare_sampler => null,
+        };
     }
 };
 
@@ -3551,6 +3579,7 @@ pub const BindingError = error{
     BindingResourceKindMismatch,
     InvalidBufferBindingRange,
     InvalidStorageTextureVisibility,
+    InvalidStorageAccess,
     InvalidBindingArrayCount,
     InvalidDynamicBindingResource,
     UnsupportedResourceArray,
@@ -5985,6 +6014,28 @@ test "bind group layout descriptor validates resource bindings" {
     try std.testing.expect(BindingResourceKind.sampler.isSampler());
     try std.testing.expect(BindingResourceKind.compare_sampler.isSampler());
     try std.testing.expect(BindingResourceKind.storage_texture.isWritable());
+
+    const storage_buffer_entry = BindGroupLayoutEntry{
+        .binding = 4,
+        .resource = .storage_buffer,
+        .visibility = .{ .compute = true },
+        .storage_access = .read,
+    };
+    try storage_buffer_entry.validate();
+    try std.testing.expectEqual(StorageAccess.read, storage_buffer_entry.resolvedStorageAccess().?);
+    const storage_texture_entry = BindGroupLayoutEntry{
+        .binding = 5,
+        .resource = .storage_texture,
+        .visibility = .{ .compute = true },
+    };
+    try storage_texture_entry.validate();
+    try std.testing.expectEqual(StorageAccess.write, storage_texture_entry.resolvedStorageAccess().?);
+    try std.testing.expectError(BindingError.InvalidStorageAccess, (BindGroupLayoutEntry{
+        .binding = 6,
+        .resource = .uniform_buffer,
+        .visibility = .{ .compute = true },
+        .storage_access = .read,
+    }).validate());
 
     try std.testing.expectError(BindingError.MissingBindGroupLayoutEntry, (BindGroupLayoutDescriptor{}).validate());
 

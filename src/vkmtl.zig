@@ -175,6 +175,7 @@ pub const HeapError = core.HeapError;
 pub const ShaderVisibility = core.ShaderVisibility;
 pub const BindingLocation = core.BindingLocation;
 pub const BindingResourceKind = core.BindingResourceKind;
+pub const StorageAccess = core.StorageAccess;
 pub const BindGroupLayoutEntry = core.BindGroupLayoutEntry;
 pub const BindGroupLayoutDescriptor = core.BindGroupLayoutDescriptor;
 pub const BufferBindingDescriptor = core.BufferBindingDescriptor;

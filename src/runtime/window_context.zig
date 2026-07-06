@@ -807,7 +807,6 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
             .storage_texture => |texture_view| {
                 assertAlive(texture_view.alive, .texture_view);
                 try expectSameBackend(expected_backend, texture_view.backend);
-                if (!texture_view.usage_value.shader_write) return RuntimeError.InvalidStorageTextureUsage;
             },
             .sampled_texture => |texture_view| {
                 assertAlive(texture_view.alive, .texture_view);
@@ -1898,6 +1897,7 @@ pub const RuntimeError = error{
     UnsupportedStencilAttachment,
     UnsupportedTransientAttachment,
     UnsupportedDynamicRenderState,
+    InvalidStorageBufferUsage,
     InvalidStorageTextureUsage,
     PresentRequiresCurrentDrawable,
 };
@@ -2548,13 +2548,18 @@ fn materializeBindGroupEntries(
 ) ![]core.BindGroupEntry {
     assertAlive(descriptor.layout.alive, .bind_group_layout);
     try expectSameBackend(backend, descriptor.layout.backend);
-    try validateFirstSliceBindGroupLayout(descriptor.layout.descriptor());
+    const layout_descriptor = descriptor.layout.descriptor();
+    try validateFirstSliceBindGroupLayout(layout_descriptor);
 
     const entries = try allocator.alloc(core.BindGroupEntry, descriptor.entries.len);
     errdefer allocator.free(entries);
 
     for (descriptor.entries, entries) |entry, *out| {
         try entry.resource.validateRuntimeResource(backend);
+        const layout_entry = layout_descriptor.entryForBinding(entry.binding) orelse {
+            return core.BindingError.ExtraBindGroupEntry;
+        };
+        try validateAndRecordStorageAccess(entry.resource, layout_entry);
         out.* = .{
             .binding = entry.binding,
             .resource = entry.resource.toCoreResource(),
@@ -2562,11 +2567,42 @@ fn materializeBindGroupEntries(
     }
 
     try (core.BindGroupDescriptor{
-        .layout = descriptor.layout.descriptor(),
+        .layout = layout_descriptor,
         .entries = entries,
     }).validate();
 
     return entries;
+}
+
+fn validateAndRecordStorageAccess(
+    resource: BindGroupResource,
+    layout_entry: core.BindGroupLayoutEntry,
+) !void {
+    const access = layout_entry.resolvedStorageAccess() orelse return;
+    switch (resource) {
+        .storage_buffer => |binding| {
+            if (!binding.buffer.usage_value.storage) return RuntimeError.InvalidStorageBufferUsage;
+            if (access.requiresWrite()) {
+                _ = binding.buffer.recordUsage(.storage_buffer_write);
+            } else {
+                _ = binding.buffer.recordUsage(.storage_buffer_read);
+            }
+        },
+        .storage_texture => |texture_view| {
+            if (access.requiresRead() and !texture_view.usage_value.shader_read) {
+                return RuntimeError.InvalidStorageTextureUsage;
+            }
+            if (access.requiresWrite() and !texture_view.usage_value.shader_write) {
+                return RuntimeError.InvalidStorageTextureUsage;
+            }
+            if (access.requiresWrite()) {
+                _ = texture_view.recordUsage(.storage_texture_write);
+            } else {
+                _ = texture_view.recordUsage(.storage_texture_read);
+            }
+        },
+        .uniform_buffer, .sampled_texture, .sampler, .compare_sampler => {},
+    }
 }
 
 fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor) core.BindingError!void {
@@ -3143,6 +3179,75 @@ test "runtime bind group materialization validates resources against layout" {
     });
     defer allocator.free(materialized_compare);
     try std.testing.expectEqual(core.BindingResourceKind.compare_sampler, materialized_compare[0].resource.resourceKind());
+
+    const storage_layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 0,
+            .resource = .storage_buffer,
+            .visibility = .{ .compute = true },
+        },
+        .{
+            .binding = 1,
+            .resource = .storage_texture,
+            .visibility = .{ .compute = true },
+            .storage_access = .read,
+        },
+    };
+    const copied_storage_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, storage_layout_entries[0..]);
+    var storage_layout = BindGroupLayout{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = allocator,
+        .entries = copied_storage_layout_entries,
+    };
+    tracker.retain(.bind_group_layout);
+    defer storage_layout.deinit();
+
+    var storage_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 128,
+        .usage_value = .{ .storage = true },
+        .impl = undefined,
+    };
+    const storage_entries = [_]BindGroupEntry{
+        .{
+            .binding = 0,
+            .resource = .{ .storage_buffer = .{ .buffer = &storage_buffer, .size = 64 } },
+        },
+        .{
+            .binding = 1,
+            .resource = .{ .storage_texture = &texture_view },
+        },
+    };
+    const materialized_storage = try materializeBindGroupEntries(allocator, .vulkan, .{
+        .layout = &storage_layout,
+        .entries = storage_entries[0..],
+    });
+    defer allocator.free(materialized_storage);
+    try std.testing.expectEqual(core.ResourceUsageKind.storage_buffer_write, storage_buffer.currentUsage().?);
+    try std.testing.expectEqual(core.ResourceUsageKind.storage_texture_read, texture_view.currentUsage().?);
+
+    var non_storage_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 128,
+        .impl = undefined,
+    };
+    const invalid_storage_entries = [_]BindGroupEntry{
+        .{
+            .binding = 0,
+            .resource = .{ .storage_buffer = .{ .buffer = &non_storage_buffer } },
+        },
+        .{
+            .binding = 1,
+            .resource = .{ .storage_texture = &texture_view },
+        },
+    };
+    try std.testing.expectError(RuntimeError.InvalidStorageBufferUsage, materializeBindGroupEntries(allocator, .vulkan, .{
+        .layout = &storage_layout,
+        .entries = invalid_storage_entries[0..],
+    }));
 
     try std.testing.expectError(core.BindingError.MissingBindGroupEntry, materializeBindGroupEntries(allocator, .vulkan, .{
         .layout = &layout,
