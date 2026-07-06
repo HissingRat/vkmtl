@@ -37,6 +37,7 @@ pub const SurfaceSource = core.SurfaceSource;
 pub const SurfaceDescriptor = core.SurfaceDescriptor;
 pub const TextureFormat = core.TextureFormat;
 pub const TextureFormatKind = core.TextureFormatKind;
+pub const shader_reflection_schema_version = core.shader_reflection_schema_version;
 pub const ShaderSourceLanguage = core.ShaderSourceLanguage;
 pub const ShaderArtifact = core.ShaderArtifact;
 pub const ShaderSource = core.ShaderSource;

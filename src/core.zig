@@ -335,6 +335,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSamplerAnisotropy,
         error.UnsupportedSamplerBorderColor,
         error.UnsupportedHeaps,
+        error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -669,6 +670,8 @@ pub const ShaderSourceLanguage = enum {
     msl,
 };
 
+pub const shader_reflection_schema_version: u32 = 1;
+
 pub const ShaderArtifact = struct {
     path: []const u8,
     language: ShaderSourceLanguage,
@@ -781,6 +784,7 @@ pub const ShaderReflectionVertexInput = struct {
 };
 
 pub const ShaderStageReflection = struct {
+    schema_version: u32 = shader_reflection_schema_version,
     stage: ShaderStage,
     entry_point: []const u8,
     vertex_inputs: []const ShaderReflectionVertexInput = &.{},
@@ -963,6 +967,7 @@ pub const ShaderError = error{
     MissingShaderLibraryEntry,
     DuplicateShaderLibraryEntry,
     EmptyShaderReflectionPath,
+    UnsupportedShaderReflectionSchema,
     InvalidShaderReflection,
     ShaderReflectionReadFailed,
     ShaderReflectionStageMismatch,
@@ -1039,6 +1044,7 @@ pub fn validateShaderReflectionBinding(
 }
 
 fn validateShaderStageReflectionShape(reflection: ShaderStageReflection) ShaderError!void {
+    if (reflection.schema_version != shader_reflection_schema_version) return ShaderError.UnsupportedShaderReflectionSchema;
     if (reflection.entry_point.len == 0) return ShaderError.InvalidShaderReflection;
     for (reflection.bind_groups) |bind_group| {
         for (bind_group.bindings) |binding| {
@@ -3397,6 +3403,27 @@ test "render pipeline descriptor validates reflection against bind group layouts
         .bind_group_layouts = bind_group_layouts[0..],
         .color_attachments = color_attachments[0..],
     }).validate();
+
+    try std.testing.expectError(ShaderError.UnsupportedShaderReflectionSchema, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = vertex_module,
+            .stage = .vertex,
+            .entry_point = "vs_main",
+        },
+        .fragment = .{
+            .module = fragment_module,
+            .stage = .fragment,
+            .entry_point = "fs_main",
+            .reflection = .{ .data = .{
+                .schema_version = 999,
+                .stage = .fragment,
+                .entry_point = "fs_main",
+                .bind_groups = reflected_groups[0..],
+            } },
+        },
+        .bind_group_layouts = bind_group_layouts[0..],
+        .color_attachments = color_attachments[0..],
+    }).validate());
 
     try std.testing.expectError(ShaderError.ShaderReflectionBindingKindMismatch, (RenderPipelineDescriptor{
         .vertex = .{

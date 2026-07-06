@@ -9,6 +9,8 @@ and manual reflection overrides.
 - Add schema metadata to core reflection descriptors.
 - Accept current JSON artifacts without a version for compatibility.
 - Include schema version in newly generated runtime reflection JSON.
+- Implemented with `shader_reflection_schema_version = 1` and
+  `ShaderStageReflection.schema_version`.
 
 ## Current Limits
 

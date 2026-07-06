@@ -379,10 +379,10 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 4 Phase 3 Checklist
 
-- [ ] Add reflection schema version metadata.
-- [ ] Include schema version in generated JSON.
-- [ ] Accept older unversioned reflection artifacts for compatibility.
-- [ ] Document stable reflection schema.
+- [x] Add reflection schema version metadata.
+- [x] Include schema version in generated JSON.
+- [x] Accept older unversioned reflection artifacts for compatibility.
+- [x] Document stable reflection schema.
 
 ## Period 4 Phase 4 Checklist
 

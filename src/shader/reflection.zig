@@ -148,6 +148,8 @@ fn validateJsonStage(
     root: std.json.Value,
     bind_group_layouts: []const core.BindGroupLayoutDescriptor,
 ) !void {
+    try validateSchemaVersion(root);
+
     const stage = try parseStage(try requiredField(root, "stage"));
     if (stage != expected_stage or stage != stage_descriptor.stage) {
         return core.ShaderError.ShaderReflectionStageMismatch;
@@ -269,6 +271,8 @@ const LayoutBuilder = struct {
         expected_stage: core.ShaderStage,
         root: std.json.Value,
     ) !void {
+        try validateSchemaVersion(root);
+
         const stage = try parseStage(try requiredField(root, "stage"));
         if (stage != expected_stage or stage != stage_descriptor.stage) {
             return core.ShaderError.ShaderReflectionStageMismatch;
@@ -434,6 +438,8 @@ const VertexInputBuilder = struct {
         stage_descriptor: core.ProgrammableStageDescriptor,
         root: std.json.Value,
     ) !void {
+        try validateSchemaVersion(root);
+
         const stage = try parseStage(try requiredField(root, "stage"));
         if (stage != .vertex or stage != stage_descriptor.stage) {
             return core.ShaderError.ShaderReflectionStageMismatch;
@@ -572,6 +578,14 @@ fn expectU32(value: std.json.Value) !u32 {
     };
 }
 
+fn validateSchemaVersion(root: std.json.Value) !void {
+    const value = optionalField(root, "schema_version") orelse return;
+    const version = try expectU32(value);
+    if (version != core.shader_reflection_schema_version) {
+        return core.ShaderError.UnsupportedShaderReflectionSchema;
+    }
+}
+
 fn parseStage(value: std.json.Value) !core.ShaderStage {
     const stage = try expectString(value);
     if (std.mem.eql(u8, stage, "vertex")) return .vertex;
@@ -632,6 +646,7 @@ fn mergeVisibility(a: core.ShaderVisibility, b: core.ShaderVisibility) core.Shad
 test "reflection artifact validates bind group layout" {
     const json =
         \\{
+        \\  "schema_version": 1,
         \\  "stage": "compute",
         \\  "entry_point": "cs_main",
         \\  "bind_groups": [
@@ -663,6 +678,29 @@ test "reflection artifact validates bind group layout" {
         .entry_point = "cs_main",
     };
     try validateJsonStage(stage_descriptor, .compute, parsed.value, bind_group_layouts[0..]);
+
+    const legacy_json =
+        \\{
+        \\  "stage": "compute",
+        \\  "entry_point": "cs_main",
+        \\  "bind_groups": []
+        \\}
+    ;
+    var legacy = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, legacy_json, .{});
+    defer legacy.deinit();
+    try validateJsonStage(stage_descriptor, .compute, legacy.value, bind_group_layouts[0..]);
+
+    const future_json =
+        \\{
+        \\  "schema_version": 999,
+        \\  "stage": "compute",
+        \\  "entry_point": "cs_main",
+        \\  "bind_groups": []
+        \\}
+    ;
+    var future = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, future_json, .{});
+    defer future.deinit();
+    try std.testing.expectError(core.ShaderError.UnsupportedShaderReflectionSchema, validateJsonStage(stage_descriptor, .compute, future.value, bind_group_layouts[0..]));
 }
 
 test "derived render bind group layouts merge stage visibility" {

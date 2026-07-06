@@ -461,8 +461,8 @@ const ReflectionModel = struct {
         errdefer json.deinit(allocator);
         try json.print(
             allocator,
-            "{{\n  \"name\": \"{s}\",\n  \"source\": \"{s}\",\n  \"source_language\": \"slang\",\n  \"stage\": \"{s}\",\n  \"entry_point\": \"{s}\",\n",
-            .{ shader_name, source_path, stageName(stage), entry },
+            "{{\n  \"schema_version\": {},\n  \"name\": \"{s}\",\n  \"source\": \"{s}\",\n  \"source_language\": \"slang\",\n  \"stage\": \"{s}\",\n  \"entry_point\": \"{s}\",\n",
+            .{ core.shader_reflection_schema_version, shader_name, source_path, stageName(stage), entry },
         );
 
         if (stage == .compute) {
