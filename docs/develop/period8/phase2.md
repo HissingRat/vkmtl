@@ -11,4 +11,6 @@ Phase 2 defines bind group layout object-cache identity.
 
 ## Current Limits
 
+- `BindGroupLayoutCacheKeyDescriptor` is label-free and can be converted back
+  to a `BindGroupLayoutDescriptor` for validation.
 - Native descriptor-set layout / argument metadata reuse is future backend work.

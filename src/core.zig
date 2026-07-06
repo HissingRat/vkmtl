@@ -3412,6 +3412,18 @@ pub const BindGroupLayoutDescriptor = struct {
     }
 };
 
+pub const BindGroupLayoutCacheKeyDescriptor = struct {
+    entries: []const BindGroupLayoutEntry = &.{},
+
+    pub fn validate(self: BindGroupLayoutCacheKeyDescriptor) BindingError!void {
+        try self.asLayoutDescriptor().validate();
+    }
+
+    pub fn asLayoutDescriptor(self: BindGroupLayoutCacheKeyDescriptor) BindGroupLayoutDescriptor {
+        return .{ .entries = self.entries };
+    }
+};
+
 pub const BufferBindingDescriptor = struct {
     offset: u64 = 0,
     size: ?u64 = null,
@@ -6279,6 +6291,13 @@ test "bind group layout descriptor validates resource bindings" {
     try (BindGroupLayoutDescriptor{
         .entries = valid_dynamic_entries[0..],
     }).validate();
+
+    const cache_key = BindGroupLayoutCacheKeyDescriptor{
+        .entries = valid_dynamic_entries[0..],
+    };
+    try cache_key.validate();
+    try std.testing.expect(cache_key.asLayoutDescriptor().containsBinding(0));
+    try std.testing.expectError(BindingError.MissingBindGroupLayoutEntry, (BindGroupLayoutCacheKeyDescriptor{}).validate());
 }
 
 test "bind group descriptor validates entries against layout" {

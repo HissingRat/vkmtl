@@ -184,6 +184,7 @@ pub const BindingResourceKind = core.BindingResourceKind;
 pub const StorageAccess = core.StorageAccess;
 pub const BindGroupLayoutEntry = core.BindGroupLayoutEntry;
 pub const BindGroupLayoutDescriptor = core.BindGroupLayoutDescriptor;
+pub const BindGroupLayoutCacheKeyDescriptor = core.BindGroupLayoutCacheKeyDescriptor;
 pub const BufferBindingDescriptor = core.BufferBindingDescriptor;
 pub const TextureViewBindingDescriptor = core.TextureViewBindingDescriptor;
 pub const SamplerBindingDescriptor = core.SamplerBindingDescriptor;

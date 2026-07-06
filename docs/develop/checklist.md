@@ -584,10 +584,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 2 Checklist
 
 - [x] Define bind group layout cache scope before implementation.
-- [ ] Add bind group layout cache-key descriptor shape.
-- [ ] Include visibility, resource type, dynamic offset, array count, and storage access.
-- [ ] Validate keys with existing layout validation.
-- [ ] Document bind group layout cache limits.
+- [x] Add bind group layout cache-key descriptor shape.
+- [x] Include visibility, resource type, dynamic offset, array count, and storage access.
+- [x] Validate keys with existing layout validation.
+- [x] Document bind group layout cache limits.
 
 ## Period 8 Phase 3 Checklist
 
