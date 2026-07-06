@@ -415,11 +415,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 5 Phase 1 Checklist
 
-- [ ] Add stencil attachment descriptor shape.
-- [ ] Add transient attachment metadata.
-- [ ] Keep multiple color attachments represented in public descriptors.
-- [ ] Validate unsupported attachment lowering through typed errors.
-- [ ] Document attachment model limits.
+- [x] Add stencil attachment descriptor shape.
+- [x] Add transient attachment metadata.
+- [x] Keep multiple color attachments represented in public descriptors.
+- [x] Validate unsupported attachment lowering through typed errors.
+- [x] Document attachment model limits.
 
 ## Period 5 Phase 2 Checklist
 

@@ -243,7 +243,10 @@ try command_buffer.commit();
 ```
 
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
-attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。
+attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
+也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
+lowering 支持一个 color attachment，并会对 stencil、transient 和 MRT 路径返回 typed
+unsupported error，直到 native lowering 接上。
 
 Transfer 使用 Metal 风格的 blit encoder：
 

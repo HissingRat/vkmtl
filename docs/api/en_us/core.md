@@ -292,7 +292,11 @@ try command_buffer.commit();
 
 Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
-`resolve_target` when rendering from an MSAA texture.
+`resolve_target` when rendering from an MSAA texture. The descriptor model also
+includes stencil attachments, transient attachment hints, and multiple color
+attachments. Current runtime lowering supports one color attachment and returns
+typed unsupported errors for stencil, transient, and MRT paths until native
+lowering is implemented.
 
 Transfer work uses a Metal-style blit encoder:
 

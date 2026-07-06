@@ -15,3 +15,7 @@ lowering explicit about unsupported combinations.
 
 - Existing runtime lowering supports one color attachment.
 - Stencil and transient attachment lowering are validation/API shape first.
+- Multiple color attachments are represented in descriptors, but runtime
+  lowering currently returns `UnsupportedMultipleRenderTargets`.
+- Stencil and transient attachment lowering return `UnsupportedStencilAttachment`
+  and `UnsupportedTransientAttachment` respectively.

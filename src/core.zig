@@ -345,6 +345,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSmallConstants,
         error.UnsupportedRootConstants,
         error.UnsupportedShaderSpecialization,
+        error.UnsupportedMultipleRenderTargets,
+        error.UnsupportedStencilAttachment,
+        error.UnsupportedTransientAttachment,
         error.UnsupportedShaderReflectionSchema,
         => .unsupported_feature,
 
@@ -382,6 +385,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidIndexCount,
         error.InvalidInstanceCount,
         error.InvalidIndexBufferOffset,
+        error.InvalidStencilClearValue,
         error.InvalidThreadgroupCount,
         error.InvalidCopySize,
         error.InvalidCopyBufferRange,
@@ -1172,6 +1176,10 @@ pub const StoreAction = enum {
     store,
 };
 
+pub const RenderPassAttachmentOptions = struct {
+    transient: bool = false,
+};
+
 pub const RenderPassColorAttachmentTarget = enum {
     current_drawable,
     texture_view,
@@ -1183,6 +1191,7 @@ pub const RenderPassColorAttachmentDescriptor = struct {
     load_action: LoadAction = .clear,
     store_action: StoreAction = .store,
     clear_color: ClearColorLike = .{},
+    options: RenderPassAttachmentOptions = .{},
 };
 
 pub const RenderPassDepthAttachmentTarget = enum {
@@ -1195,6 +1204,7 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
     load_action: LoadAction = .clear,
     store_action: StoreAction = .dont_care,
     clear_depth: f32 = 1.0,
+    options: RenderPassAttachmentOptions = .{},
 
     pub fn validate(self: RenderPassDepthAttachmentDescriptor) CommandEncodingError!void {
         if (!std.math.isFinite(self.clear_depth) or self.clear_depth < 0 or self.clear_depth > 1) {
@@ -1203,14 +1213,33 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
     }
 };
 
+pub const RenderPassStencilAttachmentTarget = enum {
+    current_drawable,
+    texture_view,
+};
+
+pub const RenderPassStencilAttachmentDescriptor = struct {
+    target: RenderPassStencilAttachmentTarget = .current_drawable,
+    load_action: LoadAction = .clear,
+    store_action: StoreAction = .dont_care,
+    clear_stencil: u32 = 0,
+    options: RenderPassAttachmentOptions = .{},
+
+    pub fn validate(self: RenderPassStencilAttachmentDescriptor) CommandEncodingError!void {
+        if (self.clear_stencil > 0xff) return CommandEncodingError.InvalidStencilClearValue;
+    }
+};
+
 pub const RenderPassDescriptor = struct {
     label: ?[]const u8 = null,
     color_attachments: []const RenderPassColorAttachmentDescriptor = &.{},
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+    stencil_attachment: ?RenderPassStencilAttachmentDescriptor = null,
 
     pub fn validate(self: RenderPassDescriptor) CommandEncodingError!void {
         if (self.color_attachments.len == 0) return CommandEncodingError.MissingColorAttachment;
         if (self.depth_attachment) |depth_attachment| try depth_attachment.validate();
+        if (self.stencil_attachment) |stencil_attachment| try stencil_attachment.validate();
     }
 };
 
@@ -1560,6 +1589,7 @@ pub const CommandEncodingError = error{
     DebugGroupStackUnderflow,
     UnclosedDebugGroup,
     InvalidDepthClearValue,
+    InvalidStencilClearValue,
     DepthStateRenderPassMismatch,
     SampleCountRenderPassMismatch,
     InvalidVertexCount,
@@ -4017,6 +4047,21 @@ test "render pass descriptor validates depth attachment" {
     try std.testing.expectError(CommandEncodingError.InvalidDepthClearValue, (RenderPassDescriptor{
         .color_attachments = color_attachments[0..],
         .depth_attachment = .{ .clear_depth = 1.5 },
+    }).validate());
+
+    try (RenderPassDescriptor{
+        .color_attachments = color_attachments[0..],
+        .stencil_attachment = .{
+            .load_action = .clear,
+            .store_action = .store,
+            .clear_stencil = 0xff,
+            .options = .{ .transient = true },
+        },
+    }).validate();
+
+    try std.testing.expectError(CommandEncodingError.InvalidStencilClearValue, (RenderPassDescriptor{
+        .color_attachments = color_attachments[0..],
+        .stencil_attachment = .{ .clear_stencil = 0x100 },
     }).validate());
 }
 

@@ -911,8 +911,10 @@ pub const RenderPassColorAttachmentDescriptor = struct {
     load_action: core.LoadAction = .clear,
     store_action: core.StoreAction = .store,
     clear_color: core.ClearColorLike = .{},
+    options: core.RenderPassAttachmentOptions = .{},
 
     fn validateRuntime(self: RenderPassColorAttachmentDescriptor, backend: core.Backend) !void {
+        if (self.options.transient) return RuntimeError.UnsupportedTransientAttachment;
         switch (self.target) {
             .current_drawable => {
                 if (self.resolve_target != null) return RuntimeError.InvalidRenderPassAttachment;
@@ -955,6 +957,7 @@ pub const RenderPassColorAttachmentDescriptor = struct {
             .load_action = self.load_action,
             .store_action = self.store_action,
             .clear_color = self.clear_color,
+            .options = self.options,
         };
     }
 };
@@ -969,9 +972,11 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
     load_action: core.LoadAction = .clear,
     store_action: core.StoreAction = .dont_care,
     clear_depth: f32 = 1.0,
+    options: core.RenderPassAttachmentOptions = .{},
 
     fn validateRuntime(self: RenderPassDepthAttachmentDescriptor, backend: core.Backend) !void {
         try self.toCore().validate();
+        if (self.options.transient) return RuntimeError.UnsupportedTransientAttachment;
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
@@ -993,6 +998,48 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
             .load_action = self.load_action,
             .store_action = self.store_action,
             .clear_depth = self.clear_depth,
+            .options = self.options,
+        };
+    }
+};
+
+pub const RenderPassStencilAttachmentTarget = union(enum) {
+    current_drawable,
+    texture_view: *TextureView,
+};
+
+pub const RenderPassStencilAttachmentDescriptor = struct {
+    target: RenderPassStencilAttachmentTarget = .current_drawable,
+    load_action: core.LoadAction = .clear,
+    store_action: core.StoreAction = .dont_care,
+    clear_stencil: u32 = 0,
+    options: core.RenderPassAttachmentOptions = .{},
+
+    fn validateRuntime(self: RenderPassStencilAttachmentDescriptor, backend: core.Backend) !void {
+        try self.toCore().validate();
+        if (self.options.transient) return RuntimeError.UnsupportedTransientAttachment;
+        switch (self.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| {
+                assertAlive(texture_view.alive, .texture_view);
+                try expectSameBackend(backend, texture_view.backend);
+                if (!texture_view.usage().render_attachment or !core.isStencilFormat(texture_view.format())) {
+                    return RuntimeError.InvalidRenderPassAttachment;
+                }
+            },
+        }
+    }
+
+    fn toCore(self: RenderPassStencilAttachmentDescriptor) core.RenderPassStencilAttachmentDescriptor {
+        return .{
+            .target = switch (self.target) {
+                .current_drawable => .current_drawable,
+                .texture_view => .texture_view,
+            },
+            .load_action = self.load_action,
+            .store_action = self.store_action,
+            .clear_stencil = self.clear_stencil,
+            .options = self.options,
         };
     }
 };
@@ -1001,9 +1048,11 @@ pub const RenderPassDescriptor = struct {
     label: ?[]const u8 = null,
     color_attachments: []const RenderPassColorAttachmentDescriptor = &.{},
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+    stencil_attachment: ?RenderPassStencilAttachmentDescriptor = null,
 
     fn validateRuntime(self: RenderPassDescriptor, backend: core.Backend) !void {
-        if (self.color_attachments.len != 1) return RuntimeError.InvalidRenderPassAttachment;
+        if (self.color_attachments.len == 0) return core.CommandEncodingError.MissingColorAttachment;
+        if (self.color_attachments.len != 1) return RuntimeError.UnsupportedMultipleRenderTargets;
         for (self.color_attachments) |attachment| {
             try attachment.validateRuntime(backend);
         }
@@ -1011,6 +1060,10 @@ pub const RenderPassDescriptor = struct {
             try depth_attachment.validateRuntime(backend);
             try validateAttachmentExtents(self.color_attachments[0], depth_attachment);
             try validateAttachmentSampleCounts(self.color_attachments[0], depth_attachment);
+        }
+        if (self.stencil_attachment) |stencil_attachment| {
+            try stencil_attachment.validateRuntime(backend);
+            return RuntimeError.UnsupportedStencilAttachment;
         }
     }
 
@@ -1155,6 +1208,12 @@ fn recordRenderPassUsage(descriptor: RenderPassDescriptor) void {
             .texture_view => |texture_view| _ = texture_view.recordUsage(.render_attachment_write),
         }
     }
+    if (descriptor.stencil_attachment) |stencil_attachment| {
+        switch (stencil_attachment.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| _ = texture_view.recordUsage(.render_attachment_write),
+        }
+    }
 }
 
 pub const CommandBuffer = struct {
@@ -1188,6 +1247,7 @@ pub const CommandBuffer = struct {
             .label = descriptor.label,
             .color_attachments = core_color_attachments[0..],
             .depth_attachment = core_depth_attachment,
+            .stencil_attachment = if (descriptor.stencil_attachment) |stencil_attachment| stencil_attachment.toCore() else null,
         };
 
         const debug_encoder = try self.debug.makeRenderCommandEncoder(core_descriptor);
@@ -1668,6 +1728,9 @@ pub const RuntimeError = error{
     DeviceLost,
     SurfaceLost,
     InvalidRenderPassAttachment,
+    UnsupportedMultipleRenderTargets,
+    UnsupportedStencilAttachment,
+    UnsupportedTransientAttachment,
     InvalidStorageTextureUsage,
     PresentRequiresCurrentDrawable,
 };
@@ -3045,6 +3108,24 @@ test "runtime render pass descriptor rejects invalid texture targets" {
 
     try std.testing.expectError(RuntimeError.InvalidRenderPassAttachment, (RenderPassDescriptor{
         .color_attachments = color_attachments[0..],
+    }).validateRuntime(.vulkan));
+
+    const multiple_color_attachments = [_]RenderPassColorAttachmentDescriptor{ .{}, .{} };
+    try std.testing.expectError(RuntimeError.UnsupportedMultipleRenderTargets, (RenderPassDescriptor{
+        .color_attachments = multiple_color_attachments[0..],
+    }).validateRuntime(.vulkan));
+
+    const transient_color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
+        .options = .{ .transient = true },
+    }};
+    try std.testing.expectError(RuntimeError.UnsupportedTransientAttachment, (RenderPassDescriptor{
+        .color_attachments = transient_color_attachments[0..],
+    }).validateRuntime(.vulkan));
+
+    const drawable_color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
+    try std.testing.expectError(RuntimeError.UnsupportedStencilAttachment, (RenderPassDescriptor{
+        .color_attachments = drawable_color_attachments[0..],
+        .stencil_attachment = .{ .clear_stencil = 1 },
     }).validateRuntime(.vulkan));
 }
 
