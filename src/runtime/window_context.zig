@@ -2354,6 +2354,46 @@ pub const Device = struct {
         return self.capability_report;
     }
 
+    pub fn validateDescriptorIndexingLayout(self: Device, descriptor: core.DescriptorIndexingLayoutDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn validateSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn validateExternalTextureDescriptor(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
+        try descriptor.validate(self.backend, self.features());
+    }
+
+    pub fn validateExternalSemaphoreDescriptor(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.backend, self.features());
+    }
+
+    pub fn validateTessellationDescriptor(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn validateAccelerationStructureDescriptor(self: Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features());
+    }
+
+    pub fn validateRayTracingPipelineDescriptor(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn validateDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
         return switch (self.impl.*) {
             .vulkan => |*vulkan| vulkan.formatCapabilities(format),
@@ -3402,6 +3442,73 @@ test "runtime device exposes adapter features limits and format caps" {
     try std.testing.expect(device.getFormatCaps(.rgba8_unorm).storage);
     try std.testing.expect(device.getFormatCaps(.depth32_float).depth_stencil_attachment);
     try std.testing.expectEqual(core.DeviceCapabilitySource.defaults, device.capabilityReport().source);
+}
+
+test "runtime device validates advanced descriptors against selected capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+
+    const bindless_ranges = [_]core.DescriptorIndexingRange{.{
+        .binding = 0,
+        .resource = .sampled_texture,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 4,
+    }};
+
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedArgumentBuffers, device.validateDescriptorIndexingLayout(.{
+        .model = .argument_buffer,
+        .ranges = &bindless_ranges,
+    }));
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedSparseBuffers, device.validateSparseMappingCommit(.{
+        .buffers = &.{.{
+            .offset = 0,
+            .size = 4096,
+            .page_size = 4096,
+        }},
+    }));
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedExternalTextures, device.validateExternalTextureDescriptor(.{
+        .handle = .{
+            .kind = .metal_texture,
+            .value = 1,
+        },
+        .format = .rgba8_unorm,
+        .width = 1,
+        .height = 1,
+    }));
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedTessellation, device.validateTessellationDescriptor(.{
+        .control_point_count = 3,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    }));
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedMeshShaders, device.validateMeshPipelineDescriptor(.{
+        .mesh_entry_point = "mesh_main",
+    }));
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedAccelerationStructures, device.validateAccelerationStructureDescriptor(.{
+        .kind = .bottom_level,
+        .primitive_count = 1,
+    }));
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, device.validateRayTracingPipelineDescriptor(.{
+        .shader_groups = &.{.{
+            .kind = .ray_generation,
+            .entry_point = "raygen",
+        }},
+    }));
 }
 
 test "runtime adapter selection validates resolved adapter info" {

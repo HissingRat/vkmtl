@@ -774,11 +774,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 11 Phase 4 Checklist
 
-- [ ] Define unsupported-feature validation scope before implementation.
-- [ ] Check advanced descriptors against selected-device features.
-- [ ] Check descriptor counts, alignments, page sizes, and stage visibility against limits.
-- [ ] Return precise typed errors for unsupported optional modules.
-- [ ] Add one unsupported-path test per advanced module.
+- [x] Define unsupported-feature validation scope before implementation.
+- [x] Check advanced descriptors against selected-device features.
+- [x] Check descriptor counts, alignments, page sizes, and stage visibility against limits.
+- [x] Return precise typed errors for unsupported optional modules.
+- [x] Add one unsupported-path test per advanced module.
 
 ## Period 11 Phase 5 Checklist
 
