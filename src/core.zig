@@ -550,6 +550,14 @@ pub const ErrorCategory = enum {
     unknown,
 };
 
+pub const ObjectCacheError = error{
+    EmptyObjectCacheSourceHash,
+    EmptyObjectCacheOptionsHash,
+    EmptyObjectCacheEntryPoint,
+    EmptyObjectCacheKey,
+    MissingObjectCacheLayout,
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -786,6 +794,11 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidPipeline,
         error.InvalidCommand,
         error.MissingShaderCacheDirValue,
+        error.EmptyObjectCacheSourceHash,
+        error.EmptyObjectCacheOptionsHash,
+        error.EmptyObjectCacheEntryPoint,
+        error.EmptyObjectCacheKey,
+        error.MissingObjectCacheLayout,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -1119,6 +1132,21 @@ pub const ShaderLibraryCacheKeyDescriptor = struct {
         if (self.library_name.len == 0) return ShaderError.EmptyShaderLibraryName;
         if (self.source_hash.len == 0) return ShaderError.EmptyShaderSourceHash;
         try self.specialization.validateShape();
+    }
+};
+
+pub const ShaderModuleCacheKeyDescriptor = struct {
+    source_hash: []const u8,
+    compile_options_hash: []const u8,
+    entry_point: []const u8 = "main",
+    backend: Backend,
+    stage: ShaderStage,
+    profile: ShaderCompileProfile = .debug,
+
+    pub fn validate(self: ShaderModuleCacheKeyDescriptor) ObjectCacheError!void {
+        if (self.source_hash.len == 0) return ObjectCacheError.EmptyObjectCacheSourceHash;
+        if (self.compile_options_hash.len == 0) return ObjectCacheError.EmptyObjectCacheOptionsHash;
+        if (self.entry_point.len == 0) return ObjectCacheError.EmptyObjectCacheEntryPoint;
     }
 };
 
@@ -4891,6 +4919,19 @@ test "shader library descriptor validates entries and cache keys" {
         .source_hash = "abc",
         .backend = .metal,
     }).validate();
+    try (ShaderModuleCacheKeyDescriptor{
+        .source_hash = "abc",
+        .compile_options_hash = "debug-options",
+        .entry_point = "vs_main",
+        .backend = .metal,
+        .stage = .vertex,
+    }).validate();
+    try std.testing.expectError(ObjectCacheError.EmptyObjectCacheOptionsHash, (ShaderModuleCacheKeyDescriptor{
+        .source_hash = "abc",
+        .compile_options_hash = "",
+        .backend = .metal,
+        .stage = .fragment,
+    }).validate());
 
     const specialization_constants = [_]ShaderSpecializationConstant{
         .{ .id = 0, .name = "use_lighting", .value = .{ .bool = true } },

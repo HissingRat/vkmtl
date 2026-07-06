@@ -12,5 +12,7 @@ existing runtime shader artifact cache.
 
 ## Current Limits
 
+- `ShaderModuleCacheKeyDescriptor` is the public identity shape for native
+  shader module reuse.
 - Runtime shader artifacts are cached on disk already.
 - Native shader module handle reuse is key/diagnostic first in this period.

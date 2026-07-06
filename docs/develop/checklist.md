@@ -576,10 +576,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 1 Checklist
 
 - [x] Define shader module cache scope before implementation.
-- [ ] Add shader module cache-key descriptor shape.
-- [ ] Include source, compile option, entry point, and backend identity.
-- [ ] Keep existing runtime shader artifact cache behavior intact.
-- [ ] Document shader module object-cache limits.
+- [x] Add shader module cache-key descriptor shape.
+- [x] Include source, compile option, entry point, and backend identity.
+- [x] Keep existing runtime shader artifact cache behavior intact.
+- [x] Document shader module object-cache limits.
 
 ## Period 8 Phase 2 Checklist
 
