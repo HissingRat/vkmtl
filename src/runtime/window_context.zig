@@ -1920,9 +1920,14 @@ pub const Queue = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     impl: *BackendRuntime,
+    kind_value: core.QueueKind = .graphics,
 
     pub fn selectedBackend(self: Queue) core.Backend {
         return self.backend;
+    }
+
+    pub fn kind(self: Queue) core.QueueKind {
+        return self.kind_value;
     }
 
     pub fn makeCommandBuffer(self: *Queue) !CommandBuffer {
@@ -1990,6 +1995,14 @@ pub const Device = struct {
             .tracker = self.tracker,
             .impl = self.impl,
         };
+    }
+
+    pub fn queueWithDescriptor(self: *Device, descriptor: core.QueueDescriptor) !Queue {
+        try descriptor.validate(self.features(), .{});
+        if (descriptor.kind != .graphics) return core.CommandEncodingError.UnsupportedMultiQueue;
+        var queue_view = self.queue();
+        queue_view.kind_value = .graphics;
+        return queue_view;
     }
 
     pub fn compileRenderShader(
@@ -2366,6 +2379,11 @@ pub const WindowContext = struct {
             .tracker = self.tracker,
             .impl = &self.impl,
         };
+    }
+
+    pub fn queueWithDescriptor(self: *WindowContext, descriptor: core.QueueDescriptor) !Queue {
+        var device_view = self.device();
+        return try device_view.queueWithDescriptor(descriptor);
     }
 
     pub fn surface(self: *WindowContext) Surface {
@@ -2907,14 +2925,21 @@ test "window context exposes device and queue views" {
         .impl = undefined,
     };
 
-    const device = context.device();
+    var device = context.device();
     const queue_view = context.queue();
+    const descriptor_queue = try device.queueWithDescriptor(.{});
     var surface_view = context.surface();
     const swapchain_view = context.swapchain();
     const surface_swapchain_view = surface_view.swapchain();
 
     try std.testing.expectEqual(core.Backend.vulkan, device.selectedBackend());
     try std.testing.expectEqual(core.Backend.vulkan, queue_view.selectedBackend());
+    try std.testing.expectEqual(core.QueueKind.graphics, queue_view.kind());
+    try std.testing.expectEqual(core.QueueKind.graphics, descriptor_queue.kind());
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedMultiQueue, device.queueWithDescriptor(.{
+        .kind = .compute,
+        .allow_fallback = false,
+    }));
     try std.testing.expectEqual(core.Backend.vulkan, surface_view.selectedBackend());
     try std.testing.expectEqual(core.Backend.vulkan, swapchain_view.selectedBackend());
     try std.testing.expectEqual(core.Backend.vulkan, surface_swapchain_view.selectedBackend());

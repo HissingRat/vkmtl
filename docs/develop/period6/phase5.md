@@ -13,5 +13,9 @@ queues.
 ## Current Limits
 
 - `Device.queue()` returns the default graphics queue.
+- `QueueKind`, `QueueCapabilities`, `QueueDescriptor`, and
+  `QueueOwnershipTransferDescriptor` define the public multi-queue vocabulary.
+- `Device.queueWithDescriptor(...)` currently accepts the default graphics queue
+  path and returns `UnsupportedMultiQueue` for non-graphics runtime queues.
 - Dedicated compute and transfer queues are descriptor/feature shapes until
   backend selection and synchronization are implemented.

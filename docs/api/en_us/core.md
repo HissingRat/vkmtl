@@ -338,6 +338,13 @@ Command buffers are still one-shot after `commit()`; pooled or reusable command
 buffers are represented by descriptor fields and rejected by feature gates until
 native reset/pooling is implemented.
 
+`QueueKind`, `QueueCapabilities`, and `QueueDescriptor` define the multi-queue
+selection vocabulary. `Device.queue()` still returns the default graphics queue,
+and `Device.queueWithDescriptor(.{})` is the explicit form of that default.
+Dedicated compute/transfer queues and queue ownership transfers are represented
+by descriptors and feature gates, but runtime selection currently returns typed
+unsupported errors for non-graphics queues.
+
 Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also

@@ -512,10 +512,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 6 Phase 5 Checklist
 
 - [x] Define multi-queue scope before implementation.
-- [ ] Add public queue kind/capability descriptors.
-- [ ] Preserve single graphics queue behavior by default.
-- [ ] Gate compute/transfer queue selection and ownership transfer.
-- [ ] Document cross-queue fallback rules.
+- [x] Add public queue kind/capability descriptors.
+- [x] Preserve single graphics queue behavior by default.
+- [x] Gate compute/transfer queue selection and ownership transfer.
+- [x] Document cross-queue fallback rules.
 
 ## Period 6 Phase 6 Checklist
 

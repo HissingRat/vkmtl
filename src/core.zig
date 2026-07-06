@@ -120,6 +120,10 @@ pub const DeviceFeatures = struct {
     events: bool = false,
     timeline_fences: bool = false,
     shared_events: bool = false,
+    multi_queue: bool = false,
+    dedicated_compute_queue: bool = false,
+    dedicated_transfer_queue: bool = false,
+    queue_ownership_transfer: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -396,6 +400,66 @@ pub const EventWaitDescriptor = struct {
     timeout_ns: ?u64 = null,
 };
 
+pub const QueueKind = enum {
+    graphics,
+    compute,
+    transfer,
+};
+
+pub const QueueCapabilities = struct {
+    graphics: bool = true,
+    compute: bool = true,
+    transfer: bool = true,
+    present: bool = true,
+
+    pub fn supports(self: QueueCapabilities, kind: QueueKind) bool {
+        return switch (kind) {
+            .graphics => self.graphics,
+            .compute => self.compute,
+            .transfer => self.transfer,
+        };
+    }
+};
+
+pub const QueueDescriptor = struct {
+    label: ?[]const u8 = null,
+    kind: QueueKind = .graphics,
+    require_dedicated: bool = false,
+    allow_fallback: bool = true,
+
+    pub fn validate(
+        self: QueueDescriptor,
+        features: DeviceFeatures,
+        capabilities: QueueCapabilities,
+    ) CommandEncodingError!void {
+        if (!capabilities.supports(self.kind)) return CommandEncodingError.InvalidQueueCapability;
+        if (self.kind == .graphics) return;
+        if (!features.multi_queue) {
+            if (self.allow_fallback and !self.require_dedicated) return;
+            return CommandEncodingError.UnsupportedMultiQueue;
+        }
+        if (!self.require_dedicated) return;
+        switch (self.kind) {
+            .graphics => {},
+            .compute => if (!features.dedicated_compute_queue) return CommandEncodingError.UnsupportedDedicatedQueue,
+            .transfer => if (!features.dedicated_transfer_queue) return CommandEncodingError.UnsupportedDedicatedQueue,
+        }
+    }
+};
+
+pub const QueueOwnershipTransferDescriptor = struct {
+    source: QueueKind,
+    destination: QueueKind,
+    before: ResourceUsageKind,
+    after: ResourceUsageKind,
+
+    pub fn validate(self: QueueOwnershipTransferDescriptor, features: DeviceFeatures) CommandEncodingError!void {
+        if (!features.queue_ownership_transfer) return CommandEncodingError.UnsupportedQueueOwnershipTransfer;
+        if (self.source == self.destination) return CommandEncodingError.RedundantQueueOwnershipTransfer;
+        if (self.before == self.after) return CommandEncodingError.RedundantResourceBarrier;
+    }
+};
+
 fn resourceHazard(previous: ?ResourceUsageKind, next: ResourceUsageKind) ResourceHazard {
     const prev = previous orelse return .none;
     const prev_access = prev.access();
@@ -553,6 +617,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedEvents,
         error.UnsupportedTimelineFences,
         error.UnsupportedSharedEvents,
+        error.UnsupportedMultiQueue,
+        error.UnsupportedDedicatedQueue,
+        error.UnsupportedQueueOwnershipTransfer,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -612,8 +679,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidCopyTextureSlice,
         error.InvalidCopyBufferLayout,
         error.RedundantResourceBarrier,
+        error.RedundantQueueOwnershipTransfer,
         error.InvalidResourceBarrierState,
         error.InvalidResourceBarrierRange,
+        error.InvalidQueueCapability,
         error.InvalidFenceValue,
         error.TextureCopySizeOverflow,
         error.MissingBindGroupLayoutEntry,
@@ -2311,9 +2380,14 @@ pub const CommandEncodingError = error{
     UnsupportedEvents,
     UnsupportedTimelineFences,
     UnsupportedSharedEvents,
+    UnsupportedMultiQueue,
+    UnsupportedDedicatedQueue,
+    UnsupportedQueueOwnershipTransfer,
     RedundantResourceBarrier,
+    RedundantQueueOwnershipTransfer,
     InvalidResourceBarrierState,
     InvalidResourceBarrierRange,
+    InvalidQueueCapability,
     InvalidFenceValue,
     InvalidCopySize,
     InvalidCopyBufferRange,
@@ -4159,6 +4233,45 @@ test "fence and event descriptors validate feature gates" {
     try (EventDescriptor{
         .shared = true,
     }).validate(.{ .events = true, .shared_events = true });
+}
+
+test "queue descriptors validate capabilities and gates" {
+    const caps = QueueCapabilities{};
+    try (QueueDescriptor{}).validate(.{}, caps);
+    try (QueueDescriptor{
+        .kind = .compute,
+    }).validate(.{}, caps);
+    try std.testing.expectError(CommandEncodingError.UnsupportedMultiQueue, (QueueDescriptor{
+        .kind = .compute,
+        .allow_fallback = false,
+    }).validate(.{}, caps));
+    try std.testing.expectError(CommandEncodingError.UnsupportedDedicatedQueue, (QueueDescriptor{
+        .kind = .compute,
+        .require_dedicated = true,
+    }).validate(.{ .multi_queue = true }, caps));
+    try (QueueDescriptor{
+        .kind = .transfer,
+        .require_dedicated = true,
+    }).validate(.{
+        .multi_queue = true,
+        .dedicated_transfer_queue = true,
+    }, caps);
+    try std.testing.expectError(CommandEncodingError.InvalidQueueCapability, (QueueDescriptor{
+        .kind = .transfer,
+    }).validate(.{}, .{ .transfer = false }));
+
+    try std.testing.expectError(CommandEncodingError.UnsupportedQueueOwnershipTransfer, (QueueOwnershipTransferDescriptor{
+        .source = .graphics,
+        .destination = .transfer,
+        .before = .copy_destination,
+        .after = .copy_source,
+    }).validate(.{}));
+    try std.testing.expectError(CommandEncodingError.RedundantQueueOwnershipTransfer, (QueueOwnershipTransferDescriptor{
+        .source = .graphics,
+        .destination = .graphics,
+        .before = .copy_destination,
+        .after = .copy_source,
+    }).validate(.{ .queue_ownership_transfer = true }));
 }
 
 test "debug group stack validates labels and nesting" {

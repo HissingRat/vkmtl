@@ -281,6 +281,12 @@ try command_buffer.commit();
 lifecycle state。当前 command buffer 在 `commit()` 后仍然是 one-shot；pooled 或 reusable
 command buffer 已经由 descriptor 表达，但在 native reset/pooling 接上前会被 feature gate 拒绝。
 
+`QueueKind`、`QueueCapabilities` 和 `QueueDescriptor` 定义 multi-queue selection
+词汇。`Device.queue()` 仍然返回 default graphics queue，`Device.queueWithDescriptor(.{})`
+是这个默认路径的显式写法。Dedicated compute/transfer queue 与 queue ownership transfer 已经由
+descriptor 和 feature gate 表达，但 runtime 选择非 graphics queue 目前会返回 typed unsupported
+error。
+
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
