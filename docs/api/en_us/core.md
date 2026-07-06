@@ -437,6 +437,27 @@ compile profile, entry point, bind group layouts, the unified
 validation shape only; native compute pipeline object caching is still future
 work.
 
+## Object Cache Diagnostics
+
+Period 8 exposes cache-key and diagnostic shapes for expensive native objects:
+
+- `ShaderModuleCacheKeyDescriptor`
+- `BindGroupLayoutCacheKeyDescriptor`
+- `PipelineLayoutCacheKeyDescriptor`
+- `RenderPipelineCacheKeyDescriptor`
+- `ComputePipelineCacheKeyDescriptor`
+- `SamplerCacheKeyDescriptor`
+
+`ObjectCachePolicy` controls whether a key requests reuse, disables
+diagnostics, or records diagnostics only. `ObjectCacheDiagnostics` reports
+hits, misses, creation attempts, equivalent recreation attempts, bypassed reuse,
+suppressed diagnostics, and total creation time. Read snapshots with
+`device.objectCacheDiagnostics()` or `context.objectCacheDiagnostics()`.
+
+These diagnostics currently count repeated key-equivalent runtime object
+creation attempts. They do not yet prove that a backend-native handle was
+reused.
+
 ## Debug Labels And Groups
 
 Runtime resources, command buffers, and command encoders expose borrowed debug

@@ -39,6 +39,9 @@ pub const ResourceKind = enum {
     bind_group,
 };
 
+const object_cache_fingerprint_capacity = 32;
+const object_cache_fingerprint_slots = core.object_cache_kind_count * object_cache_fingerprint_capacity;
+
 pub const ResourceTracker = struct {
     buffers: usize = 0,
     textures: usize = 0,
@@ -52,6 +55,9 @@ pub const ResourceTracker = struct {
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
+    object_cache_diagnostics: core.ObjectCacheDiagnostics = .{},
+    object_cache_fingerprints: [object_cache_fingerprint_slots]u64 = [_]u64{0} ** object_cache_fingerprint_slots,
+    object_cache_fingerprint_counts: [core.object_cache_kind_count]usize = [_]usize{0} ** core.object_cache_kind_count,
 
     pub fn retain(self: *ResourceTracker, kind: ResourceKind) void {
         self.countPtr(kind).* += 1;
@@ -83,6 +89,24 @@ pub const ResourceTracker = struct {
 
     pub fn hasPendingRetirements(self: ResourceTracker) bool {
         return self.pending_retirements != 0;
+    }
+
+    pub fn objectCacheDiagnostics(self: ResourceTracker) core.ObjectCacheDiagnostics {
+        return self.object_cache_diagnostics;
+    }
+
+    pub fn recordObjectCreation(
+        self: *ResourceTracker,
+        kind: core.ObjectCacheKind,
+        fingerprint: u64,
+        policy: core.ObjectCachePolicy,
+        creation_time_ns: u64,
+    ) void {
+        const equivalent = self.hasObjectFingerprint(kind, fingerprint);
+        self.object_cache_diagnostics.recordCreation(kind, equivalent, policy, creation_time_ns);
+        if (policy.recordsDiagnostics()) {
+            self.rememberObjectFingerprint(kind, fingerprint);
+        }
     }
 
     fn retire(self: *ResourceTracker, kind: ResourceKind) void {
@@ -148,7 +172,292 @@ pub const ResourceTracker = struct {
             .bind_group => &self.bind_groups,
         };
     }
+
+    fn hasObjectFingerprint(self: ResourceTracker, kind: core.ObjectCacheKind, fingerprint: u64) bool {
+        const kind_index: usize = @intFromEnum(kind);
+        const base = kind_index * object_cache_fingerprint_capacity;
+        const count = @min(self.object_cache_fingerprint_counts[kind_index], object_cache_fingerprint_capacity);
+        for (0..count) |i| {
+            if (self.object_cache_fingerprints[base + i] == fingerprint) return true;
+        }
+        return false;
+    }
+
+    fn rememberObjectFingerprint(self: *ResourceTracker, kind: core.ObjectCacheKind, fingerprint: u64) void {
+        const kind_index: usize = @intFromEnum(kind);
+        const base = kind_index * object_cache_fingerprint_capacity;
+        const count = self.object_cache_fingerprint_counts[kind_index];
+        if (count < object_cache_fingerprint_capacity) {
+            self.object_cache_fingerprints[base + count] = fingerprint;
+            self.object_cache_fingerprint_counts[kind_index] = count + 1;
+            return;
+        }
+
+        const slot: usize = @intCast(fingerprint % object_cache_fingerprint_capacity);
+        self.object_cache_fingerprints[base + slot] = fingerprint;
+    }
 };
+
+fn objectFingerprintStart(kind: core.ObjectCacheKind, backend: core.Backend) u64 {
+    var hash: u64 = 0xcbf29ce484222325;
+    hashU64(&hash, @intFromEnum(kind));
+    hashU64(&hash, @intFromEnum(backend));
+    return hash;
+}
+
+fn hashByte(hash: *u64, byte: u8) void {
+    hash.* ^= byte;
+    hash.* *%= 0x100000001b3;
+}
+
+fn hashBytes(hash: *u64, bytes: []const u8) void {
+    hashU64(hash, bytes.len);
+    for (bytes) |byte| hashByte(hash, byte);
+}
+
+fn hashU32Slice(hash: *u64, values: []const u32) void {
+    hashU64(hash, values.len);
+    for (values) |value| hashU64(hash, value);
+}
+
+fn hashU64(hash: *u64, value: u64) void {
+    var remaining = value;
+    for (0..8) |_| {
+        hashByte(hash, @intCast(remaining & 0xff));
+        remaining >>= 8;
+    }
+}
+
+fn hashBool(hash: *u64, value: bool) void {
+    hashByte(hash, if (value) 1 else 0);
+}
+
+fn hashF32(hash: *u64, value: f32) void {
+    const bits: u32 = @bitCast(value);
+    hashU64(hash, bits);
+}
+
+fn hashOptionalBytes(hash: *u64, value: ?[]const u8) void {
+    if (value) |bytes| {
+        hashBool(hash, true);
+        hashBytes(hash, bytes);
+    } else {
+        hashBool(hash, false);
+    }
+}
+
+fn hashShaderSource(hash: *u64, source: core.ShaderSource) void {
+    switch (source) {
+        .slang => |bytes| {
+            hashU64(hash, 0);
+            hashBytes(hash, bytes);
+        },
+        .spirv => |words| {
+            hashU64(hash, 1);
+            hashU32Slice(hash, words);
+        },
+        .msl => |bytes| {
+            hashU64(hash, 2);
+            hashBytes(hash, bytes);
+        },
+        .artifact => |artifact| {
+            hashU64(hash, 3);
+            hashU64(hash, @intFromEnum(artifact.language));
+            hashBytes(hash, artifact.path);
+        },
+    }
+}
+
+fn hashShaderModuleDescriptor(hash: *u64, descriptor: core.ShaderModuleDescriptor) void {
+    hashShaderSource(hash, descriptor.source);
+}
+
+fn hashShaderSpecialization(hash: *u64, descriptor: core.ShaderSpecializationDescriptor) void {
+    hashU64(hash, descriptor.constants.len);
+    for (descriptor.constants) |constant| {
+        hashU64(hash, constant.id);
+        hashOptionalBytes(hash, constant.name);
+        switch (constant.value) {
+            .bool => |value| {
+                hashU64(hash, 0);
+                hashBool(hash, value);
+            },
+            .i32 => |value| {
+                hashU64(hash, 1);
+                hashU64(hash, @bitCast(@as(i64, value)));
+            },
+            .u32 => |value| {
+                hashU64(hash, 2);
+                hashU64(hash, value);
+            },
+            .f32 => |value| {
+                hashU64(hash, 3);
+                hashF32(hash, value);
+            },
+        }
+    }
+}
+
+fn hashProgrammableStage(hash: *u64, stage: core.ProgrammableStageDescriptor) void {
+    hashShaderModuleDescriptor(hash, stage.module);
+    hashU64(hash, @intFromEnum(stage.stage));
+    hashBytes(hash, stage.entry_point);
+    hashShaderSpecialization(hash, stage.specialization);
+}
+
+fn hashBindGroupLayoutDescriptor(hash: *u64, descriptor: core.BindGroupLayoutDescriptor) void {
+    hashU64(hash, descriptor.entries.len);
+    for (descriptor.entries) |entry| {
+        hashU64(hash, entry.binding);
+        hashU64(hash, @intFromEnum(entry.resource));
+        hashBool(hash, entry.visibility.vertex);
+        hashBool(hash, entry.visibility.fragment);
+        hashBool(hash, entry.visibility.compute);
+        hashBool(hash, entry.dynamic_offset);
+        hashU64(hash, entry.array_count);
+        if (entry.storage_access) |access| {
+            hashBool(hash, true);
+            hashU64(hash, @intFromEnum(access));
+        } else {
+            hashBool(hash, false);
+        }
+    }
+}
+
+fn hashVertexDescriptor(hash: *u64, descriptor: core.VertexDescriptor) void {
+    hashU64(hash, descriptor.buffers.len);
+    for (descriptor.buffers) |buffer| {
+        hashU64(hash, buffer.stride);
+        hashU64(hash, @intFromEnum(buffer.step_function));
+        hashU64(hash, buffer.instance_step_rate);
+        if (buffer.buffer_index) |buffer_index| {
+            hashBool(hash, true);
+            hashU64(hash, buffer_index);
+        } else {
+            hashBool(hash, false);
+        }
+        hashU64(hash, buffer.attributes.len);
+        for (buffer.attributes) |attribute| {
+            hashU64(hash, attribute.location);
+            hashU64(hash, @intFromEnum(attribute.format));
+            hashU64(hash, attribute.offset);
+        }
+    }
+}
+
+fn hashDepthStencilDescriptor(hash: *u64, descriptor: core.DepthStencilDescriptor) void {
+    hashU64(hash, @intFromEnum(descriptor.format));
+    hashBool(hash, descriptor.depth_write_enabled);
+    hashBool(hash, descriptor.depth_test_enabled);
+    hashU64(hash, @intFromEnum(descriptor.depth_compare_function));
+    hashBool(hash, descriptor.stencil.enabled);
+    hashU64(hash, @intFromEnum(descriptor.stencil.front.stencil_compare_function));
+    hashU64(hash, @intFromEnum(descriptor.stencil.front.stencil_fail_operation));
+    hashU64(hash, @intFromEnum(descriptor.stencil.front.depth_fail_operation));
+    hashU64(hash, @intFromEnum(descriptor.stencil.front.depth_stencil_pass_operation));
+    hashU64(hash, @intFromEnum(descriptor.stencil.back.stencil_compare_function));
+    hashU64(hash, @intFromEnum(descriptor.stencil.back.stencil_fail_operation));
+    hashU64(hash, @intFromEnum(descriptor.stencil.back.depth_fail_operation));
+    hashU64(hash, @intFromEnum(descriptor.stencil.back.depth_stencil_pass_operation));
+    hashU64(hash, descriptor.stencil.read_mask);
+    hashU64(hash, descriptor.stencil.write_mask);
+}
+
+fn hashRenderPipelineDescriptor(hash: *u64, descriptor: core.RenderPipelineDescriptor) void {
+    hashProgrammableStage(hash, descriptor.vertex);
+    if (descriptor.fragment) |fragment| {
+        hashBool(hash, true);
+        hashProgrammableStage(hash, fragment);
+    } else {
+        hashBool(hash, false);
+    }
+    hashVertexDescriptor(hash, descriptor.vertex_descriptor);
+    hashU64(hash, descriptor.bind_group_layouts.len);
+    for (descriptor.bind_group_layouts) |layout| hashBindGroupLayoutDescriptor(hash, layout);
+    hashU64(hash, @intFromEnum(descriptor.primitive_topology));
+    hashU64(hash, @intFromEnum(descriptor.front_facing_winding));
+    hashU64(hash, @intFromEnum(descriptor.cull_mode));
+    hashU64(hash, @intFromEnum(descriptor.fill_mode));
+    hashBool(hash, descriptor.depth_bias.enabled);
+    hashF32(hash, descriptor.depth_bias.constant);
+    hashF32(hash, descriptor.depth_bias.slope);
+    hashF32(hash, descriptor.depth_bias.clamp);
+    hashBool(hash, descriptor.conservative_rasterization);
+    hashU64(hash, descriptor.sample_count);
+    hashU64(hash, descriptor.color_attachments.len);
+    for (descriptor.color_attachments) |attachment| {
+        hashU64(hash, @intFromEnum(attachment.format));
+        hashBool(hash, attachment.write_mask.red);
+        hashBool(hash, attachment.write_mask.green);
+        hashBool(hash, attachment.write_mask.blue);
+        hashBool(hash, attachment.write_mask.alpha);
+        if (attachment.blend) |blend| {
+            hashBool(hash, true);
+            hashU64(hash, @intFromEnum(blend.source_rgb_blend_factor));
+            hashU64(hash, @intFromEnum(blend.destination_rgb_blend_factor));
+            hashU64(hash, @intFromEnum(blend.rgb_blend_operation));
+            hashU64(hash, @intFromEnum(blend.source_alpha_blend_factor));
+            hashU64(hash, @intFromEnum(blend.destination_alpha_blend_factor));
+            hashU64(hash, @intFromEnum(blend.alpha_blend_operation));
+        } else {
+            hashBool(hash, false);
+        }
+    }
+    if (descriptor.depth_stencil) |depth_stencil| {
+        hashBool(hash, true);
+        hashDepthStencilDescriptor(hash, depth_stencil);
+    } else {
+        hashBool(hash, false);
+    }
+}
+
+fn hashComputePipelineDescriptor(hash: *u64, descriptor: core.ComputePipelineDescriptor) void {
+    hashProgrammableStage(hash, descriptor.compute);
+    hashU64(hash, descriptor.bind_group_layouts.len);
+    for (descriptor.bind_group_layouts) |layout| hashBindGroupLayoutDescriptor(hash, layout);
+}
+
+fn hashSamplerDescriptor(hash: *u64, descriptor: core.SamplerDescriptor) void {
+    hashU64(hash, @intFromEnum(descriptor.min_filter));
+    hashU64(hash, @intFromEnum(descriptor.mag_filter));
+    hashU64(hash, @intFromEnum(descriptor.mip_filter));
+    hashU64(hash, @intFromEnum(descriptor.address_mode_u));
+    hashU64(hash, @intFromEnum(descriptor.address_mode_v));
+    hashU64(hash, @intFromEnum(descriptor.address_mode_w));
+    hashF32(hash, descriptor.lod_min_clamp);
+    hashF32(hash, descriptor.lod_max_clamp);
+    if (descriptor.compare_function) |compare| {
+        hashBool(hash, true);
+        hashU64(hash, @intFromEnum(compare));
+    } else {
+        hashBool(hash, false);
+    }
+    hashF32(hash, descriptor.max_anisotropy);
+    if (descriptor.border_color) |border_color| {
+        hashBool(hash, true);
+        hashU64(hash, @intFromEnum(border_color));
+    } else {
+        hashBool(hash, false);
+    }
+}
+
+fn objectCreationTimerStart() i128 {
+    if (builtin.os.tag == .windows or builtin.os.tag == .wasi) return 0;
+    var timespec: std.posix.timespec = undefined;
+    return switch (std.posix.errno(std.posix.system.clock_gettime(.MONOTONIC, &timespec))) {
+        .SUCCESS => @as(i128, timespec.sec) * std.time.ns_per_s + timespec.nsec,
+        else => 0,
+    };
+}
+
+fn objectCreationElapsedNs(start: i128) u64 {
+    if (start == 0) return 0;
+    const delta = objectCreationTimerStart() - start;
+    if (delta <= 0) return 0;
+    const max_u64_as_delta: @TypeOf(delta) = std.math.maxInt(u64);
+    if (delta > max_u64_as_delta) return std.math.maxInt(u64);
+    return @intCast(delta);
+}
 
 pub const Buffer = struct {
     backend: core.Backend,
@@ -2043,6 +2352,10 @@ pub const Device = struct {
         return core.defaultFormatCapabilities(format);
     }
 
+    pub fn objectCacheDiagnostics(self: Device) core.ObjectCacheDiagnostics {
+        return self.tracker.objectCacheDiagnostics();
+    }
+
     pub fn queue(self: *Device) Queue {
         return .{
             .backend = self.backend,
@@ -2108,11 +2421,16 @@ pub const Device = struct {
     }
 
     pub fn makeShaderModule(self: *Device, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
+        var fingerprint = objectFingerprintStart(.shader_module, self.backend);
+        hashShaderModuleDescriptor(&fingerprint, descriptor);
+        const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ShaderModule.Impl{ .vulkan = try vulkan.makeShaderModule(descriptor) },
             .metal => |*metal| ShaderModule.Impl{ .metal = try metal.makeShaderModule(self.allocator, descriptor) },
         };
+        const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.shader_module);
+        self.tracker.recordObjectCreation(.shader_module, fingerprint, .{}, elapsed_ns);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -2127,11 +2445,16 @@ pub const Device = struct {
         try validateRuntimeSpecialization(descriptor.vertex);
         if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment);
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
+        var fingerprint = objectFingerprintStart(.render_pipeline, self.backend);
+        hashRenderPipelineDescriptor(&fingerprint, descriptor);
+        const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| RenderPipelineState.Impl{ .vulkan = try vulkan.makeRenderPipelineState(descriptor) },
             .metal => |*metal| RenderPipelineState.Impl{ .metal = try metal.makeRenderPipelineState(self.allocator, descriptor) },
         };
+        const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.render_pipeline_state);
+        self.tracker.recordObjectCreation(.render_pipeline, fingerprint, .{}, elapsed_ns);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -2144,11 +2467,16 @@ pub const Device = struct {
         try descriptor.validate();
         try validateRuntimeSpecialization(descriptor.compute);
         try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
+        var fingerprint = objectFingerprintStart(.compute_pipeline, self.backend);
+        hashComputePipelineDescriptor(&fingerprint, descriptor);
+        const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ComputePipelineState.Impl{ .vulkan = try vulkan.makeComputePipelineState(descriptor) },
             .metal => |*metal| ComputePipelineState.Impl{ .metal = try metal.makeComputePipelineState(self.allocator, descriptor) },
         };
+        const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.compute_pipeline_state);
+        self.tracker.recordObjectCreation(.compute_pipeline, fingerprint, .{}, elapsed_ns);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -2160,6 +2488,9 @@ pub const Device = struct {
     pub fn makeBindGroupLayout(self: *Device, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
         try descriptor.validate();
         try validateFirstSliceBindGroupLayout(descriptor);
+        var fingerprint = objectFingerprintStart(.bind_group_layout, self.backend);
+        hashBindGroupLayoutDescriptor(&fingerprint, descriptor);
+        const timer_start = objectCreationTimerStart();
 
         const entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.entries);
         errdefer self.allocator.free(entries);
@@ -2180,7 +2511,9 @@ pub const Device = struct {
             },
         };
 
+        const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.bind_group_layout);
+        self.tracker.recordObjectCreation(.bind_group_layout, fingerprint, .{}, elapsed_ns);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -2254,11 +2587,16 @@ pub const Device = struct {
 
     pub fn makeSamplerState(self: *Device, descriptor: core.SamplerDescriptor) !SamplerState {
         try descriptor.validateForDevice(self.features(), self.limits());
+        var fingerprint = objectFingerprintStart(.sampler, self.backend);
+        hashSamplerDescriptor(&fingerprint, descriptor);
+        const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| SamplerState.Impl{ .vulkan = try vulkan.makeSamplerState(descriptor) },
             .metal => |*metal| SamplerState.Impl{ .metal = try metal.makeSamplerState(descriptor) },
         };
+        const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.sampler_state);
+        self.tracker.recordObjectCreation(.sampler, fingerprint, .{}, elapsed_ns);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -2413,6 +2751,10 @@ pub const WindowContext = struct {
             .vulkan => |*vulkan| vulkan.nativeHandles(),
             .metal => |*metal| try metal.nativeHandles(),
         };
+    }
+
+    pub fn objectCacheDiagnostics(self: WindowContext) core.ObjectCacheDiagnostics {
+        return self.tracker.objectCacheDiagnostics();
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -2919,6 +3261,21 @@ test "resource tracker completeAllWork flushes pending retirements" {
 
     tracker.completeAllWork();
     try std.testing.expect(!tracker.hasPendingRetirements());
+}
+
+test "resource tracker records equivalent object cache creations" {
+    var tracker = ResourceTracker{};
+    tracker.recordObjectCreation(.sampler, 42, .{}, 10);
+    tracker.recordObjectCreation(.sampler, 42, .{}, 7);
+    tracker.recordObjectCreation(.sampler, 7, .{ .mode = .disabled }, 3);
+
+    const diagnostics = tracker.objectCacheDiagnostics();
+    const sampler_stats = diagnostics.stats(.sampler);
+    try std.testing.expectEqual(@as(u64, 2), sampler_stats.creation_attempts);
+    try std.testing.expectEqual(@as(u64, 2), sampler_stats.misses);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.equivalent_recreations);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.diagnostics_suppressed);
+    try std.testing.expectEqual(@as(u64, 17), sampler_stats.total_creation_time_ns);
 }
 
 test "runtime blit encoder records buffer usage transitions" {

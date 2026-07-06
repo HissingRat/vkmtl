@@ -368,6 +368,25 @@ key 的输入：shader source identity、backend、compile profile、entry point
 统一的 `PipelineLayoutCacheKeyDescriptor` 和 specialization constants。它目前只是 validation shape；
 native compute pipeline object cache 仍是后续工作。
 
+## Object Cache Diagnostics
+
+Period 8 暴露 expensive native object 的 cache-key 和 diagnostics 形状：
+
+- `ShaderModuleCacheKeyDescriptor`
+- `BindGroupLayoutCacheKeyDescriptor`
+- `PipelineLayoutCacheKeyDescriptor`
+- `RenderPipelineCacheKeyDescriptor`
+- `ComputePipelineCacheKeyDescriptor`
+- `SamplerCacheKeyDescriptor`
+
+`ObjectCachePolicy` 控制一个 key 是否请求复用、关闭 diagnostics，或只记录 diagnostics。
+`ObjectCacheDiagnostics` 会报告 hit、miss、creation attempts、equivalent recreation attempts、
+bypassed reuse、suppressed diagnostics 和总创建耗时。可以通过
+`device.objectCacheDiagnostics()` 或 `context.objectCacheDiagnostics()` 读取快照。
+
+这些 diagnostics 目前统计 key-equivalent runtime object creation attempts；它还不能证明
+backend-native handle 已经被复用。
+
 ## Debug Label 与 Group
 
 Runtime resource、command buffer 和 command encoder 都暴露借用字符串形式的 debug label：

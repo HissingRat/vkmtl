@@ -1,6 +1,7 @@
 # Period 8: Pipeline / Object Cache
 
-Status: in progress.
+Status: completed validation/API expansion, with native object reuse still
+planned as backend work.
 
 Goal: manage expensive native objects so real applications do not repeatedly
 create equivalent shader modules, layouts, pipelines, and samplers.

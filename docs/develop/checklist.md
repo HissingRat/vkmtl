@@ -624,10 +624,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 8 Phase 7 Checklist
 
 - [x] Define cache diagnostics scope before implementation.
-- [ ] Add cache policy and diagnostic statistic shapes.
-- [ ] Track repeated equivalent runtime object creation.
-- [ ] Expose diagnostics through runtime device/context views.
-- [ ] Document diagnostics limits.
+- [x] Add cache policy and diagnostic statistic shapes.
+- [x] Track repeated equivalent runtime object creation.
+- [x] Expose diagnostics through runtime device/context views.
+- [x] Document diagnostics limits.
 
 ## First Backend-Independent Triangle Checklist
 

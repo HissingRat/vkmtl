@@ -577,6 +577,106 @@ pub const ObjectCachePolicy = struct {
     }
 };
 
+pub const ObjectCacheKind = enum {
+    shader_module,
+    bind_group_layout,
+    pipeline_layout,
+    render_pipeline,
+    compute_pipeline,
+    sampler,
+};
+
+pub const object_cache_kind_count: usize = 6;
+
+pub const ObjectCacheStats = struct {
+    hits: u64 = 0,
+    misses: u64 = 0,
+    creation_attempts: u64 = 0,
+    equivalent_recreations: u64 = 0,
+    reuse_bypassed_creations: u64 = 0,
+    diagnostics_suppressed: u64 = 0,
+    total_creation_time_ns: u64 = 0,
+
+    pub fn recordHit(self: *ObjectCacheStats) void {
+        self.hits += 1;
+    }
+
+    pub fn recordMiss(self: *ObjectCacheStats) void {
+        self.misses += 1;
+    }
+
+    pub fn recordCreation(
+        self: *ObjectCacheStats,
+        equivalent: bool,
+        policy: ObjectCachePolicy,
+        creation_time_ns: u64,
+    ) void {
+        if (!policy.recordsDiagnostics()) {
+            self.diagnostics_suppressed += 1;
+            return;
+        }
+        self.recordMiss();
+        self.creation_attempts += 1;
+        self.total_creation_time_ns = self.total_creation_time_ns +| creation_time_ns;
+        if (equivalent) self.equivalent_recreations += 1;
+        if (!policy.allowsReuse()) self.reuse_bypassed_creations += 1;
+    }
+};
+
+pub const ObjectCacheDiagnostics = struct {
+    shader_modules: ObjectCacheStats = .{},
+    bind_group_layouts: ObjectCacheStats = .{},
+    pipeline_layouts: ObjectCacheStats = .{},
+    render_pipelines: ObjectCacheStats = .{},
+    compute_pipelines: ObjectCacheStats = .{},
+    samplers: ObjectCacheStats = .{},
+
+    pub fn stats(self: ObjectCacheDiagnostics, kind: ObjectCacheKind) ObjectCacheStats {
+        return switch (kind) {
+            .shader_module => self.shader_modules,
+            .bind_group_layout => self.bind_group_layouts,
+            .pipeline_layout => self.pipeline_layouts,
+            .render_pipeline => self.render_pipelines,
+            .compute_pipeline => self.compute_pipelines,
+            .sampler => self.samplers,
+        };
+    }
+
+    pub fn recordHit(self: *ObjectCacheDiagnostics, kind: ObjectCacheKind) void {
+        self.statsPtr(kind).recordHit();
+    }
+
+    pub fn recordCreation(
+        self: *ObjectCacheDiagnostics,
+        kind: ObjectCacheKind,
+        equivalent: bool,
+        policy: ObjectCachePolicy,
+        creation_time_ns: u64,
+    ) void {
+        self.statsPtr(kind).recordCreation(equivalent, policy, creation_time_ns);
+    }
+
+    pub fn totalCreationAttempts(self: ObjectCacheDiagnostics) u64 {
+        return self.shader_modules.creation_attempts +
+            self.bind_group_layouts.creation_attempts +
+            self.pipeline_layouts.creation_attempts +
+            self.render_pipelines.creation_attempts +
+            self.compute_pipelines.creation_attempts +
+            self.samplers.creation_attempts;
+    }
+
+    fn statsPtr(self: *ObjectCacheDiagnostics, kind: ObjectCacheKind) *ObjectCacheStats {
+        return switch (kind) {
+            .shader_module => &self.shader_modules,
+            .bind_group_layout => &self.bind_group_layouts,
+            .pipeline_layout => &self.pipeline_layouts,
+            .render_pipeline => &self.render_pipelines,
+            .compute_pipeline => &self.compute_pipelines,
+            .sampler => &self.samplers,
+        };
+    }
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -5115,6 +5215,24 @@ test "shader library descriptor validates entries and cache keys" {
         },
         .entry_point = "",
     }).validate());
+}
+
+test "object cache diagnostics record creation policy" {
+    var diagnostics = ObjectCacheDiagnostics{};
+    diagnostics.recordCreation(.sampler, false, .{}, 12);
+    diagnostics.recordCreation(.sampler, true, .{ .mode = .diagnostics_only }, 8);
+    diagnostics.recordCreation(.sampler, true, .{ .mode = .disabled }, 4);
+    diagnostics.recordHit(.sampler);
+
+    const sampler_stats = diagnostics.stats(.sampler);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.hits);
+    try std.testing.expectEqual(@as(u64, 2), sampler_stats.misses);
+    try std.testing.expectEqual(@as(u64, 2), sampler_stats.creation_attempts);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.equivalent_recreations);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.reuse_bypassed_creations);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.diagnostics_suppressed);
+    try std.testing.expectEqual(@as(u64, 20), sampler_stats.total_creation_time_ns);
+    try std.testing.expectEqual(@as(u64, 2), diagnostics.totalCreationAttempts());
 }
 
 test "render pipeline descriptor validates shader stages and color targets" {
