@@ -97,6 +97,8 @@ pub const DeviceFeatures = struct {
     task_shaders: bool = false,
     acceleration_structures: bool = false,
     ray_tracing: bool = false,
+    driver_pipeline_cache: bool = false,
+    metal_binary_archive: bool = false,
     vertex_instance_step_rate: bool = false,
     draw_base_vertex: bool = false,
     draw_base_instance: bool = false,
@@ -172,6 +174,7 @@ pub const DeviceLimits = struct {
     max_task_threads_per_threadgroup: u32 = 0,
     max_ray_tracing_recursion_depth: u32 = 0,
     shader_binding_table_alignment: u64 = 0,
+    max_driver_cache_identity_bytes: u32 = 0,
     sparse_buffer_page_size: u64 = 0,
     sparse_texture_page_width: u32 = 0,
     sparse_texture_page_height: u32 = 0,
@@ -614,6 +617,12 @@ pub const AdvancedFeatureError = error{
     InvalidAccelerationStructureDescriptor,
     InvalidRayTracingPipeline,
     InvalidShaderBindingTable,
+    UnsupportedDriverPipelineCache,
+    UnsupportedBinaryArchive,
+    EmptyDriverCachePath,
+    EmptyDriverCacheIdentity,
+    DriverCacheBackendMismatch,
+    DriverCacheIdentityTooLarge,
 };
 
 pub const ObjectCacheMode = enum {
@@ -734,6 +743,51 @@ pub const ObjectCacheDiagnostics = struct {
     }
 };
 
+pub const DriverCacheKind = enum {
+    vulkan_pipeline_cache,
+    metal_binary_archive,
+};
+
+pub const DriverCacheIdentityDescriptor = struct {
+    backend: Backend,
+    device_id: []const u8,
+    driver_id: []const u8,
+    shader_hash: []const u8,
+    schema_version: []const u8,
+
+    pub fn validate(self: DriverCacheIdentityDescriptor, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (self.device_id.len == 0 or self.driver_id.len == 0 or self.shader_hash.len == 0 or self.schema_version.len == 0) {
+            return AdvancedFeatureError.EmptyDriverCacheIdentity;
+        }
+        const identity_size = self.device_id.len + self.driver_id.len + self.shader_hash.len + self.schema_version.len;
+        if (limits.max_driver_cache_identity_bytes != 0 and identity_size > limits.max_driver_cache_identity_bytes) {
+            return AdvancedFeatureError.DriverCacheIdentityTooLarge;
+        }
+    }
+};
+
+pub const DriverPipelineCacheDescriptor = struct {
+    path: []const u8,
+    kind: DriverCacheKind,
+    identity: DriverCacheIdentityDescriptor,
+    read_only: bool = false,
+
+    pub fn validate(self: DriverPipelineCacheDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (self.path.len == 0) return AdvancedFeatureError.EmptyDriverCachePath;
+        try self.identity.validate(limits);
+        switch (self.kind) {
+            .vulkan_pipeline_cache => {
+                if (!features.driver_pipeline_cache) return AdvancedFeatureError.UnsupportedDriverPipelineCache;
+                if (self.identity.backend != .vulkan) return AdvancedFeatureError.DriverCacheBackendMismatch;
+            },
+            .metal_binary_archive => {
+                if (!features.metal_binary_archive) return AdvancedFeatureError.UnsupportedBinaryArchive;
+                if (self.identity.backend != .metal) return AdvancedFeatureError.DriverCacheBackendMismatch;
+            },
+        }
+    }
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -841,6 +895,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTaskShaders,
         error.UnsupportedAccelerationStructures,
         error.UnsupportedRayTracing,
+        error.UnsupportedDriverPipelineCache,
+        error.UnsupportedBinaryArchive,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -1005,6 +1061,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidAccelerationStructureDescriptor,
         error.InvalidRayTracingPipeline,
         error.InvalidShaderBindingTable,
+        error.EmptyDriverCachePath,
+        error.EmptyDriverCacheIdentity,
+        error.DriverCacheBackendMismatch,
+        error.DriverCacheIdentityTooLarge,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -5633,6 +5693,40 @@ test "object cache diagnostics record creation policy" {
     try std.testing.expectEqual(@as(u64, 1), sampler_stats.diagnostics_suppressed);
     try std.testing.expectEqual(@as(u64, 20), sampler_stats.total_creation_time_ns);
     try std.testing.expectEqual(@as(u64, 2), diagnostics.totalCreationAttempts());
+}
+
+test "driver pipeline cache descriptors validate identity and backend gates" {
+    const vulkan_identity = DriverCacheIdentityDescriptor{
+        .backend = .vulkan,
+        .device_id = "device",
+        .driver_id = "driver",
+        .shader_hash = "shader",
+        .schema_version = "v1",
+    };
+    const vulkan_cache = DriverPipelineCacheDescriptor{
+        .path = "vkmtl-cache/pipeline/vulkan.bin",
+        .kind = .vulkan_pipeline_cache,
+        .identity = vulkan_identity,
+    };
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedDriverPipelineCache, vulkan_cache.validate(.{}, .{}));
+    try vulkan_cache.validate(.{ .driver_pipeline_cache = true }, .{ .max_driver_cache_identity_bytes = 64 });
+
+    try std.testing.expectError(AdvancedFeatureError.DriverCacheBackendMismatch, (DriverPipelineCacheDescriptor{
+        .path = "vkmtl-cache/pipeline/wrong.bin",
+        .kind = .metal_binary_archive,
+        .identity = vulkan_identity,
+    }).validate(.{ .metal_binary_archive = true }, .{}));
+    try std.testing.expectError(AdvancedFeatureError.EmptyDriverCacheIdentity, (DriverPipelineCacheDescriptor{
+        .path = "vkmtl-cache/pipeline/empty.bin",
+        .kind = .vulkan_pipeline_cache,
+        .identity = .{
+            .backend = .vulkan,
+            .device_id = "",
+            .driver_id = "driver",
+            .shader_hash = "shader",
+            .schema_version = "v1",
+        },
+    }).validate(.{ .driver_pipeline_cache = true }, .{}));
 }
 
 test "render pipeline descriptor validates shader stages and color targets" {

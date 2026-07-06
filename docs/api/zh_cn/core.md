@@ -417,6 +417,11 @@ bypassed reuse、suppressed diagnostics 和总创建耗时。可以通过
 这些 diagnostics 目前统计 key-equivalent runtime object creation attempts；它还不能证明
 backend-native handle 已经被复用。
 
+Driver-level cache identity 由 `DriverCacheIdentityDescriptor` 和
+`DriverPipelineCacheDescriptor` 单独表示。Vulkan pipeline cache 和 Metal binary archive support 由
+`DeviceFeatures.driver_pipeline_cache` 与 `DeviceFeatures.metal_binary_archive` gate。Identity 包含
+backend、device、driver、shader hash 和 schema version，方便后续显式做 disk cache invalidation。
+
 ## Debug Label 与 Group
 
 Runtime resource、command buffer 和 command encoder 都暴露借用字符串形式的 debug label：

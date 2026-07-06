@@ -48,3 +48,6 @@ features.
 Ray tracing descriptors are isolated from the normal render pipeline because
 Vulkan and Metal differ in acceleration structure, pipeline, and shader table
 details.
+
+Driver-level pipeline caches and Metal binary archives use explicit cache
+identity descriptors. They are separate from Period 8 object-cache diagnostics.

@@ -494,6 +494,13 @@ These diagnostics currently count repeated key-equivalent runtime object
 creation attempts. They do not yet prove that a backend-native handle was
 reused.
 
+Driver-level cache identity is represented separately by
+`DriverCacheIdentityDescriptor` and `DriverPipelineCacheDescriptor`. Vulkan
+pipeline cache and Metal binary archive support are gated by
+`DeviceFeatures.driver_pipeline_cache` and `DeviceFeatures.metal_binary_archive`.
+Identity includes backend, device, driver, shader hash, and schema version so
+future disk cache invalidation can be explicit.
+
 ## Debug Labels And Groups
 
 Runtime resources, command buffers, and command encoders expose borrowed debug

@@ -743,10 +743,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 10 Phase 7 Checklist
 
 - [x] Define driver-level pipeline cache scope before implementation.
-- [ ] Add feature gates and driver cache descriptor shapes.
-- [ ] Validate backend, device, driver, shader, and version identity.
-- [ ] Keep disk cache invalidation explicit.
-- [ ] Update Period 10 status and docs.
+- [x] Add feature gates and driver cache descriptor shapes.
+- [x] Validate backend, device, driver, shader, and version identity.
+- [x] Keep disk cache invalidation explicit.
+- [x] Update Period 10 status and docs.
 
 ## First Backend-Independent Triangle Checklist
 

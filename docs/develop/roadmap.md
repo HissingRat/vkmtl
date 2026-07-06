@@ -219,7 +219,7 @@ See `docs/develop/period9/`.
 
 ## Period 10: Advanced / Backend-Gated
 
-Status: planned optional modules.
+Status: completed validation/API expansion for optional modules.
 
 Goal: expose advanced Vulkan and Metal features without forcing them into the
 portable core. Every phase here is optional, capability-gated, and has no

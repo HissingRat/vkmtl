@@ -40,3 +40,6 @@ path 都被视为 backend-gated advanced feature。
 
 Ray tracing descriptor 和普通 render pipeline 隔离，因为 Vulkan 和 Metal 在 acceleration
 structure、pipeline 和 shader table 细节上差异很大。
+
+Driver-level pipeline cache 和 Metal binary archive 使用显式 cache identity descriptor。它们和
+Period 8 object-cache diagnostics 是分开的层。

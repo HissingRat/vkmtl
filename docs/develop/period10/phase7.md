@@ -10,5 +10,9 @@ Phase 7 defines driver-level pipeline cache and Metal binary archive metadata.
 
 ## Current Limits
 
+- `DriverCacheIdentityDescriptor` and `DriverPipelineCacheDescriptor` validate
+  driver-cache identity and backend kind.
+- `DeviceFeatures.driver_pipeline_cache` and
+  `DeviceFeatures.metal_binary_archive` default to false.
 - This is separate from the Period 8 object-cache diagnostics layer. Native
   driver cache persistence remains future backend work.

@@ -1,6 +1,7 @@
 # Period 10: Advanced / Backend-Gated
 
-Status: in progress.
+Status: completed validation/API expansion, with all advanced lowering gated
+behind future backend work.
 
 Goal: expose advanced Vulkan and Metal features without forcing them into the
 portable core.
