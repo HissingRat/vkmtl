@@ -156,6 +156,7 @@ pub const Buffer = struct {
     label_value: ?[]const u8 = null,
     length_value: usize,
     usage_value: core.BufferUsage = .{},
+    storage_mode_value: core.ResourceStorageMode = .automatic,
     usage_state: core.ResourceUsageState = .{},
     alive: bool = true,
     impl: Impl,
@@ -196,6 +197,14 @@ pub const Buffer = struct {
         return self.usage_value;
     }
 
+    pub fn storageMode(self: Buffer) core.ResourceStorageMode {
+        return self.storage_mode_value;
+    }
+
+    pub fn cpuVisible(self: Buffer) bool {
+        return self.storage_mode_value.cpuVisible();
+    }
+
     pub fn currentUsage(self: Buffer) ?core.ResourceUsageKind {
         return self.usage_state.current;
     }
@@ -206,6 +215,26 @@ pub const Buffer = struct {
 
     fn recordUsage(self: *Buffer, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
         return self.usage_state.transitionTo(next_usage);
+    }
+
+    pub fn mapRange(self: *Buffer, descriptor: core.BufferMapDescriptor) !MappedBufferRange {
+        assertAlive(self.alive, .buffer);
+        if (!self.cpuVisible()) return core.BufferError.BufferNotCpuVisible;
+        try descriptor.validate(self.length());
+
+        const impl = switch (self.impl) {
+            .vulkan => |*vulkan| MappedBufferRange.Impl{ .vulkan = try vulkan.mapRange(descriptor) },
+            .metal => |*metal| MappedBufferRange.Impl{ .metal = try metal.mapRange(descriptor) },
+        };
+        return .{
+            .backend = self.backend,
+            .buffer = self,
+            .bytes_value = switch (impl) {
+                .vulkan => |range| range.bytes,
+                .metal => |range| range.bytes,
+            },
+            .impl = impl,
+        };
     }
 
     pub fn replaceBytes(self: *Buffer, offset: usize, bytes: []const u8) !void {
@@ -232,6 +261,38 @@ pub const Buffer = struct {
             .vulkan => |*vulkan| try vulkan.readBytes(offset, destination),
             .metal => |*metal| try metal.readBytes(offset, destination),
         }
+    }
+};
+
+pub const MappedBufferRange = struct {
+    backend: core.Backend,
+    buffer: *Buffer,
+    bytes_value: []u8,
+    alive: bool = true,
+    impl: Impl,
+
+    const Impl = union(core.Backend) {
+        vulkan: VulkanBuffer.MappedRange,
+        metal: MetalBuffer.MappedRange,
+    };
+
+    pub fn bytes(self: MappedBufferRange) []u8 {
+        assertObjectAlive(self.alive, "mapped_buffer_range");
+        return self.bytes_value;
+    }
+
+    pub fn deinit(self: *MappedBufferRange) void {
+        assertObjectAlive(self.alive, "mapped_buffer_range");
+        assertAlive(self.buffer.alive, .buffer);
+        switch (self.impl) {
+            .vulkan => |range| self.buffer.impl.vulkan.unmapRange(range),
+            .metal => |range| self.buffer.impl.metal.unmapRange(range) catch |err| {
+                if (builtin.mode == .Debug) {
+                    std.debug.panic("vkmtl failed to unmap Metal buffer: {s}", .{@errorName(err)});
+                }
+            },
+        }
+        self.alive = false;
     }
 };
 
@@ -1735,6 +1796,7 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .length_value = length,
             .usage_value = descriptor.usage,
+            .storage_mode_value = descriptor.storage_mode,
             .impl = impl,
         };
     }
@@ -2720,6 +2782,20 @@ test "runtime resources keep borrowed debug labels" {
     try std.testing.expectEqualStrings("renamed vertices", buffer.label().?);
     buffer.setLabel(null);
     try std.testing.expect(buffer.label() == null);
+}
+
+test "runtime buffers expose storage and cpu visibility" {
+    var tracker = ResourceTracker{};
+    var buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 16,
+        .storage_mode_value = .private,
+        .impl = undefined,
+    };
+
+    try std.testing.expectEqual(core.ResourceStorageMode.private, buffer.storageMode());
+    try std.testing.expect(!buffer.cpuVisible());
 }
 
 test "runtime command objects validate debug group balance" {

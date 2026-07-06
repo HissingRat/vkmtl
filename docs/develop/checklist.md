@@ -307,11 +307,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 3 Phase 1 Checklist
 
-- [ ] Add CPU visibility and resolved storage-mode helpers.
-- [ ] Add public buffer mapping descriptors.
-- [ ] Add runtime buffer map/unmap wrappers.
-- [ ] Keep read/write convenience helpers working.
-- [ ] Document private-buffer staging/readback expectations.
+- [x] Add CPU visibility and resolved storage-mode helpers.
+- [x] Add public buffer mapping descriptors.
+- [x] Add runtime buffer map/unmap wrappers.
+- [x] Keep read/write convenience helpers working.
+- [x] Document private-buffer staging/readback expectations.
 
 ## Period 3 Phase 2 Checklist
 

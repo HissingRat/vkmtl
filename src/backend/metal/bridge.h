@@ -183,6 +183,15 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
 );
 void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer);
 size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer);
+vkmtl_metal_status vkmtl_metal_buffer_contents(
+    vkmtl_metal_buffer *buffer,
+    void **out_contents
+);
+vkmtl_metal_status vkmtl_metal_buffer_did_modify_range(
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    size_t length
+);
 vkmtl_metal_status vkmtl_metal_buffer_replace_bytes(
     vkmtl_metal_buffer *buffer,
     size_t offset,

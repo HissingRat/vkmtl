@@ -64,8 +64,24 @@ adapter 名称/vendor/type。`Device.limits()` 现在会询问当前 runtime 后
 capability 仍使用 portable 默认表，后续可以继续接 backend-specific format query。
 
 CPU 可见 buffer 可以用 `buffer.replaceBytes(...)` 更新，也可以用
-`buffer.readBytes(...)` 读回。Texture 通过 `texture.makeTextureView(...)` 创建 view，
-上传 helper 包括 `texture.replaceRegion(...)` 和 `texture.replaceAll2D(...)`。
+`buffer.readBytes(...)` 读回。Period 3 也提供显式 range mapping：
+
+```zig
+var mapped = try buffer.mapRange(.{
+    .offset = 0,
+    .length = buffer.length(),
+    .mode = .{ .read = true, .write = true },
+});
+defer mapped.deinit();
+
+const bytes = mapped.bytes();
+```
+
+`BufferMapDescriptor` 会校验 range 和 access mode。Private buffer 不 CPU-visible；这类资源的上传或
+读回应该走 transfer 路径。
+
+Texture 通过 `texture.makeTextureView(...)` 创建 view，上传 helper 包括
+`texture.replaceRegion(...)` 和 `texture.replaceAll2D(...)`。
 
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、

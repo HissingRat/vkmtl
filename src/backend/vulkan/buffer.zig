@@ -11,6 +11,10 @@ memory: vk.DeviceMemory,
 length_value: usize,
 cpu_visible: bool,
 
+pub const MappedRange = struct {
+    bytes: []u8,
+};
+
 pub fn init(gc: *const GraphicsContext, descriptor: core.BufferDescriptor) !VulkanBuffer {
     const buffer_len = try descriptor.resolvedLength();
 
@@ -51,6 +55,25 @@ pub fn deinit(self: *VulkanBuffer) void {
 
 pub fn length(self: VulkanBuffer) usize {
     return self.length_value;
+}
+
+pub fn mapRange(self: *VulkanBuffer, descriptor: core.BufferMapDescriptor) !MappedRange {
+    if (!self.cpu_visible) return core.BufferError.BufferNotCpuVisible;
+    try descriptor.validate(self.length_value);
+
+    const data = try self.gc.dev.mapMemory(
+        self.memory,
+        @intCast(descriptor.offset),
+        @intCast(descriptor.length),
+        .{},
+    );
+    const ptr: [*]u8 = @ptrCast(@alignCast(data));
+    return .{ .bytes = ptr[0..descriptor.length] };
+}
+
+pub fn unmapRange(self: *VulkanBuffer, range: MappedRange) void {
+    _ = range;
+    self.gc.dev.unmapMemory(self.memory);
 }
 
 pub fn replaceBytes(self: *VulkanBuffer, offset: usize, bytes: []const u8) !void {

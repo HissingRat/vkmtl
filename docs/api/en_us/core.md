@@ -79,9 +79,25 @@ the selected runtime backend for known limits; format capabilities still use the
 portable default table until backend-specific format queries are added.
 
 Buffers created with CPU-visible storage can be updated with
-`buffer.replaceBytes(...)` and read back with `buffer.readBytes(...)`. Textures
-create views through `texture.makeTextureView(...)`, and upload helpers include
-`texture.replaceRegion(...)` and `texture.replaceAll2D(...)`.
+`buffer.replaceBytes(...)` and read back with `buffer.readBytes(...)`.
+Period 3 also exposes explicit range mapping:
+
+```zig
+var mapped = try buffer.mapRange(.{
+    .offset = 0,
+    .length = buffer.length(),
+    .mode = .{ .read = true, .write = true },
+});
+defer mapped.deinit();
+
+const bytes = mapped.bytes();
+```
+
+`BufferMapDescriptor` validates range and access mode. Private buffers are not
+CPU-visible; upload or readback for those resources should use transfer paths.
+
+Textures create views through `texture.makeTextureView(...)`, and upload
+helpers include `texture.replaceRegion(...)` and `texture.replaceAll2D(...)`.
 
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and

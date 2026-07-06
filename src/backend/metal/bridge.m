@@ -634,6 +634,53 @@ size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer) {
     return buffer->length;
 }
 
+vkmtl_metal_status vkmtl_metal_buffer_contents(
+    vkmtl_metal_buffer *buffer,
+    void **out_contents
+) {
+    if (out_contents == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    *out_contents = NULL;
+
+    if (buffer == NULL ||
+        buffer->buffer == nil ||
+        buffer->storage_mode == VKMTL_METAL_STORAGE_MODE_PRIVATE) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+
+    @autoreleasepool {
+        void *contents = [buffer->buffer contents];
+        if (contents == NULL) {
+            return VKMTL_METAL_STATUS_INVALID_BUFFER;
+        }
+        *out_contents = contents;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_buffer_did_modify_range(
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    size_t length
+) {
+    if (buffer == NULL ||
+        buffer->buffer == nil ||
+        length == 0 ||
+        offset > buffer->length ||
+        length > buffer->length - offset ||
+        buffer->storage_mode == VKMTL_METAL_STORAGE_MODE_PRIVATE) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+
+    @autoreleasepool {
+        if (buffer->storage_mode == VKMTL_METAL_STORAGE_MODE_MANAGED) {
+            [buffer->buffer didModifyRange:NSMakeRange(offset, length)];
+        }
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_replace_bytes(
     vkmtl_metal_buffer *buffer,
     size_t offset,

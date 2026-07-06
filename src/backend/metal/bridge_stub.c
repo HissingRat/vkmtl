@@ -119,6 +119,28 @@ size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer) {
     return 0;
 }
 
+vkmtl_metal_status vkmtl_metal_buffer_contents(
+    vkmtl_metal_buffer *buffer,
+    void **out_contents
+) {
+    (void)buffer;
+    if (out_contents != NULL) {
+        *out_contents = NULL;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_buffer_did_modify_range(
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    size_t length
+) {
+    (void)buffer;
+    (void)offset;
+    (void)length;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_replace_bytes(
     vkmtl_metal_buffer *buffer,
     size_t offset,

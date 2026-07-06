@@ -369,6 +369,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InitialDataRequiresCpuVisibleStorage,
         error.InvalidBufferWriteRange,
         error.InvalidBufferReadRange,
+        error.InvalidBufferMapRange,
+        error.InvalidBufferMapMode,
         error.BufferNotCpuVisible,
         error.InvalidTextureFormat,
         error.InvalidTextureExtent,
@@ -2172,6 +2174,10 @@ pub const ResourceStorageMode = enum {
     shared,
     managed,
     private,
+
+    pub fn cpuVisible(self: ResourceStorageMode) bool {
+        return self != .private;
+    }
 };
 
 pub const BufferDescriptor = struct {
@@ -2189,6 +2195,10 @@ pub const BufferDescriptor = struct {
             if (self.storage_mode == .private) return BufferError.InitialDataRequiresCpuVisibleStorage;
         }
         return length;
+    }
+
+    pub fn cpuVisible(self: BufferDescriptor) bool {
+        return self.storage_mode.cpuVisible();
     }
 };
 
@@ -2218,12 +2228,38 @@ pub const BufferReadDescriptor = struct {
     }
 };
 
+pub const BufferMapMode = struct {
+    read: bool = true,
+    write: bool = false,
+
+    pub fn isEmpty(self: BufferMapMode) bool {
+        return !self.read and !self.write;
+    }
+};
+
+pub const BufferMapDescriptor = struct {
+    offset: usize = 0,
+    length: usize,
+    mode: BufferMapMode = .{},
+
+    pub fn validate(self: BufferMapDescriptor, buffer_length: usize) BufferError!void {
+        if (self.length == 0) return BufferError.InvalidBufferMapRange;
+        if (self.mode.isEmpty()) return BufferError.InvalidBufferMapMode;
+        const end = std.math.add(usize, self.offset, self.length) catch {
+            return BufferError.InvalidBufferMapRange;
+        };
+        if (end > buffer_length) return BufferError.InvalidBufferMapRange;
+    }
+};
+
 pub const BufferError = error{
     InvalidBufferLength,
     InitialDataTooLarge,
     InitialDataRequiresCpuVisibleStorage,
     InvalidBufferWriteRange,
     InvalidBufferReadRange,
+    InvalidBufferMapRange,
+    InvalidBufferMapMode,
     BufferNotCpuVisible,
 };
 
@@ -2739,6 +2775,10 @@ test "buffer descriptor validates initial data" {
         .bytes = bytes[0..],
         .storage_mode = .private,
     }).resolvedLength());
+    try std.testing.expect((BufferDescriptor{}).cpuVisible());
+    try std.testing.expect(!(BufferDescriptor{
+        .storage_mode = .private,
+    }).cpuVisible());
 }
 
 test "buffer write descriptor validates ranges" {
@@ -2772,6 +2812,26 @@ test "buffer read descriptor validates ranges" {
     }).validate(8));
     try std.testing.expectError(BufferError.InvalidBufferReadRange, (BufferReadDescriptor{
         .destination = bytes[0..0],
+    }).validate(8));
+}
+
+test "buffer map descriptor validates ranges and modes" {
+    try (BufferMapDescriptor{
+        .offset = 4,
+        .length = 4,
+        .mode = .{ .read = true, .write = true },
+    }).validate(8);
+
+    try std.testing.expectError(BufferError.InvalidBufferMapRange, (BufferMapDescriptor{
+        .offset = 5,
+        .length = 4,
+    }).validate(8));
+    try std.testing.expectError(BufferError.InvalidBufferMapRange, (BufferMapDescriptor{
+        .length = 0,
+    }).validate(8));
+    try std.testing.expectError(BufferError.InvalidBufferMapMode, (BufferMapDescriptor{
+        .length = 4,
+        .mode = .{ .read = false, .write = false },
     }).validate(8));
 }
 

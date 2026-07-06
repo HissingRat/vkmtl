@@ -6,12 +6,19 @@ const MetalBuffer = @This();
 
 handle: *metal.vkmtl_metal_buffer,
 length_value: usize,
+storage_mode: core.ResourceStorageMode,
 
 const Error = error{
     MetalUnsupported,
     InvalidBuffer,
     CommandFailed,
     UnexpectedMetalStatus,
+};
+
+pub const MappedRange = struct {
+    bytes: []u8,
+    offset: usize,
+    write: bool,
 };
 
 pub fn init(owner: *MetalClearScreen, descriptor: core.BufferDescriptor) !MetalBuffer {
@@ -32,6 +39,7 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.BufferDescriptor) !MetalB
     return .{
         .handle = raw_handle,
         .length_value = metal.vkmtl_metal_buffer_length(raw_handle),
+        .storage_mode = descriptor.storage_mode,
     };
 }
 
@@ -41,6 +49,30 @@ pub fn deinit(self: *MetalBuffer) void {
 
 pub fn length(self: MetalBuffer) usize {
     return self.length_value;
+}
+
+pub fn mapRange(self: *MetalBuffer, descriptor: core.BufferMapDescriptor) !MappedRange {
+    if (!self.storage_mode.cpuVisible()) return core.BufferError.BufferNotCpuVisible;
+    try descriptor.validate(self.length_value);
+
+    var contents: ?*anyopaque = null;
+    try check(metal.vkmtl_metal_buffer_contents(self.handle, &contents));
+    const base: [*]u8 = @ptrCast(@alignCast(contents orelse return Error.InvalidBuffer));
+    return .{
+        .bytes = base[descriptor.offset..][0..descriptor.length],
+        .offset = descriptor.offset,
+        .write = descriptor.mode.write,
+    };
+}
+
+pub fn unmapRange(self: *MetalBuffer, range: MappedRange) !void {
+    if (range.write) {
+        try check(metal.vkmtl_metal_buffer_did_modify_range(
+            self.handle,
+            range.offset,
+            range.bytes.len,
+        ));
+    }
 }
 
 pub fn replaceBytes(self: *MetalBuffer, offset: usize, bytes: []const u8) !void {
