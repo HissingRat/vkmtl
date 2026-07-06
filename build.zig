@@ -1,0 +1,604 @@
+const std = @import("std");
+const builtin = @import("builtin");
+
+const slang_version = "2026.12.2";
+const slang_tag = "v2026.12.2";
+const slang_cache_namespace = "vkmtl-tools";
+
+const SlangPackage = struct {
+    id: []const u8,
+    url: []const u8,
+    sha256: []const u8,
+    slangc_path: []const u8,
+};
+
+const VulkanRuntimeOptions = struct {
+    loader_dir: ?[]const u8,
+    icd: ?[]const u8,
+};
+
+const slang_packages = [_]SlangPackage{
+    .{
+        .id = "macos-aarch64",
+        .url = "https://github.com/shader-slang/slang/releases/download/v2026.12.2/slang-macos-dist-aarch64.zip",
+        .sha256 = "0a1dd86629f79feb339d91fe1261dd80ef71f5e71490d3460c0df00bf74976e0",
+        .slangc_path = "slangc",
+    },
+    .{
+        .id = "macos-x86_64",
+        .url = "https://github.com/shader-slang/slang/releases/download/v2026.12.2/slang-macos-dist-x86_64.zip",
+        .sha256 = "fd2b34b91fa9e14001d77f930e325cd65e7225250ee5e0b6e19e4205ecb829ab",
+        .slangc_path = "slangc",
+    },
+    .{
+        .id = "linux-aarch64",
+        .url = "https://github.com/shader-slang/slang/releases/download/v2026.12.2/slang-2026.12.2-linux-aarch64-glibc-2.28.zip",
+        .sha256 = "c8b02fd0d892005b12feb482d30775ae0a5767f5bd0e7f6f05db3d32d743ffc1",
+        .slangc_path = "bin/slangc",
+    },
+    .{
+        .id = "linux-x86_64",
+        .url = "https://github.com/shader-slang/slang/releases/download/v2026.12.2/slang-2026.12.2-linux-x86_64-glibc-2.27.zip",
+        .sha256 = "826e9924d6b6d28fdb37eed56cd2d1cd1d3a8f17590510953b1f360011123038",
+        .slangc_path = "bin/slangc",
+    },
+    .{
+        .id = "windows-aarch64",
+        .url = "https://github.com/shader-slang/slang/releases/download/v2026.12.2/slang-2026.12.2-windows-aarch64.zip",
+        .sha256 = "65bb80430181d7a78de10506cef8ea52dba757c0e7fbdaa6333b9af926f53377",
+        .slangc_path = "bin/slangc.exe",
+    },
+    .{
+        .id = "windows-x86_64",
+        .url = "https://github.com/shader-slang/slang/releases/download/v2026.12.2/slang-2026.12.2-windows-x86_64.zip",
+        .sha256 = "e44a29e4ba766e892db19e7f491b0c1fc21f548a0380a1b2931039569bf747e7",
+        .slangc_path = "bin/slangc.exe",
+    },
+};
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+    const shader_tools = resolveSlangTool(b, b.option([]const u8, "slangc", "Path to a Slang compiler executable"));
+    const force_vulkan = b.option(bool, "vulkan", "Force WindowContext to use the Vulkan backend") orelse false;
+    const vulkan_runtime = VulkanRuntimeOptions{
+        .loader_dir = b.option([]const u8, "vulkan-loader-dir", "Directory containing the macOS Vulkan loader dylib for forced Vulkan example runs"),
+        .icd = b.option([]const u8, "vulkan-icd", "Path to the macOS MoltenVK ICD JSON for forced Vulkan example runs"),
+    };
+    if (shader_tools.setup_step) |setup_step| {
+        b.getInstallStep().dependOn(setup_step);
+    }
+    const vkmtl_build_options = b.addOptions();
+    vkmtl_build_options.addOption([]const u8, "slangc_path", shader_tools.slangc);
+    vkmtl_build_options.addOption(bool, "force_vulkan", force_vulkan);
+
+    const vulkan_headers = b.dependency("vulkan_headers", .{});
+    const registry = vulkan_headers.path("registry/vk.xml");
+    const vulkan = b.dependency("vulkan", .{
+        .registry = registry,
+    }).module("vulkan-zig");
+
+    const zig_glfw_dep = b.dependency("zig_glfw", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zig_glfw = zig_glfw_dep.module("zig_glfw");
+    const glfw = zig_glfw_dep.artifact("glfw");
+
+    const metal_bridge = b.addTranslateC(.{
+        .root_source_file = b.path("src/backend/metal/bridge.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const vkmtl = b.addModule("vkmtl", .{
+        .root_source_file = b.path("src/vkmtl.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "vulkan", .module = vulkan },
+            .{ .name = "metal_bridge", .module = metal_bridge.createModule() },
+            .{ .name = "vkmtl_build_options", .module = vkmtl_build_options.createModule() },
+        },
+    });
+    addMetalBridge(b, vkmtl, target.result.os.tag);
+
+    const vkmtl_examples_common = b.addModule("vkmtl_examples_common", .{
+        .root_source_file = b.path("examples/common.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "vkmtl", .module = vkmtl },
+            .{ .name = "zig_glfw", .module = zig_glfw },
+        },
+    });
+
+    const clear_screen = b.addExecutable(.{
+        .name = "vkmtl-clear-screen",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/clear_screen/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    clear_screen.root_module.linkLibrary(glfw);
+    b.installArtifact(clear_screen);
+
+    const clear_screen_cmd = b.addRunArtifact(clear_screen);
+    clear_screen_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, clear_screen_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, clear_screen_cmd);
+
+    const clear_screen_step = b.step("run-clear-screen", "Run the vkmtl clear-screen example");
+    clear_screen_step.dependOn(&clear_screen_cmd.step);
+
+    const triangle = b.addExecutable(.{
+        .name = "vkmtl-triangle",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/triangle/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    triangle.root_module.linkLibrary(glfw);
+    b.installArtifact(triangle);
+
+    const triangle_cmd = b.addRunArtifact(triangle);
+    triangle_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, triangle_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, triangle_cmd);
+
+    const triangle_step = b.step("run-triangle", "Run the vkmtl triangle example");
+    triangle_step.dependOn(&triangle_cmd.step);
+
+    const run_step = b.step("run", "Run the vkmtl triangle example");
+    run_step.dependOn(&triangle_cmd.step);
+
+    const uniform_buffer = b.addExecutable(.{
+        .name = "vkmtl-uniform-buffer",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/uniform_buffer/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    uniform_buffer.root_module.linkLibrary(glfw);
+    b.installArtifact(uniform_buffer);
+
+    const uniform_buffer_cmd = b.addRunArtifact(uniform_buffer);
+    uniform_buffer_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, uniform_buffer_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, uniform_buffer_cmd);
+
+    const uniform_buffer_step = b.step("run-uniform-buffer", "Run the vkmtl uniform-buffer example");
+    uniform_buffer_step.dependOn(&uniform_buffer_cmd.step);
+
+    const sampled_texture = b.addExecutable(.{
+        .name = "vkmtl-sampled-texture",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/sampled_texture/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    sampled_texture.root_module.linkLibrary(glfw);
+    b.installArtifact(sampled_texture);
+
+    const sampled_texture_cmd = b.addRunArtifact(sampled_texture);
+    sampled_texture_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, sampled_texture_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, sampled_texture_cmd);
+
+    const sampled_texture_step = b.step("run-sampled-texture", "Run the vkmtl sampled-texture example");
+    sampled_texture_step.dependOn(&sampled_texture_cmd.step);
+
+    const depth_triangles = b.addExecutable(.{
+        .name = "vkmtl-depth-triangles",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/depth_triangles/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    depth_triangles.root_module.linkLibrary(glfw);
+    b.installArtifact(depth_triangles);
+
+    const depth_triangles_cmd = b.addRunArtifact(depth_triangles);
+    depth_triangles_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, depth_triangles_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, depth_triangles_cmd);
+
+    const depth_triangles_step = b.step("run-depth-triangles", "Run the vkmtl depth-tested triangles example");
+    depth_triangles_step.dependOn(&depth_triangles_cmd.step);
+
+    const offscreen_texture = b.addExecutable(.{
+        .name = "vkmtl-offscreen-texture",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/offscreen_texture/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    offscreen_texture.root_module.linkLibrary(glfw);
+    b.installArtifact(offscreen_texture);
+
+    const offscreen_texture_cmd = b.addRunArtifact(offscreen_texture);
+    offscreen_texture_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, offscreen_texture_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, offscreen_texture_cmd);
+
+    const offscreen_texture_step = b.step("run-offscreen-texture", "Run the vkmtl offscreen texture example");
+    offscreen_texture_step.dependOn(&offscreen_texture_cmd.step);
+
+    const msaa_triangle = b.addExecutable(.{
+        .name = "vkmtl-msaa-triangle",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/msaa_triangle/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    msaa_triangle.root_module.linkLibrary(glfw);
+    b.installArtifact(msaa_triangle);
+
+    const msaa_triangle_cmd = b.addRunArtifact(msaa_triangle);
+    msaa_triangle_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, msaa_triangle_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, msaa_triangle_cmd);
+
+    const msaa_triangle_step = b.step("run-msaa-triangle", "Run the vkmtl MSAA triangle example");
+    msaa_triangle_step.dependOn(&msaa_triangle_cmd.step);
+
+    const rainbow_cube = b.addExecutable(.{
+        .name = "vkmtl-rainbow-cube",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/rainbow_cube/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    rainbow_cube.root_module.linkLibrary(glfw);
+    b.installArtifact(rainbow_cube);
+
+    const rainbow_cube_cmd = b.addRunArtifact(rainbow_cube);
+    rainbow_cube_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, rainbow_cube_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, rainbow_cube_cmd);
+
+    const rainbow_cube_step = b.step("run-rainbow-cube", "Run the vkmtl rotating rainbow cube example");
+    rainbow_cube_step.dependOn(&rainbow_cube_cmd.step);
+
+    const transfer_readback = b.addExecutable(.{
+        .name = "vkmtl-transfer-readback",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/transfer_readback/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    transfer_readback.root_module.linkLibrary(glfw);
+    b.installArtifact(transfer_readback);
+
+    const transfer_readback_cmd = b.addRunArtifact(transfer_readback);
+    transfer_readback_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, transfer_readback_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, transfer_readback_cmd);
+
+    const transfer_readback_step = b.step("run-transfer-readback", "Run the vkmtl transfer readback example");
+    transfer_readback_step.dependOn(&transfer_readback_cmd.step);
+
+    const compute_readback = b.addExecutable(.{
+        .name = "vkmtl-compute-readback",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/compute_readback/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    compute_readback.root_module.linkLibrary(glfw);
+    b.installArtifact(compute_readback);
+
+    const compute_readback_cmd = b.addRunArtifact(compute_readback);
+    compute_readback_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, compute_readback_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, compute_readback_cmd);
+
+    const compute_readback_step = b.step("run-compute-readback", "Run the vkmtl compute readback example");
+    compute_readback_step.dependOn(&compute_readback_cmd.step);
+
+    const probe = b.addExecutable(.{
+        .name = "vkmtl-metal-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/probes/metal_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "metal_bridge", .module = metal_bridge.createModule() },
+            },
+        }),
+    });
+    addMetalBridge(b, probe.root_module, target.result.os.tag);
+    b.installArtifact(probe);
+
+    const probe_build_step = b.step("probe-build", "Build backend binding probes");
+    probe_build_step.dependOn(&probe.step);
+
+    const probe_cmd = b.addRunArtifact(probe);
+
+    const probe_step = b.step("probe", "Probe native backend bindings");
+    probe_step.dependOn(&probe_cmd.step);
+
+    const unit_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/core.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
+
+    const root_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/vkmtl.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vulkan", .module = vulkan },
+                .{ .name = "metal_bridge", .module = metal_bridge.createModule() },
+                .{ .name = "vkmtl_build_options", .module = vkmtl_build_options.createModule() },
+            },
+        }),
+    });
+    addMetalBridge(b, root_tests.root_module, target.result.os.tag);
+    const run_root_tests = b.addRunArtifact(root_tests);
+
+    const backend_pipeline_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/backend_pipeline_compile_test.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vulkan", .module = vulkan },
+                .{ .name = "metal_bridge", .module = metal_bridge.createModule() },
+            },
+        }),
+    });
+    addMetalBridge(b, backend_pipeline_tests.root_module, target.result.os.tag);
+    const run_backend_pipeline_tests = b.addRunArtifact(backend_pipeline_tests);
+
+    const test_step = b.step("test", "Run vkmtl tests");
+    test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&run_root_tests.step);
+    test_step.dependOn(&run_backend_pipeline_tests.step);
+}
+
+const SlangTool = struct {
+    slangc: []const u8,
+    setup_step: ?*std.Build.Step = null,
+};
+
+fn resolveSlangTool(b: *std.Build, explicit_slangc: ?[]const u8) SlangTool {
+    if (explicit_slangc) |slangc| {
+        return .{ .slangc = slangc };
+    }
+
+    const package = slangPackageForHost() orelse {
+        std.log.warn(
+            "vkmtl has no pinned Slang distribution for build host {s}-{s}; using 'slangc' from PATH. Pass -Dslangc=/path/to/slangc to override.",
+            .{ @tagName(builtin.os.tag), @tagName(builtin.cpu.arch) },
+        );
+        return .{ .slangc = "slangc" };
+    };
+    const cache_root = b.cache_root.path orelse ".zig-cache";
+    const root = b.pathJoin(&.{ cache_root, slang_cache_namespace, "slang", slang_tag, package.id });
+    const archive_dir = b.pathJoin(&.{ cache_root, slang_cache_namespace, "downloads" });
+    const archive = b.pathJoin(&.{ archive_dir, b.fmt("{s}.zip", .{package.id}) });
+    const stamp = b.pathJoin(&.{ root, ".complete" });
+    const slangc = b.pathJoin(&.{ root, package.slangc_path });
+
+    const setup = addSlangSetupStep(b, package, root, archive_dir, archive, stamp, slangc);
+    return .{
+        .slangc = slangc,
+        .setup_step = &setup.step,
+    };
+}
+
+fn addSlangSetupStep(
+    b: *std.Build,
+    package: SlangPackage,
+    root: []const u8,
+    archive_dir: []const u8,
+    archive: []const u8,
+    stamp: []const u8,
+    slangc: []const u8,
+) *std.Build.Step.Run {
+    return switch (builtin.os.tag) {
+        .windows => addWindowsSlangSetupStep(b, package, root, archive_dir, archive, stamp, slangc),
+        else => addPosixSlangSetupStep(b, package, root, archive_dir, archive, stamp, slangc),
+    };
+}
+
+fn addPosixSlangSetupStep(
+    b: *std.Build,
+    package: SlangPackage,
+    root: []const u8,
+    archive_dir: []const u8,
+    archive: []const u8,
+    stamp: []const u8,
+    slangc: []const u8,
+) *std.Build.Step.Run {
+    const setup = b.addSystemCommand(&.{"sh"});
+    setup.addFileArg(b.path("scripts/setup_slang_posix.sh"));
+    addSlangSetupArgs(setup, package, root, archive_dir, archive, stamp, slangc);
+    return setup;
+}
+
+fn addWindowsSlangSetupStep(
+    b: *std.Build,
+    package: SlangPackage,
+    root: []const u8,
+    archive_dir: []const u8,
+    archive: []const u8,
+    stamp: []const u8,
+    slangc: []const u8,
+) *std.Build.Step.Run {
+    const setup = b.addSystemCommand(&.{
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+    });
+    setup.addFileArg(b.path("scripts/setup_slang_windows.ps1"));
+    addSlangSetupArgs(setup, package, root, archive_dir, archive, stamp, slangc);
+    return setup;
+}
+
+fn addSlangSetupArgs(
+    step: *std.Build.Step.Run,
+    package: SlangPackage,
+    root: []const u8,
+    archive_dir: []const u8,
+    archive: []const u8,
+    stamp: []const u8,
+    slangc: []const u8,
+) void {
+    step.addArgs(&.{
+        root,
+        archive_dir,
+        archive,
+        stamp,
+        slangc,
+        package.url,
+        package.sha256,
+        slang_tag,
+        package.id,
+    });
+}
+
+fn slangPackageForHost() ?SlangPackage {
+    const os = builtin.os.tag;
+    const arch = builtin.cpu.arch;
+
+    for (slang_packages) |package| {
+        if (std.mem.eql(u8, package.id, "macos-aarch64") and os == .macos and arch == .aarch64) return package;
+        if (std.mem.eql(u8, package.id, "macos-x86_64") and os == .macos and arch == .x86_64) return package;
+        if (std.mem.eql(u8, package.id, "linux-aarch64") and os == .linux and arch == .aarch64) return package;
+        if (std.mem.eql(u8, package.id, "linux-x86_64") and os == .linux and arch == .x86_64) return package;
+        if (std.mem.eql(u8, package.id, "windows-aarch64") and os == .windows and arch == .aarch64) return package;
+        if (std.mem.eql(u8, package.id, "windows-x86_64") and os == .windows and arch == .x86_64) return package;
+    }
+
+    return null;
+}
+
+fn addMetalBridge(b: *std.Build, module: *std.Build.Module, os_tag: std.Target.Os.Tag) void {
+    const flags = &.{
+        "-std=c99",
+        "-Wno-deprecated-declarations",
+    };
+
+    switch (os_tag) {
+        .macos => {
+            module.addCSourceFile(.{
+                .file = b.path("src/backend/metal/bridge.m"),
+                .flags = &.{"-Wno-deprecated-declarations"},
+            });
+            module.linkFramework("AppKit", .{});
+            module.linkFramework("Foundation", .{});
+            module.linkFramework("Metal", .{});
+            module.linkFramework("QuartzCore", .{});
+        },
+        else => {
+            module.addCSourceFile(.{
+                .file = b.path("src/backend/metal/bridge_stub.c"),
+                .flags = flags,
+            });
+        },
+    }
+}
+
+fn configureVulkanRuntimeForRun(
+    _: *std.Build,
+    run_cmd: *std.Build.Step.Run,
+    os_tag: std.Target.Os.Tag,
+    options: VulkanRuntimeOptions,
+) void {
+    if (os_tag != .macos) return;
+
+    if (options.loader_dir) |loader_dir| {
+        run_cmd.setEnvironmentVariable("DYLD_LIBRARY_PATH", loader_dir);
+    }
+
+    if (options.icd) |icd| {
+        run_cmd.setEnvironmentVariable("VK_ICD_FILENAMES", icd);
+    }
+}
+
+fn forwardRunArgs(b: *std.Build, run_cmd: *std.Build.Step.Run) void {
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+}

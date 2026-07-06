@@ -1,0 +1,458 @@
+#ifndef VKMTL_METAL_BRIDGE_H
+#define VKMTL_METAL_BRIDGE_H
+
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct vkmtl_metal_probe vkmtl_metal_probe;
+typedef struct vkmtl_metal_clear_screen vkmtl_metal_clear_screen;
+typedef struct vkmtl_metal_buffer vkmtl_metal_buffer;
+typedef struct vkmtl_metal_texture vkmtl_metal_texture;
+typedef struct vkmtl_metal_texture_view vkmtl_metal_texture_view;
+typedef struct vkmtl_metal_sampler_state vkmtl_metal_sampler_state;
+typedef struct vkmtl_metal_shader_module vkmtl_metal_shader_module;
+typedef struct vkmtl_metal_render_pipeline_state vkmtl_metal_render_pipeline_state;
+typedef struct vkmtl_metal_compute_pipeline_state vkmtl_metal_compute_pipeline_state;
+typedef struct vkmtl_metal_command_buffer vkmtl_metal_command_buffer;
+typedef struct vkmtl_metal_render_command_encoder vkmtl_metal_render_command_encoder;
+typedef struct vkmtl_metal_blit_command_encoder vkmtl_metal_blit_command_encoder;
+typedef struct vkmtl_metal_compute_command_encoder vkmtl_metal_compute_command_encoder;
+
+typedef enum vkmtl_metal_status {
+    VKMTL_METAL_STATUS_OK = 0,
+    VKMTL_METAL_STATUS_UNSUPPORTED = 1,
+    VKMTL_METAL_STATUS_NO_DEVICE = 2,
+    VKMTL_METAL_STATUS_NAME_BUFFER_TOO_SMALL = 3,
+    VKMTL_METAL_STATUS_INVALID_SURFACE = 4,
+    VKMTL_METAL_STATUS_NO_DRAWABLE = 5,
+    VKMTL_METAL_STATUS_COMMAND_FAILED = 6,
+    VKMTL_METAL_STATUS_INVALID_BUFFER = 7,
+    VKMTL_METAL_STATUS_INVALID_TEXTURE = 8,
+    VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW = 9,
+    VKMTL_METAL_STATUS_INVALID_SAMPLER = 10,
+    VKMTL_METAL_STATUS_INVALID_SHADER = 11,
+    VKMTL_METAL_STATUS_INVALID_PIPELINE = 12,
+    VKMTL_METAL_STATUS_INVALID_COMMAND = 13,
+} vkmtl_metal_status;
+
+typedef enum vkmtl_metal_storage_mode {
+    VKMTL_METAL_STORAGE_MODE_AUTOMATIC = 0,
+    VKMTL_METAL_STORAGE_MODE_SHARED = 1,
+    VKMTL_METAL_STORAGE_MODE_MANAGED = 2,
+    VKMTL_METAL_STORAGE_MODE_PRIVATE = 3,
+} vkmtl_metal_storage_mode;
+
+typedef enum vkmtl_metal_texture_dimension {
+    VKMTL_METAL_TEXTURE_DIMENSION_1D = 1,
+    VKMTL_METAL_TEXTURE_DIMENSION_2D = 2,
+    VKMTL_METAL_TEXTURE_DIMENSION_3D = 3,
+} vkmtl_metal_texture_dimension;
+
+typedef enum vkmtl_metal_texture_view_dimension {
+    VKMTL_METAL_TEXTURE_VIEW_DIMENSION_1D = 1,
+    VKMTL_METAL_TEXTURE_VIEW_DIMENSION_1D_ARRAY = 2,
+    VKMTL_METAL_TEXTURE_VIEW_DIMENSION_2D = 3,
+    VKMTL_METAL_TEXTURE_VIEW_DIMENSION_2D_ARRAY = 4,
+    VKMTL_METAL_TEXTURE_VIEW_DIMENSION_3D = 5,
+} vkmtl_metal_texture_view_dimension;
+
+typedef enum vkmtl_metal_texture_format {
+    VKMTL_METAL_TEXTURE_FORMAT_INVALID = 0,
+    VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM = 1,
+    VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB = 2,
+    VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM = 3,
+    VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB = 4,
+    VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT = 5,
+} vkmtl_metal_texture_format;
+
+typedef enum vkmtl_metal_compare_function {
+    VKMTL_METAL_COMPARE_FUNCTION_NEVER = 0,
+    VKMTL_METAL_COMPARE_FUNCTION_LESS = 1,
+    VKMTL_METAL_COMPARE_FUNCTION_EQUAL = 2,
+    VKMTL_METAL_COMPARE_FUNCTION_LESS_EQUAL = 3,
+    VKMTL_METAL_COMPARE_FUNCTION_GREATER = 4,
+    VKMTL_METAL_COMPARE_FUNCTION_NOT_EQUAL = 5,
+    VKMTL_METAL_COMPARE_FUNCTION_GREATER_EQUAL = 6,
+    VKMTL_METAL_COMPARE_FUNCTION_ALWAYS = 7,
+} vkmtl_metal_compare_function;
+
+typedef enum vkmtl_metal_texture_usage {
+    VKMTL_METAL_TEXTURE_USAGE_COPY_SOURCE = 1u << 0,
+    VKMTL_METAL_TEXTURE_USAGE_COPY_DESTINATION = 1u << 1,
+    VKMTL_METAL_TEXTURE_USAGE_SHADER_READ = 1u << 2,
+    VKMTL_METAL_TEXTURE_USAGE_SHADER_WRITE = 1u << 3,
+    VKMTL_METAL_TEXTURE_USAGE_RENDER_ATTACHMENT = 1u << 4,
+} vkmtl_metal_texture_usage;
+
+typedef enum vkmtl_metal_filter {
+    VKMTL_METAL_FILTER_NEAREST = 0,
+    VKMTL_METAL_FILTER_LINEAR = 1,
+} vkmtl_metal_filter;
+
+typedef enum vkmtl_metal_mip_filter {
+    VKMTL_METAL_MIP_FILTER_NOT_MIPMAPPED = 0,
+    VKMTL_METAL_MIP_FILTER_NEAREST = 1,
+    VKMTL_METAL_MIP_FILTER_LINEAR = 2,
+} vkmtl_metal_mip_filter;
+
+typedef enum vkmtl_metal_address_mode {
+    VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_EDGE = 0,
+    VKMTL_METAL_ADDRESS_MODE_REPEAT = 1,
+    VKMTL_METAL_ADDRESS_MODE_MIRROR_REPEAT = 2,
+} vkmtl_metal_address_mode;
+
+typedef enum vkmtl_metal_vertex_format {
+    VKMTL_METAL_VERTEX_FORMAT_FLOAT = 1,
+    VKMTL_METAL_VERTEX_FORMAT_FLOAT2 = 2,
+    VKMTL_METAL_VERTEX_FORMAT_FLOAT3 = 3,
+    VKMTL_METAL_VERTEX_FORMAT_FLOAT4 = 4,
+} vkmtl_metal_vertex_format;
+
+typedef enum vkmtl_metal_vertex_step_function {
+    VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_VERTEX = 0,
+    VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_INSTANCE = 1,
+} vkmtl_metal_vertex_step_function;
+
+typedef struct vkmtl_metal_vertex_buffer_layout {
+    unsigned int buffer_index;
+    unsigned int stride;
+    vkmtl_metal_vertex_step_function step_function;
+} vkmtl_metal_vertex_buffer_layout;
+
+typedef struct vkmtl_metal_vertex_attribute {
+    unsigned int location;
+    unsigned int buffer_index;
+    vkmtl_metal_vertex_format format;
+    unsigned int offset;
+} vkmtl_metal_vertex_attribute;
+
+vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe);
+void vkmtl_metal_probe_destroy(vkmtl_metal_probe *probe);
+vkmtl_metal_status vkmtl_metal_probe_copy_device_name(
+    const vkmtl_metal_probe *probe,
+    char *buffer,
+    size_t buffer_len
+);
+
+vkmtl_metal_status vkmtl_metal_clear_screen_create(
+    vkmtl_metal_clear_screen **out_clear_screen,
+    void *cocoa_window,
+    unsigned int width,
+    unsigned int height
+);
+void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen);
+vkmtl_metal_status vkmtl_metal_clear_screen_resize(
+    vkmtl_metal_clear_screen *clear_screen,
+    unsigned int width,
+    unsigned int height
+);
+vkmtl_metal_status vkmtl_metal_clear_screen_draw(
+    vkmtl_metal_clear_screen *clear_screen,
+    float red,
+    float green,
+    float blue,
+    float alpha
+);
+
+vkmtl_metal_status vkmtl_metal_buffer_create(
+    vkmtl_metal_clear_screen *owner,
+    size_t length,
+    const void *bytes,
+    size_t bytes_len,
+    vkmtl_metal_storage_mode storage_mode,
+    vkmtl_metal_buffer **out_buffer
+);
+void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer);
+size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer);
+vkmtl_metal_status vkmtl_metal_buffer_replace_bytes(
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    const void *bytes,
+    size_t bytes_len
+);
+vkmtl_metal_status vkmtl_metal_buffer_read_bytes(
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    void *destination,
+    size_t destination_len
+);
+
+vkmtl_metal_status vkmtl_metal_texture_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    vkmtl_metal_storage_mode storage_mode,
+    vkmtl_metal_texture **out_texture
+);
+void vkmtl_metal_texture_destroy(vkmtl_metal_texture *texture);
+unsigned int vkmtl_metal_texture_width(const vkmtl_metal_texture *texture);
+unsigned int vkmtl_metal_texture_height(const vkmtl_metal_texture *texture);
+unsigned int vkmtl_metal_texture_depth_or_array_layers(const vkmtl_metal_texture *texture);
+unsigned int vkmtl_metal_texture_mip_level_count(const vkmtl_metal_texture *texture);
+vkmtl_metal_status vkmtl_metal_texture_replace_region(
+    vkmtl_metal_texture *texture,
+    unsigned int x,
+    unsigned int y,
+    unsigned int z,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int mip_level,
+    unsigned int slice,
+    const void *bytes,
+    size_t bytes_len,
+    size_t bytes_per_row,
+    size_t bytes_per_image
+);
+
+vkmtl_metal_status vkmtl_metal_texture_view_create(
+    vkmtl_metal_texture *texture,
+    vkmtl_metal_texture_view_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int base_mip_level,
+    unsigned int mip_level_count,
+    unsigned int base_array_layer,
+    unsigned int array_layer_count,
+    vkmtl_metal_texture_view **out_view
+);
+void vkmtl_metal_texture_view_destroy(vkmtl_metal_texture_view *view);
+
+vkmtl_metal_status vkmtl_metal_sampler_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_filter min_filter,
+    vkmtl_metal_filter mag_filter,
+    vkmtl_metal_mip_filter mip_filter,
+    vkmtl_metal_address_mode address_mode_u,
+    vkmtl_metal_address_mode address_mode_v,
+    vkmtl_metal_address_mode address_mode_w,
+    float lod_min_clamp,
+    float lod_max_clamp,
+    vkmtl_metal_sampler_state **out_sampler
+);
+void vkmtl_metal_sampler_state_destroy(vkmtl_metal_sampler_state *sampler);
+
+vkmtl_metal_status vkmtl_metal_shader_module_create_msl(
+    vkmtl_metal_clear_screen *owner,
+    const char *source,
+    size_t source_len,
+    vkmtl_metal_shader_module **out_shader
+);
+void vkmtl_metal_shader_module_destroy(vkmtl_metal_shader_module *shader);
+
+vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *vertex_shader,
+    const char *vertex_entry,
+    size_t vertex_entry_len,
+    vkmtl_metal_shader_module *fragment_shader,
+    const char *fragment_entry,
+    size_t fragment_entry_len,
+    vkmtl_metal_texture_format color_format,
+    vkmtl_metal_texture_format depth_format,
+    vkmtl_metal_compare_function depth_compare_function,
+    unsigned int depth_write_enabled,
+    unsigned int sample_count,
+    const vkmtl_metal_vertex_buffer_layout *vertex_buffers,
+    size_t vertex_buffer_count,
+    const vkmtl_metal_vertex_attribute *vertex_attributes,
+    size_t vertex_attribute_count,
+    vkmtl_metal_render_pipeline_state **out_pipeline
+);
+void vkmtl_metal_render_pipeline_state_destroy(vkmtl_metal_render_pipeline_state *pipeline);
+
+vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *compute_shader,
+    const char *compute_entry,
+    size_t compute_entry_len,
+    vkmtl_metal_compute_pipeline_state **out_pipeline
+);
+void vkmtl_metal_compute_pipeline_state_destroy(vkmtl_metal_compute_pipeline_state *pipeline);
+
+vkmtl_metal_status vkmtl_metal_command_buffer_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_command_buffer **out_command_buffer
+);
+void vkmtl_metal_command_buffer_destroy(vkmtl_metal_command_buffer *command_buffer);
+vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
+    vkmtl_metal_command_buffer *command_buffer
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_commit(
+    vkmtl_metal_command_buffer *command_buffer
+);
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_command_buffer *command_buffer,
+    float clear_red,
+    float clear_green,
+    float clear_blue,
+    float clear_alpha,
+    vkmtl_metal_texture_view *color_texture_view,
+    vkmtl_metal_texture_view *resolve_texture_view,
+    unsigned int use_depth,
+    vkmtl_metal_texture_view *depth_texture_view,
+    float clear_depth,
+    vkmtl_metal_render_command_encoder **out_encoder
+);
+void vkmtl_metal_render_command_encoder_destroy(vkmtl_metal_render_command_encoder *encoder);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_pipeline(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_render_pipeline_state *pipeline
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_buffer(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer,
+    unsigned int index,
+    size_t offset
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_buffer(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer,
+    unsigned int index,
+    size_t offset
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_index_buffer(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_texture(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_texture_view *texture_view,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_texture(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_texture_view *texture_view,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_sampler_state(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_sampler_state *sampler,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_sampler_state(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_sampler_state *sampler,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    unsigned int vertex_start,
+    unsigned int vertex_count,
+    unsigned int instance_count
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    unsigned int index_type,
+    unsigned int index_count,
+    size_t index_buffer_offset,
+    unsigned int instance_count
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_end_encoding(
+    vkmtl_metal_render_command_encoder *encoder
+);
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_create(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_compute_command_encoder **out_encoder
+);
+void vkmtl_metal_compute_command_encoder_destroy(vkmtl_metal_compute_command_encoder *encoder);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_pipeline(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_compute_pipeline_state *pipeline
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_buffer(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer,
+    unsigned int index,
+    size_t offset
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_texture(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_texture_view *texture_view,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_sampler_state(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_sampler_state *sampler,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups(
+    vkmtl_metal_compute_command_encoder *encoder,
+    unsigned int threadgroup_count_x,
+    unsigned int threadgroup_count_y,
+    unsigned int threadgroup_count_z,
+    unsigned int threads_per_threadgroup_x,
+    unsigned int threads_per_threadgroup_y,
+    unsigned int threads_per_threadgroup_z
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_end_encoding(
+    vkmtl_metal_compute_command_encoder *encoder
+);
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_create(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_blit_command_encoder **out_encoder
+);
+void vkmtl_metal_blit_command_encoder_destroy(vkmtl_metal_blit_command_encoder *encoder);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_buffer(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_buffer *source,
+    vkmtl_metal_buffer *destination,
+    size_t source_offset,
+    size_t destination_offset,
+    size_t size
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_texture(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_buffer *source,
+    vkmtl_metal_texture *destination,
+    size_t buffer_offset,
+    size_t bytes_per_row,
+    size_t bytes_per_image,
+    unsigned int x,
+    unsigned int y,
+    unsigned int z,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int mip_level,
+    unsigned int slice
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_buffer(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *source,
+    vkmtl_metal_buffer *destination,
+    size_t buffer_offset,
+    size_t bytes_per_row,
+    size_t bytes_per_image,
+    unsigned int x,
+    unsigned int y,
+    unsigned int z,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int mip_level,
+    unsigned int slice
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_end_encoding(
+    vkmtl_metal_blit_command_encoder *encoder
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

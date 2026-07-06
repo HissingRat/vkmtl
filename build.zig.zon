@@ -1,0 +1,32 @@
+.{
+    .name = .vkmtl,
+    .version = "0.0.0",
+    .fingerprint = 0x13cf5b82c8e7a698, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/v1.3.283.tar.gz",
+            .hash = "N-V-__8AAAkkoQGn5z1yoNVrwqZfnYmZp8AZ5CJgoHRMQI0c",
+        },
+        .vulkan = .{
+            .url = "git+https://github.com/Snektron/vulkan-zig.git#b496a6a561ffbbeb530b0f9ed4e059f88c0723a5",
+            .hash = "vulkan-0.0.0-r7Ytx7N9AwD7IZt5_XNHtkJ4G9qY0pCH-cpcOsbL8wzD",
+        },
+        .zig_glfw = .{
+            .url = "git+https://github.com/HissingRat/zig-glfw.git#190a779015b799a555b0944318b41f98f9a237e3",
+            .hash = "zig_glfw-0.1.0-r9fvbDY4AACVKDWH755dOl2XATiOXCXEK4_a3d0B_lPJ",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "shaders",
+        "examples",
+        "tools",
+        "docs",
+        "AGENTS.md",
+        "README.md",
+        "LICENSE",
+    },
+}
