@@ -552,10 +552,10 @@ closed one by one as vkmtl moves from prototype to library.
 ## Period 7 Phase 4 Checklist
 
 - [x] Define atomics/threadgroup memory scope before implementation.
-- [ ] Add atomic capability descriptor shapes.
-- [ ] Add threadgroup memory descriptor shapes.
-- [ ] Gate unsupported atomic and shared-memory behavior.
-- [ ] Document portable shader patterns and limits.
+- [x] Add atomic capability descriptor shapes.
+- [x] Add threadgroup memory descriptor shapes.
+- [x] Gate unsupported atomic and shared-memory behavior.
+- [x] Document portable shader patterns and limits.
 
 ## Period 7 Phase 5 Checklist
 

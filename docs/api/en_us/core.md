@@ -423,6 +423,13 @@ arguments. Indirect buffers use `BufferUsage.indirect`; runtime
 `dispatchThreadgroupsIndirect(...)` validates usage, offset, and alignment
 before returning `UnsupportedDispatchIndirect` until backend lowering lands.
 
+Advanced compute shader requirements can be declared with
+`ComputeAtomicDescriptor` and `ThreadgroupMemoryDescriptor`. These are
+validation shapes gated by `DeviceFeatures.compute_atomics`,
+`DeviceFeatures.compute_threadgroup_memory`, and
+`DeviceLimits.max_compute_threadgroup_memory_bytes`; vkmtl does not infer them
+from Slang source yet.
+
 ## Debug Labels And Groups
 
 Runtime resources, command buffers, and command encoders expose borrowed debug

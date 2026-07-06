@@ -126,6 +126,8 @@ pub const DeviceFeatures = struct {
     dedicated_transfer_queue: bool = false,
     queue_ownership_transfer: bool = false,
     debug_markers: bool = false,
+    compute_atomics: bool = false,
+    compute_threadgroup_memory: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -148,6 +150,7 @@ pub const DeviceLimits = struct {
     max_compute_threads_per_threadgroup_y: u32 = 1024,
     max_compute_threads_per_threadgroup_z: u32 = 64,
     max_compute_total_threads_per_threadgroup: u32 = 1024,
+    max_compute_threadgroup_memory_bytes: u32 = 0,
     dispatch_indirect_alignment: u64 = 4,
 };
 
@@ -639,6 +642,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedDedicatedQueue,
         error.UnsupportedQueueOwnershipTransfer,
         error.UnsupportedDispatchIndirect,
+        error.UnsupportedComputeAtomics,
+        error.UnsupportedThreadgroupMemory,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -705,6 +710,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidFenceValue,
         error.InvalidDispatchIndirectOffset,
         error.InvalidIndirectBufferUsage,
+        error.InvalidAtomicStorageResource,
+        error.MissingAtomicOperation,
+        error.InvalidThreadgroupMemorySize,
+        error.InvalidThreadgroupMemoryAlignment,
         error.TextureCopySizeOverflow,
         error.MissingBindGroupLayoutEntry,
         error.EmptyShaderVisibility,
@@ -2054,6 +2063,56 @@ pub const DispatchThreadgroupsIndirectDescriptor = struct {
     }
 };
 
+pub const ComputeAtomicOperations = struct {
+    add: bool = false,
+    min: bool = false,
+    max: bool = false,
+    bitwise_and: bool = false,
+    bitwise_or: bool = false,
+    bitwise_xor: bool = false,
+    exchange: bool = false,
+    compare_exchange: bool = false,
+
+    pub fn isEmpty(self: ComputeAtomicOperations) bool {
+        return !self.add and
+            !self.min and
+            !self.max and
+            !self.bitwise_and and
+            !self.bitwise_or and
+            !self.bitwise_xor and
+            !self.exchange and
+            !self.compare_exchange;
+    }
+};
+
+pub const ComputeAtomicDescriptor = struct {
+    storage: BindingResourceKind = .storage_buffer,
+    operations: ComputeAtomicOperations = .{},
+
+    pub fn validate(self: ComputeAtomicDescriptor, features: DeviceFeatures) CommandEncodingError!void {
+        if (!features.compute_atomics) return CommandEncodingError.UnsupportedComputeAtomics;
+        if (self.storage != .storage_buffer and self.storage != .storage_texture) {
+            return CommandEncodingError.InvalidAtomicStorageResource;
+        }
+        if (self.operations.isEmpty()) return CommandEncodingError.MissingAtomicOperation;
+    }
+};
+
+pub const ThreadgroupMemoryDescriptor = struct {
+    bytes: u32 = 0,
+    alignment: u32 = 16,
+
+    pub fn validate(self: ThreadgroupMemoryDescriptor, features: DeviceFeatures, limits: DeviceLimits) CommandEncodingError!void {
+        if (!features.compute_threadgroup_memory) return CommandEncodingError.UnsupportedThreadgroupMemory;
+        if (self.bytes == 0 or self.bytes > limits.max_compute_threadgroup_memory_bytes) {
+            return CommandEncodingError.InvalidThreadgroupMemorySize;
+        }
+        if (self.alignment == 0 or !isAlignedU32(self.bytes, self.alignment)) {
+            return CommandEncodingError.InvalidThreadgroupMemoryAlignment;
+        }
+    }
+};
+
 pub const CopyBufferToBufferDescriptor = struct {
     source_offset: u64 = 0,
     destination_offset: u64 = 0,
@@ -2548,6 +2607,8 @@ pub const CommandEncodingError = error{
     UnsupportedDedicatedQueue,
     UnsupportedQueueOwnershipTransfer,
     UnsupportedDispatchIndirect,
+    UnsupportedComputeAtomics,
+    UnsupportedThreadgroupMemory,
     RedundantResourceBarrier,
     RedundantQueueOwnershipTransfer,
     InvalidResourceBarrierState,
@@ -2556,6 +2617,10 @@ pub const CommandEncodingError = error{
     InvalidFenceValue,
     InvalidDispatchIndirectOffset,
     InvalidIndirectBufferUsage,
+    InvalidAtomicStorageResource,
+    MissingAtomicOperation,
+    InvalidThreadgroupMemorySize,
+    InvalidThreadgroupMemoryAlignment,
     InvalidCopySize,
     InvalidCopyBufferRange,
     InvalidCopyTextureRegion,
@@ -5626,6 +5691,34 @@ test "compute dispatch descriptors validate limits and resolve thread counts" {
     try std.testing.expectError(CommandEncodingError.InvalidDispatchIndirectOffset, (DispatchThreadgroupsIndirectDescriptor{
         .offset = 8,
     }).validate(16, .{ .compute_dispatch_indirect = true }, limits));
+}
+
+test "compute atomic and threadgroup memory descriptors validate gates" {
+    try std.testing.expectError(CommandEncodingError.UnsupportedComputeAtomics, (ComputeAtomicDescriptor{
+        .operations = .{ .add = true },
+    }).validate(.{}));
+    try (ComputeAtomicDescriptor{
+        .storage = .storage_buffer,
+        .operations = .{ .add = true, .compare_exchange = true },
+    }).validate(.{ .compute_atomics = true });
+    try std.testing.expectError(CommandEncodingError.InvalidAtomicStorageResource, (ComputeAtomicDescriptor{
+        .storage = .uniform_buffer,
+        .operations = .{ .add = true },
+    }).validate(.{ .compute_atomics = true }));
+    try std.testing.expectError(CommandEncodingError.MissingAtomicOperation, (ComputeAtomicDescriptor{}).validate(.{ .compute_atomics = true }));
+
+    const limits = DeviceLimits{ .max_compute_threadgroup_memory_bytes = 1024 };
+    try std.testing.expectError(CommandEncodingError.UnsupportedThreadgroupMemory, (ThreadgroupMemoryDescriptor{
+        .bytes = 256,
+    }).validate(.{}, limits));
+    try (ThreadgroupMemoryDescriptor{ .bytes = 256, .alignment = 16 }).validate(.{ .compute_threadgroup_memory = true }, limits);
+    try std.testing.expectError(CommandEncodingError.InvalidThreadgroupMemorySize, (ThreadgroupMemoryDescriptor{
+        .bytes = 2048,
+    }).validate(.{ .compute_threadgroup_memory = true }, limits));
+    try std.testing.expectError(CommandEncodingError.InvalidThreadgroupMemoryAlignment, (ThreadgroupMemoryDescriptor{
+        .bytes = 258,
+        .alignment = 16,
+    }).validate(.{ .compute_threadgroup_memory = true }, limits));
 }
 
 test "command debug state validates render pass ordering" {

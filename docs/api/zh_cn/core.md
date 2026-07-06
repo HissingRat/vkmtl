@@ -357,6 +357,12 @@ Indirect buffer 使用 `BufferUsage.indirect`；runtime `dispatchThreadgroupsInd
 会先校验 usage、offset 和 alignment，然后在 backend lowering 接上前返回
 `UnsupportedDispatchIndirect`。
 
+高级 compute shader 需求可以用 `ComputeAtomicDescriptor` 和
+`ThreadgroupMemoryDescriptor` 显式声明。这些目前是 validation shape，由
+`DeviceFeatures.compute_atomics`、`DeviceFeatures.compute_threadgroup_memory` 和
+`DeviceLimits.max_compute_threadgroup_memory_bytes` gate 控制；vkmtl 还不会从 Slang source
+自动推断这些需求。
+
 ## Debug Label 与 Group
 
 Runtime resource、command buffer 和 command encoder 都暴露借用字符串形式的 debug label：
