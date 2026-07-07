@@ -30,6 +30,7 @@ See `phase2.md`.
 
 - Track which regions are resident.
 - Batch page commits and uncommits.
+- Add `SparseResidencyMap` diagnostics for buffer and texture resident regions.
 
 See `phase3.md`.
 

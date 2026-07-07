@@ -3755,6 +3755,121 @@ pub const SparseMappingCommitDescriptor = struct {
     }
 };
 
+pub const SparseResidencyDiagnostics = struct {
+    buffer_regions: usize = 0,
+    texture_regions: usize = 0,
+};
+
+pub const SparseResidencyMap = struct {
+    allocator: std.mem.Allocator,
+    buffers: std.ArrayListUnmanaged(SparseBufferMappingDescriptor) = .empty,
+    textures: std.ArrayListUnmanaged(SparseTextureMappingDescriptor) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) SparseResidencyMap {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *SparseResidencyMap) void {
+        self.buffers.deinit(self.allocator);
+        self.textures.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn diagnostics(self: SparseResidencyMap) SparseResidencyDiagnostics {
+        return .{
+            .buffer_regions = self.buffers.items.len,
+            .texture_regions = self.textures.items.len,
+        };
+    }
+
+    pub fn apply(self: *SparseResidencyMap, descriptor: SparseMappingCommitDescriptor) AdvancedFeatureError!void {
+        for (descriptor.buffers) |mapping| try self.applyBuffer(mapping);
+        for (descriptor.textures) |mapping| try self.applyTexture(mapping);
+    }
+
+    fn applyBuffer(self: *SparseResidencyMap, mapping: SparseBufferMappingDescriptor) AdvancedFeatureError!void {
+        switch (mapping.residency) {
+            .resident => {
+                for (self.buffers.items) |existing| {
+                    if (bufferRangesOverlap(existing, mapping)) return AdvancedFeatureError.InvalidSparseRegion;
+                }
+                self.buffers.append(self.allocator, mapping) catch return AdvancedFeatureError.InvalidSparseRegion;
+            },
+            .evicted => {
+                const index = self.findBuffer(mapping) orelse return AdvancedFeatureError.InvalidSparseRegion;
+                _ = self.buffers.swapRemove(index);
+            },
+        }
+    }
+
+    fn applyTexture(self: *SparseResidencyMap, mapping: SparseTextureMappingDescriptor) AdvancedFeatureError!void {
+        switch (mapping.residency) {
+            .resident => {
+                for (self.textures.items) |existing| {
+                    if (textureRegionsOverlap(existing, mapping)) return AdvancedFeatureError.InvalidSparseRegion;
+                }
+                self.textures.append(self.allocator, mapping) catch return AdvancedFeatureError.InvalidSparseRegion;
+            },
+            .evicted => {
+                const index = self.findTexture(mapping) orelse return AdvancedFeatureError.InvalidSparseRegion;
+                _ = self.textures.swapRemove(index);
+            },
+        }
+    }
+
+    fn findBuffer(self: SparseResidencyMap, mapping: SparseBufferMappingDescriptor) ?usize {
+        for (self.buffers.items, 0..) |existing, i| {
+            if (existing.offset == mapping.offset and existing.size == mapping.size) return i;
+        }
+        return null;
+    }
+
+    fn findTexture(self: SparseResidencyMap, mapping: SparseTextureMappingDescriptor) ?usize {
+        for (self.textures.items, 0..) |existing, i| {
+            if (existing.kind == mapping.kind and
+                existing.mip_level == mapping.mip_level and
+                existing.array_layer == mapping.array_layer and
+                regionsEqual(existing.region, mapping.region))
+            {
+                return i;
+            }
+        }
+        return null;
+    }
+};
+
+fn bufferRangesOverlap(a: SparseBufferMappingDescriptor, b: SparseBufferMappingDescriptor) bool {
+    const a_end = a.offset + a.size;
+    const b_end = b.offset + b.size;
+    return a.offset < b_end and b.offset < a_end;
+}
+
+fn textureRegionsOverlap(a: SparseTextureMappingDescriptor, b: SparseTextureMappingDescriptor) bool {
+    if (a.kind != b.kind or a.mip_level != b.mip_level or a.array_layer != b.array_layer) return false;
+    return regionsOverlap(a.region, b.region);
+}
+
+fn regionsEqual(a: Region3D, b: Region3D) bool {
+    return a.origin.x == b.origin.x and
+        a.origin.y == b.origin.y and
+        a.origin.z == b.origin.z and
+        a.size.width == b.size.width and
+        a.size.height == b.size.height and
+        a.size.depth == b.size.depth;
+}
+
+fn regionsOverlap(a: Region3D, b: Region3D) bool {
+    return rangesOverlapU32(a.origin.x, a.size.width, b.origin.x, b.size.width) and
+        rangesOverlapU32(a.origin.y, a.size.height, b.origin.y, b.size.height) and
+        rangesOverlapU32(a.origin.z, a.size.depth, b.origin.z, b.size.depth);
+}
+
+fn rangesOverlapU32(a_origin: u32, a_size: u32, b_origin: u32, b_size: u32) bool {
+    const a_end = a_origin + a_size;
+    const b_end = b_origin + b_size;
+    return a_origin < b_end and b_origin < a_end;
+}
+
 pub const TextureReplaceRegionDescriptor = struct {
     bytes: []const u8,
     mip_level: u32 = 0,
@@ -7773,6 +7888,55 @@ test "sparse resource descriptors validate feature gates and alignment" {
         .sparse_texture_page_depth = 1,
         .max_sparse_regions_per_commit = 1,
     }));
+}
+
+test "sparse residency map tracks commits and rejects overlaps" {
+    var map = SparseResidencyMap.init(std.testing.allocator);
+    defer map.deinit();
+
+    const buffer_region = SparseBufferMappingDescriptor{
+        .offset = 0,
+        .size = 4096,
+        .page_size = 4096,
+    };
+    try map.apply(.{ .buffers = &.{buffer_region} });
+    try std.testing.expectEqual(@as(usize, 1), map.diagnostics().buffer_regions);
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{
+        .buffers = &.{.{
+            .offset = 2048,
+            .size = 4096,
+            .page_size = 4096,
+        }},
+    }));
+    try map.apply(.{ .buffers = &.{.{
+        .offset = 0,
+        .size = 4096,
+        .page_size = 4096,
+        .residency = .evicted,
+    }} });
+    try std.testing.expectEqual(@as(usize, 0), map.diagnostics().buffer_regions);
+
+    const texture_region = SparseTextureMappingDescriptor{
+        .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+    };
+    try map.apply(.{ .textures = &.{texture_region} });
+    try std.testing.expectEqual(@as(usize, 1), map.diagnostics().texture_regions);
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{
+        .textures = &.{.{
+            .region = .{
+                .origin = .{ .x = 32, .y = 0, .z = 0 },
+                .size = .{ .width = 64, .height = 64, .depth = 1 },
+            },
+            .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+        }},
+    }));
+    try map.apply(.{ .textures = &.{.{
+        .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+        .residency = .evicted,
+    }} });
+    try std.testing.expectEqual(@as(usize, 0), map.diagnostics().texture_regions);
 }
 
 test "texture usage can detect empty usage" {

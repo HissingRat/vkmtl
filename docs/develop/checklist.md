@@ -958,11 +958,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 15 Phase 3 Checklist
 
-- [ ] Define residency map scope before implementation.
-- [ ] Track resident sparse buffer and texture regions.
-- [ ] Batch page commit operations.
-- [ ] Expose residency diagnostics.
-- [ ] Add duplicate and overlapping region tests.
+- [x] Define residency map scope before implementation.
+- [x] Track resident sparse buffer and texture regions.
+- [x] Batch page commit operations through `SparseMappingCommitDescriptor`.
+- [x] Expose residency diagnostics.
+- [x] Add duplicate and overlapping region tests.
 
 ## Period 15 Phase 4 Checklist
 
