@@ -173,6 +173,7 @@ pub const MultiDrawIndexedPrimitivesDescriptor = core.MultiDrawIndexedPrimitives
 pub const QueryType = core.QueryType;
 pub const PipelineStatisticFlags = core.PipelineStatisticFlags;
 pub const QuerySetDescriptor = core.QuerySetDescriptor;
+pub const ProfilerMarkerDescriptor = core.ProfilerMarkerDescriptor;
 pub const QueryResolveDescriptor = core.QueryResolveDescriptor;
 pub const QueryReadbackDescriptor = core.QueryReadbackDescriptor;
 pub const QueryError = core.QueryError;

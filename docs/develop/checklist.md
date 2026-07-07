@@ -1110,11 +1110,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 18 Phase 4 Checklist
 
-- [ ] Define GPU timestamp/profiler scope before implementation.
-- [ ] Add timestamp query support where available.
-- [ ] Add profiler marker descriptors.
-- [ ] Keep timing features capability-gated.
-- [ ] Add timing descriptor tests and smoke coverage.
+- [x] Define GPU timestamp/profiler scope before implementation.
+- [x] Add timestamp query support where available.
+- [x] Add profiler marker descriptors.
+- [x] Keep timing features capability-gated.
+- [x] Add timing descriptor tests and keep smoke coverage gated.
 
 ## Period 18 Phase 5 Checklist
 

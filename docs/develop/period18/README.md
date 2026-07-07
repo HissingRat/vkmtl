@@ -33,6 +33,7 @@ See `phase3.md`.
 ## Phase 4: GPU Timestamps And Profiler Markers
 
 - Add portable timing and profiling markers.
+- Add `ProfilerMarkerDescriptor` with timestamp feature gating.
 
 See `phase4.md`.
 

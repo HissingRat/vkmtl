@@ -2797,6 +2797,19 @@ pub const QuerySetDescriptor = struct {
     }
 };
 
+pub const ProfilerMarkerDescriptor = struct {
+    label: []const u8,
+    write_timestamp_begin: bool = false,
+    write_timestamp_end: bool = false,
+
+    pub fn validate(self: ProfilerMarkerDescriptor, features: DeviceFeatures) (QueryError || CommandEncodingError)!void {
+        if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        if ((self.write_timestamp_begin or self.write_timestamp_end) and !features.timestamp_queries) {
+            return QueryError.UnsupportedTimestampQueries;
+        }
+    }
+};
+
 pub const QueryResolveDescriptor = struct {
     first_query: u32 = 0,
     query_count: u32 = 0,
@@ -7745,6 +7758,19 @@ test "query descriptors validate feature gates and ranges" {
         .query_count = 3,
         .destination = results[0..],
     }).validate(occlusion_set));
+    try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (ProfilerMarkerDescriptor{
+        .label = "",
+    }).validate(.{}));
+    try std.testing.expectError(QueryError.UnsupportedTimestampQueries, (ProfilerMarkerDescriptor{
+        .label = "gpu span",
+        .write_timestamp_begin = true,
+        .write_timestamp_end = true,
+    }).validate(.{}));
+    try (ProfilerMarkerDescriptor{
+        .label = "gpu span",
+        .write_timestamp_begin = true,
+        .write_timestamp_end = true,
+    }).validate(.{ .timestamp_queries = true });
 }
 
 test "compute dispatch descriptors validate limits and resolve thread counts" {
