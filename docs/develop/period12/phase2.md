@@ -13,3 +13,12 @@ Phase 2 implements Vulkan descriptor indexing for supported devices.
 
 - Add a Vulkan-only smoke path behind feature gates.
 - Add tests for descriptor count and runtime-array validation.
+
+## Current Status
+
+- Vulkan advanced binding has a backend-side metadata object for
+  descriptor-indexing layouts.
+- The metadata records descriptor counts, partially-bound ranges, and
+  update-after-bind ranges.
+- Native Vulkan descriptor set layout flags remain gated behind the selected
+  device feature path and will be expanded from this backend object.

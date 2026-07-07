@@ -15,6 +15,7 @@ const MetalShaderModule = @import("../backend/metal/shader_module.zig");
 const MetalTexture = @import("../backend/metal/texture.zig");
 const MetalTextureView = @import("../backend/metal/texture_view.zig");
 const VulkanBindGroupBackend = @import("../backend/vulkan/bind_group.zig");
+const VulkanAdvancedBindGroupBackend = @import("../backend/vulkan/advanced_binding.zig");
 const VulkanBuffer = @import("../backend/vulkan/buffer.zig");
 const VulkanCommand = @import("../backend/vulkan/command.zig");
 const VulkanComputePipelineState = @import("../backend/vulkan/compute_pipeline.zig");
@@ -1095,10 +1096,20 @@ pub const AdvancedBindGroupLayout = struct {
     model_value: core.AdvancedBindingModel,
     ranges: []core.DescriptorIndexingRange,
     alive: bool = true,
+    impl: ?Impl = null,
+
+    const Impl = union(core.Backend) {
+        vulkan: VulkanAdvancedBindGroupBackend,
+        metal: void,
+    };
 
     pub fn deinit(self: *AdvancedBindGroupLayout) void {
         assertObjectAlive(self.alive, "advanced_bind_group_layout");
         self.alive = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => {},
+        };
         self.allocator.free(self.ranges);
         self.tracker.release(.advanced_bind_group_layout);
     }
@@ -2621,6 +2632,10 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
         const ranges = try self.allocator.dupe(core.DescriptorIndexingRange, descriptor.ranges);
         errdefer self.allocator.free(ranges);
+        const impl: ?AdvancedBindGroupLayout.Impl = switch (self.impl.*) {
+            .vulkan => |*vulkan| .{ .vulkan = try VulkanAdvancedBindGroupBackend.init(vulkan.gc, descriptor) },
+            .metal => null,
+        };
 
         self.tracker.retain(.advanced_bind_group_layout);
         return .{
@@ -2630,6 +2645,7 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .model_value = descriptor.model,
             .ranges = ranges,
+            .impl = impl,
         };
     }
 

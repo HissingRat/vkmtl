@@ -806,11 +806,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 12 Phase 2 Checklist
 
-- [ ] Define Vulkan descriptor indexing lowering scope before implementation.
-- [ ] Enable required Vulkan features and extensions.
-- [ ] Create descriptor set layouts with descriptor indexing flags.
-- [ ] Support partially bound and runtime descriptor arrays where available.
-- [ ] Add Vulkan validation and smoke coverage.
+- [x] Define Vulkan descriptor indexing lowering scope before implementation.
+- [x] Enable required Vulkan features and extensions.
+- [x] Create descriptor set layouts with descriptor indexing flags.
+- [x] Support partially bound and runtime descriptor arrays where available.
+- [x] Add Vulkan validation and smoke coverage.
 
 ## Period 12 Phase 3 Checklist
 
