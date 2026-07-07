@@ -1213,6 +1213,37 @@ pub const AdvancedBindGroupLayout = struct {
         if (index >= self.ranges.len) return null;
         return self.ranges[index];
     }
+
+    pub fn totalDescriptorCount(self: AdvancedBindGroupLayout) u32 {
+        var count: u32 = 0;
+        for (self.ranges) |descriptor_range| count +|= descriptor_range.descriptor_count;
+        return count;
+    }
+
+    pub fn resourceDescriptorCount(
+        self: AdvancedBindGroupLayout,
+        resource: core.BindingResourceKind,
+    ) u32 {
+        var count: u32 = 0;
+        for (self.ranges) |descriptor_range| {
+            if (descriptor_range.resource == resource) count +|= descriptor_range.descriptor_count;
+        }
+        return count;
+    }
+
+    pub fn usesPartiallyBoundRanges(self: AdvancedBindGroupLayout) bool {
+        for (self.ranges) |descriptor_range| {
+            if (descriptor_range.partially_bound) return true;
+        }
+        return false;
+    }
+
+    pub fn usesUpdateAfterBindRanges(self: AdvancedBindGroupLayout) bool {
+        for (self.ranges) |descriptor_range| {
+            if (descriptor_range.update_after_bind) return true;
+        }
+        return false;
+    }
 };
 
 pub const BindGroupBufferBinding = struct {
@@ -4077,6 +4108,11 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
     try std.testing.expectEqual(core.AdvancedBindingModel.argument_buffer, layout.model());
     try std.testing.expectEqual(@as(usize, 1), layout.rangeCount());
     try std.testing.expectEqual(@as(u32, 3), layout.range(0).?.binding);
+    try std.testing.expectEqual(@as(u32, 8), layout.totalDescriptorCount());
+    try std.testing.expectEqual(@as(u32, 8), layout.resourceDescriptorCount(.sampled_texture));
+    try std.testing.expectEqual(@as(u32, 0), layout.resourceDescriptorCount(.sampler));
+    try std.testing.expect(!layout.usesPartiallyBoundRanges());
+    try std.testing.expect(!layout.usesUpdateAfterBindRanges());
     try std.testing.expectEqual(@as(usize, 1), tracker.advanced_bind_group_layouts);
 }
 

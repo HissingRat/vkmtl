@@ -296,10 +296,13 @@ Shader resource binding starts with public descriptors:
 - `BindingResourceKind`
 
 Advanced binding shapes are capability-gated. `DescriptorIndexingLayoutDescriptor`
-and `DescriptorIndexingRange` describe bindless-style ranges for future Vulkan
-descriptor indexing or Metal argument buffer lowering. They validate descriptor
-counts, shader visibility, and the selected `AdvancedBindingModel`, but backend
-lowering is not implemented yet.
+and `DescriptorIndexingRange` describe bindless-style ranges for Vulkan
+descriptor indexing or Metal argument buffer layout metadata. They validate
+descriptor counts, shader visibility, and the selected `AdvancedBindingModel`.
+`Device.makeAdvancedBindGroupLayout(...)` snapshots those ranges into a
+backend-aware `AdvancedBindGroupLayout` with descriptor count and range-flag
+queries. Creating and updating a bindless resource table is still a deferred
+API surface.
 
 The first resource classes are uniform buffers, storage buffers, storage
 textures, sampled textures, samplers, and compare samplers. Layout entries also

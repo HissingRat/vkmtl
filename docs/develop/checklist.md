@@ -1259,6 +1259,15 @@ obvious render and binding blockers.
 - [x] Validate layout/resource count mismatches and dynamic-buffer-array deferral.
 - [x] Update docs and tests.
 
+## Period 21 Phase 3 Checklist
+
+- [x] Define advanced binding scope before implementation.
+- [x] Keep first-slice bind groups separate from advanced bind group layouts.
+- [x] Preserve capability gates for Vulkan descriptor indexing and Metal argument buffers.
+- [x] Expose public range summary queries on `AdvancedBindGroupLayout`.
+- [x] Keep bindless table resource updates explicitly deferred.
+- [x] Update docs and tests.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

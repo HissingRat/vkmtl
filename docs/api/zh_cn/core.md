@@ -252,9 +252,11 @@ Shader 资源绑定从公开描述符开始：
 - `BindingResourceKind`
 
 高级 binding shape 由 capability gate 控制。`DescriptorIndexingLayoutDescriptor`
-和 `DescriptorIndexingRange` 描述 future Vulkan descriptor indexing 或 Metal argument buffer
-lowering 需要的 bindless-style range。它们会校验 descriptor count、shader visibility 和选择的
-`AdvancedBindingModel`，但 backend lowering 还没有实现。
+和 `DescriptorIndexingRange` 描述 Vulkan descriptor indexing 或 Metal argument buffer layout
+metadata 所需的 bindless-style range。它们会校验 descriptor count、shader visibility 和选择的
+`AdvancedBindingModel`。`Device.makeAdvancedBindGroupLayout(...)` 会把这些 range snapshot 到
+backend-aware 的 `AdvancedBindGroupLayout`，并提供 descriptor count 和 range flag 查询。
+真正创建和更新 bindless resource table 的 API 仍然是后续工作。
 
 当前资源类别包括 uniform buffer、storage buffer、storage texture、sampled texture、
 sampler 和 compare sampler。Layout entry 也包含 `array_count` 和 `dynamic_offset`
