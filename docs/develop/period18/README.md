@@ -19,6 +19,7 @@ See `phase1.md`.
 ## Phase 2: Resource Aliasing / Transient Allocator
 
 - Add transient resource reuse for short-lived render and transfer resources.
+- Add transient resource descriptors and aliasing eligibility checks.
 
 See `phase2.md`.
 

@@ -336,6 +336,46 @@ pub const CommandBufferDescriptor = struct {
     }
 };
 
+pub const TransientResourceKind = enum {
+    buffer,
+    texture,
+};
+
+pub const TransientResourceDescriptor = struct {
+    kind: TransientResourceKind,
+    size: u64 = 0,
+    texture_extent: Extent2D = .{ .width = 0, .height = 0 },
+    alignment: u64 = 1,
+    first_use: u64 = 0,
+    last_use: u64 = 0,
+
+    pub fn validate(self: TransientResourceDescriptor) error{InvalidResourceBarrierRange}!void {
+        if (self.alignment == 0) return error.InvalidResourceBarrierRange;
+        if (self.last_use < self.first_use) return error.InvalidResourceBarrierRange;
+        switch (self.kind) {
+            .buffer => if (self.size == 0) return error.InvalidResourceBarrierRange,
+            .texture => if (self.texture_extent.isZero()) return error.InvalidResourceBarrierRange,
+        }
+    }
+
+    pub fn canAlias(existing: TransientResourceDescriptor, requested: TransientResourceDescriptor) bool {
+        existing.validate() catch return false;
+        requested.validate() catch return false;
+        if (existing.kind != requested.kind) return false;
+        if (lifetimesOverlap(existing, requested)) return false;
+        if (existing.alignment < requested.alignment) return false;
+        return switch (existing.kind) {
+            .buffer => existing.size >= requested.size,
+            .texture => existing.texture_extent.width >= requested.texture_extent.width and
+                existing.texture_extent.height >= requested.texture_extent.height,
+        };
+    }
+};
+
+fn lifetimesOverlap(a: TransientResourceDescriptor, b: TransientResourceDescriptor) bool {
+    return a.first_use <= b.last_use and b.first_use <= a.last_use;
+}
+
 pub const BufferBarrierDescriptor = struct {
     before: ResourceUsageKind,
     after: ResourceUsageKind,
@@ -5883,6 +5923,37 @@ test "resource usage state records portable hazards" {
     try std.testing.expectEqual(ResourceHazard.write_after_read, transition.hazard);
     try std.testing.expect(transition.requires_barrier);
     try std.testing.expectEqual(@as(usize, 2), state.barrier_count);
+
+    const existing = TransientResourceDescriptor{
+        .kind = .buffer,
+        .size = 4096,
+        .alignment = 256,
+        .first_use = 0,
+        .last_use = 2,
+    };
+    const requested = TransientResourceDescriptor{
+        .kind = .buffer,
+        .size = 1024,
+        .alignment = 128,
+        .first_use = 3,
+        .last_use = 4,
+    };
+    try existing.validate();
+    try requested.validate();
+    try std.testing.expect(TransientResourceDescriptor.canAlias(existing, requested));
+    try std.testing.expect(!TransientResourceDescriptor.canAlias(existing, .{
+        .kind = .buffer,
+        .size = 1024,
+        .alignment = 128,
+        .first_use = 1,
+        .last_use = 4,
+    }));
+    try std.testing.expect(!TransientResourceDescriptor.canAlias(existing, .{
+        .kind = .texture,
+        .texture_extent = .{ .width = 64, .height = 64 },
+        .first_use = 3,
+        .last_use = 4,
+    }));
 
     try (BufferBarrierDescriptor{
         .before = .copy_destination,

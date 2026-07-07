@@ -1094,11 +1094,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 18 Phase 2 Checklist
 
-- [ ] Define transient allocator scope before implementation.
-- [ ] Add transient resource descriptors.
-- [ ] Reuse compatible temporary buffers and textures.
-- [ ] Respect backend alignment and hazard constraints.
-- [ ] Add aliasing eligibility tests.
+- [x] Define transient allocator scope before implementation.
+- [x] Add transient resource descriptors.
+- [x] Reuse compatible temporary buffers and textures in metadata.
+- [x] Respect backend alignment and hazard constraints.
+- [x] Add aliasing eligibility tests.
 
 ## Period 18 Phase 3 Checklist
 
