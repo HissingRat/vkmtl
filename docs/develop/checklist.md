@@ -1225,6 +1225,15 @@ obvious render and binding blockers.
 - [x] Keep separate stencil-only attachments deferred.
 - [x] Update docs and tests for stencil format and state validation.
 
+## Period 20 Phase 5 Checklist
+
+- [x] Define MRT backend lowering scope before implementation.
+- [x] Lower multiple color attachments in Vulkan render pass creation.
+- [x] Lower multiple color attachments in Metal render pipeline and render pass descriptors.
+- [x] Validate MRT attachment count, extents, sample counts, and resolve targets.
+- [x] Re-enable independent blend where backend support is available.
+- [x] Keep current-drawable MRT deferred.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

@@ -43,8 +43,8 @@ pub fn init(
     const vertex_attributes = try makeVertexAttributes(allocator, descriptor.vertex_descriptor);
     defer allocator.free(vertex_attributes);
 
-    const color_attachment = descriptor.color_attachments[0];
-    const blend = color_attachment.blend;
+    const color_attachments = makeColorAttachments(descriptor.color_attachments);
+    const color_attachment_slice = color_attachments[0..descriptor.color_attachments.len];
     const stencil = if (descriptor.depth_stencil) |depth| depth.stencil else core.StencilDescriptor{};
     var handle: ?*metal.vkmtl_metal_render_pipeline_state = null;
     try check(metal.vkmtl_metal_render_pipeline_state_create(
@@ -55,15 +55,8 @@ pub fn init(
         if (fragment_module) |module| module.handle else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.ptr else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.len else 0,
-        textureFormat(color_attachment.format),
-        colorWriteMask(color_attachment.write_mask),
-        if (blend != null) 1 else 0,
-        if (blend) |value| blendFactor(value.source_rgb_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ONE,
-        if (blend) |value| blendFactor(value.destination_rgb_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
-        if (blend) |value| blendOperation(value.rgb_blend_operation) else metal.VKMTL_METAL_BLEND_OPERATION_ADD,
-        if (blend) |value| blendFactor(value.source_alpha_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ONE,
-        if (blend) |value| blendFactor(value.destination_alpha_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
-        if (blend) |value| blendOperation(value.alpha_blend_operation) else metal.VKMTL_METAL_BLEND_OPERATION_ADD,
+        color_attachment_slice.ptr,
+        color_attachment_slice.len,
         if (descriptor.depth_stencil) |depth| textureFormat(depth.format) else metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
         if (descriptor.depth_stencil) |depth| compareFunction(depth.depth_compare_function) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
         if (descriptor.depth_stencil) |depth| if (depth.depth_write_enabled) 1 else 0 else 0,
@@ -122,6 +115,27 @@ fn makeVertexBufferLayouts(
         };
     }
     return layouts;
+}
+
+fn makeColorAttachments(
+    descriptors: []const core.RenderPipelineColorAttachmentDescriptor,
+) [core.default_max_color_attachments]metal.vkmtl_metal_render_pipeline_color_attachment {
+    var out: [core.default_max_color_attachments]metal.vkmtl_metal_render_pipeline_color_attachment = undefined;
+    for (descriptors, 0..) |descriptor, i| {
+        const blend = descriptor.blend;
+        out[i] = .{
+            .format = textureFormat(descriptor.format),
+            .color_write_mask = colorWriteMask(descriptor.write_mask),
+            .blend_enabled = if (blend != null) 1 else 0,
+            .source_rgb_blend_factor = if (blend) |value| blendFactor(value.source_rgb_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ONE,
+            .destination_rgb_blend_factor = if (blend) |value| blendFactor(value.destination_rgb_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
+            .rgb_blend_operation = if (blend) |value| blendOperation(value.rgb_blend_operation) else metal.VKMTL_METAL_BLEND_OPERATION_ADD,
+            .source_alpha_blend_factor = if (blend) |value| blendFactor(value.source_alpha_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ONE,
+            .destination_alpha_blend_factor = if (blend) |value| blendFactor(value.destination_alpha_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
+            .alpha_blend_operation = if (blend) |value| blendOperation(value.alpha_blend_operation) else metal.VKMTL_METAL_BLEND_OPERATION_ADD,
+        };
+    }
+    return out;
 }
 
 fn makeVertexAttributes(

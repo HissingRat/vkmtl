@@ -1443,15 +1443,8 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_shader_module *fragment_shader,
     const char *fragment_entry,
     size_t fragment_entry_len,
-    vkmtl_metal_texture_format color_format,
-    unsigned int color_write_mask,
-    unsigned int blend_enabled,
-    vkmtl_metal_blend_factor source_rgb_blend_factor,
-    vkmtl_metal_blend_factor destination_rgb_blend_factor,
-    vkmtl_metal_blend_operation rgb_blend_operation,
-    vkmtl_metal_blend_factor source_alpha_blend_factor,
-    vkmtl_metal_blend_factor destination_alpha_blend_factor,
-    vkmtl_metal_blend_operation alpha_blend_operation,
+    const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
+    size_t color_attachment_count,
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
@@ -1485,7 +1478,9 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
         vertex_entry == NULL ||
         vertex_entry_len == 0 ||
         sample_count == 0 ||
-        color_format == VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
+        color_attachments == NULL ||
+        color_attachment_count == 0 ||
+        color_attachment_count > 4) {
         return VKMTL_METAL_STATUS_INVALID_PIPELINE;
     }
     if (![owner->device supportsTextureSampleCount:sample_count]) {
@@ -1540,22 +1535,31 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
 
         descriptor.vertexFunction = vertex_function;
         descriptor.fragmentFunction = fragment_function;
-        descriptor.colorAttachments[0].pixelFormat = vkmtl_texture_pixel_format(color_format);
-        descriptor.colorAttachments[0].writeMask = vkmtl_color_write_mask(color_write_mask);
-        if (blend_enabled != 0) {
-            descriptor.colorAttachments[0].blendingEnabled = YES;
-            descriptor.colorAttachments[0].sourceRGBBlendFactor =
-                vkmtl_blend_factor(source_rgb_blend_factor);
-            descriptor.colorAttachments[0].destinationRGBBlendFactor =
-                vkmtl_blend_factor(destination_rgb_blend_factor);
-            descriptor.colorAttachments[0].rgbBlendOperation =
-                vkmtl_blend_operation(rgb_blend_operation);
-            descriptor.colorAttachments[0].sourceAlphaBlendFactor =
-                vkmtl_blend_factor(source_alpha_blend_factor);
-            descriptor.colorAttachments[0].destinationAlphaBlendFactor =
-                vkmtl_blend_factor(destination_alpha_blend_factor);
-            descriptor.colorAttachments[0].alphaBlendOperation =
-                vkmtl_blend_operation(alpha_blend_operation);
+        for (size_t i = 0; i < color_attachment_count; i += 1) {
+            const vkmtl_metal_render_pipeline_color_attachment attachment = color_attachments[i];
+            if (attachment.format == VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
+                [descriptor release];
+                [fragment_function release];
+                [vertex_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+            descriptor.colorAttachments[i].pixelFormat = vkmtl_texture_pixel_format(attachment.format);
+            descriptor.colorAttachments[i].writeMask = vkmtl_color_write_mask(attachment.color_write_mask);
+            if (attachment.blend_enabled != 0) {
+                descriptor.colorAttachments[i].blendingEnabled = YES;
+                descriptor.colorAttachments[i].sourceRGBBlendFactor =
+                    vkmtl_blend_factor(attachment.source_rgb_blend_factor);
+                descriptor.colorAttachments[i].destinationRGBBlendFactor =
+                    vkmtl_blend_factor(attachment.destination_rgb_blend_factor);
+                descriptor.colorAttachments[i].rgbBlendOperation =
+                    vkmtl_blend_operation(attachment.rgb_blend_operation);
+                descriptor.colorAttachments[i].sourceAlphaBlendFactor =
+                    vkmtl_blend_factor(attachment.source_alpha_blend_factor);
+                descriptor.colorAttachments[i].destinationAlphaBlendFactor =
+                    vkmtl_blend_factor(attachment.destination_alpha_blend_factor);
+                descriptor.colorAttachments[i].alphaBlendOperation =
+                    vkmtl_blend_operation(attachment.alpha_blend_operation);
+            }
         }
         descriptor.sampleCount = sample_count;
         if (vkmtl_texture_format_has_depth(depth_format)) {
@@ -1919,12 +1923,8 @@ vkmtl_metal_status vkmtl_metal_command_buffer_commit(
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer *command_buffer,
-    float clear_red,
-    float clear_green,
-    float clear_blue,
-    float clear_alpha,
-    vkmtl_metal_texture_view *color_texture_view,
-    vkmtl_metal_texture_view *resolve_texture_view,
+    const vkmtl_metal_render_pass_color_attachment *color_attachments,
+    size_t color_attachment_count,
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
@@ -1938,47 +1938,61 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     if (owner == NULL ||
         owner->layer == nil ||
         command_buffer == NULL ||
-        command_buffer->command_buffer == nil) {
+        command_buffer->command_buffer == nil ||
+        color_attachments == NULL ||
+        color_attachment_count == 0 ||
+        color_attachment_count > 4) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
     @autoreleasepool {
         id<CAMetalDrawable> drawable = nil;
-        id<MTLTexture> color_texture = nil;
-        if (color_texture_view != NULL) {
-            color_texture = color_texture_view->texture;
-            if (color_texture == nil) {
-                return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
-            }
-        } else {
-            drawable = [owner->layer nextDrawable];
-            if (drawable == nil) {
-                return VKMTL_METAL_STATUS_NO_DRAWABLE;
-            }
-            color_texture = drawable.texture;
-        }
-
         MTLRenderPassDescriptor *descriptor = [MTLRenderPassDescriptor renderPassDescriptor];
         if (descriptor == nil) {
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
-        descriptor.colorAttachments[0].texture = color_texture;
-        descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
-        if (resolve_texture_view != NULL) {
-            if (color_texture_view == NULL ||
-                color_texture_view->sample_count <= 1 ||
-                resolve_texture_view->texture == nil ||
-                resolve_texture_view->sample_count != 1) {
-                return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+        for (size_t i = 0; i < color_attachment_count; i += 1) {
+            const vkmtl_metal_render_pass_color_attachment attachment = color_attachments[i];
+            id<MTLTexture> color_texture = nil;
+            if (attachment.texture_view != NULL) {
+                color_texture = attachment.texture_view->texture;
+                if (color_texture == nil) {
+                    return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+                }
+            } else {
+                if (i != 0 || color_attachment_count != 1) {
+                    return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+                }
+                drawable = [owner->layer nextDrawable];
+                if (drawable == nil) {
+                    return VKMTL_METAL_STATUS_NO_DRAWABLE;
+                }
+                color_texture = drawable.texture;
             }
-            descriptor.colorAttachments[0].resolveTexture = resolve_texture_view->texture;
-            descriptor.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-        } else {
-            descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+            descriptor.colorAttachments[i].texture = color_texture;
+            descriptor.colorAttachments[i].loadAction = MTLLoadActionClear;
+            if (attachment.resolve_texture_view != NULL) {
+                if (attachment.texture_view == NULL ||
+                    attachment.texture_view->sample_count <= 1 ||
+                    attachment.resolve_texture_view->texture == nil ||
+                    attachment.resolve_texture_view->sample_count != 1) {
+                    return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+                }
+                descriptor.colorAttachments[i].resolveTexture = attachment.resolve_texture_view->texture;
+                descriptor.colorAttachments[i].storeAction = MTLStoreActionMultisampleResolve;
+            } else {
+                descriptor.colorAttachments[i].storeAction = MTLStoreActionStore;
+            }
+            descriptor.colorAttachments[i].clearColor =
+                MTLClearColorMake(
+                    attachment.clear_red,
+                    attachment.clear_green,
+                    attachment.clear_blue,
+                    attachment.clear_alpha
+                );
         }
-        descriptor.colorAttachments[0].clearColor =
-            MTLClearColorMake(clear_red, clear_green, clear_blue, clear_alpha);
 
         if (use_depth != 0) {
             id<MTLTexture> depth_texture =

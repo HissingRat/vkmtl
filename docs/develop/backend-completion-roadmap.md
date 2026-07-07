@@ -28,6 +28,7 @@ paths. They are recorded here instead of rewriting the historical period notes:
 - Pipeline depth-bias and wireframe / line fill mode lowering.
 - Vertex instance step-rate lowering.
 - Combined depth/stencil format and stencil pipeline state lowering.
+- Multiple render target pipeline and texture-backed render pass lowering.
 
 ## Goal
 
@@ -48,7 +49,7 @@ Tracked in `docs/develop/period20/`.
 - [x] Wireframe / line fill mode where the backend supports it.
 - [x] Vertex instance step-rate lowering.
 - [x] Stencil render pass and stencil pipeline state lowering.
-- [ ] Multiple render target render pass and pipeline lowering.
+- [x] Multiple render target render pass and pipeline lowering.
 
 Expected result: normal forward/deferred-style render pipelines can be expressed
 without hitting typed unsupported errors, except where a backend truly lacks the

@@ -36,8 +36,13 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
 
 pub const RenderPassDescriptor = struct {
     label: ?[]const u8 = null,
-    color_attachment: RenderPassColorAttachmentDescriptor,
+    color_attachments: [core.default_max_color_attachments]RenderPassColorAttachmentDescriptor,
+    color_attachment_count: usize,
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+
+    fn colorAttachmentSlice(self: *const RenderPassDescriptor) []const RenderPassColorAttachmentDescriptor {
+        return self.color_attachments[0..self.color_attachment_count];
+    }
 };
 
 pub const CommandBuffer = struct {
@@ -116,25 +121,28 @@ pub const CommandBuffer = struct {
         const cmdbuf = self.cmdbuf;
         try self.gc.dev.beginCommandBuffer(cmdbuf, &.{});
 
-        const clear_color = descriptor.color_attachment.clear_color;
-        var clear_values: [2]vk.ClearValue = undefined;
-        clear_values[0] = vk.ClearValue{
-            .color = .{ .float_32 = .{
-                clear_color.red,
-                clear_color.green,
-                clear_color.blue,
-                clear_color.alpha,
-            } },
-        };
-        var clear_value_count: u32 = 1;
+        const color_attachments = descriptor.colorAttachmentSlice();
+        var clear_values: [core.default_max_color_attachments + 1]vk.ClearValue = undefined;
+        for (color_attachments, 0..) |color_attachment, i| {
+            const clear_color = color_attachment.clear_color;
+            clear_values[i] = vk.ClearValue{
+                .color = .{ .float_32 = .{
+                    clear_color.red,
+                    clear_color.green,
+                    clear_color.blue,
+                    clear_color.alpha,
+                } },
+            };
+        }
+        var clear_value_count: u32 = @intCast(color_attachments.len);
         if (descriptor.depth_attachment) |depth_attachment| {
-            clear_values[1] = vk.ClearValue{
+            clear_values[clear_value_count] = vk.ClearValue{
                 .depth_stencil = .{
                     .depth = depth_attachment.clear_depth,
                     .stencil = 0,
                 },
             };
-            clear_value_count = 2;
+            clear_value_count += 1;
         }
 
         const uses_depth = descriptor.depth_attachment != null;
@@ -173,7 +181,12 @@ pub const CommandBuffer = struct {
             .uses_depth_pass = uses_depth,
             .color_layout = pass.color_layout,
             .color_final_layout = pass.color_final_layout,
+            .color_layouts = pass.color_layouts,
+            .color_final_layouts = pass.color_final_layouts,
+            .color_layout_count = pass.color_layout_count,
             .resolve_layout = pass.resolve_layout,
+            .resolve_layouts = pass.resolve_layouts,
+            .resolve_layout_count = pass.resolve_layout_count,
             .depth_layout = pass.depth_layout,
             .sample_count = pass.sample_count,
         };
@@ -220,12 +233,15 @@ pub const CommandBuffer = struct {
     }
 
     fn renderPassSetup(self: *CommandBuffer, descriptor: RenderPassDescriptor) !RenderPassSetup {
-        const uses_current_drawable = switch (descriptor.color_attachment.target) {
+        const color_attachments = descriptor.colorAttachmentSlice();
+        const first_color_attachment = color_attachments[0];
+        const uses_current_drawable = switch (first_color_attachment.target) {
             .current_drawable => true,
             .texture_view => false,
         };
         if (uses_current_drawable) {
-            if (descriptor.color_attachment.resolve_target != null) return error.InvalidRenderPassAttachment;
+            if (color_attachments.len != 1) return error.InvalidRenderPassAttachment;
+            if (first_color_attachment.resolve_target != null) return error.InvalidRenderPassAttachment;
             if (descriptor.depth_attachment) |depth_attachment| {
                 switch (depth_attachment.target) {
                     .current_drawable => {},
@@ -239,34 +255,65 @@ pub const CommandBuffer = struct {
                 .extent = self.swapchain.extent,
                 .uses_current_drawable = true,
                 .sample_count = 1,
+                .color_layout_count = 0,
+                .resolve_layout_count = 0,
             };
         }
 
-        const color_view = switch (descriptor.color_attachment.target) {
+        var color_views: [core.default_max_color_attachments]*const VulkanTextureView = undefined;
+        var color_formats: [core.default_max_color_attachments]vk.Format = undefined;
+        var color_initial_layouts: [core.default_max_color_attachments]vk.ImageLayout = undefined;
+        var resolve_views: [core.default_max_color_attachments]?*const VulkanTextureView = undefined;
+        var resolve_initial_layouts: [core.default_max_color_attachments]vk.ImageLayout = undefined;
+        const color_view = switch (first_color_attachment.target) {
             .current_drawable => unreachable,
             .texture_view => |texture_view| texture_view,
         };
-        const resolve_view = descriptor.color_attachment.resolve_target;
-        if (color_view.sample_count != 1 and resolve_view == null) {
-            return error.InvalidRenderPassAttachment;
-        }
-        if (resolve_view) |view| {
-            if (color_view.sample_count == 1 or
-                view.sample_count != 1 or
-                view.format != color_view.format or
-                view.width != color_view.width or
-                view.height != color_view.height)
-            {
+        for (color_attachments, 0..) |attachment, i| {
+            const attachment_view = switch (attachment.target) {
+                .current_drawable => return error.InvalidRenderPassAttachment,
+                .texture_view => |texture_view| texture_view,
+            };
+            if (attachment_view.width != color_view.width or attachment_view.height != color_view.height) {
                 return error.InvalidRenderPassAttachment;
             }
+            if (attachment_view.sample_count != color_view.sample_count) {
+                return error.InvalidRenderPassAttachment;
+            }
+            const resolve_view = attachment.resolve_target;
+            if (attachment_view.sample_count != 1 and resolve_view == null) {
+                return error.InvalidRenderPassAttachment;
+            }
+            if (resolve_view) |view| {
+                if (attachment_view.sample_count == 1 or
+                    view.sample_count != 1 or
+                    view.format != attachment_view.format or
+                    view.width != attachment_view.width or
+                    view.height != attachment_view.height)
+                {
+                    return error.InvalidRenderPassAttachment;
+                }
+            }
+            color_views[i] = attachment_view;
+            color_formats[i] = VulkanTexture.imageFormat(attachment_view.format);
+            color_initial_layouts[i] = attachment_view.layout.*;
+            resolve_views[i] = resolve_view;
+            resolve_initial_layouts[i] = if (resolve_view) |view| view.layout.* else .undefined;
         }
+        const uses_resolve = color_view.sample_count != 1;
 
-        var attachments: [3]vk.ImageView = undefined;
-        attachments[0] = color_view.handle;
-        var attachment_count: u32 = 1;
-        if (resolve_view) |view| {
+        var attachments: [core.default_max_color_attachments * 2 + 1]vk.ImageView = undefined;
+        var attachment_count: u32 = 0;
+        for (color_views[0..color_attachments.len]) |view| {
             attachments[attachment_count] = view.handle;
             attachment_count += 1;
+        }
+        if (uses_resolve) {
+            for (resolve_views[0..color_attachments.len]) |maybe_view| {
+                const view = maybe_view orelse return error.InvalidRenderPassAttachment;
+                attachments[attachment_count] = view.handle;
+                attachment_count += 1;
+            }
         }
         var depth_format: ?vk.Format = null;
         if (descriptor.depth_attachment) |depth_attachment| {
@@ -287,11 +334,11 @@ pub const CommandBuffer = struct {
 
         self.temporary_render_pass = try createTextureRenderPass(
             self.gc,
-            VulkanTexture.imageFormat(color_view.format),
-            color_view.layout.*,
+            color_formats[0..color_attachments.len],
+            color_initial_layouts[0..color_attachments.len],
             color_view.sample_count,
-            resolve_view != null,
-            if (resolve_view) |view| view.layout.* else .undefined,
+            uses_resolve,
+            resolve_initial_layouts[0..color_attachments.len],
             descriptor.depth_attachment != null,
             depth_format,
             if (descriptor.depth_attachment) |depth_attachment| switch (depth_attachment.target) {
@@ -310,6 +357,19 @@ pub const CommandBuffer = struct {
             .layers = 1,
         }, null);
 
+        var color_layouts_out: [core.default_max_color_attachments]?*vk.ImageLayout = .{null} ** core.default_max_color_attachments;
+        var color_final_layouts_out: [core.default_max_color_attachments]vk.ImageLayout = .{.shader_read_only_optimal} ** core.default_max_color_attachments;
+        var resolve_layouts_out: [core.default_max_color_attachments]?*vk.ImageLayout = .{null} ** core.default_max_color_attachments;
+        for (color_views[0..color_attachments.len], 0..) |view, i| {
+            color_layouts_out[i] = view.layout;
+            color_final_layouts_out[i] = if (uses_resolve) .color_attachment_optimal else .shader_read_only_optimal;
+        }
+        if (uses_resolve) {
+            for (resolve_views[0..color_attachments.len], 0..) |maybe_view, i| {
+                resolve_layouts_out[i] = (maybe_view orelse return error.InvalidRenderPassAttachment).layout;
+            }
+        }
+
         return .{
             .render_pass = self.temporary_render_pass,
             .framebuffer = self.temporary_framebuffer,
@@ -317,8 +377,13 @@ pub const CommandBuffer = struct {
             .uses_current_drawable = false,
             .sample_count = color_view.sample_count,
             .color_layout = color_view.layout,
-            .color_final_layout = if (resolve_view != null) .color_attachment_optimal else .shader_read_only_optimal,
-            .resolve_layout = if (resolve_view) |view| view.layout else null,
+            .color_final_layout = if (uses_resolve) .color_attachment_optimal else .shader_read_only_optimal,
+            .color_layouts = color_layouts_out,
+            .color_final_layouts = color_final_layouts_out,
+            .color_layout_count = color_attachments.len,
+            .resolve_layout = if (uses_resolve) (resolve_views[0] orelse return error.InvalidRenderPassAttachment).layout else null,
+            .resolve_layouts = resolve_layouts_out,
+            .resolve_layout_count = if (uses_resolve) color_attachments.len else 0,
             .depth_layout = if (descriptor.depth_attachment) |depth_attachment| switch (depth_attachment.target) {
                 .current_drawable => null,
                 .texture_view => |depth_view| depth_view.layout,
@@ -346,51 +411,65 @@ const RenderPassSetup = struct {
     sample_count: u32,
     color_layout: ?*vk.ImageLayout = null,
     color_final_layout: vk.ImageLayout = .shader_read_only_optimal,
+    color_layouts: [core.default_max_color_attachments]?*vk.ImageLayout = .{null} ** core.default_max_color_attachments,
+    color_final_layouts: [core.default_max_color_attachments]vk.ImageLayout = .{.shader_read_only_optimal} ** core.default_max_color_attachments,
+    color_layout_count: usize = 0,
     resolve_layout: ?*vk.ImageLayout = null,
+    resolve_layouts: [core.default_max_color_attachments]?*vk.ImageLayout = .{null} ** core.default_max_color_attachments,
+    resolve_layout_count: usize = 0,
     depth_layout: ?*vk.ImageLayout = null,
 };
 
 fn createTextureRenderPass(
     gc: *const GraphicsContext,
-    color_format: vk.Format,
-    color_initial_layout: vk.ImageLayout,
+    color_formats: []const vk.Format,
+    color_initial_layouts: []const vk.ImageLayout,
     color_sample_count: u32,
     uses_resolve: bool,
-    resolve_initial_layout: vk.ImageLayout,
+    resolve_initial_layouts: []const vk.ImageLayout,
     uses_depth: bool,
     depth_format: ?vk.Format,
     depth_initial_layout: vk.ImageLayout,
 ) !vk.RenderPass {
-    var attachments: [3]vk.AttachmentDescription = undefined;
-    attachments[0] = .{
-        .format = color_format,
-        .samples = VulkanTexture.sampleCountFlags(color_sample_count),
-        .load_op = .clear,
-        .store_op = .store,
-        .stencil_load_op = .dont_care,
-        .stencil_store_op = .dont_care,
-        .initial_layout = color_initial_layout,
-        .final_layout = if (uses_resolve) .color_attachment_optimal else .shader_read_only_optimal,
-    };
-
-    var attachment_count: u32 = 1;
-    var resolve_attachment_ref: vk.AttachmentReference = undefined;
-    if (uses_resolve) {
+    var attachments: [core.default_max_color_attachments * 2 + 1]vk.AttachmentDescription = undefined;
+    var color_attachment_refs: [core.default_max_color_attachments]vk.AttachmentReference = undefined;
+    var resolve_attachment_refs: [core.default_max_color_attachments]vk.AttachmentReference = undefined;
+    var attachment_count: u32 = 0;
+    for (color_formats, color_initial_layouts, 0..) |color_format, color_initial_layout, i| {
         attachments[attachment_count] = .{
             .format = color_format,
-            .samples = .{ .@"1_bit" = true },
-            .load_op = .dont_care,
+            .samples = VulkanTexture.sampleCountFlags(color_sample_count),
+            .load_op = .clear,
             .store_op = .store,
             .stencil_load_op = .dont_care,
             .stencil_store_op = .dont_care,
-            .initial_layout = resolve_initial_layout,
-            .final_layout = .shader_read_only_optimal,
+            .initial_layout = color_initial_layout,
+            .final_layout = if (uses_resolve) .color_attachment_optimal else .shader_read_only_optimal,
         };
-        resolve_attachment_ref = .{
+        color_attachment_refs[i] = .{
             .attachment = attachment_count,
             .layout = .color_attachment_optimal,
         };
         attachment_count += 1;
+    }
+    if (uses_resolve) {
+        for (color_formats, resolve_initial_layouts, 0..) |color_format, resolve_initial_layout, i| {
+            attachments[attachment_count] = .{
+                .format = color_format,
+                .samples = .{ .@"1_bit" = true },
+                .load_op = .dont_care,
+                .store_op = .store,
+                .stencil_load_op = .dont_care,
+                .stencil_store_op = .dont_care,
+                .initial_layout = resolve_initial_layout,
+                .final_layout = .shader_read_only_optimal,
+            };
+            resolve_attachment_refs[i] = .{
+                .attachment = attachment_count,
+                .layout = .color_attachment_optimal,
+            };
+            attachment_count += 1;
+        }
     }
 
     var depth_attachment_ref: vk.AttachmentReference = undefined;
@@ -412,15 +491,13 @@ fn createTextureRenderPass(
         attachment_count += 1;
     }
 
-    const color_attachment_ref = vk.AttachmentReference{
-        .attachment = 0,
-        .layout = .color_attachment_optimal,
-    };
+    const color_attachment_ref_slice = color_attachment_refs[0..color_formats.len];
+    const resolve_attachment_ref_slice = resolve_attachment_refs[0..color_formats.len];
     const subpass = vk.SubpassDescription{
         .pipeline_bind_point = .graphics,
-        .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast(&color_attachment_ref),
-        .p_resolve_attachments = if (uses_resolve) @ptrCast(&resolve_attachment_ref) else null,
+        .color_attachment_count = @intCast(color_formats.len),
+        .p_color_attachments = color_attachment_ref_slice.ptr,
+        .p_resolve_attachments = if (uses_resolve) resolve_attachment_ref_slice.ptr else null,
         .p_depth_stencil_attachment = if (uses_depth) &depth_attachment_ref else null,
     };
 
@@ -438,7 +515,12 @@ pub const RenderCommandEncoder = struct {
     uses_depth_pass: bool,
     color_layout: ?*vk.ImageLayout = null,
     color_final_layout: vk.ImageLayout = .shader_read_only_optimal,
+    color_layouts: [core.default_max_color_attachments]?*vk.ImageLayout = .{null} ** core.default_max_color_attachments,
+    color_final_layouts: [core.default_max_color_attachments]vk.ImageLayout = .{.shader_read_only_optimal} ** core.default_max_color_attachments,
+    color_layout_count: usize = 0,
     resolve_layout: ?*vk.ImageLayout = null,
+    resolve_layouts: [core.default_max_color_attachments]?*vk.ImageLayout = .{null} ** core.default_max_color_attachments,
+    resolve_layout_count: usize = 0,
     depth_layout: ?*vk.ImageLayout = null,
     sample_count: u32 = 1,
     index_buffer: vk.Buffer = .null_handle,
@@ -635,6 +717,12 @@ pub const RenderCommandEncoder = struct {
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
         self.gc.dev.cmdEndRenderPass(self.cmdbuf);
+        for (self.color_layouts[0..self.color_layout_count], 0..) |maybe_layout, i| {
+            if (maybe_layout) |layout| layout.* = self.color_final_layouts[i];
+        }
+        for (self.resolve_layouts[0..self.resolve_layout_count]) |maybe_layout| {
+            if (maybe_layout) |layout| layout.* = .shader_read_only_optimal;
+        }
         if (self.color_layout) |layout| layout.* = self.color_final_layout;
         if (self.resolve_layout) |layout| layout.* = .shader_read_only_optimal;
         if (self.depth_layout) |layout| layout.* = .depth_stencil_attachment_optimal;

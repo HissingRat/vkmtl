@@ -37,8 +37,13 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
 
 pub const RenderPassDescriptor = struct {
     label: ?[]const u8 = null,
-    color_attachment: RenderPassColorAttachmentDescriptor,
+    color_attachments: [core.default_max_color_attachments]RenderPassColorAttachmentDescriptor,
+    color_attachment_count: usize,
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+
+    fn colorAttachmentSlice(self: *const RenderPassDescriptor) []const RenderPassColorAttachmentDescriptor {
+        return self.color_attachments[0..self.color_attachment_count];
+    }
 };
 
 pub const CommandBuffer = struct {
@@ -99,19 +104,16 @@ pub const CommandBuffer = struct {
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
     ) !RenderCommandEncoder {
-        const clear_color = descriptor.color_attachment.clear_color;
+        const color_attachments = makeRenderPassColorAttachments(descriptor.colorAttachmentSlice());
+        const color_attachment_slice = color_attachments[0..descriptor.color_attachment_count];
         const depth_attachment = descriptor.depth_attachment;
 
         var handle: ?*metal.vkmtl_metal_render_command_encoder = null;
         try check(metal.vkmtl_metal_render_command_encoder_create(
             self.owner.handle,
             self.handle,
-            clear_color.red,
-            clear_color.green,
-            clear_color.blue,
-            clear_color.alpha,
-            colorTextureViewHandle(descriptor.color_attachment.target),
-            resolveTextureViewHandle(descriptor.color_attachment.resolve_target),
+            color_attachment_slice.ptr,
+            color_attachment_slice.len,
             if (depth_attachment != null) 1 else 0,
             if (depth_attachment) |depth| depthTextureViewHandle(depth.target) else null,
             if (depth_attachment) |depth| depth.clear_depth else 1.0,
@@ -121,7 +123,7 @@ pub const CommandBuffer = struct {
         return .{
             .handle = handle orelse return Error.InvalidCommand,
             .uses_depth_pass = depth_attachment != null,
-            .sample_count = colorAttachmentSampleCount(descriptor.color_attachment),
+            .sample_count = colorAttachmentSampleCount(descriptor.colorAttachmentSlice()[0]),
         };
     }
 
@@ -753,6 +755,24 @@ fn primitiveType(primitive_type: core.PrimitiveTopology) c_uint {
         .line => 1,
         .point => 2,
     };
+}
+
+fn makeRenderPassColorAttachments(
+    descriptors: []const RenderPassColorAttachmentDescriptor,
+) [core.default_max_color_attachments]metal.vkmtl_metal_render_pass_color_attachment {
+    var out: [core.default_max_color_attachments]metal.vkmtl_metal_render_pass_color_attachment = undefined;
+    for (descriptors, 0..) |descriptor, i| {
+        const clear_color = descriptor.clear_color;
+        out[i] = .{
+            .texture_view = colorTextureViewHandle(descriptor.target),
+            .resolve_texture_view = resolveTextureViewHandle(descriptor.resolve_target),
+            .clear_red = clear_color.red,
+            .clear_green = clear_color.green,
+            .clear_blue = clear_color.blue,
+            .clear_alpha = clear_color.alpha,
+        };
+    }
+    return out;
 }
 
 fn colorTextureViewHandle(target: RenderPassColorAttachmentTarget) ?*metal.vkmtl_metal_texture_view {

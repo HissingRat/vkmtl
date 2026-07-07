@@ -172,6 +172,27 @@ typedef struct vkmtl_metal_vertex_attribute {
     unsigned int offset;
 } vkmtl_metal_vertex_attribute;
 
+typedef struct vkmtl_metal_render_pipeline_color_attachment {
+    vkmtl_metal_texture_format format;
+    unsigned int color_write_mask;
+    unsigned int blend_enabled;
+    vkmtl_metal_blend_factor source_rgb_blend_factor;
+    vkmtl_metal_blend_factor destination_rgb_blend_factor;
+    vkmtl_metal_blend_operation rgb_blend_operation;
+    vkmtl_metal_blend_factor source_alpha_blend_factor;
+    vkmtl_metal_blend_factor destination_alpha_blend_factor;
+    vkmtl_metal_blend_operation alpha_blend_operation;
+} vkmtl_metal_render_pipeline_color_attachment;
+
+typedef struct vkmtl_metal_render_pass_color_attachment {
+    vkmtl_metal_texture_view *texture_view;
+    vkmtl_metal_texture_view *resolve_texture_view;
+    float clear_red;
+    float clear_green;
+    float clear_blue;
+    float clear_alpha;
+} vkmtl_metal_render_pass_color_attachment;
+
 typedef struct vkmtl_metal_native_handles {
     void *device;
     void *command_queue;
@@ -371,15 +392,8 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_shader_module *fragment_shader,
     const char *fragment_entry,
     size_t fragment_entry_len,
-    vkmtl_metal_texture_format color_format,
-    unsigned int color_write_mask,
-    unsigned int blend_enabled,
-    vkmtl_metal_blend_factor source_rgb_blend_factor,
-    vkmtl_metal_blend_factor destination_rgb_blend_factor,
-    vkmtl_metal_blend_operation rgb_blend_operation,
-    vkmtl_metal_blend_factor source_alpha_blend_factor,
-    vkmtl_metal_blend_factor destination_alpha_blend_factor,
-    vkmtl_metal_blend_operation alpha_blend_operation,
+    const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
+    size_t color_attachment_count,
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
@@ -455,12 +469,8 @@ vkmtl_metal_status vkmtl_metal_command_buffer_commit(
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer *command_buffer,
-    float clear_red,
-    float clear_green,
-    float clear_blue,
-    float clear_alpha,
-    vkmtl_metal_texture_view *color_texture_view,
-    vkmtl_metal_texture_view *resolve_texture_view,
+    const vkmtl_metal_render_pass_color_attachment *color_attachments,
+    size_t color_attachment_count,
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,

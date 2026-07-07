@@ -1490,10 +1490,11 @@ pub const RenderPassDescriptor = struct {
 
     fn validateRuntime(self: RenderPassDescriptor, backend: core.Backend) !void {
         if (self.color_attachments.len == 0) return core.CommandEncodingError.MissingColorAttachment;
-        if (self.color_attachments.len != 1) return RuntimeError.UnsupportedMultipleRenderTargets;
+        if (self.color_attachments.len > core.default_max_color_attachments) return RuntimeError.UnsupportedMultipleRenderTargets;
         for (self.color_attachments) |attachment| {
             try attachment.validateRuntime(backend);
         }
+        try validateColorAttachmentCompatibility(self.color_attachments);
         if (self.depth_attachment) |depth_attachment| {
             try depth_attachment.validateRuntime(backend);
             try validateAttachmentExtents(self.color_attachments[0], depth_attachment);
@@ -1513,6 +1514,26 @@ pub const RenderPassDescriptor = struct {
         };
     }
 };
+
+fn validateColorAttachmentCompatibility(color_attachments: []const RenderPassColorAttachmentDescriptor) RuntimeError!void {
+    if (color_attachments.len <= 1) return;
+    const first_view = switch (color_attachments[0].target) {
+        .current_drawable => return RuntimeError.InvalidRenderPassAttachment,
+        .texture_view => |texture_view| texture_view,
+    };
+    for (color_attachments[1..]) |attachment| {
+        const view = switch (attachment.target) {
+            .current_drawable => return RuntimeError.InvalidRenderPassAttachment,
+            .texture_view => |texture_view| texture_view,
+        };
+        if (view.width() != first_view.width() or view.height() != first_view.height()) {
+            return RuntimeError.InvalidRenderPassAttachment;
+        }
+        if (view.sampleCount() != first_view.sampleCount()) {
+            return RuntimeError.InvalidRenderPassAttachment;
+        }
+    }
+}
 
 fn validateAttachmentExtents(
     color_attachment: RenderPassColorAttachmentDescriptor,
@@ -1557,15 +1578,20 @@ fn validateAttachmentSampleCounts(
 }
 
 fn vulkanRenderPassDescriptor(descriptor: RenderPassDescriptor) VulkanCommand.RenderPassDescriptor {
+    var color_attachments: [core.default_max_color_attachments]VulkanCommand.RenderPassColorAttachmentDescriptor = undefined;
+    for (descriptor.color_attachments, 0..) |attachment, i| {
+        color_attachments[i] = .{
+            .target = vulkanColorAttachmentTarget(attachment.target),
+            .resolve_target = vulkanResolveAttachmentTarget(attachment.resolve_target),
+            .load_action = attachment.load_action,
+            .store_action = attachment.store_action,
+            .clear_color = attachment.clear_color,
+        };
+    }
     return .{
         .label = descriptor.label,
-        .color_attachment = .{
-            .target = vulkanColorAttachmentTarget(descriptor.color_attachments[0].target),
-            .resolve_target = vulkanResolveAttachmentTarget(descriptor.color_attachments[0].resolve_target),
-            .load_action = descriptor.color_attachments[0].load_action,
-            .store_action = descriptor.color_attachments[0].store_action,
-            .clear_color = descriptor.color_attachments[0].clear_color,
-        },
+        .color_attachments = color_attachments,
+        .color_attachment_count = descriptor.color_attachments.len,
         .depth_attachment = if (descriptor.depth_attachment) |depth_attachment| .{
             .target = vulkanDepthAttachmentTarget(depth_attachment.target),
             .load_action = depth_attachment.load_action,
@@ -1594,15 +1620,20 @@ fn vulkanDepthAttachmentTarget(target: RenderPassDepthAttachmentTarget) VulkanCo
 }
 
 fn metalRenderPassDescriptor(descriptor: RenderPassDescriptor) MetalCommand.RenderPassDescriptor {
+    var color_attachments: [core.default_max_color_attachments]MetalCommand.RenderPassColorAttachmentDescriptor = undefined;
+    for (descriptor.color_attachments, 0..) |attachment, i| {
+        color_attachments[i] = .{
+            .target = metalColorAttachmentTarget(attachment.target),
+            .resolve_target = metalResolveAttachmentTarget(attachment.resolve_target),
+            .load_action = attachment.load_action,
+            .store_action = attachment.store_action,
+            .clear_color = attachment.clear_color,
+        };
+    }
     return .{
         .label = descriptor.label,
-        .color_attachment = .{
-            .target = metalColorAttachmentTarget(descriptor.color_attachments[0].target),
-            .resolve_target = metalResolveAttachmentTarget(descriptor.color_attachments[0].resolve_target),
-            .load_action = descriptor.color_attachments[0].load_action,
-            .store_action = descriptor.color_attachments[0].store_action,
-            .clear_color = descriptor.color_attachments[0].clear_color,
-        },
+        .color_attachments = color_attachments,
+        .color_attachment_count = descriptor.color_attachments.len,
         .depth_attachment = if (descriptor.depth_attachment) |depth_attachment| .{
             .target = metalDepthAttachmentTarget(depth_attachment.target),
             .load_action = depth_attachment.load_action,
@@ -4620,12 +4651,21 @@ test "runtime render pass descriptor accepts texture-backed color targets" {
         .height_value = 64,
         .impl = undefined,
     };
+    var second_color_view = color_view;
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
         .target = .{ .texture_view = &color_view },
     }};
 
     try (RenderPassDescriptor{
         .color_attachments = color_attachments[0..],
+    }).validateRuntime(.vulkan);
+
+    const mrt_attachments = [_]RenderPassColorAttachmentDescriptor{
+        .{ .target = .{ .texture_view = &color_view } },
+        .{ .target = .{ .texture_view = &second_color_view } },
+    };
+    try (RenderPassDescriptor{
+        .color_attachments = mrt_attachments[0..],
     }).validateRuntime(.vulkan);
 }
 
@@ -4650,7 +4690,7 @@ test "runtime render pass descriptor rejects invalid texture targets" {
     }).validateRuntime(.vulkan));
 
     const multiple_color_attachments = [_]RenderPassColorAttachmentDescriptor{ .{}, .{} };
-    try std.testing.expectError(RuntimeError.UnsupportedMultipleRenderTargets, (RenderPassDescriptor{
+    try std.testing.expectError(RuntimeError.InvalidRenderPassAttachment, (RenderPassDescriptor{
         .color_attachments = multiple_color_attachments[0..],
     }).validateRuntime(.vulkan));
 

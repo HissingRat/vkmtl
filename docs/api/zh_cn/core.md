@@ -212,8 +212,8 @@ Color attachment pipeline state 包含 write mask 和可选的
 `RenderPipelineBlendDescriptor`。Blend descriptor 分别描述 RGB / alpha 的 factor 和
 operation，每个 attachment 都可以有自己的 descriptor。非空 blend state 当前由
 `DeviceFeatures.blend_state` gate；每个 attachment 使用不同 blend descriptor 还需要
-`DeviceFeatures.independent_blend`。单 color attachment blend 已经下沉到 Vulkan 和 Metal；
-真正 independent blend 会跟 MRT lowering 一起补。
+`DeviceFeatures.independent_blend`。Blend state 和每个 attachment 独立 blend 已经跟
+MRT 路径一起下沉到 Vulkan 和 Metal。
 
 Depth/stencil state 包含 `depth_test_enabled`、depth compare/write 字段，以及带 front/back
 operation 和 read/write mask 的 `StencilDescriptor`。Depth state 和 combined
@@ -331,9 +331,10 @@ error。
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
-lowering 支持一个 color attachment；`transient` 目前作为 no-op 性能 hint 保留。Combined
-depth/stencil attachment 会通过 depth attachment 路径下沉；独立 stencil-only attachment
-和 MRT 路径仍会返回 typed unsupported error。
+lowering 支持 texture-backed MRT render pass；current drawable render pass 仍保持单个
+color attachment。`transient` 目前作为 no-op 性能 hint 保留。Combined depth/stencil
+attachment 会通过 depth attachment 路径下沉；独立 stencil-only attachment 仍会返回
+typed unsupported error。
 
 Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`、
 `StencilReference` 和 `DepthBiasDescriptor`。`RenderCommandEncoder` 暴露对应 setter。

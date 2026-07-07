@@ -353,15 +353,8 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_shader_module *fragment_shader,
     const char *fragment_entry,
     size_t fragment_entry_len,
-    vkmtl_metal_texture_format color_format,
-    unsigned int color_write_mask,
-    unsigned int blend_enabled,
-    vkmtl_metal_blend_factor source_rgb_blend_factor,
-    vkmtl_metal_blend_factor destination_rgb_blend_factor,
-    vkmtl_metal_blend_operation rgb_blend_operation,
-    vkmtl_metal_blend_factor source_alpha_blend_factor,
-    vkmtl_metal_blend_factor destination_alpha_blend_factor,
-    vkmtl_metal_blend_operation alpha_blend_operation,
+    const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
+    size_t color_attachment_count,
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
@@ -390,15 +383,8 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     (void)fragment_shader;
     (void)fragment_entry;
     (void)fragment_entry_len;
-    (void)color_format;
-    (void)color_write_mask;
-    (void)blend_enabled;
-    (void)source_rgb_blend_factor;
-    (void)destination_rgb_blend_factor;
-    (void)rgb_blend_operation;
-    (void)source_alpha_blend_factor;
-    (void)destination_alpha_blend_factor;
-    (void)alpha_blend_operation;
+    (void)color_attachments;
+    (void)color_attachment_count;
     (void)depth_format;
     (void)depth_compare_function;
     (void)depth_write_enabled;
@@ -481,12 +467,8 @@ vkmtl_metal_status vkmtl_metal_command_buffer_commit(
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer *command_buffer,
-    float clear_red,
-    float clear_green,
-    float clear_blue,
-    float clear_alpha,
-    vkmtl_metal_texture_view *color_texture_view,
-    vkmtl_metal_texture_view *resolve_texture_view,
+    const vkmtl_metal_render_pass_color_attachment *color_attachments,
+    size_t color_attachment_count,
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
@@ -494,12 +476,8 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
 ) {
     (void)owner;
     (void)command_buffer;
-    (void)clear_red;
-    (void)clear_green;
-    (void)clear_blue;
-    (void)clear_alpha;
-    (void)color_texture_view;
-    (void)resolve_texture_view;
+    (void)color_attachments;
+    (void)color_attachment_count;
     (void)use_depth;
     (void)depth_texture_view;
     (void)clear_depth;

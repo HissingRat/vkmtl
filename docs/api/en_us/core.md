@@ -248,8 +248,8 @@ Color attachment pipeline state includes write masks and optional
 alpha factors/operations, and each attachment may specify its own descriptor.
 Non-empty blend state is currently feature-gated by `DeviceFeatures.blend_state`;
 different per-attachment blend descriptors also require
-`DeviceFeatures.independent_blend`. Single color attachment blending now lowers
-to Vulkan and Metal; true independent blend will land with MRT lowering.
+`DeviceFeatures.independent_blend`. Blend state and independent per-attachment
+blend now lower to Vulkan and Metal with the MRT path.
 
 Depth/stencil state includes `depth_test_enabled`, depth compare/write fields,
 and a `StencilDescriptor` with front/back operations plus read/write masks.
@@ -399,10 +399,11 @@ Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also
 includes stencil attachments, transient attachment hints, and multiple color
-attachments. Current runtime lowering supports one color attachment; `transient`
-is currently preserved as a no-op performance hint. Combined depth/stencil
-attachments lower through the depth attachment path; separate stencil-only
-attachments and MRT paths still return typed unsupported errors.
+attachments. Texture-backed MRT render passes lower to Vulkan and Metal, while
+current-drawable render passes remain single-color. `transient` is currently
+preserved as a no-op performance hint. Combined depth/stencil attachments lower
+through the depth attachment path; separate stencil-only attachments still
+return typed unsupported errors.
 
 Dynamic render state descriptors include `Viewport`, `ScissorRect`,
 `BlendColor`, `StencilReference`, and `DepthBiasDescriptor`.

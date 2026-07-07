@@ -24,8 +24,10 @@ pub fn init(
     descriptor: core.RenderPipelineDescriptor,
 ) !VulkanRenderPipelineState {
     try descriptor.validate();
-    if (!gc.supportsSampleCount(descriptor.color_attachments[0].format, descriptor.sample_count)) {
-        return core.PipelineError.UnsupportedSampleCount;
+    for (descriptor.color_attachments) |attachment| {
+        if (!gc.supportsSampleCount(attachment.format, descriptor.sample_count)) {
+            return core.PipelineError.UnsupportedSampleCount;
+        }
     }
     if (descriptor.depth_stencil) |depth_stencil| {
         if (!gc.supportsSampleCount(depth_stencil.format, descriptor.sample_count)) {
@@ -213,37 +215,46 @@ fn createRenderPassForDescriptor(
     gc: *const GraphicsContext,
     descriptor: core.RenderPipelineDescriptor,
 ) !vk.RenderPass {
-    var attachments: [3]vk.AttachmentDescription = undefined;
-    attachments[0] = .{
-        .format = textureFormat(descriptor.color_attachments[0].format),
-        .samples = VulkanTexture.sampleCountFlags(descriptor.sample_count),
-        .load_op = .clear,
-        .store_op = .store,
-        .stencil_load_op = .dont_care,
-        .stencil_store_op = .dont_care,
-        .initial_layout = .undefined,
-        .final_layout = .color_attachment_optimal,
-    };
-
-    var attachment_count: u32 = 1;
-    var resolve_attachment_ref: vk.AttachmentReference = undefined;
+    var attachments: [core.default_max_color_attachments * 2 + 1]vk.AttachmentDescription = undefined;
+    var color_attachment_refs: [core.default_max_color_attachments]vk.AttachmentReference = undefined;
+    var resolve_attachment_refs: [core.default_max_color_attachments]vk.AttachmentReference = undefined;
+    var attachment_count: u32 = 0;
     const uses_resolve = descriptor.sample_count != 1;
-    if (uses_resolve) {
+    for (descriptor.color_attachments, 0..) |color_attachment, i| {
         attachments[attachment_count] = .{
-            .format = textureFormat(descriptor.color_attachments[0].format),
-            .samples = .{ .@"1_bit" = true },
-            .load_op = .dont_care,
+            .format = textureFormat(color_attachment.format),
+            .samples = VulkanTexture.sampleCountFlags(descriptor.sample_count),
+            .load_op = .clear,
             .store_op = .store,
             .stencil_load_op = .dont_care,
             .stencil_store_op = .dont_care,
             .initial_layout = .undefined,
             .final_layout = .color_attachment_optimal,
         };
-        resolve_attachment_ref = .{
+        color_attachment_refs[i] = .{
             .attachment = attachment_count,
             .layout = .color_attachment_optimal,
         };
         attachment_count += 1;
+    }
+    if (uses_resolve) {
+        for (descriptor.color_attachments, 0..) |color_attachment, i| {
+            attachments[attachment_count] = .{
+                .format = textureFormat(color_attachment.format),
+                .samples = .{ .@"1_bit" = true },
+                .load_op = .dont_care,
+                .store_op = .store,
+                .stencil_load_op = .dont_care,
+                .stencil_store_op = .dont_care,
+                .initial_layout = .undefined,
+                .final_layout = .color_attachment_optimal,
+            };
+            resolve_attachment_refs[i] = .{
+                .attachment = attachment_count,
+                .layout = .color_attachment_optimal,
+            };
+            attachment_count += 1;
+        }
     }
 
     var depth_attachment_ref: vk.AttachmentReference = undefined;
@@ -265,15 +276,13 @@ fn createRenderPassForDescriptor(
         attachment_count += 1;
     }
 
-    const color_attachment_ref = vk.AttachmentReference{
-        .attachment = 0,
-        .layout = .color_attachment_optimal,
-    };
+    const color_attachment_ref_slice = color_attachment_refs[0..descriptor.color_attachments.len];
+    const resolve_attachment_ref_slice = resolve_attachment_refs[0..descriptor.color_attachments.len];
     const subpass = vk.SubpassDescription{
         .pipeline_bind_point = .graphics,
-        .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast(&color_attachment_ref),
-        .p_resolve_attachments = if (uses_resolve) @ptrCast(&resolve_attachment_ref) else null,
+        .color_attachment_count = @intCast(descriptor.color_attachments.len),
+        .p_color_attachments = color_attachment_ref_slice.ptr,
+        .p_resolve_attachments = if (uses_resolve) resolve_attachment_ref_slice.ptr else null,
         .p_depth_stencil_attachment = if (descriptor.depth_stencil != null) &depth_attachment_ref else null,
     };
 

@@ -149,7 +149,7 @@ pub const DeviceFeatures = struct {
 pub const DeviceLimits = struct {
     max_vertex_buffer_slots: u32 = default_max_vertex_buffer_slots,
     max_bind_group_slots: u32 = default_max_bind_group_slots,
-    max_color_attachments: u32 = 4,
+    max_color_attachments: u32 = default_max_color_attachments,
     max_sample_count: u32 = 4,
     max_sampler_anisotropy: f32 = 1,
     min_uniform_buffer_offset_alignment: u64 = 256,
@@ -1467,6 +1467,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
 
     if (backend == .metal) {
         result.wireframe_fill_mode = true;
+        result.independent_blend = true;
         result.vertex_instance_step_rate = true;
     }
 
@@ -2343,6 +2344,7 @@ pub const RenderPipelineDescriptor = struct {
         try validateProgrammableStageReflection(self.vertex, .vertex, self.bind_group_layouts);
         if (self.fragment) |fragment| try validateProgrammableStageReflection(fragment, .fragment, self.bind_group_layouts);
         if (self.color_attachments.len == 0) return PipelineError.MissingColorAttachment;
+        if (self.color_attachments.len > default_max_color_attachments) return PipelineError.UnsupportedMultipleRenderTargets;
         try self.depth_bias.validate();
         try validateSampleCount(self.sample_count);
         for (self.color_attachments) |attachment| {
@@ -2465,6 +2467,7 @@ pub const PipelineError = error{
     UnsupportedBlendState,
     UnsupportedIndependentBlend,
     UnsupportedBlendFormat,
+    UnsupportedMultipleRenderTargets,
     InvalidStencilMask,
     UnsupportedStencilState,
     UnsupportedInstanceStepRate,
@@ -2656,6 +2659,7 @@ pub const RenderPassDescriptor = struct {
 
     pub fn validate(self: RenderPassDescriptor) CommandEncodingError!void {
         if (self.color_attachments.len == 0) return CommandEncodingError.MissingColorAttachment;
+        if (self.color_attachments.len > default_max_color_attachments) return CommandEncodingError.UnsupportedMultipleRenderTargets;
         if (self.depth_attachment) |depth_attachment| try depth_attachment.validate();
         if (self.stencil_attachment) |stencil_attachment| try stencil_attachment.validate();
     }
@@ -3555,6 +3559,7 @@ pub const CommandEncodingError = error{
     InvalidIndirectDrawStride,
     UnsupportedBaseVertex,
     UnsupportedBaseInstance,
+    UnsupportedMultipleRenderTargets,
     UnsupportedIndirectDraw,
     UnsupportedMultiDraw,
     UnsupportedCommandBufferPooling,
@@ -5195,6 +5200,7 @@ fn validateSampleCount(sample_count: u32) error{ InvalidSampleCount, Unsupported
 
 pub const default_max_vertex_buffer_slots: u32 = 31;
 pub const default_max_bind_group_slots: u32 = 16;
+pub const default_max_color_attachments: u32 = 4;
 const max_vertex_buffer_slots: u32 = default_max_vertex_buffer_slots;
 const max_bind_group_slots: u32 = default_max_bind_group_slots;
 
@@ -9514,6 +9520,7 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.depth_bias);
     try std.testing.expect(features.wireframe_fill_mode);
     try std.testing.expect(features.blend_state);
+    try std.testing.expect(features.independent_blend);
     try std.testing.expect(features.stencil_state);
     try std.testing.expect(features.vertex_instance_step_rate);
     try std.testing.expect(!features.heaps);

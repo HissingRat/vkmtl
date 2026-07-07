@@ -331,7 +331,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures
     var result = core.defaultDeviceFeatures(.vulkan);
 
     result.sampler_anisotropy = native_features.sampler_anisotropy;
-    result.independent_blend = false;
+    result.independent_blend = native_features.independent_blend;
     result.tessellation = false;
     result.wireframe_fill_mode = native_features.wireframe_fill_mode;
     result.vertex_instance_step_rate = native_features.vertex_instance_step_rate;
@@ -519,6 +519,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         .sampler_anisotropy = native_features.sampler_anisotropy,
         .fill_mode_non_solid = native_features.fill_mode_non_solid,
         .depth_bias_clamp = native_features.depth_bias_clamp,
+        .independent_blend = native_features.independent_blend,
     };
     var vertex_divisor_features = vk.PhysicalDeviceVertexAttributeDivisorFeaturesEXT{
         .vertex_attribute_instance_rate_divisor = if (enable_vertex_divisor) .true else .false,
@@ -729,6 +730,7 @@ test "Vulkan extension support maps optional backend capabilities" {
 test "Vulkan usable features stay conservative before backend lowering" {
     const native = core.DeviceFeatures{
         .wireframe_fill_mode = true,
+        .independent_blend = true,
         .vertex_instance_step_rate = true,
         .descriptor_indexing = true,
         .sparse_buffers = true,
@@ -743,6 +745,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     const usable = queryUsableFeatures(native);
     try std.testing.expect(!usable.descriptor_indexing);
     try std.testing.expect(usable.wireframe_fill_mode);
+    try std.testing.expect(usable.independent_blend);
     try std.testing.expect(usable.vertex_instance_step_rate);
     try std.testing.expect(!usable.sparse_buffers);
     try std.testing.expect(!usable.external_textures);
