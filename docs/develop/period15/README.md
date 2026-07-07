@@ -44,6 +44,7 @@ See `phase4.md`.
 ## Phase 5: Streaming Texture Example
 
 - Add an example that streams texture tiles or mip levels.
+- Provide a feature-gated `examples/streaming_texture` residency smoke path.
 
 See `phase5.md`.
 

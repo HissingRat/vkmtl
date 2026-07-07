@@ -466,6 +466,31 @@ pub fn build(b: *std.Build) void {
     const external_texture_step = b.step("run-external-texture", "Run the vkmtl external texture feature-gate example");
     external_texture_step.dependOn(&external_texture_cmd.step);
 
+    const streaming_texture = b.addExecutable(.{
+        .name = "vkmtl-streaming-texture",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/streaming_texture/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    streaming_texture.root_module.linkLibrary(glfw);
+    b.installArtifact(streaming_texture);
+
+    const streaming_texture_cmd = b.addRunArtifact(streaming_texture);
+    streaming_texture_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, streaming_texture_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, streaming_texture_cmd);
+
+    const streaming_texture_step = b.step("run-streaming-texture", "Run the vkmtl streaming texture feature-gate example");
+    streaming_texture_step.dependOn(&streaming_texture_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

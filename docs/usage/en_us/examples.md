@@ -398,3 +398,15 @@ Tracked cases include:
 
 Portable examples should keep using public vkmtl abstractions. If an example
 needs native access, it should be named and documented as a native interop case.
+
+## Streaming Texture
+
+`examples/streaming_texture` exercises the sparse/tiled texture descriptor and
+residency map path. It prints an unsupported-feature message until the selected
+backend exposes sparse or tiled textures.
+
+Run it with:
+
+```sh
+zig build run-streaming-texture
+```

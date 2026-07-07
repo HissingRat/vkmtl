@@ -974,11 +974,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 15 Phase 5 Checklist
 
-- [ ] Define streaming texture example scope before implementation.
-- [ ] Add `examples/streaming_texture`.
-- [ ] Stream visible tiles or mip levels.
-- [ ] Show missing tiles or unsupported fallback clearly.
-- [ ] Record backend requirements.
+- [x] Define streaming texture example scope before implementation.
+- [x] Add `examples/streaming_texture`.
+- [x] Validate a sparse/tiled texture tile residency path.
+- [x] Show unsupported fallback clearly.
+- [x] Record backend requirements.
 
 ## Period 15 Phase 6 Checklist
 

@@ -241,3 +241,14 @@ zig build run-external-texture
 
 Portable 示例应该继续使用公开 vkmtl abstraction。如果示例需要 native access，它应该被命名并记录为
 native interop case。
+
+## Streaming Texture
+
+`examples/streaming_texture` 会验证 sparse/tiled texture descriptor 和 residency map 路径。在所选
+backend 暴露 sparse 或 tiled texture 之前，它会打印 unsupported-feature 信息。
+
+运行：
+
+```sh
+zig build run-streaming-texture
+```

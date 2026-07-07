@@ -164,6 +164,13 @@ pub const examples = [_]ExampleEntry{
         .kind = .render,
         .backend_expectation = "external texture descriptor validation and wrapper feature gate",
     },
+    .{
+        .name = "streaming_texture",
+        .path = "examples/streaming_texture",
+        .run_step = "run-streaming-texture",
+        .kind = .render,
+        .backend_expectation = "sparse/tiled texture descriptor and residency feature gate",
+    },
 };
 
 pub fn validateExamples(entries: []const ExampleEntry) DevelopmentMatrixError!void {
@@ -617,7 +624,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 14), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 15), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {
