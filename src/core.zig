@@ -543,6 +543,33 @@ pub const QueueDescriptor = struct {
     }
 };
 
+pub const TransferBatchDescriptor = struct {
+    upload_bytes: u64 = 0,
+    readback_bytes: u64 = 0,
+    prefer_dedicated_transfer: bool = true,
+
+    pub fn validate(self: TransferBatchDescriptor) CommandEncodingError!void {
+        if (self.upload_bytes == 0 and self.readback_bytes == 0) return CommandEncodingError.InvalidCopySize;
+    }
+};
+
+pub const TransferBatchPlan = struct {
+    queue: QueueKind,
+    upload_bytes: u64,
+    readback_bytes: u64,
+
+    pub fn fromDescriptor(descriptor: TransferBatchDescriptor, features: DeviceFeatures, capabilities: QueueCapabilities) CommandEncodingError!TransferBatchPlan {
+        try descriptor.validate();
+        const can_use_transfer = capabilities.transfer and features.multi_queue and
+            (!descriptor.prefer_dedicated_transfer or features.dedicated_transfer_queue);
+        return .{
+            .queue = if (can_use_transfer) .transfer else .graphics,
+            .upload_bytes = descriptor.upload_bytes,
+            .readback_bytes = descriptor.readback_bytes,
+        };
+    }
+};
+
 pub const QueueOwnershipTransferDescriptor = struct {
     source: QueueKind,
     destination: QueueKind,
@@ -6069,6 +6096,18 @@ test "queue descriptors validate capabilities and gates" {
     try std.testing.expectError(CommandEncodingError.InvalidQueueCapability, (QueueDescriptor{
         .kind = .transfer,
     }).validate(.{}, .{ .transfer = false }));
+
+    const transfer_plan = try TransferBatchPlan.fromDescriptor(.{
+        .upload_bytes = 4096,
+        .readback_bytes = 2048,
+        .prefer_dedicated_transfer = true,
+    }, .{ .multi_queue = true, .dedicated_transfer_queue = true }, .{ .transfer = true });
+    try std.testing.expectEqual(QueueKind.transfer, transfer_plan.queue);
+    const graphics_plan = try TransferBatchPlan.fromDescriptor(.{
+        .upload_bytes = 4096,
+    }, .{}, .{ .transfer = true });
+    try std.testing.expectEqual(QueueKind.graphics, graphics_plan.queue);
+    try std.testing.expectError(CommandEncodingError.InvalidCopySize, (TransferBatchDescriptor{}).validate());
 
     try std.testing.expectError(CommandEncodingError.UnsupportedQueueOwnershipTransfer, (QueueOwnershipTransferDescriptor{
         .source = .graphics,

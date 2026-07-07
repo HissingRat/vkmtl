@@ -26,6 +26,7 @@ See `phase2.md`.
 ## Phase 3: Upload And Readback Queue Optimization
 
 - Improve staging, transfer, and readback scheduling.
+- Add transfer batch plans that choose graphics versus transfer queues.
 
 See `phase3.md`.
 

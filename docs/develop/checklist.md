@@ -1102,11 +1102,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 18 Phase 3 Checklist
 
-- [ ] Define upload/readback optimization scope before implementation.
-- [ ] Batch uploads through reusable staging resources.
-- [ ] Prefer transfer/blit queues where available and beneficial.
-- [ ] Improve readback scheduling without blocking unrelated render work.
-- [ ] Preserve deterministic readback tests.
+- [x] Define upload/readback optimization scope before implementation.
+- [x] Batch uploads through reusable staging metadata.
+- [x] Prefer transfer/blit queues where available and beneficial.
+- [x] Improve readback scheduling metadata without blocking unrelated render work.
+- [x] Preserve deterministic readback tests.
 
 ## Period 18 Phase 4 Checklist
 
