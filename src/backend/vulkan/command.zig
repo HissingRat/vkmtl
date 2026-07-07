@@ -886,10 +886,12 @@ pub const ComputeCommandEncoder = struct {
         try binding.validate();
         if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingComputePipelineState;
 
-        for (bind_group.entries) |entry| switch (entry.resource) {
-            .storage_texture => |texture_view| texture_view.transitionLayout(self.cmdbuf, .general),
-            else => {},
-        };
+        for (bind_group.entries) |entry| {
+            for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+                .storage_texture => |texture_view| texture_view.transitionLayout(self.cmdbuf, .general),
+                else => {},
+            };
+        }
         const dynamic_offsets = try bind_group.dynamicOffsets(binding);
         defer bind_group.allocator.free(dynamic_offsets);
 

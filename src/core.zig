@@ -1104,6 +1104,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ShaderReflectionMissingBindGroupLayout,
         error.ShaderReflectionMissingBinding,
         error.ShaderReflectionBindingKindMismatch,
+        error.ShaderReflectionBindingArrayCountMismatch,
         error.ShaderReflectionVisibilityMismatch,
         error.InvalidVertexStride,
         error.InvalidVertexAttributeOffset,
@@ -1172,6 +1173,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidStorageTextureVisibility,
         error.InvalidStorageAccess,
         error.InvalidBindingArrayCount,
+        error.InvalidBindGroupResourceCount,
         error.InvalidDynamicBindingResource,
         error.UnsupportedResourceArray,
         error.UnsupportedDynamicBinding,
@@ -2442,6 +2444,7 @@ pub const ShaderError = error{
     ShaderReflectionMissingBindGroupLayout,
     ShaderReflectionMissingBinding,
     ShaderReflectionBindingKindMismatch,
+    ShaderReflectionBindingArrayCountMismatch,
     ShaderReflectionVisibilityMismatch,
     UnexpectedShaderStage,
     UnsupportedShaderSpecialization,
@@ -2522,6 +2525,9 @@ pub fn validateShaderReflectionBinding(
     };
     if (layout_entry.resource != reflection.resource) {
         return ShaderError.ShaderReflectionBindingKindMismatch;
+    }
+    if (layout_entry.array_count != reflection.array_count) {
+        return ShaderError.ShaderReflectionBindingArrayCountMismatch;
     }
     if (!visibilityContains(layout_entry.visibility, reflection.visibility)) {
         return ShaderError.ShaderReflectionVisibilityMismatch;
@@ -5129,6 +5135,7 @@ pub const BindingError = error{
     InvalidStorageTextureVisibility,
     InvalidStorageAccess,
     InvalidBindingArrayCount,
+    InvalidBindGroupResourceCount,
     InvalidDynamicBindingResource,
     UnsupportedResourceArray,
     UnsupportedDynamicBinding,
@@ -7196,6 +7203,42 @@ test "render pipeline descriptor validates reflection against bind group layouts
             .resource = .sampler,
             .visibility = .{ .fragment = true },
         } } }},
+        .color_attachments = color_attachments[0..],
+    }).validate());
+
+    const reflected_array_bindings = [_]ShaderReflectionBinding{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .array_count = 2,
+        },
+        .{
+            .binding = 1,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+        },
+    };
+    const reflected_array_groups = [_]ShaderReflectionBindGroup{
+        .{ .index = 0, .bindings = reflected_array_bindings[0..] },
+    };
+    try std.testing.expectError(ShaderError.ShaderReflectionBindingArrayCountMismatch, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = vertex_module,
+            .stage = .vertex,
+            .entry_point = "vs_main",
+        },
+        .fragment = .{
+            .module = fragment_module,
+            .stage = .fragment,
+            .entry_point = "fs_main",
+            .reflection = .{ .data = .{
+                .stage = .fragment,
+                .entry_point = "fs_main",
+                .bind_groups = reflected_array_groups[0..],
+            } },
+        },
+        .bind_group_layouts = bind_group_layouts[0..],
         .color_attachments = color_attachments[0..],
     }).validate());
 

@@ -309,11 +309,31 @@ buffers, and storage textures are compute-only.
 
 Runtime bind group creation validates layout shape, resource class, backend
 match, whether referenced resources are alive, and whether storage resources
-satisfy the declared access intent. Current native lowering supports only
-single resources (`array_count = 1`) and rejects resource-array layouts with the
-typed `UnsupportedResourceArray` error until later backend lowering phases.
-Render and compute encoders expose `setBindGroup(...)` for debug-validated
-command recording.
+satisfy the declared access intent. Native lowering supports single resources
+and resource arrays for uniform buffers, storage buffers, sampled textures,
+storage textures, samplers, and compare samplers. A single binding uses
+`BindGroupEntry.resource`; an array binding sets `BindGroupEntry.resources` and
+must provide exactly `BindGroupLayoutEntry.array_count` resources:
+
+```zig
+const texture_resources = [_]vkmtl.BindGroupResource{
+    .{ .sampled_texture = &albedo_view },
+    .{ .sampled_texture = &normal_view },
+};
+const sampler_resources = [_]vkmtl.BindGroupResource{
+    .{ .sampler = &linear_sampler },
+    .{ .sampler = &nearest_sampler },
+};
+const entries = [_]vkmtl.BindGroupEntry{
+    .{ .binding = 0, .resource = texture_resources[0], .resources = texture_resources[0..] },
+    .{ .binding = 1, .resource = sampler_resources[0], .resources = sampler_resources[0..] },
+};
+```
+
+Dynamic buffer offsets and resource arrays are currently separate paths:
+`dynamic_offset = true` with `array_count > 1` remains rejected with
+`UnsupportedDynamicBinding`. Render and compute encoders expose
+`setBindGroup(...)` for debug-validated command recording.
 
 Storage resources can specify `BindGroupLayoutEntry.storage_access` as
 `.read`, `.write`, or `.read_write`. The metadata is valid only for storage

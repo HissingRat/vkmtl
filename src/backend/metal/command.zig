@@ -356,20 +356,24 @@ pub const ComputeCommandEncoder = struct {
             };
             if (!layout_entry.visibility.compute) continue;
 
-            switch (entry.resource) {
-                .uniform_buffer, .storage_buffer => |buffer_binding| try self.setBufferResource(
-                    buffer_binding,
-                    layout_entry.binding,
-                    dynamicOffsetForBinding(binding, layout_entry),
-                ),
-                .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
-                    texture_view,
-                    layout_entry.binding,
-                ),
-                .sampler, .compare_sampler => |sampler_state| try self.setSamplerResource(
-                    sampler_state,
-                    layout_entry.binding,
-                ),
+            if (entry.resourceCount() != layout_entry.array_count) return core.BindingError.InvalidBindGroupResourceCount;
+            for (0..entry.resourceCount()) |resource_index| {
+                const native_index: u32 = layout_entry.binding + @as(u32, @intCast(resource_index));
+                switch (entry.resourceAt(resource_index)) {
+                    .uniform_buffer, .storage_buffer => |buffer_binding| try self.setBufferResource(
+                        buffer_binding,
+                        native_index,
+                        dynamicOffsetForBinding(binding, layout_entry),
+                    ),
+                    .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
+                        texture_view,
+                        native_index,
+                    ),
+                    .sampler, .compare_sampler => |sampler_state| try self.setSamplerResource(
+                        sampler_state,
+                        native_index,
+                    ),
+                }
             }
         }
     }
@@ -539,23 +543,27 @@ pub const RenderCommandEncoder = struct {
                 return error.BindingResourceKindMismatch;
             };
 
-            switch (entry.resource) {
-                .uniform_buffer, .storage_buffer => |buffer_binding| try self.setBufferResource(
-                    buffer_binding,
-                    layout_entry.binding,
-                    layout_entry.visibility,
-                    dynamicOffsetForBinding(binding, layout_entry),
-                ),
-                .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
-                    texture_view,
-                    layout_entry.binding,
-                    layout_entry.visibility,
-                ),
-                .sampler, .compare_sampler => |sampler_state| try self.setSamplerResource(
-                    sampler_state,
-                    layout_entry.binding,
-                    layout_entry.visibility,
-                ),
+            if (entry.resourceCount() != layout_entry.array_count) return core.BindingError.InvalidBindGroupResourceCount;
+            for (0..entry.resourceCount()) |resource_index| {
+                const native_index: u32 = layout_entry.binding + @as(u32, @intCast(resource_index));
+                switch (entry.resourceAt(resource_index)) {
+                    .uniform_buffer, .storage_buffer => |buffer_binding| try self.setBufferResource(
+                        buffer_binding,
+                        native_index,
+                        layout_entry.visibility,
+                        dynamicOffsetForBinding(binding, layout_entry),
+                    ),
+                    .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
+                        texture_view,
+                        native_index,
+                        layout_entry.visibility,
+                    ),
+                    .sampler, .compare_sampler => |sampler_state| try self.setSamplerResource(
+                        sampler_state,
+                        native_index,
+                        layout_entry.visibility,
+                    ),
+                }
             }
         }
     }

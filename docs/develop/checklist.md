@@ -1250,6 +1250,15 @@ obvious render and binding blockers.
 - [x] Validate count, alignment, buffer binding class, and backend range.
 - [x] Update docs and tests.
 
+## Period 21 Phase 2 Checklist
+
+- [x] Define resource-array lowering scope before implementation.
+- [x] Add runtime resource-array binding shape without breaking single-resource entries.
+- [x] Lower Vulkan descriptor layout counts, descriptor pool counts, and descriptor writes.
+- [x] Lower Metal arrays to consecutive native resource slots.
+- [x] Validate layout/resource count mismatches and dynamic-buffer-array deferral.
+- [x] Update docs and tests.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

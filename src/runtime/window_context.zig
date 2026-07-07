@@ -1286,6 +1286,18 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
 pub const BindGroupEntry = struct {
     binding: u32,
     resource: BindGroupResource,
+    resources: []const BindGroupResource = &.{},
+
+    fn resourceCount(self: BindGroupEntry) u32 {
+        if (self.resources.len != 0) return @intCast(self.resources.len);
+        return 1;
+    }
+
+    fn resourceAt(self: BindGroupEntry, index: usize) BindGroupResource {
+        if (self.resources.len != 0) return self.resources[index];
+        std.debug.assert(index == 0);
+        return self.resource;
+    }
 };
 
 pub const BindGroupDescriptor = struct {
@@ -2958,26 +2970,26 @@ pub const Device = struct {
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| bind_group_impl: {
                 const vulkan_entries = try materializeVulkanBindGroupEntries(self.allocator, descriptor.entries);
-                defer self.allocator.free(vulkan_entries);
+                defer vulkan_entries.deinit(self.allocator);
 
                 break :bind_group_impl BindGroup.Impl{
                     .vulkan = try VulkanBindGroupBackend.VulkanBindGroup.init(
                         vulkan.gc,
                         self.allocator,
                         &descriptor.layout.impl.?.vulkan,
-                        vulkan_entries,
+                        vulkan_entries.entries,
                     ),
                 };
             },
             .metal => bind_group_impl: {
                 const metal_entries = try materializeMetalBindGroupEntries(self.allocator, descriptor.entries);
-                defer self.allocator.free(metal_entries);
+                defer metal_entries.deinit(self.allocator);
 
                 break :bind_group_impl BindGroup.Impl{
                     .metal = try MetalBindGroupBackend.MetalBindGroup.init(
                         self.allocator,
                         &descriptor.layout.impl.?.metal,
-                        metal_entries,
+                        metal_entries.entries,
                     ),
                 };
             },
@@ -3379,14 +3391,21 @@ fn materializeBindGroupEntries(
     errdefer allocator.free(entries);
 
     for (descriptor.entries, entries) |entry, *out| {
-        try entry.resource.validateRuntimeResource(backend);
         const layout_entry = layout_descriptor.entryForBinding(entry.binding) orelse {
             return core.BindingError.ExtraBindGroupEntry;
         };
-        try validateAndRecordStorageAccess(entry.resource, layout_entry);
+        if (entry.resourceCount() != layout_entry.array_count) return core.BindingError.InvalidBindGroupResourceCount;
+        for (0..entry.resourceCount()) |resource_index| {
+            const resource = entry.resourceAt(resource_index);
+            if (resource.resourceKind() != layout_entry.resource) {
+                return core.BindingError.BindingResourceKindMismatch;
+            }
+            try resource.validateRuntimeResource(backend);
+            try validateAndRecordStorageAccess(resource, layout_entry);
+        }
         out.* = .{
             .binding = entry.binding,
-            .resource = entry.resource.toCoreResource(),
+            .resource = entry.resourceAt(0).toCoreResource(),
         };
     }
 
@@ -3441,7 +3460,7 @@ fn validateAndRecordStorageAccess(
 
 fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor) core.BindingError!void {
     for (descriptor.entries) |entry| {
-        if (entry.array_count != 1) return core.BindingError.UnsupportedResourceArray;
+        if (entry.array_count > 1 and entry.dynamic_offset) return core.BindingError.UnsupportedDynamicBinding;
     }
 }
 
@@ -3521,90 +3540,152 @@ fn indirectDrawStride(stride: u32, default_stride: u64) u64 {
     return if (stride == 0) default_stride else stride;
 }
 
+const VulkanMaterializedBindGroupEntries = struct {
+    entries: []VulkanBindGroupBackend.VulkanBindGroup.Entry,
+    resources: []VulkanBindGroupBackend.VulkanBindGroup.Resource = &.{},
+
+    fn deinit(self: VulkanMaterializedBindGroupEntries, allocator: std.mem.Allocator) void {
+        allocator.free(self.resources);
+        allocator.free(self.entries);
+    }
+};
+
 fn materializeVulkanBindGroupEntries(
     allocator: std.mem.Allocator,
     entries: []const BindGroupEntry,
-) ![]VulkanBindGroupBackend.VulkanBindGroup.Entry {
+) !VulkanMaterializedBindGroupEntries {
     const vulkan_entries = try allocator.alloc(VulkanBindGroupBackend.VulkanBindGroup.Entry, entries.len);
+    errdefer allocator.free(vulkan_entries);
+    const resources = try allocator.alloc(VulkanBindGroupBackend.VulkanBindGroup.Resource, bindGroupArrayResourceCount(entries));
+    errdefer allocator.free(resources);
 
+    var resource_index: usize = 0;
     for (entries, vulkan_entries) |entry, *out| {
+        const resource = vulkanResourceForBindGroupResource(entry.resourceAt(0));
         out.* = .{
             .binding = entry.binding,
-            .resource = switch (entry.resource) {
-                .uniform_buffer => |binding| .{
-                    .uniform_buffer = .{
-                        .buffer = &binding.buffer.impl.vulkan,
-                        .offset = binding.offset,
-                        .size = binding.size,
-                    },
-                },
-                .storage_buffer => |binding| .{
-                    .storage_buffer = .{
-                        .buffer = &binding.buffer.impl.vulkan,
-                        .offset = binding.offset,
-                        .size = binding.size,
-                    },
-                },
-                .storage_texture => |texture_view| .{
-                    .storage_texture = &texture_view.impl.vulkan,
-                },
-                .sampled_texture => |texture_view| .{
-                    .sampled_texture = &texture_view.impl.vulkan,
-                },
-                .sampler => |sampler_state| .{
-                    .sampler = &sampler_state.impl.vulkan,
-                },
-                .compare_sampler => |sampler_state| .{
-                    .compare_sampler = &sampler_state.impl.vulkan,
-                },
-            },
+            .resource = resource,
         };
+        if (entry.resources.len == 0) continue;
+
+        const start = resource_index;
+        for (entry.resources) |array_resource| {
+            resources[resource_index] = vulkanResourceForBindGroupResource(array_resource);
+            resource_index += 1;
+        }
+        out.resources = resources[start..resource_index];
     }
 
-    return vulkan_entries;
+    return .{ .entries = vulkan_entries, .resources = resources };
 }
+
+fn vulkanResourceForBindGroupResource(resource: BindGroupResource) VulkanBindGroupBackend.VulkanBindGroup.Resource {
+    return switch (resource) {
+        .uniform_buffer => |binding| .{
+            .uniform_buffer = .{
+                .buffer = &binding.buffer.impl.vulkan,
+                .offset = binding.offset,
+                .size = binding.size,
+            },
+        },
+        .storage_buffer => |binding| .{
+            .storage_buffer = .{
+                .buffer = &binding.buffer.impl.vulkan,
+                .offset = binding.offset,
+                .size = binding.size,
+            },
+        },
+        .storage_texture => |texture_view| .{
+            .storage_texture = &texture_view.impl.vulkan,
+        },
+        .sampled_texture => |texture_view| .{
+            .sampled_texture = &texture_view.impl.vulkan,
+        },
+        .sampler => |sampler_state| .{
+            .sampler = &sampler_state.impl.vulkan,
+        },
+        .compare_sampler => |sampler_state| .{
+            .compare_sampler = &sampler_state.impl.vulkan,
+        },
+    };
+}
+
+const MetalMaterializedBindGroupEntries = struct {
+    entries: []MetalBindGroupBackend.MetalBindGroup.Entry,
+    resources: []MetalBindGroupBackend.MetalBindGroup.Resource = &.{},
+
+    fn deinit(self: MetalMaterializedBindGroupEntries, allocator: std.mem.Allocator) void {
+        allocator.free(self.resources);
+        allocator.free(self.entries);
+    }
+};
 
 fn materializeMetalBindGroupEntries(
     allocator: std.mem.Allocator,
     entries: []const BindGroupEntry,
-) ![]MetalBindGroupBackend.MetalBindGroup.Entry {
+) !MetalMaterializedBindGroupEntries {
     const metal_entries = try allocator.alloc(MetalBindGroupBackend.MetalBindGroup.Entry, entries.len);
+    errdefer allocator.free(metal_entries);
+    const resources = try allocator.alloc(MetalBindGroupBackend.MetalBindGroup.Resource, bindGroupArrayResourceCount(entries));
+    errdefer allocator.free(resources);
 
+    var resource_index: usize = 0;
     for (entries, metal_entries) |entry, *out| {
+        const resource = metalResourceForBindGroupResource(entry.resourceAt(0));
         out.* = .{
             .binding = entry.binding,
-            .resource = switch (entry.resource) {
-                .uniform_buffer => |binding| .{
-                    .uniform_buffer = .{
-                        .buffer = &binding.buffer.impl.metal,
-                        .offset = binding.offset,
-                        .size = binding.size,
-                    },
-                },
-                .storage_buffer => |binding| .{
-                    .storage_buffer = .{
-                        .buffer = &binding.buffer.impl.metal,
-                        .offset = binding.offset,
-                        .size = binding.size,
-                    },
-                },
-                .storage_texture => |texture_view| .{
-                    .storage_texture = &texture_view.impl.metal,
-                },
-                .sampled_texture => |texture_view| .{
-                    .sampled_texture = &texture_view.impl.metal,
-                },
-                .sampler => |sampler_state| .{
-                    .sampler = &sampler_state.impl.metal,
-                },
-                .compare_sampler => |sampler_state| .{
-                    .compare_sampler = &sampler_state.impl.metal,
-                },
-            },
+            .resource = resource,
         };
+        if (entry.resources.len == 0) continue;
+
+        const start = resource_index;
+        for (entry.resources) |array_resource| {
+            resources[resource_index] = metalResourceForBindGroupResource(array_resource);
+            resource_index += 1;
+        }
+        out.resources = resources[start..resource_index];
     }
 
-    return metal_entries;
+    return .{ .entries = metal_entries, .resources = resources };
+}
+
+fn metalResourceForBindGroupResource(resource: BindGroupResource) MetalBindGroupBackend.MetalBindGroup.Resource {
+    return switch (resource) {
+        .uniform_buffer => |binding| .{
+            .uniform_buffer = .{
+                .buffer = &binding.buffer.impl.metal,
+                .offset = binding.offset,
+                .size = binding.size,
+            },
+        },
+        .storage_buffer => |binding| .{
+            .storage_buffer = .{
+                .buffer = &binding.buffer.impl.metal,
+                .offset = binding.offset,
+                .size = binding.size,
+            },
+        },
+        .storage_texture => |texture_view| .{
+            .storage_texture = &texture_view.impl.metal,
+        },
+        .sampled_texture => |texture_view| .{
+            .sampled_texture = &texture_view.impl.metal,
+        },
+        .sampler => |sampler_state| .{
+            .sampler = &sampler_state.impl.metal,
+        },
+        .compare_sampler => |sampler_state| .{
+            .compare_sampler = &sampler_state.impl.metal,
+        },
+    };
+}
+
+fn bindGroupArrayResourceCount(entries: []const BindGroupEntry) usize {
+    var count: usize = 0;
+    for (entries) |entry| {
+        if (entry.resources.len != 0) count += entry.resources.len;
+    }
+    return count;
 }
 
 fn assertAlive(alive: bool, kind: ResourceKind) void {
@@ -4345,10 +4426,27 @@ test "runtime bind group materialization validates resources against layout" {
     };
     tracker.retain(.bind_group_layout);
     defer array_layout.deinit();
-    try std.testing.expectError(core.BindingError.UnsupportedResourceArray, materializeBindGroupEntries(allocator, .vulkan, .{
+    try std.testing.expectError(core.BindingError.InvalidBindGroupResourceCount, materializeBindGroupEntries(allocator, .vulkan, .{
         .layout = &array_layout,
-        .entries = entries[0..0],
+        .entries = &.{.{
+            .binding = 0,
+            .resource = .{ .sampler = &sampler },
+        }},
     }));
+    const sampler_array_resources = [_]BindGroupResource{
+        .{ .sampler = &sampler },
+        .{ .sampler = &sampler },
+    };
+    const materialized_array = try materializeBindGroupEntries(allocator, .vulkan, .{
+        .layout = &array_layout,
+        .entries = &.{.{
+            .binding = 0,
+            .resource = .{ .sampler = &sampler },
+            .resources = sampler_array_resources[0..],
+        }},
+    });
+    defer allocator.free(materialized_array);
+    try std.testing.expectEqual(core.BindingResourceKind.sampler, materialized_array[0].resource.resourceKind());
 
     const dynamic_layout_entries = [_]core.BindGroupLayoutEntry{
         .{

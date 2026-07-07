@@ -29,7 +29,7 @@ pub const VulkanBindGroupLayout = struct {
             binding.* = .{
                 .binding = entry.binding,
                 .descriptor_type = descriptorTypeForLayoutEntry(entry),
-                .descriptor_count = 1,
+                .descriptor_count = entry.array_count,
                 .stage_flags = shaderStageFlags(entry.visibility),
             };
         }
@@ -60,6 +60,7 @@ pub const VulkanBindGroup = struct {
     set: vk.DescriptorSet,
     layout_entries: []core.BindGroupLayoutEntry,
     entries: []Entry,
+    entry_resources: []Resource,
 
     pub const BufferBinding = struct {
         buffer: *const VulkanBuffer,
@@ -79,6 +80,18 @@ pub const VulkanBindGroup = struct {
     pub const Entry = struct {
         binding: u32,
         resource: Resource,
+        resources: []const Resource = &.{},
+
+        pub fn resourceCount(self: Entry) usize {
+            if (self.resources.len != 0) return self.resources.len;
+            return 1;
+        }
+
+        pub fn resourceAt(self: Entry, index: usize) Resource {
+            if (self.resources.len != 0) return self.resources[index];
+            std.debug.assert(index == 0);
+            return self.resource;
+        }
     };
 
     pub fn init(
@@ -102,8 +115,10 @@ pub const VulkanBindGroup = struct {
 
         const stored_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, layout.entries);
         errdefer allocator.free(stored_layout_entries);
-        const stored_entries = try allocator.dupe(Entry, entries);
+        const stored_entries = try allocator.alloc(Entry, entries.len);
         errdefer allocator.free(stored_entries);
+        const stored_entry_resources = try copyEntryResourceArrays(allocator, entries, stored_entries);
+        errdefer allocator.free(stored_entry_resources);
 
         return .{
             .gc = gc,
@@ -112,11 +127,13 @@ pub const VulkanBindGroup = struct {
             .set = set,
             .layout_entries = stored_layout_entries,
             .entries = stored_entries,
+            .entry_resources = stored_entry_resources,
         };
     }
 
     pub fn deinit(self: *VulkanBindGroup) void {
         self.gc.dev.destroyDescriptorPool(self.pool, null);
+        self.allocator.free(self.entry_resources);
         self.allocator.free(self.layout_entries);
         self.allocator.free(self.entries);
     }
@@ -156,6 +173,38 @@ pub const VulkanBindGroup = struct {
     }
 };
 
+fn copyEntryResourceArrays(
+    allocator: std.mem.Allocator,
+    source_entries: []const VulkanBindGroup.Entry,
+    stored_entries: []VulkanBindGroup.Entry,
+) ![]VulkanBindGroup.Resource {
+    var total_resource_count: usize = 0;
+    for (source_entries) |entry| {
+        if (entry.resources.len != 0) total_resource_count += entry.resources.len;
+    }
+
+    const resources = try allocator.alloc(VulkanBindGroup.Resource, total_resource_count);
+    errdefer allocator.free(resources);
+
+    var resource_index: usize = 0;
+    for (source_entries, stored_entries) |entry, *stored| {
+        stored.* = .{
+            .binding = entry.binding,
+            .resource = entry.resource,
+        };
+        if (entry.resources.len == 0) continue;
+
+        const start = resource_index;
+        for (entry.resources) |resource| {
+            resources[resource_index] = resource;
+            resource_index += 1;
+        }
+        stored.resources = resources[start..resource_index];
+    }
+
+    return resources;
+}
+
 fn createDescriptorPool(
     gc: *const GraphicsContext,
     layout_entries: []const core.BindGroupLayoutEntry,
@@ -171,14 +220,14 @@ fn createDescriptorPool(
     for (layout_entries) |entry| {
         switch (entry.resource) {
             .uniform_buffer => {
-                if (entry.dynamic_offset) dynamic_uniform_buffers += 1 else uniform_buffers += 1;
+                if (entry.dynamic_offset) dynamic_uniform_buffers += entry.array_count else uniform_buffers += entry.array_count;
             },
             .storage_buffer => {
-                if (entry.dynamic_offset) dynamic_storage_buffers += 1 else storage_buffers += 1;
+                if (entry.dynamic_offset) dynamic_storage_buffers += entry.array_count else storage_buffers += entry.array_count;
             },
-            .storage_texture => storage_textures += 1,
-            .sampled_texture => sampled_textures += 1,
-            .sampler, .compare_sampler => samplers += 1,
+            .storage_texture => storage_textures += entry.array_count,
+            .sampled_texture => sampled_textures += entry.array_count,
+            .sampler, .compare_sampler => samplers += entry.array_count,
         }
     }
 
@@ -250,63 +299,82 @@ fn updateDescriptorSet(
 ) !void {
     const writes = try allocator.alloc(vk.WriteDescriptorSet, entries.len);
     defer allocator.free(writes);
-    const buffer_infos = try allocator.alloc(vk.DescriptorBufferInfo, entries.len);
+    const total_resource_count = bindGroupResourceCount(entries);
+    const buffer_infos = try allocator.alloc(vk.DescriptorBufferInfo, total_resource_count);
     defer allocator.free(buffer_infos);
-    const image_infos = try allocator.alloc(vk.DescriptorImageInfo, entries.len);
+    const image_infos = try allocator.alloc(vk.DescriptorImageInfo, total_resource_count);
     defer allocator.free(image_infos);
 
+    var resource_info_index: usize = 0;
     for (entries, writes, 0..) |entry, *write, i| {
+        _ = i;
         const layout_entry = layoutEntryForBinding(layout_entries, entry.binding) orelse {
             return core.BindingError.ExtraBindGroupEntry;
         };
+        if (entry.resourceCount() != layout_entry.array_count) return core.BindingError.InvalidBindGroupResourceCount;
+        const first_info_index = resource_info_index;
         write.* = .{
             .dst_set = set,
             .dst_binding = entry.binding,
             .dst_array_element = 0,
-            .descriptor_count = 1,
+            .descriptor_count = @intCast(entry.resourceCount()),
             .descriptor_type = descriptorTypeForLayoutEntry(layout_entry),
             .p_image_info = undefined,
             .p_buffer_info = undefined,
             .p_texel_buffer_view = undefined,
         };
 
-        switch (entry.resource) {
-            .uniform_buffer, .storage_buffer => |binding| {
-                buffer_infos[i] = .{
-                    .buffer = binding.buffer.handle,
-                    .offset = binding.offset,
-                    .range = binding.size orelse vk.WHOLE_SIZE,
-                };
-                write.p_buffer_info = @ptrCast(&buffer_infos[i]);
+        for (0..entry.resourceCount()) |resource_index| {
+            switch (entry.resourceAt(resource_index)) {
+                .uniform_buffer, .storage_buffer => |binding| {
+                    buffer_infos[resource_info_index] = .{
+                        .buffer = binding.buffer.handle,
+                        .offset = binding.offset,
+                        .range = binding.size orelse vk.WHOLE_SIZE,
+                    };
+                },
+                .sampled_texture => |texture_view| {
+                    image_infos[resource_info_index] = .{
+                        .sampler = .null_handle,
+                        .image_view = texture_view.handle,
+                        .image_layout = .shader_read_only_optimal,
+                    };
+                },
+                .storage_texture => |texture_view| {
+                    image_infos[resource_info_index] = .{
+                        .sampler = .null_handle,
+                        .image_view = texture_view.handle,
+                        .image_layout = .general,
+                    };
+                },
+                .sampler, .compare_sampler => |sampler_state| {
+                    image_infos[resource_info_index] = .{
+                        .sampler = sampler_state.handle,
+                        .image_view = .null_handle,
+                        .image_layout = .undefined,
+                    };
+                },
+            }
+            resource_info_index += 1;
+        }
+
+        switch (layout_entry.resource) {
+            .uniform_buffer, .storage_buffer => {
+                write.p_buffer_info = @ptrCast(&buffer_infos[first_info_index]);
             },
-            .sampled_texture => |texture_view| {
-                image_infos[i] = .{
-                    .sampler = .null_handle,
-                    .image_view = texture_view.handle,
-                    .image_layout = .shader_read_only_optimal,
-                };
-                write.p_image_info = @ptrCast(&image_infos[i]);
-            },
-            .storage_texture => |texture_view| {
-                image_infos[i] = .{
-                    .sampler = .null_handle,
-                    .image_view = texture_view.handle,
-                    .image_layout = .general,
-                };
-                write.p_image_info = @ptrCast(&image_infos[i]);
-            },
-            .sampler, .compare_sampler => |sampler_state| {
-                image_infos[i] = .{
-                    .sampler = sampler_state.handle,
-                    .image_view = .null_handle,
-                    .image_layout = .undefined,
-                };
-                write.p_image_info = @ptrCast(&image_infos[i]);
+            .storage_texture, .sampled_texture, .sampler, .compare_sampler => {
+                write.p_image_info = @ptrCast(&image_infos[first_info_index]);
             },
         }
     }
 
     gc.dev.updateDescriptorSets(writes, null);
+}
+
+fn bindGroupResourceCount(entries: []const VulkanBindGroup.Entry) usize {
+    var count: usize = 0;
+    for (entries) |entry| count += entry.resourceCount();
+    return count;
 }
 
 fn descriptorTypeForKind(kind: core.BindingResourceKind) vk.DescriptorType {

@@ -15,3 +15,11 @@ Phase 2 supports array bindings for common resources.
 
 - Add layout/resource-count mismatch tests.
 - Add shader reflection tests for array resources.
+
+## Result
+
+- `BindGroupEntry.resources` carries runtime resource arrays while keeping the existing single-resource `resource` field.
+- Runtime validation checks that resource array count matches `BindGroupLayoutEntry.array_count`.
+- Vulkan lowers array counts to descriptor layout counts, descriptor pool counts, and descriptor writes.
+- Metal lowers arrays to consecutive native buffer, texture, and sampler slots.
+- Dynamic buffer arrays remain deferred until dynamic offsets can address individual array elements.

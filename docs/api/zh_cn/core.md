@@ -262,9 +262,28 @@ sampler 和 compare sampler。Layout entry 也包含 `array_count` 和 `dynamic_
 storage texture 只允许 compute visibility。
 
 Runtime bind group 创建会校验 layout shape、资源类别、后端是否匹配、资源是否还活着，
-以及 storage resource usage 是否满足访问意图。当前 native lowering 只支持单资源
-binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` 错误拒绝 resource
-array layout；后续 backend lowering 阶段再接上真正的数组支持。
+以及 storage resource usage 是否满足访问意图。Native lowering 支持单资源 binding，也支持
+uniform buffer、storage buffer、sampled texture、storage texture、sampler 和 compare sampler
+数组。单资源 binding 使用 `BindGroupEntry.resource`；数组 binding 使用
+`BindGroupEntry.resources`，数量必须正好等于 `BindGroupLayoutEntry.array_count`：
+
+```zig
+const texture_resources = [_]vkmtl.BindGroupResource{
+    .{ .sampled_texture = &albedo_view },
+    .{ .sampled_texture = &normal_view },
+};
+const sampler_resources = [_]vkmtl.BindGroupResource{
+    .{ .sampler = &linear_sampler },
+    .{ .sampler = &nearest_sampler },
+};
+const entries = [_]vkmtl.BindGroupEntry{
+    .{ .binding = 0, .resource = texture_resources[0], .resources = texture_resources[0..] },
+    .{ .binding = 1, .resource = sampler_resources[0], .resources = sampler_resources[0..] },
+};
+```
+
+Dynamic buffer offset 和 resource array 目前还是两条分开的路径：
+`dynamic_offset = true` 且 `array_count > 1` 会继续以 `UnsupportedDynamicBinding` 拒绝。
 
 Storage resource 可以在 `BindGroupLayoutEntry.storage_access` 上声明 `.read`、`.write` 或
 `.read_write`。这个 metadata 只允许用于 storage buffer 和 storage texture。Storage buffer 默认

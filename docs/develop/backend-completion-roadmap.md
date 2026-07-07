@@ -61,8 +61,8 @@ items.
 
 Tracked in `docs/develop/period21/`.
 
-- [ ] Dynamic buffer offsets in `setBindGroup(...)`.
-- [ ] Resource arrays for sampled textures, samplers, and buffers.
+- [x] Dynamic buffer offsets in `setBindGroup(...)`.
+- [x] Resource arrays for sampled textures, samplers, and buffers.
 - [ ] Descriptor indexing / argument buffer native lowering.
 - [ ] Immutable sampler and static sampler policy.
 - [ ] Small constants / root constants lowering.
