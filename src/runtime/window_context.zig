@@ -2421,6 +2421,10 @@ pub const Device = struct {
         try descriptor.validate(self.backend, self.features());
     }
 
+    pub fn validateExternalMemoryDescriptor(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.backend, self.features());
+    }
+
     pub fn validateExternalSemaphoreDescriptor(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.backend, self.features());
     }

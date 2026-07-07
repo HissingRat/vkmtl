@@ -187,6 +187,7 @@ pub const TextureUsage = core.TextureUsage;
 pub const TextureDescriptor = core.TextureDescriptor;
 pub const ExternalHandleKind = core.ExternalHandleKind;
 pub const ExternalHandleDescriptor = core.ExternalHandleDescriptor;
+pub const ExternalMemoryDescriptor = core.ExternalMemoryDescriptor;
 pub const ExternalTextureDescriptor = core.ExternalTextureDescriptor;
 pub const ExternalSemaphoreDescriptor = core.ExternalSemaphoreDescriptor;
 pub const TextureViewDescriptor = core.TextureViewDescriptor;

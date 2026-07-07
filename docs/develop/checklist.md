@@ -902,11 +902,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 14 Phase 2 Checklist
 
-- [ ] Define Vulkan external interop scope before implementation.
-- [ ] Detect external memory and semaphore handle types.
-- [ ] Import/export buffers and images through explicit descriptors.
-- [ ] Map external waits/signals into queue submission.
-- [ ] Add descriptor and backend smoke validation.
+- [x] Define Vulkan external interop scope before implementation.
+- [x] Detect external memory, image, and semaphore handle types.
+- [x] Add explicit external memory/image/semaphore descriptors.
+- [x] Keep external waits/signals behind semaphore validation gates.
+- [x] Add descriptor validation and keep backend smoke coverage gated.
 
 ## Period 14 Phase 3 Checklist
 

@@ -21,6 +21,7 @@ See `phase1.md`.
 
 - Import and export Vulkan external memory, images, and semaphores where
   supported.
+- Add validation shapes for Vulkan external memory/image/semaphore handle kinds.
 
 See `phase2.md`.
 

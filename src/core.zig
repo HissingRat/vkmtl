@@ -3352,10 +3352,30 @@ pub const TextureDescriptor = struct {
 pub const ExternalHandleKind = enum {
     opaque_fd,
     win32_handle,
+    vulkan_memory,
     iosurface,
     metal_texture,
     vulkan_image,
     vulkan_semaphore,
+
+    pub fn isVulkanSpecific(self: ExternalHandleKind) bool {
+        return switch (self) {
+            .vulkan_memory,
+            .vulkan_image,
+            .vulkan_semaphore,
+            => true,
+            else => false,
+        };
+    }
+
+    pub fn isMetalSpecific(self: ExternalHandleKind) bool {
+        return switch (self) {
+            .iosurface,
+            .metal_texture,
+            => true,
+            else => false,
+        };
+    }
 };
 
 pub const ExternalHandleDescriptor = struct {
@@ -3370,8 +3390,28 @@ pub const ExternalHandleDescriptor = struct {
         }
         switch (self.kind) {
             .iosurface, .metal_texture => if (selected_backend != .metal) return AdvancedFeatureError.ExternalHandleBackendMismatch,
-            .vulkan_image, .vulkan_semaphore => if (selected_backend != .vulkan) return AdvancedFeatureError.ExternalHandleBackendMismatch,
+            .vulkan_memory, .vulkan_image, .vulkan_semaphore => if (selected_backend != .vulkan) return AdvancedFeatureError.ExternalHandleBackendMismatch,
             .opaque_fd, .win32_handle => {},
+        }
+    }
+};
+
+pub const ExternalMemoryDescriptor = struct {
+    label: ?[]const u8 = null,
+    handle: ExternalHandleDescriptor,
+    size: u64,
+    dedicated: bool = false,
+
+    pub fn validate(
+        self: ExternalMemoryDescriptor,
+        selected_backend: Backend,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!void {
+        if (!features.external_memory) return AdvancedFeatureError.UnsupportedExternalMemory;
+        if (self.size == 0) return AdvancedFeatureError.InvalidExternalHandle;
+        try self.handle.validateForBackend(selected_backend);
+        if (selected_backend == .metal and self.handle.kind.isVulkanSpecific()) {
+            return AdvancedFeatureError.ExternalHandleBackendMismatch;
         }
     }
 };
@@ -7422,6 +7462,33 @@ test "texture descriptor validates and resolves mip ranges" {
 }
 
 test "external texture descriptors validate backend and feature gates" {
+    const vulkan_memory = ExternalMemoryDescriptor{
+        .handle = .{
+            .kind = .vulkan_memory,
+            .value = 1,
+            .backend = .vulkan,
+        },
+        .size = 4096,
+    };
+    try std.testing.expect(ExternalHandleKind.vulkan_memory.isVulkanSpecific());
+    try std.testing.expect(!ExternalHandleKind.opaque_fd.isVulkanSpecific());
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalMemory, vulkan_memory.validate(.vulkan, .{}));
+    try vulkan_memory.validate(.vulkan, .{ .external_memory = true });
+    try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, vulkan_memory.validate(.metal, .{ .external_memory = true }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidExternalHandle, (ExternalMemoryDescriptor{
+        .handle = .{ .kind = .opaque_fd, .value = 1 },
+        .size = 0,
+    }).validate(.vulkan, .{ .external_memory = true }));
+
+    const vulkan_image = ExternalTextureDescriptor{
+        .handle = .{ .kind = .vulkan_image, .value = 2 },
+        .format = .rgba8_unorm,
+        .width = 32,
+        .height = 32,
+    };
+    try vulkan_image.validate(.vulkan, .{ .external_textures = true });
+    try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, vulkan_image.validate(.metal, .{ .external_textures = true }));
+
     const metal_handle = ExternalHandleDescriptor{
         .kind = .iosurface,
         .value = 1,
