@@ -861,11 +861,12 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
         }
 
         if ([device respondsToSelector:@selector(supportsRaytracing)]) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            NSNumber *value = [device performSelector:@selector(supportsRaytracing)];
-#pragma clang diagnostic pop
-            out_capabilities->ray_tracing = [value boolValue] ? 1u : 0u;
+            BOOL (*supports_raytracing)(id, SEL) =
+                (BOOL (*)(id, SEL))[device methodForSelector:@selector(supportsRaytracing)];
+            if (supports_raytracing != NULL) {
+                out_capabilities->ray_tracing =
+                    supports_raytracing(device, @selector(supportsRaytracing)) ? 1u : 0u;
+            }
         }
 
         if ([device respondsToSelector:@selector(newBinaryArchiveWithDescriptor:error:)]) {
