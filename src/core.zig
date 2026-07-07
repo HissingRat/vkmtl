@@ -1425,6 +1425,21 @@ pub const ShaderStage = enum {
     vertex,
     fragment,
     compute,
+    tessellation_control,
+    tessellation_evaluation,
+    mesh,
+    task,
+
+    pub fn isAdvancedGeometry(self: ShaderStage) bool {
+        return switch (self) {
+            .tessellation_control,
+            .tessellation_evaluation,
+            .mesh,
+            .task,
+            => true,
+            else => false,
+        };
+    }
 };
 
 pub const ShaderCompileProfile = enum {
@@ -8136,6 +8151,19 @@ test "Metal mesh pipeline lowering maps task stage to object function metadata" 
     try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
     try std.testing.expectEqualStrings("object_main", lowering.object_entry_point.?);
     try std.testing.expectEqual(@as(u32, 16), lowering.object_threads_per_threadgroup);
+}
+
+test "advanced geometry shader stages are classified for Slang reflection" {
+    try std.testing.expect(ShaderStage.tessellation_control.isAdvancedGeometry());
+    try std.testing.expect(ShaderStage.tessellation_evaluation.isAdvancedGeometry());
+    try std.testing.expect(ShaderStage.mesh.isAdvancedGeometry());
+    try std.testing.expect(ShaderStage.task.isAdvancedGeometry());
+    try std.testing.expect(!ShaderStage.vertex.isAdvancedGeometry());
+
+    try validateShaderStageReflectionShape(.{
+        .stage = .mesh,
+        .entry_point = "mesh_main",
+    });
 }
 
 test "texture usage can detect empty usage" {

@@ -41,6 +41,8 @@ See `phase4.md`.
 ## Phase 5: Slang Entry / Reflection Alignment
 
 - Align Slang stages and reflection data for tessellation and mesh pipelines.
+- Extend `ShaderStage` and Slang profile mapping for tessellation control,
+  tessellation evaluation, mesh, and task stages.
 
 See `phase5.md`.
 

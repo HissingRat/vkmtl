@@ -92,7 +92,12 @@ pub const CompiledRenderShader = struct {
                 .path = switch (stage) {
                     .vertex => self.vertex_spirv_path,
                     .fragment => self.fragment_spirv_path,
-                    .compute => unreachable,
+                    .compute,
+                    .tessellation_control,
+                    .tessellation_evaluation,
+                    .mesh,
+                    .task,
+                    => unreachable,
                 },
                 .language = .spirv,
             } },
@@ -100,7 +105,12 @@ pub const CompiledRenderShader = struct {
                 .path = switch (stage) {
                     .vertex => self.vertex_msl_path,
                     .fragment => self.fragment_msl_path,
-                    .compute => unreachable,
+                    .compute,
+                    .tessellation_control,
+                    .tessellation_evaluation,
+                    .mesh,
+                    .task,
+                    => unreachable,
                 },
                 .language = .msl,
             } },
@@ -268,6 +278,10 @@ fn runSlang(
         .vertex => "vs_6_0",
         .fragment => "ps_6_0",
         .compute => "cs_6_0",
+        .tessellation_control => "hs_6_0",
+        .tessellation_evaluation => "ds_6_0",
+        .mesh => "ms_6_5",
+        .task => "as_6_5",
     };
     const target_name = switch (target) {
         .spirv => "spirv",
@@ -811,6 +825,10 @@ fn stageName(stage: core.ShaderStage) []const u8 {
         .vertex => "vertex",
         .fragment => "fragment",
         .compute => "compute",
+        .tessellation_control => "tessellation_control",
+        .tessellation_evaluation => "tessellation_evaluation",
+        .mesh => "mesh",
+        .task => "task",
     };
 }
 

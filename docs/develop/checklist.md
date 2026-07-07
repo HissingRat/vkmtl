@@ -1022,11 +1022,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 16 Phase 5 Checklist
 
-- [ ] Define Slang advanced geometry scope before implementation.
-- [ ] Add Slang metadata for tessellation, mesh, and task stages.
-- [ ] Include advanced geometry stages in cache keys.
-- [ ] Validate reflection output against pipeline descriptors.
-- [ ] Add reflection fixture tests.
+- [x] Define Slang advanced geometry scope before implementation.
+- [x] Add Slang metadata for tessellation, mesh, and task stages.
+- [x] Include advanced geometry stages in shader profile/name mapping.
+- [x] Validate reflection output shape for advanced stages.
+- [x] Add reflection fixture tests.
 
 ## Period 16 Phase 6 Checklist
 
