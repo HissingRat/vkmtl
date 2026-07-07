@@ -11,6 +11,8 @@ const MetalRenderPipelineState = @This();
 handle: *metal.vkmtl_metal_render_pipeline_state,
 uses_depth: bool,
 sample_count: u32,
+fill_mode: metal.vkmtl_metal_triangle_fill_mode,
+depth_bias: core.DepthBiasDescriptor,
 
 const Error = error{
     MetalUnsupported,
@@ -76,6 +78,8 @@ pub fn init(
         .handle = handle orelse return Error.InvalidPipeline,
         .uses_depth = descriptor.depth_stencil != null,
         .sample_count = descriptor.sample_count,
+        .fill_mode = triangleFillMode(descriptor.fill_mode),
+        .depth_bias = descriptor.depth_bias,
     };
 }
 
@@ -144,6 +148,13 @@ fn vertexStepFunction(step: core.VertexStepFunction) metal.vkmtl_metal_vertex_st
     return switch (step) {
         .per_vertex => metal.VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_VERTEX,
         .per_instance => metal.VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_INSTANCE,
+    };
+}
+
+fn triangleFillMode(fill_mode: core.TriangleFillMode) metal.vkmtl_metal_triangle_fill_mode {
+    return switch (fill_mode) {
+        .fill => metal.VKMTL_METAL_TRIANGLE_FILL_MODE_FILL,
+        .lines => metal.VKMTL_METAL_TRIANGLE_FILL_MODE_LINES,
     };
 }
 

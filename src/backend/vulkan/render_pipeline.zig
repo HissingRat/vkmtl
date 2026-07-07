@@ -16,6 +16,7 @@ bind_group_layouts: []VulkanBindGroupLayout,
 render_pass: vk.RenderPass,
 uses_depth: bool,
 sample_count: u32,
+depth_bias: core.DepthBiasDescriptor,
 
 pub fn init(
     gc: *const GraphicsContext,
@@ -95,13 +96,13 @@ pub fn init(
     const rasterization = vk.PipelineRasterizationStateCreateInfo{
         .depth_clamp_enable = .false,
         .rasterizer_discard_enable = .false,
-        .polygon_mode = .fill,
+        .polygon_mode = polygonMode(descriptor.fill_mode),
         .cull_mode = cullMode(descriptor.cull_mode),
         .front_face = frontFace(descriptor.front_facing_winding),
-        .depth_bias_enable = .false,
-        .depth_bias_constant_factor = 0,
-        .depth_bias_clamp = 0,
-        .depth_bias_slope_factor = 0,
+        .depth_bias_enable = if (descriptor.depth_bias.enabled) .true else .false,
+        .depth_bias_constant_factor = descriptor.depth_bias.constant,
+        .depth_bias_clamp = descriptor.depth_bias.clamp,
+        .depth_bias_slope_factor = descriptor.depth_bias.slope,
         .line_width = 1,
     };
 
@@ -186,6 +187,7 @@ pub fn init(
         .render_pass = render_pass,
         .uses_depth = descriptor.depth_stencil != null,
         .sample_count = descriptor.sample_count,
+        .depth_bias = descriptor.depth_bias,
     };
 }
 
@@ -447,6 +449,13 @@ fn frontFace(winding: core.Winding) vk.FrontFace {
     return switch (winding) {
         .clockwise => .clockwise,
         .counter_clockwise => .counter_clockwise,
+    };
+}
+
+fn polygonMode(fill_mode: core.TriangleFillMode) vk.PolygonMode {
+    return switch (fill_mode) {
+        .fill => .fill,
+        .lines => .line,
     };
 }
 

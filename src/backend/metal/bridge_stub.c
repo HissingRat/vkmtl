@@ -500,6 +500,15 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_pipeline(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_triangle_fill_mode fill_mode
+) {
+    (void)encoder;
+    (void)fill_mode;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_buffer(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_buffer *buffer,

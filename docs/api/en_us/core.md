@@ -237,9 +237,11 @@ instead of ignoring it.
 
 Render pipeline raster state includes cull mode, front face, fill mode, depth
 bias, and a conservative-rasterization flag. Cull mode and front face are part
-of the existing lowered path. Non-default fill mode, enabled depth bias, and
-conservative rasterization are feature-gated and currently rejected with typed
-unsupported errors during runtime pipeline creation.
+of the existing lowered path. Depth bias now lowers through pipeline binding and
+dynamic encoder commands. Wireframe / line fill mode lowers on Metal and on
+Vulkan devices that expose `wireframe_fill_mode`. Conservative rasterization
+remains capability-gated and is rejected with a typed unsupported error until a
+native mapping is added.
 
 Color attachment pipeline state includes write masks and optional
 `RenderPipelineBlendDescriptor` values. Blend descriptors carry separate RGB and

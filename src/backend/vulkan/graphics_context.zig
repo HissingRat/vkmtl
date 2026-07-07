@@ -332,7 +332,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures
     result.sampler_anisotropy = native_features.sampler_anisotropy;
     result.independent_blend = false;
     result.tessellation = false;
-    result.wireframe_fill_mode = false;
+    result.wireframe_fill_mode = native_features.wireframe_fill_mode;
     result.multi_draw = false;
     result.pipeline_statistics_queries = false;
     result.sparse_buffers = false;
@@ -465,6 +465,12 @@ fn createSurface(instance: Instance, surface_provider: core.VulkanSurfaceProvide
 
 fn initializeCandidate(instance: Instance, candidate: DeviceCandidate) !vk.Device {
     const priority = [_]f32{1};
+    const native_features = instance.getPhysicalDeviceFeatures(candidate.pdev);
+    const enabled_features = vk.PhysicalDeviceFeatures{
+        .sampler_anisotropy = native_features.sampler_anisotropy,
+        .fill_mode_non_solid = native_features.fill_mode_non_solid,
+        .depth_bias_clamp = native_features.depth_bias_clamp,
+    };
     const qci = [_]vk.DeviceQueueCreateInfo{
         .{
             .queue_family_index = candidate.queues.graphics_family,
@@ -484,6 +490,7 @@ fn initializeCandidate(instance: Instance, candidate: DeviceCandidate) !vk.Devic
         .p_queue_create_infos = &qci,
         .enabled_extension_count = required_device_extensions.len,
         .pp_enabled_extension_names = @ptrCast(&required_device_extensions),
+        .p_enabled_features = &enabled_features,
     }, null);
 }
 
@@ -662,6 +669,7 @@ test "Vulkan extension support maps optional backend capabilities" {
 
 test "Vulkan usable features stay conservative before backend lowering" {
     const native = core.DeviceFeatures{
+        .wireframe_fill_mode = true,
         .descriptor_indexing = true,
         .sparse_buffers = true,
         .external_textures = true,
@@ -674,6 +682,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     };
     const usable = queryUsableFeatures(native);
     try std.testing.expect(!usable.descriptor_indexing);
+    try std.testing.expect(usable.wireframe_fill_mode);
     try std.testing.expect(!usable.sparse_buffers);
     try std.testing.expect(!usable.external_textures);
     try std.testing.expect(!usable.tessellation);

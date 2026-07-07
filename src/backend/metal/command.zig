@@ -489,6 +489,13 @@ pub const RenderCommandEncoder = struct {
             self.handle,
             pipeline.handle,
         ));
+        try check(metal.vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
+            self.handle,
+            pipeline.fill_mode,
+        ));
+        if (pipeline.depth_bias.enabled) {
+            try self.setDepthBias(pipeline.depth_bias);
+        }
     }
 
     pub fn setVertexBuffer(

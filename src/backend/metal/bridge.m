@@ -641,6 +641,16 @@ static MTLVertexStepFunction vkmtl_vertex_step_function(vkmtl_metal_vertex_step_
     }
 }
 
+static MTLTriangleFillMode vkmtl_triangle_fill_mode(vkmtl_metal_triangle_fill_mode fill_mode) {
+    switch (fill_mode) {
+        case VKMTL_METAL_TRIANGLE_FILL_MODE_LINES:
+            return MTLTriangleFillModeLines;
+        case VKMTL_METAL_TRIANGLE_FILL_MODE_FILL:
+        default:
+            return MTLTriangleFillModeFill;
+    }
+}
+
 static MTLBlendFactor vkmtl_blend_factor(vkmtl_metal_blend_factor factor) {
     switch (factor) {
         case VKMTL_METAL_BLEND_FACTOR_ZERO:
@@ -2012,6 +2022,20 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_pipeline(
         if (pipeline->depth_stencil != nil) {
             [encoder->encoder setDepthStencilState:pipeline->depth_stencil];
         }
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_triangle_fill_mode fill_mode
+) {
+    if (encoder == NULL || encoder->encoder == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setTriangleFillMode:vkmtl_triangle_fill_mode(fill_mode)];
         return VKMTL_METAL_STATUS_OK;
     }
 }

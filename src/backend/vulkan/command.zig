@@ -465,6 +465,14 @@ pub const RenderCommandEncoder = struct {
         if (pipeline.uses_depth != self.uses_depth_pass) return core.CommandEncodingError.DepthStateRenderPassMismatch;
         if (pipeline.sample_count != self.sample_count) return core.CommandEncodingError.SampleCountRenderPassMismatch;
         self.gc.dev.cmdBindPipeline(self.cmdbuf, .graphics, pipeline.handle);
+        if (pipeline.depth_bias.enabled) {
+            self.gc.dev.cmdSetDepthBias(
+                self.cmdbuf,
+                pipeline.depth_bias.constant,
+                pipeline.depth_bias.clamp,
+                pipeline.depth_bias.slope,
+            );
+        }
         self.pipeline_layout = pipeline.layout;
     }
 

@@ -203,8 +203,10 @@ runtime pipeline 创建会用 `UnsupportedShaderSpecialization` 拒绝非空 spe
 
 Render pipeline raster state 包含 cull mode、front face、fill mode、depth bias 和
 conservative-rasterization flag。Cull mode 和 front face 已在现有 lowering 路径里。
-非默认 fill mode、启用的 depth bias 和 conservative rasterization 会由 feature gate 控制，
-当前 runtime pipeline 创建会用 typed unsupported error 拒绝。
+Depth bias 现在会在 pipeline bind 和 dynamic encoder command 两条路径下沉。
+Wireframe / line fill mode 会在 Metal 以及暴露 `wireframe_fill_mode` 的 Vulkan
+设备上下沉。Conservative rasterization 仍保持 capability-gated，在接上 native mapping
+之前会用 typed unsupported error 拒绝。
 
 Color attachment pipeline state 包含 write mask 和可选的
 `RenderPipelineBlendDescriptor`。Blend descriptor 分别描述 RGB / alpha 的 factor 和

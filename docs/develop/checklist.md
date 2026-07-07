@@ -1202,11 +1202,11 @@ obvious render and binding blockers.
 
 ## Period 20 Phase 2 Checklist
 
-- [ ] Define raster/depth-bias backend lowering scope before implementation.
-- [ ] Lower pipeline depth-bias state to Vulkan and Metal.
-- [ ] Lower wireframe / line fill mode where supported.
-- [ ] Keep conservative rasterization capability-gated.
-- [ ] Update tests and docs with backend-specific limits.
+- [x] Define raster/depth-bias backend lowering scope before implementation.
+- [x] Lower pipeline depth-bias state to Vulkan and Metal.
+- [x] Lower wireframe / line fill mode where supported.
+- [x] Keep conservative rasterization capability-gated.
+- [x] Update tests and docs with backend-specific limits.
 
 ## First Backend-Independent Triangle Checklist
 

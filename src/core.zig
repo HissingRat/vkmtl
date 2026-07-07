@@ -1449,18 +1449,25 @@ pub fn enumerateAdapters(
     };
 }
 
-pub fn defaultDeviceFeatures(_: Backend) DeviceFeatures {
-    return .{
+pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
+    var result = DeviceFeatures{
         .native_handles = true,
         .debug_labels = true,
         .sampler_compare = true,
         .sampler_anisotropy = true,
+        .depth_bias = true,
         .blend_state = true,
         .draw_base_vertex = true,
         .draw_base_instance = true,
         .indirect_draw = true,
         .compute_dispatch_indirect = true,
     };
+
+    if (backend == .metal) {
+        result.wireframe_fill_mode = true;
+    }
+
+    return result;
 }
 
 pub fn defaultDeviceLimits(_: Backend) DeviceLimits {
@@ -9461,6 +9468,8 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.sampler_compare);
     try std.testing.expect(features.sampler_anisotropy);
     try std.testing.expect(!features.sampler_border_color);
+    try std.testing.expect(features.depth_bias);
+    try std.testing.expect(features.wireframe_fill_mode);
     try std.testing.expect(features.blend_state);
     try std.testing.expect(!features.heaps);
     try std.testing.expect(!features.multi_surface);
