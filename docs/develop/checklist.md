@@ -846,11 +846,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 13 Phase 1 Checklist
 
-- [ ] Define device-owned surface registry scope before implementation.
-- [ ] Decide the owner of surface registry state.
-- [ ] Track surface handles, labels, native handles, and lifecycle state.
-- [ ] Validate stale handles and duplicate destruction.
-- [ ] Document multi-surface ownership.
+- [x] Define device-owned surface registry scope before implementation.
+- [x] Decide the owner of surface registry state.
+- [x] Track surface handles, labels, providers, and lifecycle state.
+- [x] Validate stale handles and duplicate destruction.
+- [x] Document multi-surface ownership.
 
 ## Period 13 Phase 2 Checklist
 

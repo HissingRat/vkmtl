@@ -4949,6 +4949,15 @@ pub const SurfaceHandle = struct {
     generation: u32,
 };
 
+pub const SurfaceInfo = struct {
+    handle: SurfaceHandle,
+    backend: Backend,
+    label: ?[]const u8 = null,
+    provider: SurfaceProvider,
+    state: SurfaceState,
+    presentation: ?PresentationDescriptor = null,
+};
+
 pub const SurfaceCollection = struct {
     allocator: std.mem.Allocator,
     backend: Backend,
@@ -5010,6 +5019,24 @@ pub const SurfaceCollection = struct {
 
     pub fn get(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!*Surface {
         return &(try self.entryPtr(handle)).surface;
+    }
+
+    pub fn info(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!SurfaceInfo {
+        const surface = try self.get(handle);
+        return .{
+            .handle = handle,
+            .backend = surface.backend,
+            .label = surface.descriptor.label,
+            .provider = surface.provider(),
+            .state = surface.state,
+            .presentation = surface.presentation,
+        };
+    }
+
+    pub fn contains(self: SurfaceCollection, handle: SurfaceHandle) bool {
+        if (handle.index >= self.entries.items.len) return false;
+        const entry = self.entries.items[handle.index];
+        return entry.alive and entry.generation == handle.generation;
     }
 
     pub fn resize(self: *SurfaceCollection, handle: SurfaceHandle, extent: Extent2D) SurfaceError!void {
@@ -5496,6 +5523,7 @@ test "surface collection manages multiple neutral surfaces" {
     var window_a: u8 = 0;
     var window_b: u8 = 0;
     const handle_a = try collection.add(.{
+        .label = "surface-a",
         .source = .{
             .provider = .external,
             .window = &window_a,
@@ -5513,13 +5541,34 @@ test "surface collection manages multiple neutral surfaces" {
     });
 
     try std.testing.expectEqual(@as(usize, 2), collection.liveCount());
+    try std.testing.expect(collection.contains(handle_a));
     try std.testing.expectEqual(Backend.metal, (try collection.get(handle_a)).selectedBackend());
+    const info_a = try collection.info(handle_a);
+    try std.testing.expectEqual(Backend.metal, info_a.backend);
+    try std.testing.expectEqual(SurfaceProvider.external, info_a.provider);
+    try std.testing.expectEqualStrings("surface-a", info_a.label.?);
+    try std.testing.expectEqual(SurfaceState.configured, info_a.state);
     try collection.resize(handle_b, .{ .width = 800, .height = 600 });
     try std.testing.expectEqual(@as(u32, 800), (try collection.get(handle_b)).presentation.?.extent.width);
 
     try collection.remove(handle_a);
+    try std.testing.expect(!collection.contains(handle_a));
     try std.testing.expectEqual(@as(usize, 1), collection.liveCount());
     try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.get(handle_a));
+    try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.remove(handle_a));
+
+    const handle_c = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_a,
+        },
+    }, .{
+        .extent = .{ .width = 1024, .height = 768 },
+    });
+    try std.testing.expectEqual(handle_a.index, handle_c.index);
+    try std.testing.expect(handle_a.generation != handle_c.generation);
+    try std.testing.expect(collection.contains(handle_c));
+    try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.info(handle_a));
 }
 
 test "buffer descriptor resolves length from explicit length or bytes" {

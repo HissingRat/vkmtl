@@ -1,6 +1,6 @@
 # Period 13: Multi-Surface / Presentation Backend
 
-Status: planned.
+Status: in progress.
 
 Goal: make one selected device manage multiple presentation surfaces through
 real Vulkan and Metal backend resources.
@@ -13,6 +13,8 @@ presentation behavior for multi-window tools and editors.
 - Keep surface ownership under `Device` or a clearly documented presentation
   owner.
 - Validate stale and destroyed surface handles.
+- Track surface labels, providers, lifecycle state, and handle generations
+  through `SurfaceCollection`.
 
 See `phase1.md`.
 
