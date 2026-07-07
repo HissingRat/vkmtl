@@ -1,13 +1,18 @@
 # Period 15: Sparse / Tiled Resources Backend
 
-Status: completed.
+Status: completed sparse/tiled descriptor and residency-validation scaffold.
+Native sparse/tiled allocation and residency lowering are tracked in Period 27.
 
-Goal: lower sparse and tiled resource descriptors to backend-native residency
-and page-commit mechanisms for large textures, virtual resources, and streaming
+Goal: define sparse and tiled resource descriptors, residency maps, and
+page-commit validation for large textures, virtual resources, and streaming
 asset systems.
 
 This period should remain optional and capability-gated. Portable applications
 should not be forced to manage sparse residency.
+
+Historical note: this period proves the API shape and validation model.
+Period 27 is responsible for executable Vulkan sparse-resource and Metal
+tiled/sparse-resource backend paths.
 
 ## Phase 1: Sparse Buffer Backend
 

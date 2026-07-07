@@ -1,15 +1,15 @@
-# Phase 2: Driver Pipeline Cache And Binary Archive
+# Phase 2: Present Modes And Frame Pacing
 
-Phase 2 connects backend-native pipeline caches.
+Phase 2 exposes presentation behavior explicitly.
 
 ## Scope
 
-- Integrate Vulkan pipeline cache creation, serialization, and reuse.
-- Integrate Metal binary archives where available.
-- Include shader, specialization, layout, and render target identity in cache
-  compatibility.
+- Add present mode / vsync configuration.
+- Map Vulkan present modes.
+- Map Metal display-sync behavior.
+- Add frame pacing diagnostics.
 
 ## Validation
 
-- Add cache identity tests.
-- Add docs for portable and backend-specific cache behavior.
+- Add docs for backend-specific present-mode availability.
+- Add example output that reports selected mode.

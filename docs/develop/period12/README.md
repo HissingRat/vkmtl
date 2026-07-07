@@ -1,13 +1,19 @@
 # Period 12: Bindless / Argument Buffer Backend
 
-Status: completed.
+Status: completed API, validation, reflection, and layout-metadata scaffold.
+Executable table updates and command binding are tracked in Period 22.
 
-Goal: lower the advanced binding descriptors from Period 10 to real Vulkan
-descriptor indexing and Metal argument buffers.
+Goal: define and validate the advanced binding descriptors from Period 10, then
+record backend-aware Vulkan descriptor-indexing and Metal argument-buffer
+metadata.
 
 This period should not replace the portable bind group model. It adds a
 capability-gated advanced path for workloads that need large resource arrays or
 bindless-style access.
+
+Historical note: phase titles that say "lowering" in this period refer to the
+first backend-aware metadata pass. Native resource table allocation, updates,
+and command binding belong to Period 22.
 
 ## Phase 1: Advanced Binding Layout Lowering Contract
 

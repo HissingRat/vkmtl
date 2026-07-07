@@ -1292,6 +1292,63 @@ obvious render and binding blockers.
 - [x] Confirm API docs cover dynamic offsets, arrays, constants, and specialization.
 - [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
+## Period 22 Phase 1 Checklist
+
+- [ ] Define dynamic-buffer-array offset ABI before implementation.
+- [ ] Decide immutable/static sampler ownership and layout compatibility.
+- [ ] Preserve source compatibility for current single-resource bind groups.
+- [ ] Add validation tests for missing, extra, duplicated, and unaligned dynamic
+  offsets per binding array element.
+- [ ] Update API docs with the final binding ABI.
+
+## Period 22 Phase 2 Checklist
+
+- [ ] Define resource table descriptor, ownership, and lifetime rules.
+- [ ] Add update and clear operations for table slots.
+- [ ] Validate resource kind, range, partial-binding, and update-after-bind
+  behavior.
+- [ ] Track referenced resource lifetime and debug labels.
+- [ ] Add tests for invalid table updates and dead resource references.
+
+## Period 22 Phase 3 Checklist
+
+- [ ] Define render and compute encoder binding entry points for advanced
+  resource tables.
+- [ ] Lower Vulkan descriptor-indexing table binding.
+- [ ] Lower Metal argument-buffer command binding.
+- [ ] Validate pipeline-layout compatibility and encoder state.
+- [ ] Update the bindless texture/material-table example so it proves native
+  table binding when supported.
+
+## Period 22 Phase 4 Checklist
+
+- [ ] Define root-constant encoder method names and ownership boundaries.
+- [ ] Finalize the Metal slot/index model before native lowering.
+- [ ] Lower Vulkan root constant writes to push constants.
+- [ ] Lower Metal root constant writes to `setBytes`, small constant buffers, or
+  a documented equivalent.
+- [ ] Add validation tests and one render or compute example using constants.
+
+## Period 22 Phase 5 Checklist
+
+- [ ] Decide the Slang specialization/variant compile path before
+  implementation.
+- [ ] Lower Vulkan specialization data during pipeline creation where supported.
+- [ ] Lower Metal specialization through Slang variants, function constants, or
+  a documented capability-gated equivalent.
+- [ ] Include specialization inputs in shader artifact hashes, pipeline
+  fingerprints, and persistent cache metadata.
+- [ ] Add tests for distinct runtime variants and unsupported specialization
+  shapes.
+
+## Period 22 Phase 6 Checklist
+
+- [ ] Update backend matrix notes for dynamic buffer arrays, resource tables,
+  root constants, immutable/static samplers, and shader variants.
+- [ ] Update API docs and usage docs for the closed deferred items.
+- [ ] Confirm feature gates return clear errors on unsupported backends.
+- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

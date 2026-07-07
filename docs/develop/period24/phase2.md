@@ -1,15 +1,15 @@
-# Phase 2: Present Modes And Frame Pacing
+# Phase 2: Fill Buffer Fallbacks
 
-Phase 2 exposes presentation behavior explicitly.
+Phase 2 removes the Vulkan alignment footgun for public `fillBuffer(...)`.
 
 ## Scope
 
-- Add present mode / vsync configuration.
-- Map Vulkan present modes.
-- Map Metal display-sync behavior.
-- Add frame pacing diagnostics.
+- Keep native `vkCmdFillBuffer` for aligned fills.
+- Add staging or upload fallback for unaligned Vulkan fills.
+- Preserve Metal direct fill behavior.
+- Validate ranges before fallback selection.
 
 ## Validation
 
-- Add docs for backend-specific present-mode availability.
-- Add example output that reports selected mode.
+- Add aligned and unaligned fill tests.
+- Keep fallback behavior documented as potentially slower.

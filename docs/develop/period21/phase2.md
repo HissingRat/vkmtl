@@ -22,4 +22,5 @@ Phase 2 supports array bindings for common resources.
 - Runtime validation checks that resource array count matches `BindGroupLayoutEntry.array_count`.
 - Vulkan lowers array counts to descriptor layout counts, descriptor pool counts, and descriptor writes.
 - Metal lowers arrays to consecutive native buffer, texture, and sampler slots.
-- Dynamic buffer arrays remain deferred until dynamic offsets can address individual array elements.
+- Dynamic buffer arrays remain deferred to Period 22, where dynamic offsets can
+  address individual array elements.

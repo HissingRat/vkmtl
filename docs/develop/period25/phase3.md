@@ -1,15 +1,15 @@
-# Phase 3: Persistent Runtime Cache
+# Phase 3: External Memory And Textures
 
-Phase 3 persists selected runtime artifacts across runs.
+Phase 3 imports resources owned by other systems.
 
 ## Scope
 
-- Define cache versioning.
-- Store driver cache and binary archive data.
-- Keep shader compile artifacts inspectable.
-- Handle stale or incompatible cache entries gracefully.
+- Lower Vulkan external memory and image import.
+- Lower Metal texture/buffer wrapping where supported.
+- Validate format, usage, ownership, and lifetime.
+- Keep portable resource creation unchanged.
 
 ## Validation
 
-- Add cold/warm cache tests where possible.
-- Document cache directory behavior.
+- Add external texture descriptor tests.
+- Add an interop example or mock-backed path.

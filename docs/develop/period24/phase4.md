@@ -1,15 +1,14 @@
-# Phase 4: External Semaphores And Shared Events
+# Phase 4: Sampler Border Color
 
-Phase 4 adds cross-system synchronization.
+Phase 4 lowers sampler border-color descriptors.
 
 ## Scope
 
-- Lower Vulkan external semaphore import/export.
-- Lower Metal shared event behavior.
-- Integrate imported sync primitives with queue submission.
-- Keep unsupported sharing modes behind precise typed errors.
+- Map supported border colors to Vulkan sampler state.
+- Map supported border colors to Metal sampler state where available.
+- Keep unsupported border color values typed and feature-gated.
 
 ## Validation
 
-- Add lifecycle and invalid-handle tests where possible.
-- Document platform-specific setup requirements.
+- Add sampler validation tests for supported and unsupported border colors.
+- Update feature and limit reporting.

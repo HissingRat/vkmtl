@@ -1,14 +1,15 @@
-# Phase 5: Mesh And Task Shader Backend
+# Phase 5: Long-Run Stability
 
-Phase 5 lowers mesh/task shader pipeline descriptors.
+Phase 5 stress-tests completed backend paths.
 
 ## Scope
 
-- Lower Vulkan mesh/task shader paths where extensions are available.
-- Define Metal object/mesh function mapping where available.
-- Keep classic vertex pipeline untouched.
+- Add resize/recreate loops.
+- Add shader cache warm/cold loops.
+- Add resource churn and upload/readback loops.
+- Track leak reports and destruction-order issues.
 
 ## Validation
 
-- Add feature-gated pipeline tests.
-- Add a small mesh-shader example where supported.
+- Add opt-in long-run commands.
+- Keep default test runs short and deterministic.

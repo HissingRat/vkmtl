@@ -1,46 +1,45 @@
-# Period 24: Platform, Surface, And Interop Completion
+# Period 24: Resource And Transfer Utility Completion
 
 Status: planned after Period 23.
 
-Goal: make vkmtl fit cleanly inside larger native applications, tools, media
-pipelines, and multi-window environments.
+Goal: finish practical resource utilities needed by tools, texture pipelines,
+streaming systems, and asset upload paths.
 
-Expected result: vkmtl can manage multiple surfaces, cooperate with external
-resources, and expose explicit native interop hooks without leaking backend
-types into ordinary portable APIs.
+Expected result: applications need fewer app-side workarounds for common texture,
+buffer, mipmap, and memory-management operations.
 
-## Phase 1: Multi-Surface Runtime
+## Phase 1: Automatic Mipmap Generation
 
-- Support multiple presentation surfaces from one device.
+- Lower mipmap generation through Vulkan and Metal blit paths.
 
 See `phase1.md`.
 
-## Phase 2: Present Modes And Frame Pacing
+## Phase 2: Fill Buffer Fallbacks
 
-- Add vsync/present-mode configuration and frame pacing baseline.
+- Support non-4-byte-aligned fills on Vulkan through fallback paths.
 
 See `phase2.md`.
 
-## Phase 3: External Memory And Textures
+## Phase 3: Broader Texture Copy Coverage
 
-- Lower external memory and texture import.
+- Expand texture copy format, dimension, and layer coverage.
 
 See `phase3.md`.
 
-## Phase 4: External Semaphores And Shared Events
+## Phase 4: Sampler Border Color
 
-- Lower cross-API synchronization primitives.
+- Lower sampler border colors where supported.
 
 See `phase4.md`.
 
-## Phase 5: Native Command Insertion
+## Phase 5: Heaps And Transient Allocation
 
-- Add intentional native command insertion escape hatches.
+- Add heap-backed resource creation and transient allocator behavior.
 
 See `phase5.md`.
 
-## Phase 6: Interop Examples And Matrix
+## Phase 6: Resource Utility Validation
 
-- Add examples and backend matrix coverage for interop features.
+- Add tests and docs for resource utility backend paths.
 
 See `phase6.md`.

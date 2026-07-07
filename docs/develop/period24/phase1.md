@@ -1,15 +1,15 @@
-# Phase 1: Multi-Surface Runtime
+# Phase 1: Automatic Mipmap Generation
 
-Phase 1 lets one device manage more than one presentation target.
+Phase 1 lowers automatic mipmap generation.
 
 ## Scope
 
-- Add device-owned surface registry.
-- Support multiple Vulkan swapchains.
-- Support multiple Metal drawable/layer states.
-- Handle independent resize/minimize/surface-loss events.
+- Generate mip levels through Vulkan blits where valid.
+- Generate mip levels through Metal blit commands.
+- Validate format, usage, sample count, dimensions, and mip count.
+- Keep unsupported formats behind typed texture errors.
 
 ## Validation
 
-- Add a multi-window example.
-- Add resize and close-order tests where possible.
+- Add tests for descriptor resolution and invalid formats.
+- Add an example or smoke path that samples generated mip levels.

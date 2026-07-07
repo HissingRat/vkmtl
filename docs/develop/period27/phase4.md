@@ -1,14 +1,14 @@
-# Phase 4: Metal Ray Tracing Mapping
+# Phase 4: Tessellation Backend
 
-Phase 4 handles Metal-specific ray tracing differences.
+Phase 4 lowers tessellation pipeline descriptors.
 
 ## Scope
 
-- Map acceleration structures to Metal resource types.
-- Map intersection functions and function tables.
-- Document Vulkan/Metal semantic differences.
+- Lower Vulkan tessellation control/evaluation stages.
+- Define Metal tessellation mapping or typed unsupported behavior.
+- Validate patch size and control point limits.
 
 ## Validation
 
-- Add Metal capability tests where possible.
-- Keep non-portable behavior explicit.
+- Add pipeline validation tests.
+- Add a simple tessellation example where supported.

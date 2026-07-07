@@ -1,15 +1,15 @@
-# Phase 4: Diagnostics And Capture Names
+# Phase 4: External Semaphores And Shared Events
 
-Phase 4 makes backend work visible to developers.
+Phase 4 adds cross-system synchronization.
 
 ## Scope
 
-- Report object creation cost and cache reuse.
-- Improve capture-friendly native labels.
-- Add optional diagnostics for resource churn and submission cost.
-- Keep diagnostics low overhead when disabled.
+- Lower Vulkan external semaphore import/export.
+- Lower Metal shared event behavior.
+- Integrate imported sync primitives with queue submission.
+- Keep unsupported sharing modes behind precise typed errors.
 
 ## Validation
 
-- Add diagnostics tests for counters and suppression policy.
-- Document capture setup for Vulkan and Metal.
+- Add lifecycle and invalid-handle tests where possible.
+- Document platform-specific setup requirements.

@@ -1,15 +1,15 @@
-# Phase 5: Long-Run Stability
+# Phase 5: Native Command Insertion
 
-Phase 5 stress-tests completed backend paths.
+Phase 5 exposes an explicit advanced escape hatch.
 
 ## Scope
 
-- Add resize/recreate loops.
-- Add shader cache warm/cold loops.
-- Add resource churn and upload/readback loops.
-- Track leak reports and destruction-order issues.
+- Add callback descriptors for native command insertion.
+- Pass scoped Vulkan or Metal command handles only through explicit APIs.
+- Validate command encoder state before invoking callbacks.
+- Keep the ordinary portable path free of native types.
 
 ## Validation
 
-- Add opt-in long-run commands.
-- Keep default test runs short and deterministic.
+- Add native interop sample code.
+- Add tests for invalid insertion points.

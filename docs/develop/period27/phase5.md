@@ -1,14 +1,14 @@
-# Phase 5: Native Advanced Escape Hatches
+# Phase 5: Mesh And Task Shader Backend
 
-Phase 5 finishes explicit backend-specific advanced access.
+Phase 5 lowers mesh/task shader pipeline descriptors.
 
 ## Scope
 
-- Expose native handles only through intentional APIs.
-- Add insertion or callback points for features that cannot be portable.
-- Keep safety checks around encoder/queue state.
+- Lower Vulkan mesh/task shader paths where extensions are available.
+- Define Metal object/mesh function mapping where available.
+- Keep classic vertex pipeline untouched.
 
 ## Validation
 
-- Add tests for invalid escape-hatch use.
-- Add examples that clearly label backend-specific code.
+- Add feature-gated pipeline tests.
+- Add a small mesh-shader example where supported.

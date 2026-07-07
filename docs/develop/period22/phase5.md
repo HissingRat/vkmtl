@@ -1,17 +1,26 @@
-# Phase 5: Query Pools And Encoder Commands
+# Phase 5: Shader Specialization Variants
 
-Phase 5 lowers query descriptors into real backend query commands.
+Phase 5 turns specialization from cache identity into real pipeline variants.
 
 ## Scope
 
-- Add runtime query set objects.
-- Lower occlusion queries.
-- Lower timestamp writes and resolves.
-- Lower pipeline statistics where Vulkan supports them and gate Metal behavior
-  precisely.
-- Add readback helpers for query results.
+- Decide the Slang compile/runtime path for specialization values.
+- Lower Vulkan specialization data into pipeline creation when the generated
+  target supports it.
+- Lower Metal specialization through Slang-generated variants, Metal function
+  constants, or a documented capability-gated equivalent.
+- Include specialization inputs in shader artifact hashes, pipeline
+  fingerprints, and persistent cache metadata.
+- Preserve typed errors for unsupported value kinds or backend paths.
 
 ## Validation
 
-- Add deterministic query validation where possible.
-- Add profiler marker and timestamp example coverage.
+- Add tests proving distinct specialization values create distinct runtime
+  variants.
+- Add tests for unsupported specialization shapes and stale cache entries.
+- Add a small example only if it proves backend-native variant behavior.
+
+## Result
+
+- `ProgrammableStageDescriptor.specialization` becomes an executable feature
+  instead of a descriptor-only cache key.

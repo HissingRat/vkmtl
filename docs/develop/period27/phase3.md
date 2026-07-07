@@ -1,14 +1,15 @@
-# Phase 3: Shader Binding Tables And Dispatch
+# Phase 3: Residency And Page Commit API
 
-Phase 3 makes ray dispatch executable.
+Phase 3 makes sparse/tiled updates explicit.
 
 ## Scope
 
-- Lower shader binding table descriptors.
-- Add ray dispatch command encoding.
-- Validate SBT alignment and record ranges.
+- Add page commit/update descriptors.
+- Track committed regions for diagnostics.
+- Validate unmap/remap rules.
+- Integrate residency with resource lifetime.
 
 ## Validation
 
-- Add SBT layout tests.
-- Add a minimal ray-dispatch smoke example where supported.
+- Add tests for overlapping, missing, and invalid page commits.
+- Document backend page-size differences.

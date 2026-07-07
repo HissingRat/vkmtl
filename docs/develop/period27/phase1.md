@@ -1,14 +1,14 @@
-# Phase 1: Acceleration Structures
+# Phase 1: Sparse And Tiled Buffers
 
-Phase 1 lowers acceleration structure descriptors.
+Phase 1 starts advanced residency with buffers.
 
 ## Scope
 
-- Lower bottom-level and top-level acceleration structures.
-- Define geometry, instance, scratch, and build/update descriptors.
-- Validate memory, alignment, and build flags.
+- Lower sparse buffer descriptors to Vulkan where supported.
+- Map Metal-compatible buffer residency behavior where available.
+- Validate alignment, page size, and usage.
 
 ## Validation
 
-- Add descriptor tests for invalid geometry and build flags.
-- Add backend capability gates.
+- Add descriptor tests for alignment and residency errors.
+- Document unsupported backend behavior.

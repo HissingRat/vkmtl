@@ -1,15 +1,15 @@
-# Phase 3: Broader Texture Copy Coverage
+# Phase 3: Dedicated Queues
 
-Phase 3 expands texture copy coverage.
+Phase 3 makes non-graphics queues selectable.
 
 ## Scope
 
-- Support array-layer copies.
-- Support mip-level copies.
-- Support more compatible color formats.
-- Keep MSAA and depth/stencil copies capability-gated until semantics are clear.
+- Query Vulkan queue families for graphics, compute, and transfer support.
+- Map Metal queue behavior to portable queue descriptors.
+- Route command submission through selected queue views.
+- Preserve graphics queue as the default path.
 
 ## Validation
 
-- Add descriptor tests for layers, mips, and format mismatch behavior.
-- Add readback-backed tests where possible.
+- Add queue-selection tests using capability reports.
+- Add docs for backend-specific queue limitations.

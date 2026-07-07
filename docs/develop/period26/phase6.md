@@ -1,15 +1,15 @@
-# Phase 6: Advanced Geometry Examples
+# Phase 6: Production Readiness Matrix
 
-Phase 6 closes Period 26 with examples and matrix coverage.
+Phase 6 closes Period 26 with release-oriented checks.
 
 ## Scope
 
-- Add examples only for backend-supported advanced paths.
-- Update backend matrix for sparse/tiled, tessellation, mesh, and task support.
-- Document fallback expectations.
+- Update backend matrix for cache, diagnostics, and stability status.
+- Add release-readiness checklist items.
+- Document known backend-specific production caveats.
 
 ## Validation
 
 - `zig build test`
 - `zig build`
-- Backend matrix updated for Vulkan and Metal.
+- Long-run opt-in commands documented.

@@ -1,13 +1,20 @@
 # Period 14: Native Interop / External Resources
 
-Status: completed.
+Status: completed native-handle, descriptor, validation, and feature-gate
+scaffold. Executable external resource import and native command insertion are
+tracked in Period 25.
 
-Goal: support explicit interop with platform APIs, engines, UI frameworks, and
-media pipelines while keeping native handles out of ordinary portable paths.
+Goal: define explicit interop shapes for platform APIs, engines, UI frameworks,
+and media pipelines while keeping native handles out of ordinary portable
+paths.
 
 Interop is always intentional. Applications should request external resources
 or native handles explicitly and accept the portability risks documented by the
 API.
+
+Historical note: this period records the public ownership and validation model.
+Period 25 is the current source of truth for native external memory/texture,
+shared-event, and command-insertion backend closure.
 
 ## Phase 1: Native Handle View Stabilization
 

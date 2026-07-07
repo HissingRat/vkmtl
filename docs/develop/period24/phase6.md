@@ -1,12 +1,13 @@
-# Phase 6: Interop Examples And Matrix
+# Phase 6: Resource Utility Validation
 
-Phase 6 closes Period 24 with examples and documentation.
+Phase 6 closes Period 24 with coverage and docs.
 
 ## Scope
 
-- Update backend matrix entries for surface and interop support.
-- Add examples for multi-window and native interop.
-- Document platform setup, ownership, and release rules.
+- Update resource utility docs.
+- Update backend matrix entries for mipmaps, fills, copies, border colors, and
+  heap allocation.
+- Add tests for fallback selection and typed errors.
 
 ## Validation
 

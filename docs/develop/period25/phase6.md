@@ -1,15 +1,15 @@
-# Phase 6: Production Readiness Matrix
+# Phase 6: Interop Examples And Matrix
 
-Phase 6 closes Period 25 with release-oriented checks.
+Phase 6 closes Period 25 with examples and documentation.
 
 ## Scope
 
-- Update backend matrix for cache, diagnostics, and stability status.
-- Add release-readiness checklist items.
-- Document known backend-specific production caveats.
+- Update backend matrix entries for surface and interop support.
+- Add examples for multi-window and native interop.
+- Document platform setup, ownership, and release rules.
 
 ## Validation
 
 - `zig build test`
 - `zig build`
-- Long-run opt-in commands documented.
+- Backend matrix updated for Vulkan and Metal.

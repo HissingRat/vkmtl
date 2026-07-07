@@ -63,17 +63,36 @@ Tracked in `docs/develop/period21/`.
 
 - [x] Dynamic buffer offsets in `setBindGroup(...)`.
 - [x] Resource arrays for sampled textures, samplers, and buffers.
-- [ ] Descriptor indexing / argument buffer native lowering.
-- [ ] Immutable sampler and static sampler policy.
-- [ ] Small constants / root constants lowering.
-- [ ] Shader specialization constants lowering.
+- [x] Advanced binding layout metadata and range summary queries.
+- [x] Root-constant pipeline compatibility validation.
+- [x] Shader specialization cache identity and typed rejection.
 
-Expected result: material systems and larger shader libraries can use vkmtl
-without manually flattening every binding into a unique slot.
+Expected result: material systems can use dynamic offsets and first-slice
+resource arrays without manually flattening every binding into a unique slot.
+Advanced descriptor tables, command-written constants, and shader variants are
+planned in Wave 3.
 
-## Wave 3: Command, Sync, And Queries
+## Wave 3: Binding ABI And Shader Variant Closure
 
 Tracked in `docs/develop/period22/`.
+
+This wave owns the explicit deferred items from Period 21:
+
+- [ ] Dynamic buffer arrays with per-array-element offset addressing.
+- [ ] Bindless resource table allocation, update, clear, and lifetime tracking.
+- [ ] Vulkan descriptor-indexing table binding and Metal argument-buffer
+  command binding.
+- [ ] Immutable sampler and static sampler policy.
+- [ ] Root constant command writes and native Vulkan / Metal lowering.
+- [ ] Shader specialization variant compilation and native pipeline lowering.
+
+Expected result: the advanced binding and shader shapes stop being
+metadata-only paths. Unsupported backend cases remain capability-gated, but
+supported cases are executable.
+
+## Wave 4: Command, Sync, And Queries
+
+Tracked in `docs/develop/period23/`.
 
 - [ ] Explicit resource barrier command lowering.
 - [ ] Fence and timeline fence runtime objects.
@@ -87,9 +106,9 @@ Tracked in `docs/develop/period22/`.
 Expected result: vkmtl can support profiling, readback-heavy tools, async
 compute/transfer experiments, and explicit synchronization escape hatches.
 
-## Wave 4: Resource And Transfer Utilities
+## Wave 5: Resource And Transfer Utilities
 
-Tracked in `docs/develop/period23/`.
+Tracked in `docs/develop/period24/`.
 
 - [ ] Automatic mipmap generation.
 - [ ] Non-4-byte-aligned `fillBuffer` fallback on Vulkan.
@@ -101,9 +120,9 @@ Tracked in `docs/develop/period23/`.
 Expected result: texture tools, streaming systems, and memory-sensitive
 applications need fewer app-side workarounds.
 
-## Wave 5: Platform And Interop
+## Wave 6: Platform And Interop
 
-Tracked in `docs/develop/period24/`.
+Tracked in `docs/develop/period25/`.
 
 - [ ] Multi-surface / multi-window runtime support.
 - [ ] External memory / texture import.
@@ -114,9 +133,9 @@ Tracked in `docs/develop/period24/`.
 Expected result: vkmtl can sit inside larger native apps and tooling without
 owning every resource itself.
 
-## Wave 6: Object Cache And Production Hardening
+## Wave 7: Object Cache And Production Hardening
 
-Tracked in `docs/develop/period25/`.
+Tracked in `docs/develop/period26/`.
 
 - [ ] Native object reuse for shader modules, layouts, pipelines, and samplers.
 - [ ] Vulkan driver pipeline cache integration.
@@ -128,9 +147,9 @@ Tracked in `docs/develop/period25/`.
 Expected result: completed backend paths are fast enough and observable enough
 for real applications instead of only examples.
 
-## Wave 7: Advanced Resource And Geometry Features
+## Wave 8: Advanced Resource And Geometry Features
 
-Tracked in `docs/develop/period26/`.
+Tracked in `docs/develop/period27/`.
 
 - [ ] Sparse / tiled buffer lowering.
 - [ ] Sparse / tiled texture residency backend lowering.
@@ -141,9 +160,9 @@ Tracked in `docs/develop/period26/`.
 Expected result: advanced backend-specific power is exposed through explicit
 capability-gated APIs while the portable core remains clean.
 
-## Wave 8: Ray Tracing And Native Advanced Parity
+## Wave 9: Ray Tracing And Native Advanced Parity
 
-Tracked in `docs/develop/period27/`.
+Tracked in `docs/develop/period28/`.
 
 - [ ] Acceleration structure backend lowering.
 - [ ] Ray tracing pipeline lowering.

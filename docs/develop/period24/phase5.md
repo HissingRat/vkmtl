@@ -1,15 +1,15 @@
-# Phase 5: Native Command Insertion
+# Phase 5: Heaps And Transient Allocation
 
-Phase 5 exposes an explicit advanced escape hatch.
+Phase 5 gives applications explicit memory-control options.
 
 ## Scope
 
-- Add callback descriptors for native command insertion.
-- Pass scoped Vulkan or Metal command handles only through explicit APIs.
-- Validate command encoder state before invoking callbacks.
-- Keep the ordinary portable path free of native types.
+- Add heap-backed buffer and texture creation where supported.
+- Add transient attachment allocation strategy.
+- Keep default resource creation simple and internally managed.
+- Validate heap compatibility and resource lifetime.
 
 ## Validation
 
-- Add native interop sample code.
-- Add tests for invalid insertion points.
+- Add descriptor tests for heap compatibility.
+- Add diagnostics for allocation mode and transient reuse.

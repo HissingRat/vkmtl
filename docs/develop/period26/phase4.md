@@ -1,14 +1,15 @@
-# Phase 4: Tessellation Backend
+# Phase 4: Diagnostics And Capture Names
 
-Phase 4 lowers tessellation pipeline descriptors.
+Phase 4 makes backend work visible to developers.
 
 ## Scope
 
-- Lower Vulkan tessellation control/evaluation stages.
-- Define Metal tessellation mapping or typed unsupported behavior.
-- Validate patch size and control point limits.
+- Report object creation cost and cache reuse.
+- Improve capture-friendly native labels.
+- Add optional diagnostics for resource churn and submission cost.
+- Keep diagnostics low overhead when disabled.
 
 ## Validation
 
-- Add pipeline validation tests.
-- Add a simple tessellation example where supported.
+- Add diagnostics tests for counters and suppression policy.
+- Document capture setup for Vulkan and Metal.

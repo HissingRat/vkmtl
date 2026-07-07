@@ -1,47 +1,46 @@
-# Period 25: Object Cache And Production Backend Hardening
+# Period 25: Platform, Surface, And Interop Completion
 
 Status: planned after Period 24.
 
-Goal: make completed backend paths efficient, cacheable, diagnosable, and stable
-under long-running applications.
+Goal: make vkmtl fit cleanly inside larger native applications, tools, media
+pipelines, and multi-window environments.
 
-Expected result: vkmtl behaves less like a prototype and more like a reusable
-graphics runtime: repeated object creation is reduced, diagnostics explain
-costs, and long-run stress tests catch resource churn.
+Expected result: vkmtl can manage multiple surfaces, cooperate with external
+resources, and expose explicit native interop hooks without leaking backend
+types into ordinary portable APIs.
 
-## Phase 1: Native Object Reuse
+## Phase 1: Multi-Surface Runtime
 
-- Implement reuse for shader modules, bind group layouts, pipelines, and
-  samplers.
+- Support multiple presentation surfaces from one device.
 
 See `phase1.md`.
 
-## Phase 2: Driver Pipeline Cache And Binary Archive
+## Phase 2: Present Modes And Frame Pacing
 
-- Integrate Vulkan driver pipeline cache and Metal binary archives.
+- Add vsync/present-mode configuration and frame pacing baseline.
 
 See `phase2.md`.
 
-## Phase 3: Persistent Runtime Cache
+## Phase 3: External Memory And Textures
 
-- Persist selected cache artifacts across runs.
+- Lower external memory and texture import.
 
 See `phase3.md`.
 
-## Phase 4: Diagnostics And Capture Names
+## Phase 4: External Semaphores And Shared Events
 
-- Improve diagnostics for creation cost, cache misses, and native labels.
+- Lower cross-API synchronization primitives.
 
 See `phase4.md`.
 
-## Phase 5: Long-Run Stability
+## Phase 5: Native Command Insertion
 
-- Add stress loops for resize, resource churn, shader cache, and uploads.
+- Add intentional native command insertion escape hatches.
 
 See `phase5.md`.
 
-## Phase 6: Production Readiness Matrix
+## Phase 6: Interop Examples And Matrix
 
-- Add release-readiness checks for completed backend paths.
+- Add examples and backend matrix coverage for interop features.
 
 See `phase6.md`.

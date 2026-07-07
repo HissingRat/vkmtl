@@ -1,15 +1,15 @@
-# Phase 3: Residency And Page Commit API
+# Phase 3: Persistent Runtime Cache
 
-Phase 3 makes sparse/tiled updates explicit.
+Phase 3 persists selected runtime artifacts across runs.
 
 ## Scope
 
-- Add page commit/update descriptors.
-- Track committed regions for diagnostics.
-- Validate unmap/remap rules.
-- Integrate residency with resource lifetime.
+- Define cache versioning.
+- Store driver cache and binary archive data.
+- Keep shader compile artifacts inspectable.
+- Handle stale or incompatible cache entries gracefully.
 
 ## Validation
 
-- Add tests for overlapping, missing, and invalid page commits.
-- Document backend page-size differences.
+- Add cold/warm cache tests where possible.
+- Document cache directory behavior.

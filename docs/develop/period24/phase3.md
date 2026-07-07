@@ -1,15 +1,15 @@
-# Phase 3: External Memory And Textures
+# Phase 3: Broader Texture Copy Coverage
 
-Phase 3 imports resources owned by other systems.
+Phase 3 expands texture copy coverage.
 
 ## Scope
 
-- Lower Vulkan external memory and image import.
-- Lower Metal texture/buffer wrapping where supported.
-- Validate format, usage, ownership, and lifetime.
-- Keep portable resource creation unchanged.
+- Support array-layer copies.
+- Support mip-level copies.
+- Support more compatible color formats.
+- Keep MSAA and depth/stencil copies capability-gated until semantics are clear.
 
 ## Validation
 
-- Add external texture descriptor tests.
-- Add an interop example or mock-backed path.
+- Add descriptor tests for layers, mips, and format mismatch behavior.
+- Add readback-backed tests where possible.

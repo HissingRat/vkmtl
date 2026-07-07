@@ -1,45 +1,46 @@
-# Period 23: Resource And Transfer Utility Completion
+# Period 23: Command, Sync, And Query Backend Completion
 
 Status: planned after Period 22.
 
-Goal: finish practical resource utilities needed by tools, texture pipelines,
-streaming systems, and asset upload paths.
+Goal: expose portable defaults and explicit escape hatches for synchronization,
+multi-queue work, and query/profiling operations.
 
-Expected result: applications need fewer app-side workarounds for common texture,
-buffer, mipmap, and memory-management operations.
+Expected result: vkmtl can support profiling, readback-heavy tools, async
+compute/transfer experiments, and explicit synchronization without forcing
+Vulkan details into ordinary user code.
 
-## Phase 1: Automatic Mipmap Generation
+## Phase 1: Explicit Resource Barriers
 
-- Lower mipmap generation through Vulkan and Metal blit paths.
+- Lower public barrier descriptors to backend commands.
 
 See `phase1.md`.
 
-## Phase 2: Fill Buffer Fallbacks
+## Phase 2: Fences And Events
 
-- Support non-4-byte-aligned fills on Vulkan through fallback paths.
+- Add runtime fence, timeline fence, event, and shared-event objects.
 
 See `phase2.md`.
 
-## Phase 3: Broader Texture Copy Coverage
+## Phase 3: Dedicated Queues
 
-- Expand texture copy format, dimension, and layer coverage.
+- Lower dedicated compute and transfer queue selection.
 
 See `phase3.md`.
 
-## Phase 4: Sampler Border Color
+## Phase 4: Queue Ownership And Hazards
 
-- Lower sampler border colors where supported.
+- Define queue ownership transfer and Metal no-op/validation mapping.
 
 See `phase4.md`.
 
-## Phase 5: Heaps And Transient Allocation
+## Phase 5: Query Pools And Encoder Commands
 
-- Add heap-backed resource creation and transient allocator behavior.
+- Lower occlusion, timestamp, and pipeline statistics queries.
 
 See `phase5.md`.
 
-## Phase 6: Resource Utility Validation
+## Phase 6: Sync And Query Validation
 
-- Add tests and docs for resource utility backend paths.
+- Add tests and examples for sync/query backend paths.
 
 See `phase6.md`.

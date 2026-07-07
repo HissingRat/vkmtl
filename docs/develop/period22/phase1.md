@@ -1,16 +1,28 @@
-# Phase 1: Explicit Resource Barriers
+# Phase 1: Binding ABI Cleanup
 
-Phase 1 makes explicit barrier descriptors executable.
+Phase 1 fixes the public and runtime ABI gaps that block the remaining binding
+work.
 
 ## Scope
 
-- Lower buffer barriers on Vulkan.
-- Lower texture barriers on Vulkan.
-- Define Metal mapping as validation/no-op or encoder-bound synchronization
-  where appropriate.
-- Keep automatic usage tracking available for the common path.
+- Add an array-element address to dynamic buffer offsets, or an equivalent
+  shape that can identify each buffer inside a binding array.
+- Validate dynamic offset count, alignment, and array index against the bind
+  group layout.
+- Decide immutable/static sampler ownership: layout-owned sampler handles,
+  descriptor-owned static sampler descriptors, or an explicit unsupported gate.
+- Keep existing single-resource `BindGroupEntry.resource` and
+  `BindGroupBinding.dynamic_offsets` source-compatible where possible.
 
 ## Validation
 
-- Add tests for invalid before/after usage transitions.
-- Add backend notes that distinguish Vulkan commands from Metal no-op mapping.
+- Add tests for dynamic buffer arrays with missing, extra, duplicated, and
+  unaligned element offsets.
+- Add sampler-layout compatibility tests for immutable/static sampler policy.
+- Update API docs with the final ABI.
+
+## Result
+
+- Later phases can bind descriptor tables without guessing how array elements
+  are addressed.
+- Existing first-slice bind groups keep their current behavior.

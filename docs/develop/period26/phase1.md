@@ -1,14 +1,16 @@
-# Phase 1: Sparse And Tiled Buffers
+# Phase 1: Native Object Reuse
 
-Phase 1 starts advanced residency with buffers.
+Phase 1 turns cache-key descriptors into real reuse.
 
 ## Scope
 
-- Lower sparse buffer descriptors to Vulkan where supported.
-- Map Metal-compatible buffer residency behavior where available.
-- Validate alignment, page size, and usage.
+- Reuse shader modules by source and entry identity.
+- Reuse bind group layouts and pipeline layouts.
+- Reuse render and compute pipeline objects.
+- Reuse sampler states.
+- Keep opt-out policies honored.
 
 ## Validation
 
-- Add descriptor tests for alignment and residency errors.
-- Document unsupported backend behavior.
+- Add cache hit/miss tests.
+- Add diagnostics for equivalent recreations.

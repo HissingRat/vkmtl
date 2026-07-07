@@ -1,15 +1,17 @@
-# Phase 5: Heaps And Transient Allocation
+# Phase 5: Query Pools And Encoder Commands
 
-Phase 5 gives applications explicit memory-control options.
+Phase 5 lowers query descriptors into real backend query commands.
 
 ## Scope
 
-- Add heap-backed buffer and texture creation where supported.
-- Add transient attachment allocation strategy.
-- Keep default resource creation simple and internally managed.
-- Validate heap compatibility and resource lifetime.
+- Add runtime query set objects.
+- Lower occlusion queries.
+- Lower timestamp writes and resolves.
+- Lower pipeline statistics where Vulkan supports them and gate Metal behavior
+  precisely.
+- Add readback helpers for query results.
 
 ## Validation
 
-- Add descriptor tests for heap compatibility.
-- Add diagnostics for allocation mode and transient reuse.
+- Add deterministic query validation where possible.
+- Add profiler marker and timestamp example coverage.

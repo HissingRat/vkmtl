@@ -1,12 +1,16 @@
 # Period 16: Advanced Geometry Pipeline
 
-Status: completed.
+Status: completed descriptor and lowering-metadata scaffold. Executable
+tessellation and mesh/task shader pipelines are tracked in Period 27.
 
-Goal: lower tessellation and mesh/task shader descriptors to real backend
-pipelines where supported.
+Goal: define tessellation and mesh/task shader descriptors, feature gates, and
+backend lowering metadata where supported.
 
 These features remain outside the default render pipeline. Applications opt in
 through capability-gated descriptors and shader entry points.
+
+Historical note: Period 27 owns the native pipeline creation, command, shader
+stage, and example closure for these advanced geometry paths.
 
 ## Phase 1: Vulkan Tessellation Lowering
 

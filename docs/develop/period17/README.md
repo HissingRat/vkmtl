@@ -1,12 +1,17 @@
 # Period 17: Ray Tracing Backend
 
-Status: completed.
+Status: completed ray-tracing descriptor and lowering-metadata scaffold. Native
+acceleration structure, pipeline, SBT, and dispatch lowering are tracked in
+Period 28+.
 
-Goal: lower acceleration structures, ray tracing pipelines, and shader binding
-table descriptors to Vulkan and Metal ray tracing capabilities.
+Goal: define acceleration structure, ray tracing pipeline, and shader binding
+table descriptors with backend-aware validation metadata.
 
 Ray tracing remains an optional module. The portable render and compute paths
 must not depend on ray tracing support.
+
+Historical note: Period 28+ owns executable Vulkan and Metal ray-tracing
+backend closure and the maintained advanced parity matrix.
 
 ## Phase 1: Acceleration Structure Backend API
 

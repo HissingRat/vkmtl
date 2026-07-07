@@ -1,14 +1,15 @@
-# Phase 6: Parity Matrix Closure
+# Phase 6: Advanced Geometry Examples
 
-Phase 6 turns parity into a maintained product artifact.
+Phase 6 closes Period 27 with examples and matrix coverage.
 
 ## Scope
 
-- List portable, Vulkan-only, Metal-only, fallback, and unsupported features.
-- Decide which unsupported items become future periods.
-- Keep feature reports aligned with backend reality.
+- Add examples only for backend-supported advanced paths.
+- Update backend matrix for sparse/tiled, tessellation, mesh, and task support.
+- Document fallback expectations.
 
 ## Validation
 
-- Add matrix consistency checks where possible.
-- Update docs whenever feature gates change.
+- `zig build test`
+- `zig build`
+- Backend matrix updated for Vulkan and Metal.

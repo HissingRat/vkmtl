@@ -1,46 +1,47 @@
-# Period 26: Advanced Resource And Geometry Backend Completion
+# Period 26: Object Cache And Production Backend Hardening
 
 Status: planned after Period 25.
 
-Goal: lower advanced resource residency and geometry pipeline features where
-Vulkan and Metal expose compatible or explicitly capability-gated paths.
+Goal: make completed backend paths efficient, cacheable, diagnosable, and stable
+under long-running applications.
 
-Expected result: vkmtl can support streaming-heavy renderers, large virtualized
-resources, tessellated geometry, and mesh/task-shader-style pipelines where the
-backend supports them.
+Expected result: vkmtl behaves less like a prototype and more like a reusable
+graphics runtime: repeated object creation is reduced, diagnostics explain
+costs, and long-run stress tests catch resource churn.
 
-## Phase 1: Sparse And Tiled Buffers
+## Phase 1: Native Object Reuse
 
-- Lower sparse buffer or equivalent tiled buffer behavior.
+- Implement reuse for shader modules, bind group layouts, pipelines, and
+  samplers.
 
 See `phase1.md`.
 
-## Phase 2: Sparse And Tiled Textures
+## Phase 2: Driver Pipeline Cache And Binary Archive
 
-- Lower sparse/tiled texture descriptors and residency updates.
+- Integrate Vulkan driver pipeline cache and Metal binary archives.
 
 See `phase2.md`.
 
-## Phase 3: Residency And Page Commit API
+## Phase 3: Persistent Runtime Cache
 
-- Add explicit residency maps and page commit/update behavior.
+- Persist selected cache artifacts across runs.
 
 See `phase3.md`.
 
-## Phase 4: Tessellation Backend
+## Phase 4: Diagnostics And Capture Names
 
-- Lower tessellation descriptors to supported backend pipeline paths.
+- Improve diagnostics for creation cost, cache misses, and native labels.
 
 See `phase4.md`.
 
-## Phase 5: Mesh And Task Shader Backend
+## Phase 5: Long-Run Stability
 
-- Lower mesh/task shader descriptors where available.
+- Add stress loops for resize, resource churn, shader cache, and uploads.
 
 See `phase5.md`.
 
-## Phase 6: Advanced Geometry Examples
+## Phase 6: Production Readiness Matrix
 
-- Add examples and validation for completed advanced geometry/resource paths.
+- Add release-readiness checks for completed backend paths.
 
 See `phase6.md`.

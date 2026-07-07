@@ -239,7 +239,7 @@ See `docs/develop/period10/`.
 
 ## Period 11: Backend Capability Reality
 
-Status: planned.
+Status: completed backend capability baseline.
 
 Goal: make feature and limit reports come from real Vulkan and Metal backend
 queries, then route unsupported advanced APIs through precise typed errors.
@@ -255,10 +255,11 @@ See `docs/develop/period11/`.
 
 ## Period 12: Bindless / Argument Buffer Backend
 
-Status: planned.
+Status: completed API, validation, reflection, and layout-metadata scaffold.
 
-Goal: lower the Period 10 bindless binding API to Vulkan descriptor indexing
-and Metal argument buffers.
+Goal: define the Period 10 bindless binding API, validate it, derive it from
+Slang reflection, and record backend-aware descriptor-indexing / argument-buffer
+metadata. Executable resource tables are tracked in Period 22.
 
 - Phase 1: advanced binding layout lowering contract
 - Phase 2: Vulkan descriptor indexing lowering
@@ -271,7 +272,7 @@ See `docs/develop/period12/`.
 
 ## Period 13: Multi-Surface / Presentation Backend
 
-Status: planned.
+Status: completed presentation architecture baseline.
 
 Goal: make one device manage multiple presentation surfaces reliably across
 Vulkan swapchains and Metal drawable layers.
@@ -287,10 +288,12 @@ See `docs/develop/period13/`.
 
 ## Period 14: Native Interop / External Resources
 
-Status: planned.
+Status: completed native-handle, descriptor, validation, and feature-gate
+scaffold.
 
-Goal: support explicit interop with platform APIs, engines, UI frameworks, and
-media pipelines without leaking native handles into the portable path.
+Goal: define explicit interop shapes for platform APIs, engines, UI frameworks,
+and media pipelines without leaking native handles into the portable path.
+Executable external interop is tracked in Period 25.
 
 - Phase 1: native handle view stabilization
 - Phase 2: Vulkan external memory / image / semaphore interop
@@ -303,10 +306,11 @@ See `docs/develop/period14/`.
 
 ## Period 15: Sparse / Tiled Resources Backend
 
-Status: planned.
+Status: completed sparse/tiled descriptor and residency-validation scaffold.
 
-Goal: lower sparse and tiled resource descriptors to backend-native residency
-and page-commit mechanisms for large or streaming resources.
+Goal: define sparse and tiled resource descriptors, residency maps, and
+page-commit validation for large or streaming resources. Native sparse/tiled
+backend closure is tracked in Period 27.
 
 - Phase 1: sparse buffer backend
 - Phase 2: sparse texture / tiled texture backend
@@ -319,10 +323,11 @@ See `docs/develop/period15/`.
 
 ## Period 16: Advanced Geometry Pipeline
 
-Status: planned.
+Status: completed descriptor and lowering-metadata scaffold.
 
-Goal: lower tessellation and mesh/task shader descriptors to real backend
-pipelines where supported.
+Goal: define tessellation and mesh/task shader descriptors, feature gates, and
+backend lowering metadata where supported. Executable pipelines are tracked in
+Period 27.
 
 - Phase 1: Vulkan tessellation lowering
 - Phase 2: Metal tessellation lowering
@@ -335,10 +340,11 @@ See `docs/develop/period16/`.
 
 ## Period 17: Ray Tracing Backend
 
-Status: planned.
+Status: completed ray-tracing descriptor and lowering-metadata scaffold.
 
-Goal: lower acceleration structures, ray tracing pipelines, and shader binding
-table descriptors to Vulkan and Metal ray tracing capabilities.
+Goal: define acceleration structure, ray tracing pipeline, and shader binding
+table descriptors with backend-aware validation metadata. Executable ray
+tracing is tracked in Period 28+.
 
 - Phase 1: acceleration structure backend API
 - Phase 2: Vulkan ray tracing pipeline lowering
@@ -351,11 +357,12 @@ See `docs/develop/period17/`.
 
 ## Period 18: Performance / Production Hardening
 
-Status: planned.
+Status: completed production-hardening descriptor, diagnostic, and planning
+scaffold.
 
-Goal: turn the advanced backend slices from functional prototypes into
-production-ready paths with cache persistence, diagnostics, and long-run
-stability checks.
+Goal: define production-hardening shapes for cache persistence, diagnostics,
+profiling, and long-run stability checks. Executable hardening work is tracked
+in Period 26.
 
 - Phase 1: driver pipeline cache persistence
 - Phase 2: resource aliasing / transient allocator
@@ -403,7 +410,7 @@ See `docs/develop/period20/`.
 
 ## Period 21: Binding And Shader Backend Completion
 
-Status: planned after Period 20.
+Status: completed as a binding backend validation slice.
 
 Goal: finish backend lowering for dynamic offsets, resource arrays, advanced
 binding models, constants, and shader specialization.
@@ -417,9 +424,25 @@ binding models, constants, and shader specialization.
 
 See `docs/develop/period21/`.
 
-## Period 22: Command, Sync, And Query Backend Completion
+## Period 22: Binding ABI And Shader Variant Closure
 
 Status: planned after Period 21.
+
+Goal: close the binding and shader backend items that Period 21 intentionally
+left as explicit follow-up work.
+
+- Phase 1: binding ABI cleanup
+- Phase 2: bindless resource table objects
+- Phase 3: descriptor table command binding
+- Phase 4: root constants command writes
+- Phase 5: shader specialization variants
+- Phase 6: binding and variant validation
+
+See `docs/develop/period22/`.
+
+## Period 23: Command, Sync, And Query Backend Completion
+
+Status: planned after Period 22.
 
 Goal: lower explicit barriers, synchronization objects, dedicated queues, queue
 ownership transfers, and query commands.
@@ -431,11 +454,11 @@ ownership transfers, and query commands.
 - Phase 5: query pools and encoder commands
 - Phase 6: sync and query validation
 
-See `docs/develop/period22/`.
+See `docs/develop/period23/`.
 
-## Period 23: Resource And Transfer Utility Completion
+## Period 24: Resource And Transfer Utility Completion
 
-Status: planned after Period 22.
+Status: planned after Period 23.
 
 Goal: complete practical texture, buffer, mipmap, sampler, heap, and transient
 allocation utilities.
@@ -447,11 +470,11 @@ allocation utilities.
 - Phase 5: heaps and transient allocation
 - Phase 6: resource utility validation
 
-See `docs/develop/period23/`.
+See `docs/develop/period24/`.
 
-## Period 24: Platform, Surface, And Interop Completion
+## Period 25: Platform, Surface, And Interop Completion
 
-Status: planned after Period 23.
+Status: planned after Period 24.
 
 Goal: support multi-surface applications and explicit native interop with
 external resources and synchronization primitives.
@@ -463,11 +486,11 @@ external resources and synchronization primitives.
 - Phase 5: native command insertion
 - Phase 6: interop examples and matrix
 
-See `docs/develop/period24/`.
+See `docs/develop/period25/`.
 
-## Period 25: Object Cache And Production Backend Hardening
+## Period 26: Object Cache And Production Backend Hardening
 
-Status: planned after Period 24.
+Status: planned after Period 25.
 
 Goal: make native backend paths cacheable, diagnosable, persistent where useful,
 and stable under long-running workloads.
@@ -479,11 +502,11 @@ and stable under long-running workloads.
 - Phase 5: long-run stability
 - Phase 6: production readiness matrix
 
-See `docs/develop/period25/`.
+See `docs/develop/period26/`.
 
-## Period 26: Advanced Resource And Geometry Backend Completion
+## Period 27: Advanced Resource And Geometry Backend Completion
 
-Status: planned after Period 25.
+Status: planned after Period 26.
 
 Goal: lower sparse/tiled resources, residency updates, tessellation, and
 mesh/task shader paths where the backend supports them.
@@ -495,9 +518,9 @@ mesh/task shader paths where the backend supports them.
 - Phase 5: mesh and task shader backend
 - Phase 6: advanced geometry examples
 
-See `docs/develop/period26/`.
+See `docs/develop/period27/`.
 
-## Period 27+: Ray Tracing And Native Advanced Parity
+## Period 28+: Ray Tracing And Native Advanced Parity
 
 Status: long-term planned.
 
@@ -512,21 +535,22 @@ through explicit capability-gated APIs and a maintained parity matrix.
 - Phase 6: parity matrix closure
 - Phase 7: advanced examples
 
-See `docs/develop/period27/`.
+See `docs/develop/period28/`.
 
 ## Priority Notes
 
-- Period 20 is the current priority. It keeps backend completion separate from
-  historical API-shape periods.
+- Period 22 is the current priority after Period 21. It closes the deferred
+  binding and shader backend work before command/sync expansion resumes.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced
   backend work.
-- Periods 21 through 27+ are backend completion and parity periods, not a
+- Periods 20 through 28+ are backend completion and parity periods, not a
   request to reshape already-completed historical API-shape periods.
+- Periods 12 through 18 are historical API, validation, and capability-scaffold
+  periods. When they describe advanced lowering, treat Period 20+ as the
+  current source of truth for executable native backend closure.
 - Feature gates must be truthful before advanced backend lowering begins.
-- Periods 12 through 18 should prioritize backend implementation over new API
-  surface unless a missing descriptor blocks lowering.
 - Period 19 intentionally comes after production hardening. The voxel example is
   a pressure test, not the place to invent missing backend fundamentals.
 - Each period should include tests or examples that prove the new capability.

@@ -1,13 +1,18 @@
 # Period 18: Performance / Production Hardening
 
-Status: completed.
+Status: completed production-hardening descriptor, diagnostic, and planning
+scaffold. Native cache reuse, persistent driver caches, and long-run backend
+hardening are tracked in Period 26.
 
-Goal: turn backend features from functional slices into production-ready paths
-with persistent caches, diagnostics, profiling, and long-run stability checks.
+Goal: define the production-hardening shapes for persistent caches,
+diagnostics, profiling, and long-run stability checks.
 
 This period should reduce surprise for real applications: fewer redundant
 native objects, clearer captures, better upload paths, and confidence that
 long-running render loops stay stable.
+
+Historical note: Period 26 is the current source of truth for executable cache,
+diagnostics, profiling, and stability backend work.
 
 ## Phase 1: Driver Pipeline Cache Persistence
 

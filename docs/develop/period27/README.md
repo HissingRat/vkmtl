@@ -1,56 +1,46 @@
-# Period 27+: Ray Tracing And Native Advanced Parity
+# Period 27: Advanced Resource And Geometry Backend Completion
 
-Status: long-term planned.
+Status: planned after Period 26.
 
-Goal: cover the highest-end Vulkan and Metal capabilities through explicit,
-capability-gated APIs and a maintained parity matrix.
+Goal: lower advanced resource residency and geometry pipeline features where
+Vulkan and Metal expose compatible or explicitly capability-gated paths.
 
-Expected result: vkmtl can expose ray tracing, native advanced pipeline paths,
-external/native escape hatches, and backend-specific features without weakening
-the portable core.
+Expected result: vkmtl can support streaming-heavy renderers, large virtualized
+resources, tessellated geometry, and mesh/task-shader-style pipelines where the
+backend supports them.
 
-The `+` means this period may split into more periods as implementation details
-become concrete.
+## Phase 1: Sparse And Tiled Buffers
 
-## Phase 1: Acceleration Structures
-
-- Lower acceleration structure descriptors.
+- Lower sparse buffer or equivalent tiled buffer behavior.
 
 See `phase1.md`.
 
-## Phase 2: Ray Tracing Pipelines
+## Phase 2: Sparse And Tiled Textures
 
-- Lower ray tracing pipeline descriptors.
+- Lower sparse/tiled texture descriptors and residency updates.
 
 See `phase2.md`.
 
-## Phase 3: Shader Binding Tables And Dispatch
+## Phase 3: Residency And Page Commit API
 
-- Lower SBT layout and ray dispatch commands.
+- Add explicit residency maps and page commit/update behavior.
 
 See `phase3.md`.
 
-## Phase 4: Metal Ray Tracing Mapping
+## Phase 4: Tessellation Backend
 
-- Map Metal acceleration and intersection function paths.
+- Lower tessellation descriptors to supported backend pipeline paths.
 
 See `phase4.md`.
 
-## Phase 5: Native Advanced Escape Hatches
+## Phase 5: Mesh And Task Shader Backend
 
-- Complete explicit backend-specific escape hatches that cannot be made
-  portable.
+- Lower mesh/task shader descriptors where available.
 
 See `phase5.md`.
 
-## Phase 6: Parity Matrix Closure
+## Phase 6: Advanced Geometry Examples
 
-- Maintain final feature matrix and decide what becomes future periods.
+- Add examples and validation for completed advanced geometry/resource paths.
 
 See `phase6.md`.
-
-## Phase 7: Advanced Examples
-
-- Add ray tracing and native-advanced examples where supported.
-
-See `phase7.md`.

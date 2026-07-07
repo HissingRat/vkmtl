@@ -1,14 +1,15 @@
-# Phase 4: Sampler Border Color
+# Phase 4: Queue Ownership And Hazards
 
-Phase 4 lowers sampler border-color descriptors.
+Phase 4 defines ownership transitions across queues.
 
 ## Scope
 
-- Map supported border colors to Vulkan sampler state.
-- Map supported border colors to Metal sampler state where available.
-- Keep unsupported border color values typed and feature-gated.
+- Lower Vulkan queue family ownership transfers.
+- Map Metal ownership transfer descriptors to validation/no-op behavior.
+- Integrate ownership metadata with resource usage tracking.
+- Keep illegal cross-queue access errors typed.
 
 ## Validation
 
-- Add sampler validation tests for supported and unsupported border colors.
-- Update feature and limit reporting.
+- Add tests for transfer-before-use and missing-transfer cases.
+- Document backend differences clearly.

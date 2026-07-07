@@ -21,10 +21,10 @@ Phase 6 closes Period 21 with regression coverage.
 | --- | --- | --- | --- |
 | Dynamic buffer offsets | Dynamic descriptor offsets | Buffer base offset plus dynamic offset | Complete |
 | Resource arrays | Descriptor `descriptor_count` and array writes | Consecutive native slots | Complete |
-| Dynamic buffer arrays | Deferred | Deferred | Needs per-element dynamic offset model |
-| Descriptor indexing / argument buffers | Layout metadata | Layout metadata | Resource table update/bind deferred |
-| Root constant pipeline layout | Runtime descriptor gate | Runtime descriptor gate | Command write/native lowering deferred |
-| Shader specialization | Fingerprint identity and typed rejection | Fingerprint identity and typed rejection | Native variant lowering deferred |
+| Dynamic buffer arrays | Deferred to Period 22 | Deferred to Period 22 | Needs per-element dynamic offset model |
+| Descriptor indexing / argument buffers | Layout metadata | Layout metadata | Resource table update/bind deferred to Period 22 |
+| Root constant pipeline layout | Runtime descriptor gate | Runtime descriptor gate | Command write/native lowering deferred to Period 22 |
+| Shader specialization | Fingerprint identity and typed rejection | Fingerprint identity and typed rejection | Native variant lowering deferred to Period 22 |
 
 ## Result
 
