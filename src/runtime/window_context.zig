@@ -790,6 +790,38 @@ pub const Texture = struct {
     }
 };
 
+pub const ExternalTexture = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    descriptor_value: core.ExternalTextureDescriptor,
+    alive: bool = true,
+
+    pub fn deinit(self: *ExternalTexture) void {
+        assertAlive(self.alive, .texture);
+        self.alive = false;
+        self.tracker.release(.texture);
+    }
+
+    pub fn selectedBackend(self: ExternalTexture) core.Backend {
+        return self.backend;
+    }
+
+    pub fn descriptor(self: ExternalTexture) core.ExternalTextureDescriptor {
+        assertAlive(self.alive, .texture);
+        return self.descriptor_value;
+    }
+
+    pub fn textureDescriptor(self: ExternalTexture) core.TextureDescriptor {
+        assertAlive(self.alive, .texture);
+        return self.descriptor_value.textureDescriptor();
+    }
+
+    pub fn ownership(self: ExternalTexture) core.ExternalResourceOwnership {
+        assertAlive(self.alive, .texture);
+        return self.descriptor_value.ownership;
+    }
+};
+
 pub const TextureView = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
@@ -2723,6 +2755,16 @@ pub const Device = struct {
         };
     }
 
+    pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
+        try self.validateExternalTextureDescriptor(descriptor);
+        self.tracker.retain(.texture);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .descriptor_value = descriptor,
+        };
+    }
+
     pub fn makeSamplerState(self: *Device, descriptor: core.SamplerDescriptor) !SamplerState {
         try descriptor.validateForDevice(self.features(), self.limits());
         var fingerprint = objectFingerprintStart(.sampler, self.backend);
@@ -3046,6 +3088,11 @@ pub const WindowContext = struct {
     pub fn makeTexture(self: *WindowContext, descriptor: core.TextureDescriptor) !Texture {
         var device_view = self.device();
         return try device_view.makeTexture(descriptor);
+    }
+
+    pub fn makeExternalTexture(self: *WindowContext, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
+        var device_view = self.device();
+        return try device_view.makeExternalTexture(descriptor);
     }
 
     pub fn makeSamplerState(self: *WindowContext, descriptor: core.SamplerDescriptor) !SamplerState {
@@ -3653,6 +3700,47 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
     try std.testing.expectEqual(@as(usize, 1), layout.rangeCount());
     try std.testing.expectEqual(@as(u32, 3), layout.range(0).?.binding);
     try std.testing.expectEqual(@as(usize, 1), tracker.advanced_bind_group_layouts);
+}
+
+test "runtime external texture wrapper validates and tracks lifetime" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.external_textures = true;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = report,
+    };
+
+    var texture = try device.makeExternalTexture(.{
+        .label = "external texture",
+        .handle = .{
+            .kind = .metal_texture,
+            .value = 1,
+        },
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 32,
+    });
+    defer texture.deinit();
+
+    try std.testing.expectEqual(core.Backend.metal, texture.selectedBackend());
+    try std.testing.expectEqual(core.ExternalResourceOwnership.borrowed, texture.ownership());
+    try std.testing.expectEqual(@as(u32, 64), texture.textureDescriptor().width);
+    try std.testing.expectEqual(@as(usize, 1), tracker.textures);
 }
 
 test "runtime adapter selection validates resolved adapter info" {

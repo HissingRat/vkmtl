@@ -37,6 +37,7 @@ See `phase3.md`.
 
 - Create vkmtl textures from external texture descriptors.
 - Keep backend-specific handle kinds capability-gated.
+- Add a runtime `ExternalTexture` wrapper with validation and lifetime tracking.
 
 See `phase4.md`.
 

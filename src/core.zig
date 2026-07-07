@@ -3469,6 +3469,17 @@ pub const ExternalTextureDescriptor = struct {
             .usage = self.usage,
         }).validate();
     }
+
+    pub fn textureDescriptor(self: ExternalTextureDescriptor) TextureDescriptor {
+        return .{
+            .label = self.label,
+            .format = self.format,
+            .width = self.width,
+            .height = self.height,
+            .depth_or_array_layers = self.depth_or_array_layers,
+            .usage = self.usage,
+        };
+    }
 };
 
 pub const ExternalSemaphoreDescriptor = struct {

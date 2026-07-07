@@ -294,6 +294,7 @@ pub const ClearColor = runtime.ClearColor;
 pub const Buffer = runtime.Buffer;
 pub const MappedBufferRange = runtime.MappedBufferRange;
 pub const Texture = runtime.Texture;
+pub const ExternalTexture = runtime.ExternalTexture;
 pub const TextureView = runtime.TextureView;
 pub const SamplerState = runtime.SamplerState;
 pub const ShaderModule = runtime.ShaderModule;

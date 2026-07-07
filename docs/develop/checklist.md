@@ -918,11 +918,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 14 Phase 4 Checklist
 
-- [ ] Define external texture creation scope before implementation.
-- [ ] Create vkmtl textures from external texture descriptors.
-- [ ] Support texture views and sampler bindings for imported textures.
-- [ ] Validate format, usage, extent, and ownership compatibility.
-- [ ] Add rendering smoke coverage.
+- [x] Define external texture creation scope before implementation.
+- [x] Create a vkmtl external texture wrapper from external descriptors.
+- [x] Keep texture views and sampler bindings gated until native import lowering.
+- [x] Validate format, usage, extent, and ownership compatibility.
+- [x] Add runtime wrapper lifetime coverage.
 
 ## Period 14 Phase 5 Checklist
 
