@@ -1455,6 +1455,7 @@ pub fn defaultDeviceFeatures(_: Backend) DeviceFeatures {
         .debug_labels = true,
         .sampler_compare = true,
         .sampler_anisotropy = true,
+        .blend_state = true,
         .draw_base_vertex = true,
         .draw_base_instance = true,
         .indirect_draw = true,
@@ -9460,6 +9461,7 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.sampler_compare);
     try std.testing.expect(features.sampler_anisotropy);
     try std.testing.expect(!features.sampler_border_color);
+    try std.testing.expect(features.blend_state);
     try std.testing.expect(!features.heaps);
     try std.testing.expect(!features.multi_surface);
 }

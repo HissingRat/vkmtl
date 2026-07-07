@@ -1194,11 +1194,11 @@ obvious render and binding blockers.
 ## Period 20 Phase 1 Checklist
 
 - [x] Define blend lowering scope before implementation.
-- [ ] Lower blend factors and operations to Vulkan pipeline color blend state.
-- [ ] Lower blend factors and operations to Metal render pipeline color state.
-- [ ] Keep independent blend deferred to the MRT phase.
-- [ ] Update API docs and backend completion period notes.
-- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+- [x] Lower blend factors and operations to Vulkan pipeline color blend state.
+- [x] Lower blend factors and operations to Metal render pipeline color state.
+- [x] Keep independent blend deferred to the MRT phase.
+- [x] Update API docs and backend completion period notes.
+- [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
 ## Period 20 Phase 2 Checklist
 

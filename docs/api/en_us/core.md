@@ -246,7 +246,8 @@ Color attachment pipeline state includes write masks and optional
 alpha factors/operations, and each attachment may specify its own descriptor.
 Non-empty blend state is currently feature-gated by `DeviceFeatures.blend_state`;
 different per-attachment blend descriptors also require
-`DeviceFeatures.independent_blend`.
+`DeviceFeatures.independent_blend`. Single color attachment blending now lowers
+to Vulkan and Metal; true independent blend will land with MRT lowering.
 
 Depth/stencil state includes `depth_test_enabled`, depth compare/write fields,
 and a `StencilDescriptor` with front/back operations plus read/write masks.

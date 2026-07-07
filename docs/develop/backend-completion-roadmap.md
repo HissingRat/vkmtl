@@ -24,6 +24,7 @@ paths. They are recorded here instead of rewriting the historical period notes:
 - Compute dispatch indirect lowering.
 - Compare sampler and anisotropy lowering.
 - Transient attachment metadata accepted as a no-op performance hint.
+- Single color attachment blend state lowering.
 
 ## Goal
 
@@ -39,7 +40,7 @@ lowering. Each slice should keep the backend boundary intact:
 
 Tracked in `docs/develop/period20/`.
 
-- [ ] Blend state lowering for color attachments.
+- [x] Blend state lowering for color attachments.
 - [ ] Pipeline depth-bias state lowering.
 - [ ] Wireframe / line fill mode where the backend supports it.
 - [ ] Vertex instance step-rate lowering.

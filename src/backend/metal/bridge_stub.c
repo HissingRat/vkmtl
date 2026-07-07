@@ -354,6 +354,14 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     const char *fragment_entry,
     size_t fragment_entry_len,
     vkmtl_metal_texture_format color_format,
+    unsigned int color_write_mask,
+    unsigned int blend_enabled,
+    vkmtl_metal_blend_factor source_rgb_blend_factor,
+    vkmtl_metal_blend_factor destination_rgb_blend_factor,
+    vkmtl_metal_blend_operation rgb_blend_operation,
+    vkmtl_metal_blend_factor source_alpha_blend_factor,
+    vkmtl_metal_blend_factor destination_alpha_blend_factor,
+    vkmtl_metal_blend_operation alpha_blend_operation,
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
@@ -372,6 +380,14 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     (void)fragment_entry;
     (void)fragment_entry_len;
     (void)color_format;
+    (void)color_write_mask;
+    (void)blend_enabled;
+    (void)source_rgb_blend_factor;
+    (void)destination_rgb_blend_factor;
+    (void)rgb_blend_operation;
+    (void)source_alpha_blend_factor;
+    (void)destination_alpha_blend_factor;
+    (void)alpha_blend_operation;
     (void)depth_format;
     (void)depth_compare_function;
     (void)depth_write_enabled;

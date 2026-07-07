@@ -41,6 +41,8 @@ pub fn init(
     const vertex_attributes = try makeVertexAttributes(allocator, descriptor.vertex_descriptor);
     defer allocator.free(vertex_attributes);
 
+    const color_attachment = descriptor.color_attachments[0];
+    const blend = color_attachment.blend;
     var handle: ?*metal.vkmtl_metal_render_pipeline_state = null;
     try check(metal.vkmtl_metal_render_pipeline_state_create(
         owner.handle,
@@ -50,7 +52,15 @@ pub fn init(
         if (fragment_module) |module| module.handle else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.ptr else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.len else 0,
-        textureFormat(descriptor.color_attachments[0].format),
+        textureFormat(color_attachment.format),
+        colorWriteMask(color_attachment.write_mask),
+        if (blend != null) 1 else 0,
+        if (blend) |value| blendFactor(value.source_rgb_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ONE,
+        if (blend) |value| blendFactor(value.destination_rgb_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
+        if (blend) |value| blendOperation(value.rgb_blend_operation) else metal.VKMTL_METAL_BLEND_OPERATION_ADD,
+        if (blend) |value| blendFactor(value.source_alpha_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ONE,
+        if (blend) |value| blendFactor(value.destination_alpha_blend_factor) else metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
+        if (blend) |value| blendOperation(value.alpha_blend_operation) else metal.VKMTL_METAL_BLEND_OPERATION_ADD,
         if (descriptor.depth_stencil) |depth| textureFormat(depth.format) else metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
         if (descriptor.depth_stencil) |depth| compareFunction(depth.depth_compare_function) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
         if (descriptor.depth_stencil) |depth| if (depth.depth_write_enabled) 1 else 0 else 0,
@@ -134,6 +144,42 @@ fn vertexStepFunction(step: core.VertexStepFunction) metal.vkmtl_metal_vertex_st
     return switch (step) {
         .per_vertex => metal.VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_VERTEX,
         .per_instance => metal.VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_INSTANCE,
+    };
+}
+
+fn colorWriteMask(mask: core.ColorWriteMask) u32 {
+    return (if (mask.red) @as(u32, 1) << 0 else 0) |
+        (if (mask.green) @as(u32, 1) << 1 else 0) |
+        (if (mask.blue) @as(u32, 1) << 2 else 0) |
+        (if (mask.alpha) @as(u32, 1) << 3 else 0);
+}
+
+fn blendFactor(factor: core.BlendFactor) metal.vkmtl_metal_blend_factor {
+    return switch (factor) {
+        .zero => metal.VKMTL_METAL_BLEND_FACTOR_ZERO,
+        .one => metal.VKMTL_METAL_BLEND_FACTOR_ONE,
+        .source_color => metal.VKMTL_METAL_BLEND_FACTOR_SOURCE_COLOR,
+        .one_minus_source_color => metal.VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_SOURCE_COLOR,
+        .source_alpha => metal.VKMTL_METAL_BLEND_FACTOR_SOURCE_ALPHA,
+        .one_minus_source_alpha => metal.VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_SOURCE_ALPHA,
+        .destination_color => metal.VKMTL_METAL_BLEND_FACTOR_DESTINATION_COLOR,
+        .one_minus_destination_color => metal.VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_DESTINATION_COLOR,
+        .destination_alpha => metal.VKMTL_METAL_BLEND_FACTOR_DESTINATION_ALPHA,
+        .one_minus_destination_alpha => metal.VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_DESTINATION_ALPHA,
+        .blend_color => metal.VKMTL_METAL_BLEND_FACTOR_BLEND_COLOR,
+        .one_minus_blend_color => metal.VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_BLEND_COLOR,
+        .blend_alpha => metal.VKMTL_METAL_BLEND_FACTOR_BLEND_ALPHA,
+        .one_minus_blend_alpha => metal.VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_BLEND_ALPHA,
+    };
+}
+
+fn blendOperation(operation: core.BlendOperation) metal.vkmtl_metal_blend_operation {
+    return switch (operation) {
+        .add => metal.VKMTL_METAL_BLEND_OPERATION_ADD,
+        .subtract => metal.VKMTL_METAL_BLEND_OPERATION_SUBTRACT,
+        .reverse_subtract => metal.VKMTL_METAL_BLEND_OPERATION_REVERSE_SUBTRACT,
+        .min => metal.VKMTL_METAL_BLEND_OPERATION_MIN,
+        .max => metal.VKMTL_METAL_BLEND_OPERATION_MAX,
     };
 }
 

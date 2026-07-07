@@ -116,6 +116,31 @@ typedef enum vkmtl_metal_vertex_step_function {
     VKMTL_METAL_VERTEX_STEP_FUNCTION_PER_INSTANCE = 1,
 } vkmtl_metal_vertex_step_function;
 
+typedef enum vkmtl_metal_blend_factor {
+    VKMTL_METAL_BLEND_FACTOR_ZERO = 0,
+    VKMTL_METAL_BLEND_FACTOR_ONE = 1,
+    VKMTL_METAL_BLEND_FACTOR_SOURCE_COLOR = 2,
+    VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_SOURCE_COLOR = 3,
+    VKMTL_METAL_BLEND_FACTOR_SOURCE_ALPHA = 4,
+    VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_SOURCE_ALPHA = 5,
+    VKMTL_METAL_BLEND_FACTOR_DESTINATION_COLOR = 6,
+    VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_DESTINATION_COLOR = 7,
+    VKMTL_METAL_BLEND_FACTOR_DESTINATION_ALPHA = 8,
+    VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_DESTINATION_ALPHA = 9,
+    VKMTL_METAL_BLEND_FACTOR_BLEND_COLOR = 10,
+    VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_BLEND_COLOR = 11,
+    VKMTL_METAL_BLEND_FACTOR_BLEND_ALPHA = 12,
+    VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_BLEND_ALPHA = 13,
+} vkmtl_metal_blend_factor;
+
+typedef enum vkmtl_metal_blend_operation {
+    VKMTL_METAL_BLEND_OPERATION_ADD = 0,
+    VKMTL_METAL_BLEND_OPERATION_SUBTRACT = 1,
+    VKMTL_METAL_BLEND_OPERATION_REVERSE_SUBTRACT = 2,
+    VKMTL_METAL_BLEND_OPERATION_MIN = 3,
+    VKMTL_METAL_BLEND_OPERATION_MAX = 4,
+} vkmtl_metal_blend_operation;
+
 typedef struct vkmtl_metal_vertex_buffer_layout {
     unsigned int buffer_index;
     unsigned int stride;
@@ -329,6 +354,14 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     const char *fragment_entry,
     size_t fragment_entry_len,
     vkmtl_metal_texture_format color_format,
+    unsigned int color_write_mask,
+    unsigned int blend_enabled,
+    vkmtl_metal_blend_factor source_rgb_blend_factor,
+    vkmtl_metal_blend_factor destination_rgb_blend_factor,
+    vkmtl_metal_blend_operation rgb_blend_operation,
+    vkmtl_metal_blend_factor source_alpha_blend_factor,
+    vkmtl_metal_blend_factor destination_alpha_blend_factor,
+    vkmtl_metal_blend_operation alpha_blend_operation,
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,

@@ -641,6 +641,73 @@ static MTLVertexStepFunction vkmtl_vertex_step_function(vkmtl_metal_vertex_step_
     }
 }
 
+static MTLBlendFactor vkmtl_blend_factor(vkmtl_metal_blend_factor factor) {
+    switch (factor) {
+        case VKMTL_METAL_BLEND_FACTOR_ZERO:
+            return MTLBlendFactorZero;
+        case VKMTL_METAL_BLEND_FACTOR_ONE:
+            return MTLBlendFactorOne;
+        case VKMTL_METAL_BLEND_FACTOR_SOURCE_COLOR:
+            return MTLBlendFactorSourceColor;
+        case VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_SOURCE_COLOR:
+            return MTLBlendFactorOneMinusSourceColor;
+        case VKMTL_METAL_BLEND_FACTOR_SOURCE_ALPHA:
+            return MTLBlendFactorSourceAlpha;
+        case VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_SOURCE_ALPHA:
+            return MTLBlendFactorOneMinusSourceAlpha;
+        case VKMTL_METAL_BLEND_FACTOR_DESTINATION_COLOR:
+            return MTLBlendFactorDestinationColor;
+        case VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_DESTINATION_COLOR:
+            return MTLBlendFactorOneMinusDestinationColor;
+        case VKMTL_METAL_BLEND_FACTOR_DESTINATION_ALPHA:
+            return MTLBlendFactorDestinationAlpha;
+        case VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_DESTINATION_ALPHA:
+            return MTLBlendFactorOneMinusDestinationAlpha;
+        case VKMTL_METAL_BLEND_FACTOR_BLEND_COLOR:
+            return MTLBlendFactorBlendColor;
+        case VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_BLEND_COLOR:
+            return MTLBlendFactorOneMinusBlendColor;
+        case VKMTL_METAL_BLEND_FACTOR_BLEND_ALPHA:
+            return MTLBlendFactorBlendAlpha;
+        case VKMTL_METAL_BLEND_FACTOR_ONE_MINUS_BLEND_ALPHA:
+            return MTLBlendFactorOneMinusBlendAlpha;
+    }
+    return MTLBlendFactorOne;
+}
+
+static MTLBlendOperation vkmtl_blend_operation(vkmtl_metal_blend_operation operation) {
+    switch (operation) {
+        case VKMTL_METAL_BLEND_OPERATION_ADD:
+            return MTLBlendOperationAdd;
+        case VKMTL_METAL_BLEND_OPERATION_SUBTRACT:
+            return MTLBlendOperationSubtract;
+        case VKMTL_METAL_BLEND_OPERATION_REVERSE_SUBTRACT:
+            return MTLBlendOperationReverseSubtract;
+        case VKMTL_METAL_BLEND_OPERATION_MIN:
+            return MTLBlendOperationMin;
+        case VKMTL_METAL_BLEND_OPERATION_MAX:
+            return MTLBlendOperationMax;
+    }
+    return MTLBlendOperationAdd;
+}
+
+static MTLColorWriteMask vkmtl_color_write_mask(unsigned int mask) {
+    MTLColorWriteMask out = 0;
+    if ((mask & (1u << 0)) != 0) {
+        out |= MTLColorWriteMaskRed;
+    }
+    if ((mask & (1u << 1)) != 0) {
+        out |= MTLColorWriteMaskGreen;
+    }
+    if ((mask & (1u << 2)) != 0) {
+        out |= MTLColorWriteMaskBlue;
+    }
+    if ((mask & (1u << 3)) != 0) {
+        out |= MTLColorWriteMaskAlpha;
+    }
+    return out;
+}
+
 static MTLPrimitiveType vkmtl_primitive_type(unsigned int primitive_type) {
     switch (primitive_type) {
         case 1:
@@ -1334,6 +1401,14 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     const char *fragment_entry,
     size_t fragment_entry_len,
     vkmtl_metal_texture_format color_format,
+    unsigned int color_write_mask,
+    unsigned int blend_enabled,
+    vkmtl_metal_blend_factor source_rgb_blend_factor,
+    vkmtl_metal_blend_factor destination_rgb_blend_factor,
+    vkmtl_metal_blend_operation rgb_blend_operation,
+    vkmtl_metal_blend_factor source_alpha_blend_factor,
+    vkmtl_metal_blend_factor destination_alpha_blend_factor,
+    vkmtl_metal_blend_operation alpha_blend_operation,
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
@@ -1412,6 +1487,22 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
         descriptor.vertexFunction = vertex_function;
         descriptor.fragmentFunction = fragment_function;
         descriptor.colorAttachments[0].pixelFormat = vkmtl_texture_pixel_format(color_format);
+        descriptor.colorAttachments[0].writeMask = vkmtl_color_write_mask(color_write_mask);
+        if (blend_enabled != 0) {
+            descriptor.colorAttachments[0].blendingEnabled = YES;
+            descriptor.colorAttachments[0].sourceRGBBlendFactor =
+                vkmtl_blend_factor(source_rgb_blend_factor);
+            descriptor.colorAttachments[0].destinationRGBBlendFactor =
+                vkmtl_blend_factor(destination_rgb_blend_factor);
+            descriptor.colorAttachments[0].rgbBlendOperation =
+                vkmtl_blend_operation(rgb_blend_operation);
+            descriptor.colorAttachments[0].sourceAlphaBlendFactor =
+                vkmtl_blend_factor(source_alpha_blend_factor);
+            descriptor.colorAttachments[0].destinationAlphaBlendFactor =
+                vkmtl_blend_factor(destination_alpha_blend_factor);
+            descriptor.colorAttachments[0].alphaBlendOperation =
+                vkmtl_blend_operation(alpha_blend_operation);
+        }
         descriptor.sampleCount = sample_count;
         if (depth_format != VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
             descriptor.depthAttachmentPixelFormat = vkmtl_texture_pixel_format(depth_format);

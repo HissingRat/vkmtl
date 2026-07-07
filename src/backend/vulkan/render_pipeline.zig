@@ -364,18 +364,48 @@ fn makeColorBlendAttachments(
 ) ![]vk.PipelineColorBlendAttachmentState {
     const states = try allocator.alloc(vk.PipelineColorBlendAttachmentState, attachments.len);
     for (attachments, states) |attachment, *state| {
+        const blend = attachment.blend;
         state.* = .{
-            .blend_enable = .false,
-            .src_color_blend_factor = .one,
-            .dst_color_blend_factor = .zero,
-            .color_blend_op = .add,
-            .src_alpha_blend_factor = .one,
-            .dst_alpha_blend_factor = .zero,
-            .alpha_blend_op = .add,
+            .blend_enable = if (blend != null) .true else .false,
+            .src_color_blend_factor = if (blend) |value| blendFactor(value.source_rgb_blend_factor) else .one,
+            .dst_color_blend_factor = if (blend) |value| blendFactor(value.destination_rgb_blend_factor) else .zero,
+            .color_blend_op = if (blend) |value| blendOp(value.rgb_blend_operation) else .add,
+            .src_alpha_blend_factor = if (blend) |value| blendFactor(value.source_alpha_blend_factor) else .one,
+            .dst_alpha_blend_factor = if (blend) |value| blendFactor(value.destination_alpha_blend_factor) else .zero,
+            .alpha_blend_op = if (blend) |value| blendOp(value.alpha_blend_operation) else .add,
             .color_write_mask = colorWriteMask(attachment.write_mask),
         };
     }
     return states;
+}
+
+fn blendFactor(factor: core.BlendFactor) vk.BlendFactor {
+    return switch (factor) {
+        .zero => .zero,
+        .one => .one,
+        .source_color => .src_color,
+        .one_minus_source_color => .one_minus_src_color,
+        .source_alpha => .src_alpha,
+        .one_minus_source_alpha => .one_minus_src_alpha,
+        .destination_color => .dst_color,
+        .one_minus_destination_color => .one_minus_dst_color,
+        .destination_alpha => .dst_alpha,
+        .one_minus_destination_alpha => .one_minus_dst_alpha,
+        .blend_color => .constant_color,
+        .one_minus_blend_color => .one_minus_constant_color,
+        .blend_alpha => .constant_alpha,
+        .one_minus_blend_alpha => .one_minus_constant_alpha,
+    };
+}
+
+fn blendOp(operation: core.BlendOperation) vk.BlendOp {
+    return switch (operation) {
+        .add => .add,
+        .subtract => .subtract,
+        .reverse_subtract => .reverse_subtract,
+        .min => .min,
+        .max => .max,
+    };
 }
 
 fn vertexFormat(format: core.VertexFormat) vk.Format {

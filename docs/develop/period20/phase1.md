@@ -14,7 +14,7 @@ Phase 1 completes the common single-render-target blend path.
 
 ## Status
 
-Active.
+Completed.
 
 ## Validation
 
