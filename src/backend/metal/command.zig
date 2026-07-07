@@ -389,6 +389,20 @@ pub const ComputeCommandEncoder = struct {
         _ = table;
     }
 
+    pub fn setRootConstants(
+        self: *ComputeCommandEncoder,
+        descriptor: core.RootConstantWriteDescriptor,
+        visibility: core.ShaderVisibility,
+    ) !void {
+        _ = visibility;
+        try check(metal.vkmtl_metal_compute_command_encoder_set_bytes(
+            self.handle,
+            descriptor.bytes.ptr,
+            descriptor.bytes.len,
+            slots.root_constant_buffer_slot,
+        ));
+    }
+
     pub fn dispatchThreadgroups(
         self: *ComputeCommandEncoder,
         descriptor: core.DispatchThreadgroupsDescriptor,
@@ -587,6 +601,29 @@ pub const RenderCommandEncoder = struct {
         try binding.validate();
         _ = self;
         _ = table;
+    }
+
+    pub fn setRootConstants(
+        self: *RenderCommandEncoder,
+        descriptor: core.RootConstantWriteDescriptor,
+        visibility: core.ShaderVisibility,
+    ) !void {
+        if (visibility.vertex) {
+            try check(metal.vkmtl_metal_render_command_encoder_set_vertex_bytes(
+                self.handle,
+                descriptor.bytes.ptr,
+                descriptor.bytes.len,
+                slots.root_constant_buffer_slot,
+            ));
+        }
+        if (visibility.fragment) {
+            try check(metal.vkmtl_metal_render_command_encoder_set_fragment_bytes(
+                self.handle,
+                descriptor.bytes.ptr,
+                descriptor.bytes.len,
+                slots.root_constant_buffer_slot,
+            ));
+        }
     }
 
     pub fn drawPrimitives(

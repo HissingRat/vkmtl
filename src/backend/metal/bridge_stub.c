@@ -522,6 +522,19 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_buffer(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_bytes(
+    vkmtl_metal_render_command_encoder *encoder,
+    const void *bytes,
+    size_t byte_count,
+    unsigned int index
+) {
+    (void)encoder;
+    (void)bytes;
+    (void)byte_count;
+    (void)index;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_buffer(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_buffer *buffer,
@@ -532,6 +545,19 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_buffer(
     (void)buffer;
     (void)index;
     (void)offset;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_bytes(
+    vkmtl_metal_render_command_encoder *encoder,
+    const void *bytes,
+    size_t byte_count,
+    unsigned int index
+) {
+    (void)encoder;
+    (void)bytes;
+    (void)byte_count;
+    (void)index;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -766,6 +792,19 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_buffer(
     (void)buffer;
     (void)index;
     (void)offset;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_bytes(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const void *bytes,
+    size_t byte_count,
+    unsigned int index
+) {
+    (void)encoder;
+    (void)bytes;
+    (void)byte_count;
+    (void)index;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 

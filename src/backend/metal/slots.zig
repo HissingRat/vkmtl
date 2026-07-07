@@ -2,6 +2,7 @@ const core = @import("../../core.zig");
 
 pub const vertex_buffer_slot_base: u32 = 16;
 pub const max_metal_buffer_slots: u32 = 31;
+pub const root_constant_buffer_slot: u32 = 15;
 
 pub fn vertexBufferSlot(binding: core.VertexBufferBinding) core.CommandEncodingError!u32 {
     try binding.validate();

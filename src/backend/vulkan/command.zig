@@ -604,6 +604,22 @@ pub const RenderCommandEncoder = struct {
         _ = table;
     }
 
+    pub fn setRootConstants(
+        self: *RenderCommandEncoder,
+        descriptor: core.RootConstantWriteDescriptor,
+        visibility: core.ShaderVisibility,
+    ) !void {
+        if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingRenderPipelineState;
+        self.gc.dev.cmdPushConstants(
+            self.cmdbuf,
+            self.pipeline_layout,
+            shaderStageFlags(visibility),
+            descriptor.offset,
+            @intCast(descriptor.bytes.len),
+            descriptor.bytes.ptr,
+        );
+    }
+
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
         try viewport.validate();
         self.gc.dev.cmdSetViewport(self.cmdbuf, 0, &.{.{
@@ -926,6 +942,22 @@ pub const ComputeCommandEncoder = struct {
         _ = table;
     }
 
+    pub fn setRootConstants(
+        self: *ComputeCommandEncoder,
+        descriptor: core.RootConstantWriteDescriptor,
+        visibility: core.ShaderVisibility,
+    ) !void {
+        if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingComputePipelineState;
+        self.gc.dev.cmdPushConstants(
+            self.cmdbuf,
+            self.pipeline_layout,
+            shaderStageFlags(visibility),
+            descriptor.offset,
+            @intCast(descriptor.bytes.len),
+            descriptor.bytes.ptr,
+        );
+    }
+
     pub fn dispatchThreadgroups(
         self: *ComputeCommandEncoder,
         descriptor: core.DispatchThreadgroupsDescriptor,
@@ -1027,5 +1059,13 @@ fn indexType(index_type: core.IndexType) vk.IndexType {
     return switch (index_type) {
         .uint16 => .uint16,
         .uint32 => .uint32,
+    };
+}
+
+fn shaderStageFlags(visibility: core.ShaderVisibility) vk.ShaderStageFlags {
+    return .{
+        .vertex_bit = visibility.vertex,
+        .fragment_bit = visibility.fragment,
+        .compute_bit = visibility.compute,
     };
 }

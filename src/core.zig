@@ -1200,6 +1200,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidRootConstantAlignment,
         error.EmptyRootConstantWrite,
         error.RootConstantWriteOutOfRange,
+        error.RootConstantVisibilityMismatch,
         error.MissingSurfaceSource,
         error.InvalidSurfaceExtent,
         error.InvalidSurfaceHandle,
@@ -3273,6 +3274,10 @@ pub const RenderCommandEncoderDebugState = struct {
         self.bind_group_mask |= @as(u64, 1) << @intCast(binding.index);
     }
 
+    pub fn setRootConstants(self: *RenderCommandEncoderDebugState) CommandEncodingError!void {
+        try self.requireEncoding();
+    }
+
     pub fn setResourceTable(
         self: *RenderCommandEncoderDebugState,
         binding: ResourceTableBinding,
@@ -3506,6 +3511,10 @@ pub const ComputeCommandEncoderDebugState = struct {
         try self.requireEncoding();
         try binding.validate();
         self.bind_group_mask |= @as(u64, 1) << @intCast(binding.index);
+    }
+
+    pub fn setRootConstants(self: *ComputeCommandEncoderDebugState) CommandEncodingError!void {
+        try self.requireEncoding();
     }
 
     pub fn setResourceTable(
@@ -5198,6 +5207,7 @@ pub const RootConstantError = error{
     InvalidRootConstantAlignment,
     EmptyRootConstantWrite,
     RootConstantWriteOutOfRange,
+    RootConstantVisibilityMismatch,
 };
 
 pub const BindingError = error{

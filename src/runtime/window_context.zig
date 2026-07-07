@@ -447,6 +447,14 @@ fn hashRootConstantLayout(hash: *u64, layout: ?core.RootConstantLayoutDescriptor
     }
 }
 
+fn copyRootConstantRanges(
+    allocator: std.mem.Allocator,
+    layout: ?core.RootConstantLayoutDescriptor,
+) ![]core.RootConstantRange {
+    const root_layout = layout orelse return &.{};
+    return try allocator.dupe(core.RootConstantRange, root_layout.ranges);
+}
+
 fn hashSamplerDescriptor(hash: *u64, descriptor: core.SamplerDescriptor) void {
     hashU64(hash, @intFromEnum(descriptor.min_filter));
     hashU64(hash, @intFromEnum(descriptor.mag_filter));
@@ -1065,8 +1073,10 @@ pub const ShaderModule = struct {
 pub const RenderPipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    allocator: ?std.mem.Allocator = null,
     label_value: ?[]const u8 = null,
     native_labels_enabled: bool = false,
+    root_constant_ranges: []core.RootConstantRange = &.{},
     alive: bool = true,
     impl: Impl,
 
@@ -1082,6 +1092,7 @@ pub const RenderPipelineState = struct {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
+        if (self.allocator) |allocator| allocator.free(self.root_constant_ranges);
         self.tracker.release(.render_pipeline_state);
     }
 
@@ -1091,6 +1102,11 @@ pub const RenderPipelineState = struct {
 
     pub fn label(self: RenderPipelineState) ?[]const u8 {
         return self.label_value;
+    }
+
+    pub fn rootConstantLayout(self: RenderPipelineState) ?core.RootConstantLayoutDescriptor {
+        if (self.root_constant_ranges.len == 0) return null;
+        return .{ .ranges = self.root_constant_ranges };
     }
 
     pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
@@ -1107,8 +1123,10 @@ pub const RenderPipelineState = struct {
 pub const ComputePipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
+    allocator: ?std.mem.Allocator = null,
     label_value: ?[]const u8 = null,
     native_labels_enabled: bool = false,
+    root_constant_ranges: []core.RootConstantRange = &.{},
     alive: bool = true,
     impl: Impl,
 
@@ -1124,6 +1142,7 @@ pub const ComputePipelineState = struct {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
+        if (self.allocator) |allocator| allocator.free(self.root_constant_ranges);
         self.tracker.release(.compute_pipeline_state);
     }
 
@@ -1133,6 +1152,11 @@ pub const ComputePipelineState = struct {
 
     pub fn label(self: ComputePipelineState) ?[]const u8 {
         return self.label_value;
+    }
+
+    pub fn rootConstantLayout(self: ComputePipelineState) ?core.RootConstantLayoutDescriptor {
+        if (self.root_constant_ranges.len == 0) return null;
+        return .{ .ranges = self.root_constant_ranges };
     }
 
     pub fn setLabel(self: *ComputePipelineState, label_value: ?[]const u8) void {
@@ -2267,6 +2291,7 @@ pub const ComputeCommandEncoder = struct {
     alive: bool = true,
     debug: core.ComputeCommandEncoderDebugState = .{},
     debug_groups: core.DebugGroupStack = .{},
+    active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
     impl: ?Impl = null,
 
     const Impl = union(core.Backend) {
@@ -2282,6 +2307,7 @@ pub const ComputeCommandEncoder = struct {
         assertAlive(pipeline.alive, .compute_pipeline_state);
         try expectSameBackend(self.backend, pipeline.backend);
         try self.debug.setComputePipelineState();
+        self.active_root_constant_layout = pipeline.rootConstantLayout();
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setComputePipelineState(&pipeline.impl.vulkan),
             .metal => |*metal| try metal.setComputePipelineState(&pipeline.impl.metal),
@@ -2321,6 +2347,23 @@ pub const ComputeCommandEncoder = struct {
             .metal => |*metal| try metal.setResourceTable(&table.impl.?.metal, binding),
         };
         try table.markBoundForCommands();
+    }
+
+    pub fn setRootConstants(
+        self: *ComputeCommandEncoder,
+        descriptor: core.RootConstantWriteDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        const range = try validateRootConstantWriteForStages(
+            self.active_root_constant_layout,
+            descriptor,
+            .{ .compute = true },
+        );
+        try self.debug.setRootConstants();
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setRootConstants(descriptor, range.visibility),
+            .metal => |*metal| try metal.setRootConstants(descriptor, range.visibility),
+        };
     }
 
     pub fn dispatchThreadgroups(
@@ -2439,6 +2482,7 @@ pub const RenderCommandEncoder = struct {
     alive: bool = true,
     debug: core.RenderCommandEncoderDebugState = .{},
     debug_groups: core.DebugGroupStack = .{},
+    active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
     impl: ?Impl = null,
 
     const Impl = union(core.Backend) {
@@ -2454,6 +2498,7 @@ pub const RenderCommandEncoder = struct {
         assertAlive(pipeline.alive, .render_pipeline_state);
         try expectSameBackend(self.backend, pipeline.backend);
         try self.debug.setRenderPipelineState();
+        self.active_root_constant_layout = pipeline.rootConstantLayout();
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setRenderPipelineState(&pipeline.impl.vulkan),
             .metal => |*metal| try metal.setRenderPipelineState(&pipeline.impl.metal),
@@ -2521,6 +2566,23 @@ pub const RenderCommandEncoder = struct {
             .metal => |*metal| try metal.setResourceTable(&table.impl.?.metal, binding),
         };
         try table.markBoundForCommands();
+    }
+
+    pub fn setRootConstants(
+        self: *RenderCommandEncoder,
+        descriptor: core.RootConstantWriteDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        const range = try validateRootConstantWriteForStages(
+            self.active_root_constant_layout,
+            descriptor,
+            .{ .vertex = true, .fragment = true },
+        );
+        try self.debug.setRootConstants();
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setRootConstants(descriptor, range.visibility),
+            .metal => |*metal| try metal.setRootConstants(descriptor, range.visibility),
+        };
     }
 
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
@@ -3091,6 +3153,8 @@ pub const Device = struct {
         try validateRuntimeSpecialization(descriptor.vertex);
         if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment);
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
+        const root_constant_ranges = try copyRootConstantRanges(self.allocator, descriptor.root_constant_layout);
+        errdefer self.allocator.free(root_constant_ranges);
         var fingerprint = objectFingerprintStart(.render_pipeline, self.backend);
         hashRenderPipelineDescriptor(&fingerprint, descriptor);
         const timer_start = objectCreationTimerStart();
@@ -3104,8 +3168,10 @@ pub const Device = struct {
         var pipeline = RenderPipelineState{
             .backend = self.backend,
             .tracker = self.tracker,
+            .allocator = self.allocator,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
+            .root_constant_ranges = root_constant_ranges,
             .impl = impl,
         };
         pipeline.setLabel(descriptor.label);
@@ -3117,6 +3183,8 @@ pub const Device = struct {
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.compute);
         try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
+        const root_constant_ranges = try copyRootConstantRanges(self.allocator, descriptor.root_constant_layout);
+        errdefer self.allocator.free(root_constant_ranges);
         var fingerprint = objectFingerprintStart(.compute_pipeline, self.backend);
         hashComputePipelineDescriptor(&fingerprint, descriptor);
         const timer_start = objectCreationTimerStart();
@@ -3130,8 +3198,10 @@ pub const Device = struct {
         var pipeline = ComputePipelineState{
             .backend = self.backend,
             .tracker = self.tracker,
+            .allocator = self.allocator,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
+            .root_constant_ranges = root_constant_ranges,
             .impl = impl,
         };
         pipeline.setLabel(descriptor.label);
@@ -3777,6 +3847,49 @@ fn validateRuntimeRootConstantLayout(
     limits: core.DeviceLimits,
 ) core.RootConstantError!void {
     if (layout) |root_layout| try root_layout.validate(features, limits);
+}
+
+fn validateRootConstantWriteForStages(
+    layout: ?core.RootConstantLayoutDescriptor,
+    descriptor: core.RootConstantWriteDescriptor,
+    stages: core.ShaderVisibility,
+) core.RootConstantError!core.RootConstantRange {
+    const root_layout = layout orelse return core.RootConstantError.MissingRootConstantRange;
+    if (descriptor.bytes.len == 0) return core.RootConstantError.EmptyRootConstantWrite;
+    if (descriptor.bytes.len > std.math.maxInt(u32)) return core.RootConstantError.RootConstantRangeTooLarge;
+    const byte_count: u32 = @intCast(descriptor.bytes.len);
+    const alignment: u32 = 4;
+    if (descriptor.offset % alignment != 0 or byte_count % alignment != 0) {
+        return core.RootConstantError.InvalidRootConstantAlignment;
+    }
+    for (root_layout.ranges) |range| {
+        if (!rootConstantRangeContainsWrite(range, descriptor)) continue;
+        if (!rootConstantVisibilityIntersects(range.visibility, stages)) {
+            return core.RootConstantError.RootConstantVisibilityMismatch;
+        }
+        return range;
+    }
+    return core.RootConstantError.RootConstantWriteOutOfRange;
+}
+
+fn rootConstantRangeContainsWrite(
+    range: core.RootConstantRange,
+    descriptor: core.RootConstantWriteDescriptor,
+) bool {
+    if (descriptor.bytes.len == 0 or descriptor.bytes.len > std.math.maxInt(u32)) return false;
+    const byte_count: u32 = @intCast(descriptor.bytes.len);
+    const range_end = std.math.add(u32, range.offset, range.size) catch return false;
+    const write_end = std.math.add(u32, descriptor.offset, byte_count) catch return false;
+    return descriptor.offset >= range.offset and write_end <= range_end;
+}
+
+fn rootConstantVisibilityIntersects(
+    lhs: core.ShaderVisibility,
+    rhs: core.ShaderVisibility,
+) bool {
+    return (lhs.vertex and rhs.vertex) or
+        (lhs.fragment and rhs.fragment) or
+        (lhs.compute and rhs.compute);
 }
 
 fn validateRuntimeRenderPipelineShape(
@@ -5077,6 +5190,62 @@ test "runtime command encoders bind resource tables with validation" {
     var incomplete_table = table;
     incomplete_table.slots = empty_slots[0..];
     try std.testing.expectError(core.BindingError.MissingResourceTableBinding, render_encoder.setResourceTable(&incomplete_table, .{ .index = 0 }));
+}
+
+test "runtime command encoders write root constants with pipeline layout validation" {
+    var tracker = ResourceTracker{};
+    var command_buffer = CommandBuffer{ .backend = .metal };
+    var bytes = [_]u8{ 1, 2, 3, 4 };
+    var render_encoder = RenderCommandEncoder{
+        .backend = .metal,
+        .command_buffer = &command_buffer,
+    };
+
+    try std.testing.expectError(core.RootConstantError.MissingRootConstantRange, render_encoder.setRootConstants(.{
+        .offset = 0,
+        .bytes = bytes[0..],
+    }));
+
+    var render_ranges = [_]core.RootConstantRange{.{
+        .visibility = .{ .vertex = true },
+        .offset = 0,
+        .size = 8,
+    }};
+    var render_pipeline = RenderPipelineState{
+        .backend = .metal,
+        .tracker = &tracker,
+        .root_constant_ranges = render_ranges[0..],
+        .impl = undefined,
+    };
+    try render_encoder.setRenderPipelineState(&render_pipeline);
+    try render_encoder.setRootConstants(.{
+        .offset = 0,
+        .bytes = bytes[0..],
+    });
+    try std.testing.expectError(core.RootConstantError.InvalidRootConstantAlignment, render_encoder.setRootConstants(.{
+        .offset = 2,
+        .bytes = bytes[0..],
+    }));
+    try std.testing.expectError(core.RootConstantError.RootConstantWriteOutOfRange, render_encoder.setRootConstants(.{
+        .offset = 8,
+        .bytes = bytes[0..],
+    }));
+
+    var compute_encoder = ComputeCommandEncoder{
+        .backend = .metal,
+        .command_buffer = &command_buffer,
+    };
+    var compute_pipeline = ComputePipelineState{
+        .backend = .metal,
+        .tracker = &tracker,
+        .root_constant_ranges = render_ranges[0..],
+        .impl = undefined,
+    };
+    try compute_encoder.setComputePipelineState(&compute_pipeline);
+    try std.testing.expectError(core.RootConstantError.RootConstantVisibilityMismatch, compute_encoder.setRootConstants(.{
+        .offset = 0,
+        .bytes = bytes[0..],
+    }));
 }
 
 test "runtime specialization gate rejects non-empty specialization descriptors" {

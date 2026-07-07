@@ -2156,6 +2156,22 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_buffer(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_bytes(
+    vkmtl_metal_render_command_encoder *encoder,
+    const void *bytes,
+    size_t byte_count,
+    unsigned int index
+) {
+    if (encoder == NULL || encoder->encoder == nil || bytes == NULL || byte_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setVertexBytes:bytes length:byte_count atIndex:index];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_buffer(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_buffer *buffer,
@@ -2168,6 +2184,22 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_buffer(
 
     @autoreleasepool {
         [encoder->encoder setFragmentBuffer:buffer->buffer offset:offset atIndex:index];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_bytes(
+    vkmtl_metal_render_command_encoder *encoder,
+    const void *bytes,
+    size_t byte_count,
+    unsigned int index
+) {
+    if (encoder == NULL || encoder->encoder == nil || bytes == NULL || byte_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setFragmentBytes:bytes length:byte_count atIndex:index];
         return VKMTL_METAL_STATUS_OK;
     }
 }
@@ -2620,6 +2652,22 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_buffer(
 
     @autoreleasepool {
         [encoder->encoder setBuffer:buffer->buffer offset:offset atIndex:index];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_bytes(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const void *bytes,
+    size_t byte_count,
+    unsigned int index
+) {
+    if (encoder == NULL || encoder->encoder == nil || bytes == NULL || byte_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setBytes:bytes length:byte_count atIndex:index];
         return VKMTL_METAL_STATUS_OK;
     }
 }

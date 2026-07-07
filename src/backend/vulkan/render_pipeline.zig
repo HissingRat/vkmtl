@@ -154,13 +154,15 @@ pub fn init(
 
     const set_layout_handles = try makeDescriptorSetLayoutHandles(allocator, bind_group_layouts);
     defer allocator.free(set_layout_handles);
+    const push_constant_ranges = try makePushConstantRanges(allocator, descriptor.root_constant_layout);
+    defer allocator.free(push_constant_ranges);
 
     const layout = try gc.dev.createPipelineLayout(&.{
         .flags = .{},
         .set_layout_count = @intCast(set_layout_handles.len),
         .p_set_layouts = if (set_layout_handles.len == 0) null else set_layout_handles.ptr,
-        .push_constant_range_count = 0,
-        .p_push_constant_ranges = null,
+        .push_constant_range_count = @intCast(push_constant_ranges.len),
+        .p_push_constant_ranges = if (push_constant_ranges.len == 0) null else push_constant_ranges.ptr,
     }, null);
     errdefer gc.dev.destroyPipelineLayout(layout, null);
 
@@ -328,6 +330,22 @@ fn makeDescriptorSetLayoutHandles(
     return handles;
 }
 
+fn makePushConstantRanges(
+    allocator: std.mem.Allocator,
+    layout: ?core.RootConstantLayoutDescriptor,
+) ![]vk.PushConstantRange {
+    const root_layout = layout orelse return &.{};
+    const ranges = try allocator.alloc(vk.PushConstantRange, root_layout.ranges.len);
+    for (root_layout.ranges, ranges) |range, *out| {
+        out.* = .{
+            .stage_flags = shaderStageFlags(range.visibility),
+            .offset = range.offset,
+            .size = range.size,
+        };
+    }
+    return ranges;
+}
+
 fn destroyBindGroupLayouts(
     allocator: std.mem.Allocator,
     layouts: []VulkanBindGroupLayout,
@@ -336,6 +354,14 @@ fn destroyBindGroupLayouts(
         layout.deinit();
     }
     allocator.free(layouts);
+}
+
+fn shaderStageFlags(visibility: core.ShaderVisibility) vk.ShaderStageFlags {
+    return .{
+        .vertex_bit = visibility.vertex,
+        .fragment_bit = visibility.fragment,
+        .compute_bit = visibility.compute,
+    };
 }
 
 fn makeVertexBindings(
