@@ -21,14 +21,25 @@ typed errors rather than silently changing semantics.
 
 ## Advanced Features
 
-Period 10 advanced features are descriptor/API shape first. Descriptor indexing,
-sparse resources, external texture interop, tessellation, mesh shaders, ray
-tracing, and driver-level pipeline caches remain gated until backend lowering is
-implemented.
+Advanced features stay behind feature gates. Some Period 22 binding paths now
+have runtime objects and command entry points, while sparse resources,
+external texture interop, tessellation, mesh shaders, ray tracing, and
+driver-level pipeline caches remain gated until their native backend work is
+complete.
 
 Descriptor indexing maps toward Vulkan descriptor indexing. Argument buffers map
 toward Metal argument buffers. Both are represented by
-`DescriptorIndexingLayoutDescriptor` and remain disabled by default.
+`DescriptorIndexingLayoutDescriptor`, `AdvancedBindGroupLayout`, and
+`ResourceTable`. Resource tables can be updated, cleared, and bound through
+render/compute encoders when the selected backend advertises the required
+feature.
+
+Root constants lower to Vulkan push constants and Metal `set*Bytes` calls after
+a pipeline declares a compatible `root_constant_layout`.
+
+Shader specialization is capability-gated. Vulkan pipeline specialization info
+is wired for enabled devices. Metal function-constant specialization remains
+closed until the Metal bridge exposes that variant path.
 
 Sparse buffers/textures map toward Vulkan sparse resources and Metal tiled or
 sparse texture concepts. The current descriptors validate page-aligned mapping

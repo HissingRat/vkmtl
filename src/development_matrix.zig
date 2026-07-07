@@ -148,7 +148,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/bindless_textures",
         .run_step = "run-bindless-textures",
         .kind = .render,
-        .backend_expectation = "advanced binding feature gate and bindless texture layout contract",
+        .backend_expectation = "advanced binding feature gate, bindless layout, and ResourceTable creation",
     },
     .{
         .name = "multi_window",
@@ -479,6 +479,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .required = true,
         .command = "zig build run-transfer-readback && zig build run-compute-readback",
         .expectation = "deterministic transfer and compute readback examples complete without visual inspection",
+    },
+    .{
+        .name = "binding_variant_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test",
+        .expectation = "dynamic buffer array offsets, resource tables, root constants, and shader specialization regressions pass",
     },
 };
 

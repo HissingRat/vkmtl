@@ -1,6 +1,6 @@
 # Period 22: Binding ABI And Shader Variant Closure
 
-Status: planned after Period 21.
+Status: completed.
 
 Goal: close the binding and shader backend items that Period 21 intentionally
 left as explicit follow-up work. This period should turn the remaining
@@ -69,3 +69,17 @@ identity. The following items are deliberately handled in Period 22:
   fingerprints
 - immutable/static samplers need a clear ownership and layout-compatibility
   policy
+
+## Completion Notes
+
+- Dynamic buffer arrays use `DynamicOffset.array_element`.
+- Static samplers are represented by `StaticSamplerDescriptor` and remain
+  gated by `DeviceFeatures.static_samplers`.
+- `ResourceTable` owns advanced descriptor table state and supports update,
+  clear, ready-for-binding validation, and render/compute command binding.
+- Root constants can be written from render and compute encoders. Vulkan lowers
+  to push constants; Metal lowers through `set*Bytes` on the reserved root
+  constant slot.
+- Shader specialization is feature-gated. Vulkan lowers enabled
+  specialization data into pipeline specialization info. Metal function
+  constants remain gated until the Metal variant bridge is added.

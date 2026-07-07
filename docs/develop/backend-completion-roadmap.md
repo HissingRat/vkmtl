@@ -78,13 +78,15 @@ Tracked in `docs/develop/period22/`.
 
 This wave owns the explicit deferred items from Period 21:
 
-- [ ] Dynamic buffer arrays with per-array-element offset addressing.
-- [ ] Bindless resource table allocation, update, clear, and lifetime tracking.
-- [ ] Vulkan descriptor-indexing table binding and Metal argument-buffer
+- [x] Dynamic buffer arrays with per-array-element offset addressing.
+- [x] Bindless resource table allocation, update, clear, and lifetime tracking.
+- [x] Vulkan descriptor-indexing table binding and Metal argument-buffer
   command binding.
-- [ ] Immutable sampler and static sampler policy.
-- [ ] Root constant command writes and native Vulkan / Metal lowering.
-- [ ] Shader specialization variant compilation and native pipeline lowering.
+- [x] Immutable sampler and static sampler policy.
+- [x] Root constant command writes and native Vulkan / Metal lowering.
+- [x] Shader specialization variant validation and Vulkan native pipeline
+  lowering.
+- [ ] Metal function-constant specialization native lowering.
 
 Expected result: the advanced binding and shader shapes stop being
 metadata-only paths. Unsupported backend cases remain capability-gated, but

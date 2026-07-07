@@ -174,8 +174,9 @@ VKMTL_BACKEND=metal zig build run-capability-dump
 
 ## Bindless Textures
 
-`examples/bindless_textures` 用来验证 bindless texture table 的 advanced binding layout
-contract。在所选设备的 backend lowering 启用之前，它会打印清晰的 unsupported-feature 信息并退出。
+`examples/bindless_textures` 会创建 `AdvancedBindGroupLayout` 和 `ResourceTable`，用来验证
+advanced binding 路径。若所选后端没有声明 descriptor indexing 或 argument-buffer support，
+它会打印清晰的 unsupported-feature 信息并退出。
 
 运行：
 

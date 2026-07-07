@@ -19,12 +19,21 @@ vkmtl 优先覆盖 portable Vulkan 和 Metal workflow；高级能力放在显式
 
 ## Advanced Features
 
-Period 10 的 advanced features 先提供 descriptor/API shape。Descriptor indexing、sparse
-resources、external texture interop、tessellation、mesh shader、ray tracing 和 driver-level
-pipeline cache 都会保持 gated，直到 backend lowering 实现。
+Advanced features 会继续放在 feature gate 后面。Period 22 的一部分 binding 路径已经有
+runtime object 和 command entry point；sparse resource、external texture interop、
+tessellation、mesh shader、ray tracing 和 driver-level pipeline cache 仍然保持 gated，直到
+native backend work 完成。
 
-Descriptor indexing 未来映射到 Vulkan descriptor indexing，argument buffer 未来映射到 Metal
-argument buffer。两者目前都通过 `DescriptorIndexingLayoutDescriptor` 表达，默认关闭。
+Descriptor indexing 映射到 Vulkan descriptor indexing，argument buffer 映射到 Metal
+argument buffer。两者通过 `DescriptorIndexingLayoutDescriptor`、
+`AdvancedBindGroupLayout` 和 `ResourceTable` 表达。当所选后端声明所需 feature 时，
+resource table 可以 update、clear，并通过 render / compute encoder 绑定。
+
+Root constants 会在 pipeline 声明兼容 `root_constant_layout` 后下沉到 Vulkan push constants 和
+Metal `set*Bytes`。
+
+Shader specialization 由 capability gate 控制。Vulkan pipeline specialization info 已经接上；
+Metal function-constant specialization 会等 Metal bridge 暴露 variant path 后再打开。
 
 Sparse buffer/texture 未来映射到 Vulkan sparse resource 和 Metal tiled/sparse texture 概念。
 当前 descriptor 只校验 page-aligned mapping intent。

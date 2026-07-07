@@ -228,12 +228,13 @@ defer vertex_descriptor.deinit();
 ```
 
 `ProgrammableStageDescriptor.specialization` accepts
-`ShaderSpecializationDescriptor` data for future shader variants.
-`ShaderLibraryCacheKeyDescriptor` and runtime pipeline fingerprints include
-specialization inputs so variant caches can distinguish them. The descriptor
-layer validates duplicate IDs, duplicate names, and empty names. Runtime
-pipeline creation currently rejects non-empty specialization data with
-`UnsupportedShaderSpecialization` instead of ignoring it.
+`ShaderSpecializationDescriptor` data for shader variants. The descriptor layer
+validates duplicate IDs, duplicate names, and empty names. Runtime pipeline
+fingerprints include specialization inputs so variant caches can distinguish
+them. Vulkan lowers specialization values into pipeline specialization info
+when `DeviceFeatures.shader_specialization` is enabled. Backends that do not
+advertise that feature still reject non-empty specialization descriptors with
+`UnsupportedShaderSpecialization`.
 
 Render pipeline raster state includes cull mode, front face, fill mode, depth
 bias, and a conservative-rasterization flag. Cull mode and front face are part
@@ -297,12 +298,18 @@ Shader resource binding starts with public descriptors:
 
 Advanced binding shapes are capability-gated. `DescriptorIndexingLayoutDescriptor`
 and `DescriptorIndexingRange` describe bindless-style ranges for Vulkan
-descriptor indexing or Metal argument buffer layout metadata. They validate
-descriptor counts, shader visibility, and the selected `AdvancedBindingModel`.
+descriptor indexing or Metal argument buffer layouts. They validate descriptor
+counts, shader visibility, and the selected `AdvancedBindingModel`.
 `Device.makeAdvancedBindGroupLayout(...)` snapshots those ranges into a
 backend-aware `AdvancedBindGroupLayout` with descriptor count and range-flag
-queries. Creating and updating a bindless resource table is still a deferred
-API surface.
+queries.
+
+`Device.makeResourceTable(...)` creates a `ResourceTable` from an
+`AdvancedBindGroupLayout`. Tables support `update(...)`, `clear(...)`, partial
+binding validation, update-after-bind validation, and render/compute command
+binding through `setResourceTable(...)`. Ordinary `BindGroup` remains the
+portable path; resource tables are the advanced descriptor-indexing /
+argument-buffer path.
 
 The first resource classes are uniform buffers, storage buffers, storage
 textures, sampled textures, samplers, and compare samplers. Layout entries also
@@ -333,10 +340,10 @@ const entries = [_]vkmtl.BindGroupEntry{
 };
 ```
 
-Dynamic buffer offsets and resource arrays are currently separate paths:
-`dynamic_offset = true` with `array_count > 1` remains rejected with
-`UnsupportedDynamicBinding`. Render and compute encoders expose
-`setBindGroup(...)` for debug-validated command recording.
+Dynamic buffer offsets work for single buffer bindings and buffer arrays.
+`DynamicOffset.array_element` addresses one element of a dynamic buffer array;
+the default value `0` preserves the single-resource ABI. Render and compute
+encoders expose `setBindGroup(...)` for debug-validated command recording.
 
 Storage resources can specify `BindGroupLayoutEntry.storage_access` as
 `.read`, `.write`, or `.read_write`. The metadata is valid only for storage
@@ -345,6 +352,11 @@ storage textures default to write access. Runtime bind group creation checks
 buffer `storage` usage and texture `shader_read` / `shader_write` usage against
 that access intent and records portable storage read/write usage transitions.
 
+`StaticSamplerDescriptor` records the immutable/static sampler policy. Static
+samplers are layout-owned in concept and remain feature-gated by
+`DeviceFeatures.static_samplers`; ordinary runtime bind groups still use live
+`SamplerState` resources.
+
 `DynamicOffset` and `DynamicOffsetList` are the public validation shape for
 dynamic buffer offsets. Render and compute encoder `setBindGroup(...)` calls can
 pass per-bind offsets through `BindGroupBinding.dynamic_offsets`:
@@ -352,12 +364,13 @@ pass per-bind offsets through `BindGroupBinding.dynamic_offsets`:
 ```zig
 try encoder.setBindGroup(&bind_group, .{
     .index = 0,
-    .dynamic_offsets = &.{.{ .binding = 0, .offset = 256 }},
+    .dynamic_offsets = &.{.{ .binding = 0, .array_element = 0, .offset = 256 }},
 });
 ```
 
 They validate that every dynamic buffer binding has one offset, that no
-non-dynamic binding receives an offset, and that offsets satisfy
+non-dynamic binding receives an offset, that every dynamic buffer array element
+has one offset, and that offsets satisfy
 `DeviceLimits.min_uniform_buffer_offset_alignment` or
 `DeviceLimits.min_storage_buffer_offset_alignment`. Vulkan lowers them to
 dynamic descriptor offsets; Metal adds them to the buffer base offset when
@@ -375,9 +388,9 @@ are gated by `DeviceFeatures.root_constants`,
 `DeviceLimits.max_root_constant_bytes`, and
 `DeviceLimits.root_constant_alignment`. Render and compute pipeline descriptors
 carry an optional `root_constant_layout` so pipeline compatibility can be
-validated against the selected device. Command encoder writes and native
-lowering to Vulkan push constants or Metal inline constants are still future
-work.
+validated against the selected device. Render and compute encoders expose
+`setRootConstants(...)`. Vulkan lowers writes to `vkCmdPushConstants`; Metal
+lowers writes through `set*Bytes` on a reserved root-constant buffer slot.
 
 `BindGroupDescriptor` is the runtime descriptor that points at live resources.
 For pure descriptor validation or tests, root exports also expose the shape-only
