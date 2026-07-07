@@ -3705,6 +3705,25 @@ pub const SparseTextureDescriptor = struct {
     }
 };
 
+pub const SparseMipTailDescriptor = struct {
+    first_mip_level: u32,
+    offset: u64 = 0,
+    size: u64,
+    stride: u64 = 0,
+    is_packed: bool = true,
+
+    pub fn validate(self: SparseMipTailDescriptor, texture: TextureDescriptor, page_size: u64) AdvancedFeatureError!void {
+        if (page_size == 0) return AdvancedFeatureError.InvalidSparsePageSize;
+        if (self.size == 0) return AdvancedFeatureError.InvalidSparseRegion;
+        if (self.first_mip_level >= texture.maxMipLevelCount()) return AdvancedFeatureError.InvalidSparseRegion;
+        if (!isAlignedU64(self.offset, page_size) or !isAlignedU64(self.size, page_size)) {
+            return AdvancedFeatureError.InvalidSparseRegion;
+        }
+        if (!self.is_packed and self.stride == 0) return AdvancedFeatureError.InvalidSparseRegion;
+        if (self.stride != 0 and !isAlignedU64(self.stride, page_size)) return AdvancedFeatureError.InvalidSparseRegion;
+    }
+};
+
 pub const SparseTextureMappingDescriptor = struct {
     kind: SparseTextureKind = .sparse_texture,
     region: Region3D,
@@ -7937,6 +7956,36 @@ test "sparse residency map tracks commits and rejects overlaps" {
         .residency = .evicted,
     }} });
     try std.testing.expectEqual(@as(usize, 0), map.diagnostics().texture_regions);
+}
+
+test "sparse mip tail descriptor validates page alignment" {
+    const texture = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 256,
+        .height = 256,
+        .mip_level_count = 9,
+        .usage = .{ .shader_read = true },
+    };
+    try (SparseMipTailDescriptor{
+        .first_mip_level = 6,
+        .offset = 4096,
+        .size = 8192,
+    }).validate(texture, 4096);
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseMipTailDescriptor{
+        .first_mip_level = 99,
+        .offset = 4096,
+        .size = 8192,
+    }).validate(texture, 4096));
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseMipTailDescriptor{
+        .first_mip_level = 6,
+        .offset = 1,
+        .size = 8192,
+    }).validate(texture, 4096));
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseMipTailDescriptor{
+        .first_mip_level = 6,
+        .size = 8192,
+        .is_packed = false,
+    }).validate(texture, 4096));
 }
 
 test "texture usage can detect empty usage" {

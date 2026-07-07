@@ -966,11 +966,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 15 Phase 4 Checklist
 
-- [ ] Define mip tail and alignment scope before implementation.
-- [ ] Represent mip tail behavior in backend-neutral metadata.
-- [ ] Validate mip-level alignment and page dimensions.
-- [ ] Document backend differences.
-- [ ] Add small-mip and format-dependent page tests.
+- [x] Define mip tail and alignment scope before implementation.
+- [x] Represent mip tail behavior in backend-neutral metadata.
+- [x] Validate mip-level alignment and page dimensions.
+- [x] Document backend differences.
+- [x] Add small-mip and format-dependent page tests.
 
 ## Period 15 Phase 5 Checklist
 

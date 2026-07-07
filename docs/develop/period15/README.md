@@ -37,6 +37,7 @@ See `phase3.md`.
 ## Phase 4: Mip Tail And Alignment Handling
 
 - Handle backend-specific mip tail and page alignment rules.
+- Add `SparseMipTailDescriptor` for packed or strided small-mip metadata.
 
 See `phase4.md`.
 
