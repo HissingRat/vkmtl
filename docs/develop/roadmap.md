@@ -387,7 +387,7 @@ See `docs/develop/period19/`.
 
 ## Period 20: Common Render Backend Completion
 
-Status: active.
+Status: completed.
 
 Goal: finish native Vulkan / Metal lowering for common render pass and render
 pipeline features that already have public API shapes.

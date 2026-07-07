@@ -1234,6 +1234,13 @@ obvious render and binding blockers.
 - [x] Re-enable independent blend where backend support is available.
 - [x] Keep current-drawable MRT deferred.
 
+## Period 20 Phase 6 Checklist
+
+- [x] Define render backend validation scope before implementation.
+- [x] Update backend matrix notes for blend, raster, stencil, and MRT support.
+- [x] Document remaining backend-specific render limits.
+- [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

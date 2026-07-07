@@ -1,6 +1,6 @@
 # Period 20: Common Render Backend Completion
 
-Status: active.
+Status: completed.
 
 Goal: take render-pipeline and render-pass API shapes that already exist and
 finish their Vulkan / Metal native backend lowering without rewriting the public
@@ -52,3 +52,20 @@ See `phase5.md`.
   backend slices.
 
 See `phase6.md`.
+
+## Completion Boundary
+
+Period 20 completes the common render backend catch-up for existing public API
+shapes:
+
+- blend state and independent per-attachment blend
+- depth-bias and wireframe / line fill where supported
+- vertex instance step rates
+- combined depth/stencil format and stencil pipeline state
+- texture-backed multiple render targets
+
+Still deferred:
+
+- conservative rasterization
+- separate stencil-only render pass attachments
+- current-drawable MRT presentation semantics

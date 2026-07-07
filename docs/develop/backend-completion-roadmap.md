@@ -51,9 +51,11 @@ Tracked in `docs/develop/period20/`.
 - [x] Stencil render pass and stencil pipeline state lowering.
 - [x] Multiple render target render pass and pipeline lowering.
 
-Expected result: normal forward/deferred-style render pipelines can be expressed
-without hitting typed unsupported errors, except where a backend truly lacks the
-feature.
+Expected result: normal texture-backed forward/deferred-style render pipelines
+can be expressed without hitting typed unsupported errors, except where a
+backend truly lacks the feature. Current-drawable MRT, conservative
+rasterization, and separate stencil-only attachments remain explicit deferred
+items.
 
 ## Wave 2: Binding Backend
 
