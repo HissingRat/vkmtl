@@ -4773,6 +4773,7 @@ pub const SurfaceState = enum {
     unconfigured,
     configured,
     suspended,
+    lost,
 };
 
 pub const PresentationDescriptor = struct {
@@ -4934,6 +4935,7 @@ pub const SurfaceError = error{
     MissingSurfaceSource,
     InvalidSurfaceExtent,
     InvalidSurfaceHandle,
+    SurfaceLost,
 };
 
 pub const Surface = struct {
@@ -4952,6 +4954,7 @@ pub const Surface = struct {
     }
 
     pub fn configure(self: *Surface, descriptor: PresentationDescriptor) SurfaceError!void {
+        if (self.state == .lost) return SurfaceError.SurfaceLost;
         if (descriptor.extent.isZero()) {
             if (descriptor.resize_policy == .suspend_when_zero) {
                 self.state = .suspended;
@@ -4968,9 +4971,17 @@ pub const Surface = struct {
     }
 
     pub fn resize(self: *Surface, extent: Extent2D) SurfaceError!void {
+        if (self.state == .lost) return SurfaceError.SurfaceLost;
         var descriptor = self.presentation orelse return SurfaceError.InvalidSurfaceExtent;
         descriptor.extent = extent;
         try self.configure(descriptor);
+    }
+
+    pub fn markLost(self: *Surface) void {
+        self.state = .lost;
+        self.presentation_state.configured = false;
+        self.presentation_state.frame_in_flight = false;
+        self.presentation_state.generation +%= 1;
     }
 };
 
@@ -5074,6 +5085,10 @@ pub const SurfaceCollection = struct {
 
     pub fn resize(self: *SurfaceCollection, handle: SurfaceHandle, extent: Extent2D) SurfaceError!void {
         try (try self.get(handle)).resize(extent);
+    }
+
+    pub fn markLost(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!void {
+        (try self.get(handle)).markLost();
     }
 
     pub fn liveCount(self: SurfaceCollection) usize {
@@ -5542,6 +5557,8 @@ test "surface presentation handles configured and suspended extents" {
 
     try surface.resize(.{ .width = 0, .height = 480 });
     try std.testing.expectEqual(SurfaceState.suspended, surface.state);
+    try surface.resize(.{ .width = 1280, .height = 720 });
+    try std.testing.expectEqual(SurfaceState.configured, surface.state);
 
     try std.testing.expectError(SurfaceError.InvalidSurfaceExtent, surface.configure(.{
         .extent = .{ .width = 0, .height = 480 },
@@ -5652,6 +5669,15 @@ test "surface collection isolates presentation resource state per surface" {
     try std.testing.expect(!suspended_b.configured);
     try std.testing.expectEqual(SurfaceState.suspended, (try collection.info(handle_b)).state);
     try std.testing.expectEqual(@as(u32, 1024), (try collection.info(handle_a)).presentation_state.extent.width);
+
+    try collection.markLost(handle_b);
+    try std.testing.expectEqual(SurfaceState.lost, (try collection.info(handle_b)).state);
+    try std.testing.expectError(SurfaceError.SurfaceLost, collection.resize(handle_b, .{ .width = 400, .height = 300 }));
+    try std.testing.expectError(SurfaceError.SurfaceLost, (try collection.get(handle_b)).configure(.{
+        .extent = .{ .width = 400, .height = 300 },
+    }));
+    try collection.remove(handle_b);
+    try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.info(handle_b));
 }
 
 test "buffer descriptor resolves length from explicit length or bytes" {

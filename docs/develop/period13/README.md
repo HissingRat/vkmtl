@@ -31,6 +31,8 @@ See `phase2.md`.
 
 - Recreate presentation resources cleanly.
 - Distinguish minimized windows from lost surfaces.
+- Represent native presentation failure as `.lost` / `SurfaceLost`, separate
+  from zero-sized `.suspended` surfaces.
 
 See `phase3.md`.
 

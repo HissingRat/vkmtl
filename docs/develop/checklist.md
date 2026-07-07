@@ -862,11 +862,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 13 Phase 3 Checklist
 
-- [ ] Define resize/minimize/surface-lost scope before implementation.
-- [ ] Recreate presentation resources after resize.
-- [ ] Treat zero-sized surfaces as temporarily unavailable.
-- [ ] Return typed surface-lost errors for native failures.
-- [ ] Add resize and stale-generation tests.
+- [x] Define resize/minimize/surface-lost scope before implementation.
+- [x] Track presentation generation changes after resize/suspend/lost events.
+- [x] Treat zero-sized surfaces as temporarily unavailable.
+- [x] Return typed surface-lost errors for native failures.
+- [x] Add resize, suspend recovery, and lost-state tests.
 
 ## Period 13 Phase 4 Checklist
 
