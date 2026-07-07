@@ -1962,6 +1962,36 @@ pub const VulkanRayTracingPipelineLowering = struct {
     }
 };
 
+pub const MetalIntersectionFunctionDescriptor = struct {
+    entry_point: []const u8,
+
+    pub fn validate(self: MetalIntersectionFunctionDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (self.entry_point.len == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+};
+
+pub const MetalRayTracingLowering = struct {
+    max_recursion_depth: u32,
+    function_table_entries: u32,
+    intersection_function_count: u32 = 0,
+
+    pub fn fromDescriptor(
+        descriptor: RayTracingPipelineDescriptor,
+        intersections: []const MetalIntersectionFunctionDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!MetalRayTracingLowering {
+        try descriptor.validate(features, limits);
+        for (intersections) |intersection| try intersection.validate(features);
+        return .{
+            .max_recursion_depth = descriptor.max_recursion_depth,
+            .function_table_entries = @intCast(descriptor.shader_groups.len + intersections.len),
+            .intersection_function_count = @intCast(intersections.len),
+        };
+    }
+};
+
 pub const ShaderBindingTableDescriptor = struct {
     stride: u64,
     ray_generation_count: u32 = 1,
@@ -8251,6 +8281,22 @@ test "Vulkan ray tracing lowering counts shader groups" {
     try std.testing.expectEqual(@as(u32, 1), lowering.miss_groups);
     try std.testing.expectEqual(@as(u32, 1), lowering.hit_groups);
     try std.testing.expectEqual(@as(u32, 2), lowering.max_recursion_depth);
+}
+
+test "Metal ray tracing lowering counts function table entries" {
+    const groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+    };
+    const intersections = [_]MetalIntersectionFunctionDescriptor{
+        .{ .entry_point = "intersect_triangle" },
+    };
+    const lowering = try MetalRayTracingLowering.fromDescriptor(.{
+        .shader_groups = groups[0..],
+        .max_recursion_depth = 1,
+    }, intersections[0..], .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
+    try std.testing.expectEqual(@as(u32, 3), lowering.function_table_entries);
+    try std.testing.expectEqual(@as(u32, 1), lowering.intersection_function_count);
 }
 
 test "texture usage can detect empty usage" {

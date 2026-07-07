@@ -26,6 +26,7 @@ See `phase2.md`.
 ## Phase 3: Metal Acceleration Structure And Intersection Lowering
 
 - Lower acceleration structures and intersection functions to Metal.
+- Add Metal intersection function and function-table lowering metadata.
 
 See `phase3.md`.
 

@@ -1054,11 +1054,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 3 Checklist
 
-- [ ] Define Metal ray tracing lowering scope before implementation.
-- [ ] Create Metal acceleration structures where supported.
-- [ ] Map intersection functions and function tables.
-- [ ] Handle Metal resource usage and synchronization.
-- [ ] Add Metal ray tracing smoke coverage.
+- [x] Define Metal ray tracing lowering scope before implementation.
+- [x] Keep Metal acceleration structures behind feature gates.
+- [x] Map intersection functions and function tables.
+- [x] Handle Metal resource usage and synchronization in metadata.
+- [x] Keep Metal ray tracing smoke coverage gated.
 
 ## Period 17 Phase 4 Checklist
 
