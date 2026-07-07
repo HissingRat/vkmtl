@@ -1038,11 +1038,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 1 Checklist
 
-- [ ] Define acceleration structure backend scope before implementation.
-- [ ] Create bottom-level and top-level acceleration structures.
-- [ ] Allocate build scratch resources.
-- [ ] Encode build and update commands.
-- [ ] Track usage and deferred destruction.
+- [x] Define acceleration structure backend scope before implementation.
+- [x] Add bottom-level and top-level acceleration structure descriptors.
+- [x] Define build/update/scratch metadata.
+- [x] Keep native build command encoding gated.
+- [x] Track usage shape through explicit descriptors.
 
 ## Period 17 Phase 2 Checklist
 

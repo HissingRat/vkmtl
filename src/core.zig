@@ -1872,6 +1872,40 @@ pub const AccelerationStructureDescriptor = struct {
     }
 };
 
+pub const AccelerationStructureBuildSizes = struct {
+    result_size: u64,
+    scratch_size: u64,
+    update_scratch_size: u64 = 0,
+};
+
+pub const AccelerationStructureInstanceDescriptor = struct {
+    instance_count: u32,
+    allow_update: bool = false,
+
+    pub fn validate(self: AccelerationStructureInstanceDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        if (!features.acceleration_structures) return AdvancedFeatureError.UnsupportedAccelerationStructures;
+        if (self.instance_count == 0) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+    }
+};
+
+pub fn estimateAccelerationStructureBuildSizes(descriptor: AccelerationStructureDescriptor) AccelerationStructureBuildSizes {
+    const primitive_count = @as(u64, @max(descriptor.primitive_count, 1));
+    const base_size: u64 = switch (descriptor.kind) {
+        .bottom_level => 1024,
+        .top_level => 512,
+    };
+    const primitive_size: u64 = switch (descriptor.kind) {
+        .bottom_level => 128,
+        .top_level => 64,
+    };
+    const result_size = base_size + primitive_count * primitive_size;
+    return .{
+        .result_size = result_size,
+        .scratch_size = result_size * 2,
+        .update_scratch_size = if (descriptor.allow_update) result_size else 0,
+    };
+}
+
 pub const RayTracingShaderGroupKind = enum {
     ray_generation,
     miss,
@@ -8164,6 +8198,23 @@ test "advanced geometry shader stages are classified for Slang reflection" {
         .stage = .mesh,
         .entry_point = "mesh_main",
     });
+}
+
+test "acceleration structure descriptors estimate build sizes" {
+    const descriptor = AccelerationStructureDescriptor{
+        .kind = .bottom_level,
+        .primitive_count = 2,
+        .allow_update = true,
+    };
+    try descriptor.validate(.{ .acceleration_structures = true });
+    const sizes = estimateAccelerationStructureBuildSizes(descriptor);
+    try std.testing.expect(sizes.result_size > 0);
+    try std.testing.expect(sizes.scratch_size >= sizes.result_size);
+    try std.testing.expect(sizes.update_scratch_size > 0);
+
+    try (AccelerationStructureInstanceDescriptor{
+        .instance_count = 1,
+    }).validate(.{ .acceleration_structures = true });
 }
 
 test "texture usage can detect empty usage" {

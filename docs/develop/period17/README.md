@@ -1,6 +1,6 @@
 # Period 17: Ray Tracing Backend
 
-Status: planned.
+Status: in progress.
 
 Goal: lower acceleration structures, ray tracing pipelines, and shader binding
 table descriptors to Vulkan and Metal ray tracing capabilities.
@@ -12,6 +12,7 @@ must not depend on ray tracing support.
 
 - Create bottom-level and top-level acceleration structures.
 - Define build, update, and scratch-buffer ownership.
+- Add build-size and instance descriptor metadata.
 
 See `phase1.md`.
 
