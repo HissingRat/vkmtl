@@ -323,6 +323,18 @@ zig build run-capability-dump -Dvulkan
 VKMTL_BACKEND=metal zig build run-capability-dump
 ```
 
+## Bindless Textures
+
+`examples/bindless_textures` exercises the advanced binding layout contract for
+bindless texture tables. Until backend lowering is enabled on the selected
+device, the example exits with a clear unsupported-feature message.
+
+Run it with:
+
+```sh
+zig build run-bindless-textures
+```
+
 ## Compute Gallery
 
 Period 9 tracks the broader compute gallery in `src/development_matrix.zig`.

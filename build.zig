@@ -391,6 +391,31 @@ pub fn build(b: *std.Build) void {
     const capability_dump_step = b.step("run-capability-dump", "Run the vkmtl backend capability dump example");
     capability_dump_step.dependOn(&capability_dump_cmd.step);
 
+    const bindless_textures = b.addExecutable(.{
+        .name = "vkmtl-bindless-textures",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/bindless_textures/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    bindless_textures.root_module.linkLibrary(glfw);
+    b.installArtifact(bindless_textures);
+
+    const bindless_textures_cmd = b.addRunArtifact(bindless_textures);
+    bindless_textures_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, bindless_textures_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, bindless_textures_cmd);
+
+    const bindless_textures_step = b.step("run-bindless-textures", "Run the vkmtl bindless textures feature-gate example");
+    bindless_textures_step.dependOn(&bindless_textures_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

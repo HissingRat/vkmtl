@@ -143,6 +143,13 @@ pub const examples = [_]ExampleEntry{
         .kind = .presentation,
         .backend_expectation = "prints selected backend capability report through public APIs",
     },
+    .{
+        .name = "bindless_textures",
+        .path = "examples/bindless_textures",
+        .run_step = "run-bindless-textures",
+        .kind = .render,
+        .backend_expectation = "advanced binding feature gate and bindless texture layout contract",
+    },
 };
 
 pub fn validateExamples(entries: []const ExampleEntry) DevelopmentMatrixError!void {
@@ -596,7 +603,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 11), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 12), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {

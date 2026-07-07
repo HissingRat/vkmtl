@@ -830,11 +830,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 12 Phase 5 Checklist
 
-- [ ] Define bindless texture example scope before implementation.
-- [ ] Add `examples/bindless_textures`.
-- [ ] Load or generate multiple textures.
-- [ ] Select textures through bindless indices.
-- [ ] Provide clear unsupported-feature fallback output.
+- [x] Define bindless texture example scope before implementation.
+- [x] Add `examples/bindless_textures`.
+- [x] Create a bindless-style sampled-texture descriptor array layout.
+- [x] Keep the example on public vkmtl APIs only.
+- [x] Provide clear unsupported-feature fallback output.
 
 ## Period 12 Phase 6 Checklist
 

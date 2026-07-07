@@ -1,6 +1,6 @@
 # Period 12: Bindless / Argument Buffer Backend
 
-Status: planned.
+Status: in progress.
 
 Goal: lower the advanced binding descriptors from Period 10 to real Vulkan
 descriptor indexing and Metal argument buffers.
@@ -39,8 +39,8 @@ See `phase4.md`.
 
 ## Phase 5: Bindless Texture Example
 
-- Add an example that samples from a large texture array through the advanced
-  binding path.
+- Add an example that creates a bindless-style texture table layout through the
+  advanced binding path and reports unsupported capability gates clearly.
 
 See `phase5.md`.
 
