@@ -806,6 +806,23 @@ pub const DriverPipelineCacheDescriptor = struct {
     }
 };
 
+pub const DriverPipelineCachePlan = struct {
+    path: []const u8,
+    kind: DriverCacheKind,
+    load_existing: bool,
+    store_on_shutdown: bool,
+
+    pub fn fromDescriptor(descriptor: DriverPipelineCacheDescriptor, cache_exists: bool, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!DriverPipelineCachePlan {
+        try descriptor.validate(features, limits);
+        return .{
+            .path = descriptor.path,
+            .kind = descriptor.kind,
+            .load_existing = cache_exists,
+            .store_on_shutdown = !descriptor.read_only,
+        };
+    }
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -6621,6 +6638,10 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
             .schema_version = "v1",
         },
     }).validate(.{ .driver_pipeline_cache = true }, .{}));
+
+    const plan = try DriverPipelineCachePlan.fromDescriptor(vulkan_cache, true, .{ .driver_pipeline_cache = true }, .{});
+    try std.testing.expect(plan.load_existing);
+    try std.testing.expect(plan.store_on_shutdown);
 }
 
 test "render pipeline descriptor validates shader stages and color targets" {

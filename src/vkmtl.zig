@@ -31,6 +31,7 @@ pub const ObjectCacheDiagnostics = core.ObjectCacheDiagnostics;
 pub const DriverCacheKind = core.DriverCacheKind;
 pub const DriverCacheIdentityDescriptor = core.DriverCacheIdentityDescriptor;
 pub const DriverPipelineCacheDescriptor = core.DriverPipelineCacheDescriptor;
+pub const DriverPipelineCachePlan = core.DriverPipelineCachePlan;
 pub const ResourceAccess = core.ResourceAccess;
 pub const ResourceUsageKind = core.ResourceUsageKind;
 pub const ResourceHazard = core.ResourceHazard;

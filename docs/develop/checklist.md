@@ -1086,11 +1086,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 18 Phase 1 Checklist
 
-- [ ] Define driver cache persistence scope before implementation.
-- [ ] Save and load Vulkan pipeline cache blobs.
-- [ ] Save and load Metal binary archives where supported.
-- [ ] Validate backend, device, driver, shader, and vkmtl cache identity.
-- [ ] Add warm-cache smoke coverage.
+- [x] Define driver cache persistence scope before implementation.
+- [x] Represent Vulkan pipeline cache blob persistence plans.
+- [x] Represent Metal binary archive persistence plans.
+- [x] Validate backend, device, driver, shader, and vkmtl cache identity.
+- [x] Add warm-cache planning coverage.
 
 ## Period 18 Phase 2 Checklist
 

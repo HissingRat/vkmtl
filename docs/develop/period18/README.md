@@ -1,6 +1,6 @@
 # Period 18: Performance / Production Hardening
 
-Status: planned.
+Status: in progress.
 
 Goal: turn backend features from functional slices into production-ready paths
 with persistent caches, diagnostics, profiling, and long-run stability checks.
@@ -12,6 +12,7 @@ long-running render loops stay stable.
 ## Phase 1: Driver Pipeline Cache Persistence
 
 - Persist Vulkan pipeline caches and Metal binary archives where supported.
+- Add driver cache load/store planning metadata.
 
 See `phase1.md`.
 
