@@ -942,11 +942,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 15 Phase 1 Checklist
 
-- [ ] Define sparse buffer backend scope before implementation.
-- [ ] Query sparse buffer support and page size.
-- [ ] Create sparse buffers without full memory commitment.
-- [ ] Commit and uncommit buffer pages.
-- [ ] Add alignment and read/write smoke tests.
+- [x] Define sparse buffer backend scope before implementation.
+- [x] Query sparse buffer support and page size through features/limits.
+- [x] Add sparse buffer descriptor validation without full memory commitment.
+- [x] Keep commit/uncommit represented by sparse mapping descriptors.
+- [x] Add alignment tests and keep backend read/write smoke gated.
 
 ## Period 15 Phase 2 Checklist
 

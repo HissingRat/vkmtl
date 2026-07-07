@@ -204,6 +204,7 @@ pub const Size3D = core.Size3D;
 pub const Region3D = core.Region3D;
 pub const TextureRegion = core.TextureRegion;
 pub const SparseResidency = core.SparseResidency;
+pub const SparseBufferDescriptor = core.SparseBufferDescriptor;
 pub const SparseBufferMappingDescriptor = core.SparseBufferMappingDescriptor;
 pub const SparseTextureKind = core.SparseTextureKind;
 pub const SparseTextureMappingDescriptor = core.SparseTextureMappingDescriptor;

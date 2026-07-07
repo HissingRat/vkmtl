@@ -3644,6 +3644,20 @@ pub const SparseResidency = enum {
     evicted,
 };
 
+pub const SparseBufferDescriptor = struct {
+    label: ?[]const u8 = null,
+    size: u64,
+    page_size: u64 = 0,
+    usage: BufferUsage = .{ .storage = true },
+
+    pub fn validate(self: SparseBufferDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.sparse_buffers) return AdvancedFeatureError.UnsupportedSparseBuffers;
+        const resolved_page_size = if (self.page_size != 0) self.page_size else limits.sparse_buffer_page_size;
+        if (resolved_page_size == 0) return AdvancedFeatureError.InvalidSparsePageSize;
+        if (self.size == 0 or !isAlignedU64(self.size, resolved_page_size)) return AdvancedFeatureError.InvalidSparseRegion;
+    }
+};
+
 pub const SparseBufferMappingDescriptor = struct {
     offset: u64 = 0,
     size: u64 = 0,
@@ -7657,6 +7671,16 @@ test "native command insertion descriptors are explicit and gated" {
 }
 
 test "sparse resource descriptors validate feature gates and alignment" {
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedSparseBuffers, (SparseBufferDescriptor{
+        .size = 4096,
+    }).validate(.{}, .{}));
+    try (SparseBufferDescriptor{
+        .size = 8192,
+    }).validate(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 });
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseBufferDescriptor{
+        .size = 1024,
+    }).validate(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 }));
+
     const buffer_mapping = SparseBufferMappingDescriptor{
         .offset = 4096,
         .size = 4096,

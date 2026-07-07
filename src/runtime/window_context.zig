@@ -2449,6 +2449,10 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn validateSparseBufferDescriptor(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
     pub fn validateExternalTextureDescriptor(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
         try descriptor.validate(self.backend, self.features());
     }

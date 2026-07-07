@@ -1,6 +1,6 @@
 # Period 15: Sparse / Tiled Resources Backend
 
-Status: planned.
+Status: in progress.
 
 Goal: lower sparse and tiled resource descriptors to backend-native residency
 and page-commit mechanisms for large textures, virtual resources, and streaming
@@ -13,6 +13,7 @@ should not be forced to manage sparse residency.
 
 - Allocate sparse buffers.
 - Commit and uncommit buffer pages.
+- Add `SparseBufferDescriptor` validation for page-aligned virtual buffers.
 
 See `phase1.md`.
 
