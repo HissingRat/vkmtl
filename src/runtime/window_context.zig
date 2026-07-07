@@ -40,6 +40,7 @@ pub const ResourceKind = enum {
     bind_group_layout,
     bind_group,
     advanced_bind_group_layout,
+    resource_table,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -56,6 +57,7 @@ pub const ResourceTracker = struct {
     bind_group_layouts: usize = 0,
     bind_groups: usize = 0,
     advanced_bind_group_layouts: usize = 0,
+    resource_tables: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -136,13 +138,14 @@ pub const ResourceTracker = struct {
             self.compute_pipeline_states != 0 or
             self.bind_group_layouts != 0 or
             self.bind_groups != 0 or
-            self.advanced_bind_group_layouts != 0;
+            self.advanced_bind_group_layouts != 0 or
+            self.resource_tables != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -154,6 +157,7 @@ pub const ResourceTracker = struct {
                     self.bind_group_layouts,
                     self.bind_groups,
                     self.advanced_bind_group_layouts,
+                    self.resource_tables,
                 },
             );
         }
@@ -177,6 +181,7 @@ pub const ResourceTracker = struct {
             .bind_group_layout => &self.bind_group_layouts,
             .bind_group => &self.bind_groups,
             .advanced_bind_group_layout => &self.advanced_bind_group_layouts,
+            .resource_table => &self.resource_tables,
         };
     }
 
@@ -1353,6 +1358,131 @@ pub const BindGroupDescriptor = struct {
     label: ?[]const u8 = null,
     layout: *BindGroupLayout,
     entries: []const BindGroupEntry = &.{},
+};
+
+pub const ResourceTableDescriptor = struct {
+    label: ?[]const u8 = null,
+    layout: *AdvancedBindGroupLayout,
+    allow_partially_bound: bool = false,
+    allow_update_after_bind: bool = false,
+};
+
+pub const ResourceTableUpdateDescriptor = struct {
+    slot: core.ResourceTableSlot,
+    resource: BindGroupResource,
+};
+
+pub const ResourceTable = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
+    alive: bool = true,
+    model_value: core.AdvancedBindingModel,
+    ranges: []core.DescriptorIndexingRange,
+    slots: []?BindGroupResource,
+    allow_update_after_bind: bool = false,
+    bound_count: u64 = 0,
+    impl: ?Impl = null,
+
+    const Impl = union(core.Backend) {
+        vulkan: VulkanAdvancedBindGroupBackend.ResourceTable,
+        metal: MetalAdvancedBindGroupBackend.ResourceTable,
+    };
+
+    pub fn deinit(self: *ResourceTable) void {
+        assertObjectAlive(self.alive, "resource_table");
+        self.alive = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => |*metal| metal.deinit(),
+        };
+        self.allocator.free(self.slots);
+        self.allocator.free(self.ranges);
+        self.tracker.release(.resource_table);
+    }
+
+    pub fn selectedBackend(self: ResourceTable) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: ResourceTable) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn model(self: ResourceTable) core.AdvancedBindingModel {
+        return self.model_value;
+    }
+
+    pub fn slotCount(self: ResourceTable) usize {
+        return self.slots.len;
+    }
+
+    pub fn update(self: *ResourceTable, descriptor: ResourceTableUpdateDescriptor) !void {
+        assertObjectAlive(self.alive, "resource_table");
+        const resolved = try self.resolveSlot(descriptor.slot);
+        if (self.bound_count != 0 and (!self.allow_update_after_bind or !resolved.range.update_after_bind)) {
+            return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
+        }
+        if (descriptor.resource.resourceKind() != resolved.range.resource) {
+            return core.BindingError.BindingResourceKindMismatch;
+        }
+        try validateResourceTableResource(descriptor.resource, self.backend);
+        self.slots[resolved.index] = descriptor.resource;
+    }
+
+    pub fn clear(self: *ResourceTable, slot: core.ResourceTableSlot) !void {
+        assertObjectAlive(self.alive, "resource_table");
+        const resolved = try self.resolveSlot(slot);
+        if (self.bound_count != 0 and (!self.allow_update_after_bind or !resolved.range.update_after_bind)) {
+            return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
+        }
+        self.slots[resolved.index] = null;
+    }
+
+    pub fn isSlotBound(self: ResourceTable, slot: core.ResourceTableSlot) !bool {
+        assertObjectAlive(self.alive, "resource_table");
+        const resolved = try self.resolveSlot(slot);
+        return self.slots[resolved.index] != null;
+    }
+
+    pub fn validateReadyForBinding(self: ResourceTable) core.BindingError!void {
+        assertObjectAlive(self.alive, "resource_table");
+        var base: usize = 0;
+        for (self.ranges) |range| {
+            for (0..range.descriptor_count) |array_index| {
+                if (self.slots[base + array_index] == null and !range.partially_bound) {
+                    return core.BindingError.MissingResourceTableBinding;
+                }
+            }
+            base += range.descriptor_count;
+        }
+    }
+
+    pub fn markBoundForCommands(self: *ResourceTable) core.BindingError!void {
+        try self.validateReadyForBinding();
+        self.bound_count += 1;
+    }
+
+    const ResolvedSlot = struct {
+        index: usize,
+        range: core.DescriptorIndexingRange,
+    };
+
+    fn resolveSlot(self: ResourceTable, slot: core.ResourceTableSlot) core.BindingError!ResolvedSlot {
+        var base: usize = 0;
+        for (self.ranges) |range| {
+            if (range.binding == slot.binding) {
+                if (slot.array_element >= range.descriptor_count) return core.BindingError.InvalidResourceTableSlot;
+                return .{
+                    .index = base + slot.array_element,
+                    .range = range,
+                };
+            }
+            base += range.descriptor_count;
+        }
+        return core.BindingError.InvalidResourceTableSlot;
+    }
 };
 
 pub const BindGroup = struct {
@@ -3011,6 +3141,42 @@ pub const Device = struct {
         };
     }
 
+    pub fn makeResourceTable(self: *Device, descriptor: ResourceTableDescriptor) !ResourceTable {
+        assertObjectAlive(descriptor.layout.alive, "advanced_bind_group_layout");
+        try expectSameBackend(self.backend, descriptor.layout.backend);
+        if (descriptor.layout.usesPartiallyBoundRanges() and !descriptor.allow_partially_bound) {
+            return core.BindingError.ResourceTablePartiallyBoundUnsupported;
+        }
+        if (descriptor.layout.usesUpdateAfterBindRanges() and !descriptor.allow_update_after_bind) {
+            return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
+        }
+
+        const ranges = try self.allocator.dupe(core.DescriptorIndexingRange, descriptor.layout.ranges);
+        errdefer self.allocator.free(ranges);
+
+        const slots = try self.allocator.alloc(?BindGroupResource, descriptor.layout.totalDescriptorCount());
+        errdefer self.allocator.free(slots);
+        @memset(slots, null);
+
+        const impl: ?ResourceTable.Impl = switch (descriptor.layout.impl.?) {
+            .vulkan => |vulkan| .{ .vulkan = VulkanAdvancedBindGroupBackend.ResourceTable.init(vulkan) },
+            .metal => |metal| .{ .metal = MetalAdvancedBindGroupBackend.ResourceTable.init(metal) },
+        };
+
+        self.tracker.retain(.resource_table);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .allocator = self.allocator,
+            .label_value = descriptor.label,
+            .model_value = descriptor.layout.model_value,
+            .ranges = ranges,
+            .slots = slots,
+            .allow_update_after_bind = descriptor.allow_update_after_bind,
+            .impl = impl,
+        };
+    }
+
     pub fn makeBindGroup(self: *Device, descriptor: BindGroupDescriptor) !BindGroup {
         const entries = try materializeBindGroupEntries(self.allocator, self.backend, descriptor);
         errdefer self.allocator.free(entries);
@@ -3407,6 +3573,11 @@ pub const WindowContext = struct {
         return try device_view.makeAdvancedBindGroupLayout(descriptor);
     }
 
+    pub fn makeResourceTable(self: *WindowContext, descriptor: ResourceTableDescriptor) !ResourceTable {
+        var device_view = self.device();
+        return try device_view.makeResourceTable(descriptor);
+    }
+
     pub fn makeBindGroup(self: *WindowContext, descriptor: BindGroupDescriptor) !BindGroup {
         var device_view = self.device();
         return try device_view.makeBindGroup(descriptor);
@@ -3507,6 +3678,32 @@ fn validateAndRecordStorageAccess(
         },
         .uniform_buffer, .sampled_texture, .sampler, .compare_sampler => {},
     }
+}
+
+fn validateResourceTableResource(
+    resource: BindGroupResource,
+    expected_backend: core.Backend,
+) !void {
+    if (!resourceTableResourceAlive(resource)) return core.BindingError.InvalidResourceTableResource;
+    try expectSameBackend(expected_backend, switch (resource) {
+        .uniform_buffer => |binding| binding.buffer.backend,
+        .storage_buffer => |binding| binding.buffer.backend,
+        .storage_texture => |texture_view| texture_view.backend,
+        .sampled_texture => |texture_view| texture_view.backend,
+        .sampler => |sampler_state| sampler_state.backend,
+        .compare_sampler => |sampler_state| sampler_state.backend,
+    });
+}
+
+fn resourceTableResourceAlive(resource: BindGroupResource) bool {
+    return switch (resource) {
+        .uniform_buffer => |binding| binding.buffer.alive,
+        .storage_buffer => |binding| binding.buffer.alive,
+        .storage_texture => |texture_view| texture_view.alive,
+        .sampled_texture => |texture_view| texture_view.alive,
+        .sampler => |sampler_state| sampler_state.alive,
+        .compare_sampler => |sampler_state| sampler_state.alive,
+    };
 }
 
 fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor) core.BindingError!void {
@@ -3773,6 +3970,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .bind_group_layout => "bind_group_layout",
         .bind_group => "bind_group",
         .advanced_bind_group_layout => "advanced_bind_group_layout",
+        .resource_table => "resource_table",
     };
 }
 
@@ -4140,6 +4338,175 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
     try std.testing.expect(!layout.usesPartiallyBoundRanges());
     try std.testing.expect(!layout.usesUpdateAfterBindRanges());
     try std.testing.expectEqual(@as(usize, 1), tracker.advanced_bind_group_layouts);
+}
+
+test "runtime resource table updates clear and validate slots" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.argument_buffers = true;
+    report.limits.max_bindless_descriptors_per_range = 16;
+    report.limits.max_bindless_ranges_per_layout = 4;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = report,
+    };
+
+    const ranges = [_]core.DescriptorIndexingRange{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 2,
+            .partially_bound = true,
+        },
+        .{
+            .binding = 1,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 1,
+            .update_after_bind = true,
+        },
+    };
+
+    var layout = try device.makeAdvancedBindGroupLayout(.{
+        .label = "bindless table layout",
+        .model = .argument_buffer,
+        .ranges = &ranges,
+    });
+    defer layout.deinit();
+
+    try std.testing.expectError(core.BindingError.ResourceTablePartiallyBoundUnsupported, device.makeResourceTable(.{
+        .layout = &layout,
+    }));
+    try std.testing.expectError(core.BindingError.ResourceTableUpdateAfterBindUnsupported, device.makeResourceTable(.{
+        .layout = &layout,
+        .allow_partially_bound = true,
+    }));
+
+    var table = try device.makeResourceTable(.{
+        .label = "bindless table",
+        .layout = &layout,
+        .allow_partially_bound = true,
+        .allow_update_after_bind = true,
+    });
+    defer table.deinit();
+
+    var texture_view = TextureView{
+        .backend = .metal,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .shader_read = true },
+        .sample_count_value = 1,
+        .width_value = 1,
+        .height_value = 1,
+        .impl = undefined,
+    };
+    var sampler = SamplerState{
+        .backend = .metal,
+        .tracker = &tracker,
+        .impl = undefined,
+    };
+    var dead_sampler = SamplerState{
+        .backend = .metal,
+        .tracker = &tracker,
+        .alive = false,
+        .impl = undefined,
+    };
+
+    try std.testing.expectEqual(@as(usize, 3), table.slotCount());
+    try std.testing.expectError(core.BindingError.MissingResourceTableBinding, table.validateReadyForBinding());
+    try table.update(.{
+        .slot = .{ .binding = 0, .array_element = 1 },
+        .resource = .{ .sampled_texture = &texture_view },
+    });
+    try std.testing.expect(try table.isSlotBound(.{ .binding = 0, .array_element = 1 }));
+    try std.testing.expectError(core.BindingError.BindingResourceKindMismatch, table.update(.{
+        .slot = .{ .binding = 1 },
+        .resource = .{ .sampled_texture = &texture_view },
+    }));
+    try std.testing.expectError(core.BindingError.InvalidResourceTableResource, table.update(.{
+        .slot = .{ .binding = 1 },
+        .resource = .{ .sampler = &dead_sampler },
+    }));
+    try table.update(.{
+        .slot = .{ .binding = 1 },
+        .resource = .{ .sampler = &sampler },
+    });
+    try table.validateReadyForBinding();
+    try table.markBoundForCommands();
+    try table.clear(.{ .binding = 1 });
+    try std.testing.expect(!(try table.isSlotBound(.{ .binding = 1 })));
+    try std.testing.expectEqual(@as(usize, 1), tracker.resource_tables);
+}
+
+test "runtime resource table rejects update after bind without range support" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.argument_buffers = true;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = report,
+    };
+
+    const ranges = [_]core.DescriptorIndexingRange{.{
+        .binding = 0,
+        .resource = .sampler,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 1,
+    }};
+    var layout = try device.makeAdvancedBindGroupLayout(.{
+        .model = .argument_buffer,
+        .ranges = &ranges,
+    });
+    defer layout.deinit();
+
+    var table = try device.makeResourceTable(.{
+        .layout = &layout,
+        .allow_update_after_bind = true,
+    });
+    defer table.deinit();
+
+    var sampler = SamplerState{
+        .backend = .metal,
+        .tracker = &tracker,
+        .impl = undefined,
+    };
+    try table.update(.{
+        .slot = .{ .binding = 0 },
+        .resource = .{ .sampler = &sampler },
+    });
+    try table.markBoundForCommands();
+    try std.testing.expectError(core.BindingError.ResourceTableUpdateAfterBindUnsupported, table.clear(.{
+        .binding = 0,
+    }));
 }
 
 test "runtime external texture wrapper validates and tracks lifetime" {

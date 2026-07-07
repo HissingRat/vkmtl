@@ -1178,10 +1178,16 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidDynamicBindingResource,
         error.UnsupportedResourceArray,
         error.UnsupportedDynamicBinding,
+        error.UnsupportedStaticSampler,
         error.MissingDynamicOffset,
         error.ExtraDynamicOffset,
         error.InvalidDynamicOffsetAlignment,
         error.InvalidDynamicOffsetRange,
+        error.InvalidResourceTableSlot,
+        error.MissingResourceTableBinding,
+        error.ResourceTablePartiallyBoundUnsupported,
+        error.ResourceTableUpdateAfterBindUnsupported,
+        error.InvalidResourceTableResource,
         error.EmptySmallConstantVisibility,
         error.EmptySmallConstantData,
         error.SmallConstantDataTooLarge,
@@ -4828,6 +4834,20 @@ pub const DescriptorIndexingLayoutDescriptor = struct {
     }
 };
 
+pub const ResourceTableSlot = struct {
+    binding: u32,
+    array_element: u32 = 0,
+
+    pub fn validate(self: ResourceTableSlot, layout: DescriptorIndexingLayoutDescriptor) BindingError!DescriptorIndexingRange {
+        for (layout.ranges) |range| {
+            if (range.binding != self.binding) continue;
+            if (self.array_element >= range.descriptor_count) return BindingError.InvalidResourceTableSlot;
+            return range;
+        }
+        return BindingError.InvalidResourceTableSlot;
+    }
+};
+
 pub const BindGroupLayoutCacheKeyDescriptor = struct {
     entries: []const BindGroupLayoutEntry = &.{},
 
@@ -5171,6 +5191,11 @@ pub const BindingError = error{
     ExtraDynamicOffset,
     InvalidDynamicOffsetAlignment,
     InvalidDynamicOffsetRange,
+    InvalidResourceTableSlot,
+    MissingResourceTableBinding,
+    ResourceTablePartiallyBoundUnsupported,
+    ResourceTableUpdateAfterBindUnsupported,
+    InvalidResourceTableResource,
 };
 
 fn isAlignedU32(value: u32, alignment: u32) bool {
@@ -7392,6 +7417,33 @@ test "descriptor indexing layout validates bindless edge cases" {
     }).validate(features, limits));
 
     try std.testing.expectError(AdvancedFeatureError.MissingDescriptorIndexingRange, (DescriptorIndexingLayoutDescriptor{}).validate(features, limits));
+}
+
+test "resource table slots validate against descriptor ranges" {
+    const ranges = [_]DescriptorIndexingRange{.{
+        .binding = 7,
+        .resource = .sampled_texture,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 2,
+    }};
+    const layout = DescriptorIndexingLayoutDescriptor{
+        .model = .argument_buffer,
+        .ranges = ranges[0..],
+    };
+
+    const resolved = try (ResourceTableSlot{
+        .binding = 7,
+        .array_element = 1,
+    }).validate(layout);
+    try std.testing.expectEqual(BindingResourceKind.sampled_texture, resolved.resource);
+
+    try std.testing.expectError(BindingError.InvalidResourceTableSlot, (ResourceTableSlot{
+        .binding = 7,
+        .array_element = 2,
+    }).validate(layout));
+    try std.testing.expectError(BindingError.InvalidResourceTableSlot, (ResourceTableSlot{
+        .binding = 8,
+    }).validate(layout));
 }
 
 test "reflection bindless derivation validates array metadata and capacity" {

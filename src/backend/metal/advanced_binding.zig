@@ -37,6 +37,28 @@ pub fn deinit(self: *MetalAdvancedBindGroupLayout) void {
     self.* = undefined;
 }
 
+pub const ResourceTable = struct {
+    range_count: usize,
+    total_arguments: u32,
+    texture_argument_count: u32,
+    buffer_argument_count: u32,
+    sampler_argument_count: u32,
+
+    pub fn init(layout: MetalAdvancedBindGroupLayout) ResourceTable {
+        return .{
+            .range_count = layout.range_count,
+            .total_arguments = layout.total_arguments,
+            .texture_argument_count = layout.texture_argument_count,
+            .buffer_argument_count = layout.buffer_argument_count,
+            .sampler_argument_count = layout.sampler_argument_count,
+        };
+    }
+
+    pub fn deinit(self: *ResourceTable) void {
+        self.* = undefined;
+    }
+};
+
 test "Metal advanced binding metadata groups argument resources" {
     const ranges = [_]core.DescriptorIndexingRange{
         .{

@@ -51,9 +51,18 @@ pub fn main() !void {
     };
     defer layout.deinit();
 
-    std.debug.print("bindless texture layout ok: backend={s}, model={s}, ranges={}\n", .{
+    var table = try device.makeResourceTable(.{
+        .label = "bindless texture table",
+        .layout = &layout,
+        .allow_partially_bound = layout.usesPartiallyBoundRanges(),
+        .allow_update_after_bind = layout.usesUpdateAfterBindRanges(),
+    });
+    defer table.deinit();
+
+    std.debug.print("bindless texture table ok: backend={s}, model={s}, ranges={}, slots={}\n", .{
         @tagName(device.selectedBackend()),
         @tagName(layout.model()),
         layout.rangeCount(),
+        table.slotCount(),
     });
 }

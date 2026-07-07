@@ -33,6 +33,26 @@ pub fn deinit(self: *VulkanAdvancedBindGroupLayout) void {
     self.* = undefined;
 }
 
+pub const ResourceTable = struct {
+    range_count: usize,
+    total_descriptors: u32,
+    uses_partially_bound_ranges: bool,
+    uses_update_after_bind_ranges: bool,
+
+    pub fn init(layout: VulkanAdvancedBindGroupLayout) ResourceTable {
+        return .{
+            .range_count = layout.range_count,
+            .total_descriptors = layout.total_descriptors,
+            .uses_partially_bound_ranges = layout.uses_partially_bound_ranges,
+            .uses_update_after_bind_ranges = layout.uses_update_after_bind_ranges,
+        };
+    }
+
+    pub fn deinit(self: *ResourceTable) void {
+        self.* = undefined;
+    }
+};
+
 test "Vulkan advanced binding metadata captures descriptor indexing requirements" {
     const ranges = [_]core.DescriptorIndexingRange{
         .{
