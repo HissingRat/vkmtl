@@ -141,7 +141,7 @@ pub const VulkanBindGroup = struct {
     pub fn dynamicOffsets(self: VulkanBindGroup, binding: core.BindGroupBinding) ![]u32 {
         var dynamic_count: usize = 0;
         for (self.layout_entries) |entry| {
-            if (entry.dynamic_offset) dynamic_count += 1;
+            if (entry.dynamic_offset) dynamic_count += entry.array_count;
         }
 
         const offsets = try self.allocator.alloc(u32, dynamic_count);
@@ -160,13 +160,17 @@ pub const VulkanBindGroup = struct {
         std.mem.sort(core.BindGroupLayoutEntry, dynamic_entries, {}, layoutEntryBindingLessThan);
 
         const offset_list = core.DynamicOffsetList{ .offsets = binding.dynamic_offsets };
-        for (dynamic_entries, offsets) |entry, *out| {
-            const dynamic_offset = offset_list.offsetForBinding(entry.binding) orelse {
-                return core.BindingError.MissingDynamicOffset;
-            };
-            out.* = std.math.cast(u32, dynamic_offset) orelse {
-                return core.BindingError.InvalidDynamicOffsetRange;
-            };
+        var out_index: usize = 0;
+        for (dynamic_entries) |entry| {
+            for (0..entry.array_count) |array_index| {
+                const dynamic_offset = offset_list.offsetForBindingElement(entry.binding, @intCast(array_index)) orelse {
+                    return core.BindingError.MissingDynamicOffset;
+                };
+                offsets[out_index] = std.math.cast(u32, dynamic_offset) orelse {
+                    return core.BindingError.InvalidDynamicOffsetRange;
+                };
+                out_index += 1;
+            }
         }
 
         return offsets;

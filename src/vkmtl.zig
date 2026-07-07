@@ -264,6 +264,7 @@ pub const PipelineLayoutCacheKeyDescriptor = core.PipelineLayoutCacheKeyDescript
 pub const BufferBindingDescriptor = core.BufferBindingDescriptor;
 pub const TextureViewBindingDescriptor = core.TextureViewBindingDescriptor;
 pub const SamplerBindingDescriptor = core.SamplerBindingDescriptor;
+pub const StaticSamplerDescriptor = core.StaticSamplerDescriptor;
 pub const BindGroupResourceDescriptor = core.BindGroupResource;
 pub const BindGroupEntryDescriptor = core.BindGroupEntry;
 pub const BindGroupDescriptorShape = core.BindGroupDescriptor;

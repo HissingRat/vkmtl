@@ -3510,9 +3510,7 @@ fn validateAndRecordStorageAccess(
 }
 
 fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor) core.BindingError!void {
-    for (descriptor.entries) |entry| {
-        if (entry.array_count > 1 and entry.dynamic_offset) return core.BindingError.UnsupportedDynamicBinding;
-    }
+    _ = descriptor;
 }
 
 fn validateRuntimeSpecialization(stage: core.ProgrammableStageDescriptor) core.ShaderError!void {
@@ -4569,6 +4567,43 @@ test "runtime bind group dynamic offsets validate against layout" {
     try std.testing.expectError(core.BindingError.InvalidDynamicOffsetAlignment, validateDynamicOffsetsForBindGroup(bind_group, .{
         .index = 0,
         .dynamic_offsets = &.{.{ .binding = 3, .offset = 4 }},
+    }));
+}
+
+test "runtime bind group dynamic offsets validate array elements" {
+    const layout_entries = [_]core.BindGroupLayoutEntry{.{
+        .binding = 3,
+        .resource = .uniform_buffer,
+        .visibility = .{ .vertex = true },
+        .array_count = 2,
+        .dynamic_offset = true,
+    }};
+    var tracker = ResourceTracker{};
+    const bind_group = BindGroup{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = std.testing.allocator,
+        .layout_entries = layout_entries[0..],
+        .entries = &.{},
+    };
+
+    try validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+        .dynamic_offsets = &.{
+            .{ .binding = 3, .array_element = 0, .offset = 256 },
+            .{ .binding = 3, .array_element = 1, .offset = 512 },
+        },
+    });
+    try std.testing.expectError(core.BindingError.MissingDynamicOffset, validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+        .dynamic_offsets = &.{.{ .binding = 3, .array_element = 0, .offset = 256 }},
+    }));
+    try std.testing.expectError(core.BindingError.ExtraDynamicOffset, validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+        .dynamic_offsets = &.{
+            .{ .binding = 3, .array_element = 0, .offset = 256 },
+            .{ .binding = 3, .array_element = 2, .offset = 512 },
+        },
     }));
 }
 

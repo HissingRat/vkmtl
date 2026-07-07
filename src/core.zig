@@ -82,6 +82,7 @@ pub const DeviceFeatures = struct {
     sampler_compare: bool = false,
     sampler_anisotropy: bool = false,
     sampler_border_color: bool = false,
+    static_samplers: bool = false,
     heaps: bool = false,
     small_constants: bool = false,
     root_constants: bool = false,
@@ -4876,6 +4877,18 @@ pub const TextureViewBindingDescriptor = struct {};
 
 pub const SamplerBindingDescriptor = struct {};
 
+pub const StaticSamplerDescriptor = struct {
+    binding: u32,
+    visibility: ShaderVisibility,
+    sampler: SamplerDescriptor = .{},
+
+    pub fn validate(self: StaticSamplerDescriptor, features: DeviceFeatures) (BindingError || SamplerError)!void {
+        if (!features.static_samplers) return BindingError.UnsupportedStaticSampler;
+        if (self.visibility.isEmpty()) return BindingError.EmptyShaderVisibility;
+        try self.sampler.validate();
+    }
+};
+
 pub const BindGroupResource = union(BindingResourceKind) {
     uniform_buffer: BufferBindingDescriptor,
     storage_buffer: BufferBindingDescriptor,
@@ -4947,6 +4960,7 @@ pub const BindGroupDescriptor = struct {
 
 pub const DynamicOffset = struct {
     binding: u32,
+    array_element: u32 = 0,
     offset: u64 = 0,
 };
 
@@ -4962,7 +4976,9 @@ pub const DynamicOffsetList = struct {
 
         for (self.offsets, 0..) |offset, i| {
             for (self.offsets[i + 1 ..]) |other| {
-                if (offset.binding == other.binding) return BindingError.DuplicateBinding;
+                if (offset.binding == other.binding and offset.array_element == other.array_element) {
+                    return BindingError.DuplicateBinding;
+                }
             }
 
             const layout_entry = layout.entryForBinding(offset.binding) orelse {
@@ -4970,21 +4986,30 @@ pub const DynamicOffsetList = struct {
             };
             if (!layout_entry.dynamic_offset) return BindingError.ExtraDynamicOffset;
             if (!layout_entry.resource.isBuffer()) return BindingError.InvalidDynamicBindingResource;
+            if (offset.array_element >= layout_entry.array_count) return BindingError.ExtraDynamicOffset;
 
             const alignment = dynamicOffsetAlignment(layout_entry.resource, limits);
             if (!isAlignedU64(offset.offset, alignment)) return BindingError.InvalidDynamicOffsetAlignment;
         }
 
         for (layout.entries) |layout_entry| {
-            if (layout_entry.dynamic_offset and self.offsetForBinding(layout_entry.binding) == null) {
-                return BindingError.MissingDynamicOffset;
+            if (!layout_entry.dynamic_offset) continue;
+            for (0..layout_entry.array_count) |array_index| {
+                const array_element: u32 = @intCast(array_index);
+                if (self.offsetForBindingElement(layout_entry.binding, array_element) == null) {
+                    return BindingError.MissingDynamicOffset;
+                }
             }
         }
     }
 
     pub fn offsetForBinding(self: DynamicOffsetList, binding: u32) ?u64 {
+        return self.offsetForBindingElement(binding, 0);
+    }
+
+    pub fn offsetForBindingElement(self: DynamicOffsetList, binding: u32, array_element: u32) ?u64 {
         for (self.offsets) |offset| {
-            if (offset.binding == binding) return offset.offset;
+            if (offset.binding == binding and offset.array_element == array_element) return offset.offset;
         }
         return null;
     }
@@ -5141,6 +5166,7 @@ pub const BindingError = error{
     InvalidDynamicBindingResource,
     UnsupportedResourceArray,
     UnsupportedDynamicBinding,
+    UnsupportedStaticSampler,
     MissingDynamicOffset,
     ExtraDynamicOffset,
     InvalidDynamicOffsetAlignment,
@@ -9250,6 +9276,64 @@ test "dynamic offset list validates dynamic buffer bindings" {
     try std.testing.expectError(BindingError.DuplicateBinding, (DynamicOffsetList{
         .offsets = duplicate_offsets[0..],
     }).validate(layout, limits));
+}
+
+test "dynamic offset list addresses dynamic buffer array elements" {
+    const layout_entries = [_]BindGroupLayoutEntry{.{
+        .binding = 4,
+        .resource = .uniform_buffer,
+        .visibility = .{ .vertex = true },
+        .array_count = 2,
+        .dynamic_offset = true,
+    }};
+    const layout = BindGroupLayoutDescriptor{ .entries = layout_entries[0..] };
+    const limits = DeviceLimits{ .min_uniform_buffer_offset_alignment = 256 };
+    const offsets = [_]DynamicOffset{
+        .{ .binding = 4, .array_element = 0, .offset = 256 },
+        .{ .binding = 4, .array_element = 1, .offset = 512 },
+    };
+
+    try (DynamicOffsetList{ .offsets = offsets[0..] }).validate(layout, limits);
+    try std.testing.expectEqual(@as(u64, 512), (DynamicOffsetList{
+        .offsets = offsets[0..],
+    }).offsetForBindingElement(4, 1).?);
+
+    try std.testing.expectError(BindingError.MissingDynamicOffset, (DynamicOffsetList{
+        .offsets = offsets[0..1],
+    }).validate(layout, limits));
+
+    const out_of_range_offsets = [_]DynamicOffset{
+        .{ .binding = 4, .array_element = 0, .offset = 256 },
+        .{ .binding = 4, .array_element = 2, .offset = 512 },
+    };
+    try std.testing.expectError(BindingError.ExtraDynamicOffset, (DynamicOffsetList{
+        .offsets = out_of_range_offsets[0..],
+    }).validate(layout, limits));
+
+    const duplicate_offsets = [_]DynamicOffset{
+        .{ .binding = 4, .array_element = 0, .offset = 256 },
+        .{ .binding = 4, .array_element = 0, .offset = 512 },
+    };
+    try std.testing.expectError(BindingError.DuplicateBinding, (DynamicOffsetList{
+        .offsets = duplicate_offsets[0..],
+    }).validate(layout, limits));
+}
+
+test "static sampler descriptor is feature gated" {
+    const descriptor = StaticSamplerDescriptor{
+        .binding = 0,
+        .visibility = .{ .fragment = true },
+        .sampler = .{},
+    };
+
+    try std.testing.expectError(BindingError.UnsupportedStaticSampler, descriptor.validate(.{}));
+    try descriptor.validate(.{ .static_samplers = true });
+
+    try std.testing.expectError(BindingError.EmptyShaderVisibility, (StaticSamplerDescriptor{
+        .binding = 1,
+        .visibility = .{},
+        .sampler = .{},
+    }).validate(.{ .static_samplers = true }));
 }
 
 test "small constant descriptor validates feature and limit gates" {

@@ -363,7 +363,7 @@ pub const ComputeCommandEncoder = struct {
                     .uniform_buffer, .storage_buffer => |buffer_binding| try self.setBufferResource(
                         buffer_binding,
                         native_index,
-                        dynamicOffsetForBinding(binding, layout_entry),
+                        dynamicOffsetForBinding(binding, layout_entry, @intCast(resource_index)),
                     ),
                     .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
                         texture_view,
@@ -551,7 +551,7 @@ pub const RenderCommandEncoder = struct {
                         buffer_binding,
                         native_index,
                         layout_entry.visibility,
-                        dynamicOffsetForBinding(binding, layout_entry),
+                        dynamicOffsetForBinding(binding, layout_entry, @intCast(resource_index)),
                     ),
                     .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
                         texture_view,
@@ -764,9 +764,13 @@ pub const RenderCommandEncoder = struct {
 fn dynamicOffsetForBinding(
     binding: core.BindGroupBinding,
     layout_entry: core.BindGroupLayoutEntry,
+    array_element: u32,
 ) u64 {
     if (!layout_entry.dynamic_offset) return 0;
-    return (core.DynamicOffsetList{ .offsets = binding.dynamic_offsets }).offsetForBinding(layout_entry.binding) orelse 0;
+    return (core.DynamicOffsetList{ .offsets = binding.dynamic_offsets }).offsetForBindingElement(
+        layout_entry.binding,
+        array_element,
+    ) orelse 0;
 }
 
 fn indexTypeBits(index_type: core.IndexType) c_uint {
