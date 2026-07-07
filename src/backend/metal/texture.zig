@@ -128,6 +128,7 @@ pub fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_forma
         .rgba8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM,
         .rgba8_unorm_srgb => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB,
         .depth32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT,
+        .depth32_float_stencil8 => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8,
     };
 }
 

@@ -1216,6 +1216,15 @@ obvious render and binding blockers.
 - [x] Keep unsupported device paths feature-gated.
 - [x] Update docs and tests for instance stepping.
 
+## Period 20 Phase 4 Checklist
+
+- [x] Define stencil backend lowering scope before implementation.
+- [x] Add the portable `depth32_float_stencil8` format.
+- [x] Lower combined depth/stencil render-pass attachments to Vulkan and Metal.
+- [x] Lower stencil compare, masks, and operations to Vulkan and Metal pipeline state.
+- [x] Keep separate stencil-only attachments deferred.
+- [x] Update docs and tests for stencil format and state validation.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

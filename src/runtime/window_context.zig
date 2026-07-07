@@ -4381,7 +4381,7 @@ test "runtime render pipeline gate rejects unsupported raster state" {
 
     var stencil = descriptor;
     stencil.depth_stencil = .{
-        .format = .depth32_float,
+        .format = .depth32_float_stencil8,
         .stencil = .{ .enabled = true },
     };
     try std.testing.expectError(core.PipelineError.UnsupportedStencilState, validateRuntimeRenderPipelineShape(stencil, .{}));

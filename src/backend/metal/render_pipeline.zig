@@ -45,6 +45,7 @@ pub fn init(
 
     const color_attachment = descriptor.color_attachments[0];
     const blend = color_attachment.blend;
+    const stencil = if (descriptor.depth_stencil) |depth| depth.stencil else core.StencilDescriptor{};
     var handle: ?*metal.vkmtl_metal_render_pipeline_state = null;
     try check(metal.vkmtl_metal_render_pipeline_state_create(
         owner.handle,
@@ -66,6 +67,17 @@ pub fn init(
         if (descriptor.depth_stencil) |depth| textureFormat(depth.format) else metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
         if (descriptor.depth_stencil) |depth| compareFunction(depth.depth_compare_function) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
         if (descriptor.depth_stencil) |depth| if (depth.depth_write_enabled) 1 else 0 else 0,
+        if (stencil.enabled) 1 else 0,
+        stencilOperation(stencil.front.stencil_fail_operation),
+        stencilOperation(stencil.front.depth_fail_operation),
+        stencilOperation(stencil.front.depth_stencil_pass_operation),
+        compareFunction(stencil.front.stencil_compare_function),
+        stencilOperation(stencil.back.stencil_fail_operation),
+        stencilOperation(stencil.back.depth_fail_operation),
+        stencilOperation(stencil.back.depth_stencil_pass_operation),
+        compareFunction(stencil.back.stencil_compare_function),
+        stencil.read_mask,
+        stencil.write_mask,
         descriptor.sample_count,
         if (vertex_buffers.len == 0) null else vertex_buffers.ptr,
         vertex_buffers.len,
@@ -195,6 +207,19 @@ fn blendOperation(operation: core.BlendOperation) metal.vkmtl_metal_blend_operat
     };
 }
 
+fn stencilOperation(operation: core.StencilOperation) metal.vkmtl_metal_stencil_operation {
+    return switch (operation) {
+        .keep => metal.VKMTL_METAL_STENCIL_OPERATION_KEEP,
+        .zero => metal.VKMTL_METAL_STENCIL_OPERATION_ZERO,
+        .replace => metal.VKMTL_METAL_STENCIL_OPERATION_REPLACE,
+        .increment_clamp => metal.VKMTL_METAL_STENCIL_OPERATION_INCREMENT_CLAMP,
+        .decrement_clamp => metal.VKMTL_METAL_STENCIL_OPERATION_DECREMENT_CLAMP,
+        .invert => metal.VKMTL_METAL_STENCIL_OPERATION_INVERT,
+        .increment_wrap => metal.VKMTL_METAL_STENCIL_OPERATION_INCREMENT_WRAP,
+        .decrement_wrap => metal.VKMTL_METAL_STENCIL_OPERATION_DECREMENT_WRAP,
+    };
+}
+
 fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_format {
     return switch (format) {
         .automatic => metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
@@ -203,6 +228,7 @@ fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_format {
         .rgba8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM,
         .rgba8_unorm_srgb => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB,
         .depth32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT,
+        .depth32_float_stencil8 => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8,
     };
 }
 

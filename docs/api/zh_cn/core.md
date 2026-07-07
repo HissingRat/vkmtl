@@ -216,9 +216,9 @@ operation，每个 attachment 都可以有自己的 descriptor。非空 blend st
 真正 independent blend 会跟 MRT lowering 一起补。
 
 Depth/stencil state 包含 `depth_test_enabled`、depth compare/write 字段，以及带 front/back
-operation 和 read/write mask 的 `StencilDescriptor`。Depth state 已在第一版 lowering
-路径里。Stencil state 已经可以表达和校验，但当前 format 列表还没有 stencil-capable format，
-所以启用 stencil 的 descriptor 会先被校验拒绝，直到 format support 补上。
+operation 和 read/write mask 的 `StencilDescriptor`。Depth state 和 combined
+depth/stencil state 都会下沉到 Vulkan 和 Metal。`depth32_float_stencil8` 是第一种
+stencil-capable format。独立 stencil attachment 会等 attachment model 扩展后再补。
 
 Vertex layout 支持多个 buffer 和 attribute。`VertexBufferLayoutDescriptor` 可以指定显式
 `buffer_index`；省略时保持现有按数组位置映射的行为。校验会拒绝重复的 resolved buffer
@@ -331,8 +331,9 @@ error。
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
-lowering 支持一个 color attachment；`transient` 目前作为 no-op 性能 hint 保留。stencil
-和 MRT 路径仍会返回 typed unsupported error，直到 native lowering 接上。
+lowering 支持一个 color attachment；`transient` 目前作为 no-op 性能 hint 保留。Combined
+depth/stencil attachment 会通过 depth attachment 路径下沉；独立 stencil-only attachment
+和 MRT 路径仍会返回 typed unsupported error。
 
 Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`、
 `StencilReference` 和 `DepthBiasDescriptor`。`RenderCommandEncoder` 暴露对应 setter。

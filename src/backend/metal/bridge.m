@@ -537,10 +537,21 @@ static MTLPixelFormat vkmtl_texture_pixel_format(vkmtl_metal_texture_format form
             return MTLPixelFormatRGBA8Unorm_sRGB;
         case VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT:
             return MTLPixelFormatDepth32Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8:
+            return MTLPixelFormatDepth32Float_Stencil8;
         case VKMTL_METAL_TEXTURE_FORMAT_INVALID:
         default:
             return MTLPixelFormatInvalid;
     }
+}
+
+static BOOL vkmtl_texture_format_has_stencil(vkmtl_metal_texture_format format) {
+    return format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8;
+}
+
+static BOOL vkmtl_texture_format_has_depth(vkmtl_metal_texture_format format) {
+    return format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT ||
+        format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
 static MTLCompareFunction vkmtl_compare_function(vkmtl_metal_compare_function function) {
@@ -562,6 +573,28 @@ static MTLCompareFunction vkmtl_compare_function(vkmtl_metal_compare_function fu
         case VKMTL_METAL_COMPARE_FUNCTION_ALWAYS:
         default:
             return MTLCompareFunctionAlways;
+    }
+}
+
+static MTLStencilOperation vkmtl_stencil_operation(vkmtl_metal_stencil_operation operation) {
+    switch (operation) {
+        case VKMTL_METAL_STENCIL_OPERATION_ZERO:
+            return MTLStencilOperationZero;
+        case VKMTL_METAL_STENCIL_OPERATION_REPLACE:
+            return MTLStencilOperationReplace;
+        case VKMTL_METAL_STENCIL_OPERATION_INCREMENT_CLAMP:
+            return MTLStencilOperationIncrementClamp;
+        case VKMTL_METAL_STENCIL_OPERATION_DECREMENT_CLAMP:
+            return MTLStencilOperationDecrementClamp;
+        case VKMTL_METAL_STENCIL_OPERATION_INVERT:
+            return MTLStencilOperationInvert;
+        case VKMTL_METAL_STENCIL_OPERATION_INCREMENT_WRAP:
+            return MTLStencilOperationIncrementWrap;
+        case VKMTL_METAL_STENCIL_OPERATION_DECREMENT_WRAP:
+            return MTLStencilOperationDecrementWrap;
+        case VKMTL_METAL_STENCIL_OPERATION_KEEP:
+        default:
+            return MTLStencilOperationKeep;
     }
 }
 
@@ -1422,6 +1455,17 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
+    unsigned int stencil_enabled,
+    vkmtl_metal_stencil_operation front_stencil_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function front_stencil_compare_function,
+    vkmtl_metal_stencil_operation back_stencil_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function back_stencil_compare_function,
+    unsigned int stencil_read_mask,
+    unsigned int stencil_write_mask,
     unsigned int sample_count,
     const vkmtl_metal_vertex_buffer_layout *vertex_buffers,
     size_t vertex_buffer_count,
@@ -1514,8 +1558,11 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
                 vkmtl_blend_operation(alpha_blend_operation);
         }
         descriptor.sampleCount = sample_count;
-        if (depth_format != VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
+        if (vkmtl_texture_format_has_depth(depth_format)) {
             descriptor.depthAttachmentPixelFormat = vkmtl_texture_pixel_format(depth_format);
+        }
+        if (vkmtl_texture_format_has_stencil(depth_format)) {
+            descriptor.stencilAttachmentPixelFormat = vkmtl_texture_pixel_format(depth_format);
         }
 
         if (vertex_buffer_count > 0 || vertex_attribute_count > 0) {
@@ -1558,7 +1605,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
         }
 
         id<MTLDepthStencilState> depth_stencil = nil;
-        if (depth_format != VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
+        if (depth_format != VKMTL_METAL_TEXTURE_FORMAT_INVALID || stencil_enabled != 0) {
             MTLDepthStencilDescriptor *depth_descriptor =
                 [[MTLDepthStencilDescriptor alloc] init];
             if (depth_descriptor == nil) {
@@ -1569,6 +1616,38 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
             depth_descriptor.depthCompareFunction =
                 vkmtl_compare_function(depth_compare_function);
             depth_descriptor.depthWriteEnabled = depth_write_enabled != 0;
+            if (stencil_enabled != 0) {
+                MTLStencilDescriptor *front = [[MTLStencilDescriptor alloc] init];
+                MTLStencilDescriptor *back = [[MTLStencilDescriptor alloc] init];
+                if (front == nil || back == nil) {
+                    [front release];
+                    [back release];
+                    [depth_descriptor release];
+                    [pipeline release];
+                    return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                }
+
+                front.stencilFailureOperation = vkmtl_stencil_operation(front_stencil_fail_operation);
+                front.depthFailureOperation = vkmtl_stencil_operation(front_depth_fail_operation);
+                front.depthStencilPassOperation =
+                    vkmtl_stencil_operation(front_depth_stencil_pass_operation);
+                front.stencilCompareFunction = vkmtl_compare_function(front_stencil_compare_function);
+                front.readMask = stencil_read_mask;
+                front.writeMask = stencil_write_mask;
+
+                back.stencilFailureOperation = vkmtl_stencil_operation(back_stencil_fail_operation);
+                back.depthFailureOperation = vkmtl_stencil_operation(back_depth_fail_operation);
+                back.depthStencilPassOperation =
+                    vkmtl_stencil_operation(back_depth_stencil_pass_operation);
+                back.stencilCompareFunction = vkmtl_compare_function(back_stencil_compare_function);
+                back.readMask = stencil_read_mask;
+                back.writeMask = stencil_write_mask;
+
+                depth_descriptor.frontFaceStencil = front;
+                depth_descriptor.backFaceStencil = back;
+                [front release];
+                [back release];
+            }
 
             depth_stencil = [owner->device newDepthStencilStateWithDescriptor:depth_descriptor];
             [depth_descriptor release];
@@ -1911,6 +1990,12 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
             descriptor.depthAttachment.loadAction = MTLLoadActionClear;
             descriptor.depthAttachment.storeAction = MTLStoreActionDontCare;
             descriptor.depthAttachment.clearDepth = clear_depth;
+            if (depth_texture.pixelFormat == MTLPixelFormatDepth32Float_Stencil8) {
+                descriptor.stencilAttachment.texture = depth_texture;
+                descriptor.stencilAttachment.loadAction = MTLLoadActionClear;
+                descriptor.stencilAttachment.storeAction = MTLStoreActionDontCare;
+                descriptor.stencilAttachment.clearStencil = 0;
+            }
         }
 
         id<MTLRenderCommandEncoder> encoder =

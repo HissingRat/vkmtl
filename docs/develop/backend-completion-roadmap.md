@@ -27,6 +27,7 @@ paths. They are recorded here instead of rewriting the historical period notes:
 - Single color attachment blend state lowering.
 - Pipeline depth-bias and wireframe / line fill mode lowering.
 - Vertex instance step-rate lowering.
+- Combined depth/stencil format and stencil pipeline state lowering.
 
 ## Goal
 
@@ -46,7 +47,7 @@ Tracked in `docs/develop/period20/`.
 - [x] Pipeline depth-bias state lowering.
 - [x] Wireframe / line fill mode where the backend supports it.
 - [x] Vertex instance step-rate lowering.
-- [ ] Stencil render pass and stencil pipeline state lowering.
+- [x] Stencil render pass and stencil pipeline state lowering.
 - [ ] Multiple render target render pass and pipeline lowering.
 
 Expected result: normal forward/deferred-style render pipelines can be expressed

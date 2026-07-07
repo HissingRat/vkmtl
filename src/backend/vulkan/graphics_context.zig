@@ -472,6 +472,7 @@ fn imageFormat(format: core.TextureFormat) vk.Format {
         .rgba8_unorm => .r8g8b8a8_unorm,
         .rgba8_unorm_srgb => .r8g8b8a8_srgb,
         .depth32_float => .d32_sfloat,
+        .depth32_float_stencil8 => .d32_sfloat_s8_uint,
     };
 }
 

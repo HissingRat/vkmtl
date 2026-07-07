@@ -253,7 +253,7 @@ fn createRenderPassForDescriptor(
             .samples = VulkanTexture.sampleCountFlags(descriptor.sample_count),
             .load_op = .clear,
             .store_op = .dont_care,
-            .stencil_load_op = .dont_care,
+            .stencil_load_op = if (core.isStencilFormat(depth_stencil.format)) .clear else .dont_care,
             .stencil_store_op = .dont_care,
             .initial_layout = .undefined,
             .final_layout = .depth_stencil_attachment_optimal,
@@ -456,6 +456,7 @@ fn textureFormat(format: core.TextureFormat) vk.Format {
         .rgba8_unorm => .r8g8b8a8_unorm,
         .rgba8_unorm_srgb => .r8g8b8a8_srgb,
         .depth32_float => .d32_sfloat,
+        .depth32_float_stencil8 => .d32_sfloat_s8_uint,
     };
 }
 
@@ -506,26 +507,45 @@ fn colorWriteMask(mask: core.ColorWriteMask) vk.ColorComponentFlags {
 }
 
 fn makeDepthStencilState(descriptor: core.DepthStencilDescriptor) vk.PipelineDepthStencilStateCreateInfo {
-    const disabled_stencil = vk.StencilOpState{
-        .fail_op = .keep,
-        .pass_op = .keep,
-        .depth_fail_op = .keep,
-        .compare_op = .always,
-        .compare_mask = 0,
-        .write_mask = 0,
-        .reference = 0,
-    };
-
     return .{
         .depth_test_enable = if (descriptor.depth_test_enabled) .true else .false,
         .depth_write_enable = if (descriptor.depth_write_enabled) .true else .false,
         .depth_compare_op = compareOp(descriptor.depth_compare_function),
         .depth_bounds_test_enable = .false,
-        .stencil_test_enable = .false,
-        .front = disabled_stencil,
-        .back = disabled_stencil,
+        .stencil_test_enable = if (descriptor.stencil.enabled) .true else .false,
+        .front = stencilOpState(descriptor.stencil.front, descriptor.stencil.read_mask, descriptor.stencil.write_mask),
+        .back = stencilOpState(descriptor.stencil.back, descriptor.stencil.read_mask, descriptor.stencil.write_mask),
         .min_depth_bounds = 0,
         .max_depth_bounds = 1,
+    };
+}
+
+fn stencilOpState(
+    descriptor: core.StencilFaceDescriptor,
+    read_mask: u32,
+    write_mask: u32,
+) vk.StencilOpState {
+    return .{
+        .fail_op = stencilOp(descriptor.stencil_fail_operation),
+        .pass_op = stencilOp(descriptor.depth_stencil_pass_operation),
+        .depth_fail_op = stencilOp(descriptor.depth_fail_operation),
+        .compare_op = compareOp(descriptor.stencil_compare_function),
+        .compare_mask = read_mask,
+        .write_mask = write_mask,
+        .reference = 0,
+    };
+}
+
+fn stencilOp(operation: core.StencilOperation) vk.StencilOp {
+    return switch (operation) {
+        .keep => .keep,
+        .zero => .zero,
+        .replace => .replace,
+        .increment_clamp => .increment_and_clamp,
+        .decrement_clamp => .decrement_and_clamp,
+        .invert => .invert,
+        .increment_wrap => .increment_and_wrap,
+        .decrement_wrap => .decrement_and_wrap,
     };
 }
 

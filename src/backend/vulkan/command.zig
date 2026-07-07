@@ -400,7 +400,7 @@ fn createTextureRenderPass(
             .samples = VulkanTexture.sampleCountFlags(color_sample_count),
             .load_op = .clear,
             .store_op = .dont_care,
-            .stencil_load_op = .dont_care,
+            .stencil_load_op = if (depth_format == .d32_sfloat_s8_uint) .clear else .dont_care,
             .stencil_store_op = .dont_care,
             .initial_layout = depth_initial_layout,
             .final_layout = .depth_stencil_attachment_optimal,

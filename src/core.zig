@@ -1375,6 +1375,7 @@ pub const TextureFormat = enum {
     rgba8_unorm,
     rgba8_unorm_srgb,
     depth32_float,
+    depth32_float_stencil8,
 };
 
 pub const TextureFormatKind = enum {
@@ -1457,6 +1458,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .sampler_anisotropy = true,
         .depth_bias = true,
         .blend_state = true,
+        .stencil_state = true,
         .draw_base_vertex = true,
         .draw_base_instance = true,
         .indirect_draw = true,
@@ -1517,6 +1519,11 @@ pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
         .depth32_float => .{
             .depth_stencil_attachment = true,
             .mipmapped = true,
+            .copy_source = true,
+            .copy_destination = true,
+        },
+        .depth32_float_stencil8 => .{
+            .depth_stencil_attachment = true,
             .copy_source = true,
             .copy_destination = true,
         },
@@ -5222,7 +5229,9 @@ pub fn textureFormatBytesPerPixel(format: TextureFormat) usize {
         .rgba8_unorm,
         .rgba8_unorm_srgb,
         => 4,
-        .depth32_float => unreachable,
+        .depth32_float,
+        .depth32_float_stencil8,
+        => unreachable,
     };
 }
 
@@ -5235,6 +5244,7 @@ pub fn textureFormatKind(format: TextureFormat) TextureFormatKind {
         .rgba8_unorm_srgb,
         => .color,
         .depth32_float => .depth,
+        .depth32_float_stencil8 => .depth_stencil,
     };
 }
 
@@ -5243,11 +5253,13 @@ pub fn isColorFormat(format: TextureFormat) bool {
 }
 
 pub fn isDepthFormat(format: TextureFormat) bool {
-    return textureFormatKind(format) == .depth;
+    const kind = textureFormatKind(format);
+    return kind == .depth or kind == .depth_stencil;
 }
 
 pub fn isStencilFormat(format: TextureFormat) bool {
-    return textureFormatKind(format) == .stencil;
+    const kind = textureFormatKind(format);
+    return kind == .stencil or kind == .depth_stencil;
 }
 
 pub fn isDepthStencilFormat(format: TextureFormat) bool {
@@ -5267,6 +5279,7 @@ pub fn isSrgbFormat(format: TextureFormat) bool {
         .bgra8_unorm,
         .rgba8_unorm,
         .depth32_float,
+        .depth32_float_stencil8,
         => false,
     };
 }
@@ -7417,6 +7430,22 @@ test "render pipeline descriptor validates depth state" {
             },
         },
     }).validate());
+
+    try (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .color_attachments = color_attachments[0..],
+        .depth_stencil = .{
+            .format = .depth32_float_stencil8,
+            .stencil = .{
+                .enabled = true,
+                .front = .{ .stencil_compare_function = .less_equal },
+                .back = .{ .stencil_compare_function = .greater_equal },
+            },
+        },
+    }).validate();
 }
 
 test "render pipeline descriptor rejects invalid shapes" {
@@ -9485,6 +9514,7 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.depth_bias);
     try std.testing.expect(features.wireframe_fill_mode);
     try std.testing.expect(features.blend_state);
+    try std.testing.expect(features.stencil_state);
     try std.testing.expect(features.vertex_instance_step_rate);
     try std.testing.expect(!features.heaps);
     try std.testing.expect(!features.multi_surface);
@@ -9527,6 +9557,10 @@ test "default format capabilities describe current portable formats" {
     try std.testing.expect(!depth.color_attachment);
     try std.testing.expect(depth.depth_stencil_attachment);
     try std.testing.expect(depth.supportsTextureUsage(.{ .render_attachment = true }));
+    const depth_stencil = defaultFormatCapabilities(.depth32_float_stencil8);
+    try std.testing.expect(!depth_stencil.color_attachment);
+    try std.testing.expect(depth_stencil.depth_stencil_attachment);
+    try std.testing.expect(depth_stencil.supportsTextureUsage(.{ .render_attachment = true }));
     try std.testing.expect(!depth.supportsTextureDescriptor(.{
         .format = .depth32_float,
         .width = 16,
@@ -9538,10 +9572,14 @@ test "default format capabilities describe current portable formats" {
 test "texture format helpers classify current portable formats" {
     try std.testing.expectEqual(TextureFormatKind.color, textureFormatKind(.rgba8_unorm));
     try std.testing.expectEqual(TextureFormatKind.depth, textureFormatKind(.depth32_float));
+    try std.testing.expectEqual(TextureFormatKind.depth_stencil, textureFormatKind(.depth32_float_stencil8));
     try std.testing.expect(isColorFormat(.bgra8_unorm));
     try std.testing.expect(isDepthFormat(.depth32_float));
+    try std.testing.expect(isDepthFormat(.depth32_float_stencil8));
     try std.testing.expect(!isStencilFormat(.depth32_float));
+    try std.testing.expect(isStencilFormat(.depth32_float_stencil8));
     try std.testing.expect(!isDepthStencilFormat(.depth32_float));
+    try std.testing.expect(isDepthStencilFormat(.depth32_float_stencil8));
     try std.testing.expect(!isCompressedFormat(.rgba8_unorm));
     try std.testing.expect(isSrgbFormat(.rgba8_unorm_srgb));
     try std.testing.expectEqual(@as(usize, 4), textureFormatBytesPerPixel(.rgba8_unorm));

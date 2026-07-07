@@ -66,6 +66,7 @@ typedef enum vkmtl_metal_texture_format {
     VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM = 3,
     VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB = 4,
     VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT = 5,
+    VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8 = 6,
 } vkmtl_metal_texture_format;
 
 typedef enum vkmtl_metal_compare_function {
@@ -78,6 +79,17 @@ typedef enum vkmtl_metal_compare_function {
     VKMTL_METAL_COMPARE_FUNCTION_GREATER_EQUAL = 6,
     VKMTL_METAL_COMPARE_FUNCTION_ALWAYS = 7,
 } vkmtl_metal_compare_function;
+
+typedef enum vkmtl_metal_stencil_operation {
+    VKMTL_METAL_STENCIL_OPERATION_KEEP = 0,
+    VKMTL_METAL_STENCIL_OPERATION_ZERO = 1,
+    VKMTL_METAL_STENCIL_OPERATION_REPLACE = 2,
+    VKMTL_METAL_STENCIL_OPERATION_INCREMENT_CLAMP = 3,
+    VKMTL_METAL_STENCIL_OPERATION_DECREMENT_CLAMP = 4,
+    VKMTL_METAL_STENCIL_OPERATION_INVERT = 5,
+    VKMTL_METAL_STENCIL_OPERATION_INCREMENT_WRAP = 6,
+    VKMTL_METAL_STENCIL_OPERATION_DECREMENT_WRAP = 7,
+} vkmtl_metal_stencil_operation;
 
 typedef enum vkmtl_metal_texture_usage {
     VKMTL_METAL_TEXTURE_USAGE_COPY_SOURCE = 1u << 0,
@@ -371,6 +383,17 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
+    unsigned int stencil_enabled,
+    vkmtl_metal_stencil_operation front_stencil_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function front_stencil_compare_function,
+    vkmtl_metal_stencil_operation back_stencil_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function back_stencil_compare_function,
+    unsigned int stencil_read_mask,
+    unsigned int stencil_write_mask,
     unsigned int sample_count,
     const vkmtl_metal_vertex_buffer_layout *vertex_buffers,
     size_t vertex_buffer_count,

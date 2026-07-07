@@ -157,6 +157,7 @@ pub fn imageFormat(format: core.TextureFormat) vk.Format {
         .rgba8_unorm => .r8g8b8a8_unorm,
         .rgba8_unorm_srgb => .r8g8b8a8_srgb,
         .depth32_float => .d32_sfloat,
+        .depth32_float_stencil8 => .d32_sfloat_s8_uint,
     };
 }
 
@@ -199,7 +200,7 @@ fn usageFlags(format: core.TextureFormat, usage: core.TextureUsage) vk.ImageUsag
     if (usage.shader_read) flags.sampled_bit = true;
     if (usage.shader_write) flags.storage_bit = true;
     if (usage.render_attachment) {
-        if (core.isDepthFormat(format)) {
+        if (core.isDepthFormat(format) or core.isStencilFormat(format)) {
             flags.depth_stencil_attachment_bit = true;
         } else {
             flags.color_attachment_bit = true;

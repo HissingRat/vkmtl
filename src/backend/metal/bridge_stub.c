@@ -365,6 +365,17 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_texture_format depth_format,
     vkmtl_metal_compare_function depth_compare_function,
     unsigned int depth_write_enabled,
+    unsigned int stencil_enabled,
+    vkmtl_metal_stencil_operation front_stencil_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function front_stencil_compare_function,
+    vkmtl_metal_stencil_operation back_stencil_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function back_stencil_compare_function,
+    unsigned int stencil_read_mask,
+    unsigned int stencil_write_mask,
     unsigned int sample_count,
     const vkmtl_metal_vertex_buffer_layout *vertex_buffers,
     size_t vertex_buffer_count,
@@ -391,6 +402,17 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     (void)depth_format;
     (void)depth_compare_function;
     (void)depth_write_enabled;
+    (void)stencil_enabled;
+    (void)front_stencil_fail_operation;
+    (void)front_depth_fail_operation;
+    (void)front_depth_stencil_pass_operation;
+    (void)front_stencil_compare_function;
+    (void)back_stencil_fail_operation;
+    (void)back_depth_fail_operation;
+    (void)back_depth_stencil_pass_operation;
+    (void)back_stencil_compare_function;
+    (void)stencil_read_mask;
+    (void)stencil_write_mask;
     (void)sample_count;
     (void)vertex_buffers;
     (void)vertex_buffer_count;

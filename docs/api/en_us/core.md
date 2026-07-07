@@ -253,9 +253,10 @@ to Vulkan and Metal; true independent blend will land with MRT lowering.
 
 Depth/stencil state includes `depth_test_enabled`, depth compare/write fields,
 and a `StencilDescriptor` with front/back operations plus read/write masks.
-Depth state is part of the lowered first slice. Stencil state is represented and
-validated, but the current format list has no stencil-capable format yet, so
-stencil-enabled descriptors are rejected until that format support lands.
+Depth state and combined depth/stencil state lower to Vulkan and Metal.
+`depth32_float_stencil8` is the first stencil-capable format. Separate
+stencil-only attachments remain unsupported until the attachment model grows
+beyond the combined depth/stencil path.
 
 Vertex layouts support multiple buffers and attributes. A
 `VertexBufferLayoutDescriptor` may specify an explicit `buffer_index`; when it
@@ -399,8 +400,9 @@ Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also
 includes stencil attachments, transient attachment hints, and multiple color
 attachments. Current runtime lowering supports one color attachment; `transient`
-is currently preserved as a no-op performance hint. Stencil and MRT paths still
-return typed unsupported errors until native lowering is implemented.
+is currently preserved as a no-op performance hint. Combined depth/stencil
+attachments lower through the depth attachment path; separate stencil-only
+attachments and MRT paths still return typed unsupported errors.
 
 Dynamic render state descriptors include `Viewport`, `ScissorRect`,
 `BlendColor`, `StencilReference`, and `DepthBiasDescriptor`.
