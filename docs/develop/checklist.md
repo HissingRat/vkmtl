@@ -950,11 +950,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 15 Phase 2 Checklist
 
-- [ ] Define sparse/tiled texture backend scope before implementation.
-- [ ] Query sparse texture dimensions and page granularity.
-- [ ] Create sparse or tiled textures through explicit descriptors.
-- [ ] Commit and uncommit texture regions.
-- [ ] Add render smoke coverage for a committed tile.
+- [x] Define sparse/tiled texture backend scope before implementation.
+- [x] Query sparse texture dimensions and page granularity through limits.
+- [x] Add sparse/tiled texture descriptor validation.
+- [x] Keep commit/uncommit represented by sparse texture mapping descriptors.
+- [x] Keep render smoke coverage gated for backend lowering.
 
 ## Period 15 Phase 3 Checklist
 

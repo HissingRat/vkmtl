@@ -207,6 +207,7 @@ pub const SparseResidency = core.SparseResidency;
 pub const SparseBufferDescriptor = core.SparseBufferDescriptor;
 pub const SparseBufferMappingDescriptor = core.SparseBufferMappingDescriptor;
 pub const SparseTextureKind = core.SparseTextureKind;
+pub const SparseTextureDescriptor = core.SparseTextureDescriptor;
 pub const SparseTextureMappingDescriptor = core.SparseTextureMappingDescriptor;
 pub const SparseMappingCommitDescriptor = core.SparseMappingCommitDescriptor;
 pub const TextureReplaceRegionDescriptor = core.TextureReplaceRegionDescriptor;

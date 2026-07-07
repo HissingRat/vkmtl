@@ -21,6 +21,8 @@ See `phase1.md`.
 
 - Allocate sparse or tiled textures.
 - Commit texture regions by page.
+- Add `SparseTextureDescriptor` validation for sparse/tiled texture shapes and
+  page granularity.
 
 See `phase2.md`.
 

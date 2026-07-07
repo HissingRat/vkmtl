@@ -3680,6 +3680,31 @@ pub const SparseTextureKind = enum {
     tiled_texture,
 };
 
+pub const SparseTextureDescriptor = struct {
+    label: ?[]const u8 = null,
+    kind: SparseTextureKind = .sparse_texture,
+    texture: TextureDescriptor,
+    page_extent: Size3D,
+
+    pub fn validate(self: SparseTextureDescriptor, features: DeviceFeatures, limits: DeviceLimits) (AdvancedFeatureError || TextureError)!void {
+        switch (self.kind) {
+            .sparse_texture => if (!features.sparse_textures) return AdvancedFeatureError.UnsupportedSparseTextures,
+            .tiled_texture => if (!features.tiled_textures) return AdvancedFeatureError.UnsupportedTiledTextures,
+        }
+        try self.texture.validate();
+        if (self.page_extent.isZero()) return AdvancedFeatureError.InvalidSparsePageSize;
+        if (limits.sparse_texture_page_width != 0 and self.page_extent.width != limits.sparse_texture_page_width) {
+            return AdvancedFeatureError.InvalidSparsePageSize;
+        }
+        if (limits.sparse_texture_page_height != 0 and self.page_extent.height != limits.sparse_texture_page_height) {
+            return AdvancedFeatureError.InvalidSparsePageSize;
+        }
+        if (limits.sparse_texture_page_depth != 0 and self.page_extent.depth != limits.sparse_texture_page_depth) {
+            return AdvancedFeatureError.InvalidSparsePageSize;
+        }
+    }
+};
+
 pub const SparseTextureMappingDescriptor = struct {
     kind: SparseTextureKind = .sparse_texture,
     region: Region3D,
@@ -7696,6 +7721,42 @@ test "sparse resource descriptors validate feature gates and alignment" {
         .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
         .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
     };
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedSparseTextures, (SparseTextureDescriptor{
+        .texture = .{
+            .format = .rgba8_unorm,
+            .width = 128,
+            .height = 128,
+            .usage = .{ .shader_read = true },
+        },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+    }).validate(.{}, .{}));
+    try (SparseTextureDescriptor{
+        .texture = .{
+            .format = .rgba8_unorm,
+            .width = 128,
+            .height = 128,
+            .usage = .{ .shader_read = true },
+        },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+    }).validate(.{ .sparse_textures = true }, .{
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+    });
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparsePageSize, (SparseTextureDescriptor{
+        .kind = .tiled_texture,
+        .texture = .{
+            .format = .rgba8_unorm,
+            .width = 128,
+            .height = 128,
+            .usage = .{ .shader_read = true },
+        },
+        .page_extent = .{ .width = 32, .height = 64, .depth = 1 },
+    }).validate(.{ .tiled_textures = true }, .{
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+    }));
     try std.testing.expectError(AdvancedFeatureError.UnsupportedSparseTextures, texture_mapping.validate(.{}, .{}));
     try texture_mapping.validate(.{ .sparse_textures = true }, .{
         .sparse_texture_page_width = 64,
