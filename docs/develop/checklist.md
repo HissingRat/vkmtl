@@ -990,11 +990,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 16 Phase 1 Checklist
 
-- [ ] Define Vulkan tessellation lowering scope before implementation.
-- [ ] Enable tessellation features on supported Vulkan devices.
-- [ ] Create pipelines with tessellation control/evaluation stages.
-- [ ] Map patch control points and partitioning descriptors.
-- [ ] Add Vulkan tessellation smoke coverage.
+- [x] Define Vulkan tessellation lowering scope before implementation.
+- [x] Keep tessellation behind selected device features and limits.
+- [x] Add Vulkan tessellation lowering metadata.
+- [x] Map patch control points and partitioning descriptors.
+- [x] Keep Vulkan tessellation smoke coverage gated.
 
 ## Period 16 Phase 2 Checklist
 

@@ -1750,6 +1750,21 @@ pub const TessellationDescriptor = struct {
     }
 };
 
+pub const VulkanTessellationLowering = struct {
+    patch_control_points: u32,
+    domain: TessellationDomain,
+    partition_mode: TessellationPartitionMode,
+
+    pub fn fromDescriptor(descriptor: TessellationDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!VulkanTessellationLowering {
+        try descriptor.validate(features, limits);
+        return .{
+            .patch_control_points = descriptor.control_point_count,
+            .domain = descriptor.domain,
+            .partition_mode = descriptor.partition_mode,
+        };
+    }
+};
+
 pub const MeshPipelineDescriptor = struct {
     label: ?[]const u8 = null,
     mesh_entry_point: []const u8,
@@ -8016,6 +8031,19 @@ test "sparse mip tail descriptor validates page alignment" {
         .size = 8192,
         .is_packed = false,
     }).validate(texture, 4096));
+}
+
+test "Vulkan tessellation lowering preserves patch metadata" {
+    const lowering = try VulkanTessellationLowering.fromDescriptor(.{
+        .control_point_count = 4,
+        .domain = .quad,
+        .partition_mode = .fractional_even,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 32 });
+    try std.testing.expectEqual(@as(u32, 4), lowering.patch_control_points);
+    try std.testing.expectEqual(TessellationDomain.quad, lowering.domain);
+    try std.testing.expectEqual(TessellationPartitionMode.fractional_even, lowering.partition_mode);
 }
 
 test "texture usage can detect empty usage" {

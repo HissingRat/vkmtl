@@ -1,6 +1,6 @@
 # Period 16: Advanced Geometry Pipeline
 
-Status: planned.
+Status: in progress.
 
 Goal: lower tessellation and mesh/task shader descriptors to real backend
 pipelines where supported.
@@ -11,6 +11,8 @@ through capability-gated descriptors and shader entry points.
 ## Phase 1: Vulkan Tessellation Lowering
 
 - Lower tessellation descriptors to Vulkan pipeline state.
+- Add `VulkanTessellationLowering` metadata for patch control points, domain,
+  and partition mode.
 
 See `phase1.md`.
 
