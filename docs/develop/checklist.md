@@ -838,11 +838,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 12 Phase 6 Checklist
 
-- [ ] Define bindless validation scope before implementation.
-- [ ] Validate descriptor count limits.
-- [ ] Validate partially bound behavior and empty slots.
-- [ ] Validate render and compute stage visibility.
-- [ ] Add unit and backend smoke tests where practical.
+- [x] Define bindless validation scope before implementation.
+- [x] Validate descriptor count limits.
+- [x] Validate empty visibility, duplicate bindings, and empty layouts.
+- [x] Validate reflection array metadata and derived-layout capacity.
+- [x] Add unit coverage and keep backend smoke tests capability-gated.
 
 ## Period 13 Phase 1 Checklist
 

@@ -1,6 +1,6 @@
 # Period 12: Bindless / Argument Buffer Backend
 
-Status: in progress.
+Status: completed.
 
 Goal: lower the advanced binding descriptors from Period 10 to real Vulkan
 descriptor indexing and Metal argument buffers.
@@ -48,5 +48,7 @@ See `phase5.md`.
 
 - Validate out-of-range resource access metadata, empty slots, unsupported
   stages, and descriptor count limits.
+- Lock descriptor indexing and reflection-derived layout validation with unit
+  tests before native backend lowering grows more complex.
 
 See `phase6.md`.

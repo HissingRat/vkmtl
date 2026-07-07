@@ -608,6 +608,7 @@ pub const AdvancedFeatureError = error{
     EmptyDescriptorIndexingVisibility,
     InvalidDescriptorIndexingCount,
     DescriptorIndexingRangeCountExceeded,
+    DuplicateDescriptorIndexingBinding,
     UnsupportedSparseBuffers,
     UnsupportedSparseTextures,
     UnsupportedTiledTextures,
@@ -1063,6 +1064,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptyDescriptorIndexingVisibility,
         error.InvalidDescriptorIndexingCount,
         error.DescriptorIndexingRangeCountExceeded,
+        error.DuplicateDescriptorIndexingBinding,
         error.InvalidSparsePageSize,
         error.InvalidSparseRegion,
         error.SparseRegionCountExceeded,
@@ -4114,8 +4116,11 @@ pub const DescriptorIndexingLayoutDescriptor = struct {
         if (limits.max_bindless_ranges_per_layout != 0 and self.ranges.len > limits.max_bindless_ranges_per_layout) {
             return AdvancedFeatureError.DescriptorIndexingRangeCountExceeded;
         }
-        for (self.ranges) |range| {
+        for (self.ranges, 0..) |range, i| {
             try range.validate(limits);
+            for (self.ranges[i + 1 ..]) |other| {
+                if (range.binding == other.binding) return AdvancedFeatureError.DuplicateDescriptorIndexingBinding;
+            }
         }
     }
 };
@@ -6190,6 +6195,125 @@ test "reflection derives descriptor indexing layout for bindless resources" {
     try std.testing.expectEqual(@as(u32, 0), layout.ranges[0].binding);
     try std.testing.expectEqual(@as(u32, 64), layout.ranges[0].descriptor_count);
     try std.testing.expect(layout.ranges[0].partially_bound);
+}
+
+test "descriptor indexing layout validates bindless edge cases" {
+    const features = DeviceFeatures{
+        .descriptor_indexing = true,
+        .argument_buffers = true,
+    };
+    const limits = DeviceLimits{
+        .max_bindless_descriptors_per_range = 8,
+        .max_bindless_ranges_per_layout = 2,
+    };
+
+    const empty_visibility_ranges = [_]DescriptorIndexingRange{.{
+        .binding = 0,
+        .resource = .sampled_texture,
+        .visibility = .{},
+        .descriptor_count = 4,
+    }};
+    try std.testing.expectError(AdvancedFeatureError.EmptyDescriptorIndexingVisibility, (DescriptorIndexingLayoutDescriptor{
+        .ranges = empty_visibility_ranges[0..],
+    }).validate(features, limits));
+
+    const zero_count_ranges = [_]DescriptorIndexingRange{.{
+        .binding = 0,
+        .resource = .sampled_texture,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 0,
+    }};
+    try std.testing.expectError(AdvancedFeatureError.InvalidDescriptorIndexingCount, (DescriptorIndexingLayoutDescriptor{
+        .ranges = zero_count_ranges[0..],
+    }).validate(features, limits));
+
+    const duplicate_binding_ranges = [_]DescriptorIndexingRange{
+        .{
+            .binding = 1,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 4,
+        },
+        .{
+            .binding = 1,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 1,
+        },
+    };
+    try std.testing.expectError(AdvancedFeatureError.DuplicateDescriptorIndexingBinding, (DescriptorIndexingLayoutDescriptor{
+        .ranges = duplicate_binding_ranges[0..],
+    }).validate(features, limits));
+
+    const too_many_ranges = [_]DescriptorIndexingRange{
+        .{ .binding = 0, .resource = .sampled_texture, .visibility = .{ .fragment = true }, .descriptor_count = 1 },
+        .{ .binding = 1, .resource = .sampled_texture, .visibility = .{ .fragment = true }, .descriptor_count = 1 },
+        .{ .binding = 2, .resource = .sampled_texture, .visibility = .{ .fragment = true }, .descriptor_count = 1 },
+    };
+    try std.testing.expectError(AdvancedFeatureError.DescriptorIndexingRangeCountExceeded, (DescriptorIndexingLayoutDescriptor{
+        .ranges = too_many_ranges[0..],
+    }).validate(features, limits));
+
+    try std.testing.expectError(AdvancedFeatureError.MissingDescriptorIndexingRange, (DescriptorIndexingLayoutDescriptor{}).validate(features, limits));
+}
+
+test "reflection bindless derivation validates array metadata and capacity" {
+    const invalid_bindings = [_]ShaderReflectionBinding{.{
+        .binding = 0,
+        .resource = .sampled_texture,
+        .visibility = .{ .fragment = true },
+        .array_count = 0,
+        .bindless = true,
+    }};
+    const invalid_groups = [_]ShaderReflectionBindGroup{.{
+        .index = 0,
+        .bindings = invalid_bindings[0..],
+    }};
+    const invalid_reflection = ShaderStageReflection{
+        .stage = .fragment,
+        .entry_point = "fs_main",
+        .bind_groups = invalid_groups[0..],
+    };
+    var invalid_ranges: [1]DescriptorIndexingRange = undefined;
+    try std.testing.expectError(ShaderError.InvalidShaderReflection, deriveDescriptorIndexingLayoutFromReflection(
+        invalid_reflection,
+        .descriptor_indexing,
+        invalid_ranges[0..],
+    ));
+
+    const reflected_bindings = [_]ShaderReflectionBinding{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .array_count = 4,
+            .bindless = true,
+        },
+        .{
+            .binding = 1,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+            .array_count = 4,
+            .bindless = true,
+        },
+    };
+    const reflected_groups = [_]ShaderReflectionBindGroup{.{
+        .index = 0,
+        .bindings = reflected_bindings[0..],
+    }};
+    const reflection = ShaderStageReflection{
+        .stage = .fragment,
+        .entry_point = "fs_main",
+        .bind_groups = reflected_groups[0..],
+    };
+    try std.testing.expectEqual(@as(usize, 2), descriptorIndexingRangeCountForReflection(reflection));
+
+    var too_few_ranges: [1]DescriptorIndexingRange = undefined;
+    try std.testing.expectError(ShaderError.InvalidShaderReflection, deriveDescriptorIndexingLayoutFromReflection(
+        reflection,
+        .descriptor_indexing,
+        too_few_ranges[0..],
+    ));
 }
 
 test "render pipeline descriptor validates depth state" {
