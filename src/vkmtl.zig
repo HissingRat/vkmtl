@@ -120,6 +120,7 @@ pub const estimateAccelerationStructureBuildSizes = core.estimateAccelerationStr
 pub const RayTracingShaderGroupKind = core.RayTracingShaderGroupKind;
 pub const RayTracingShaderGroupDescriptor = core.RayTracingShaderGroupDescriptor;
 pub const RayTracingPipelineDescriptor = core.RayTracingPipelineDescriptor;
+pub const VulkanRayTracingPipelineLowering = core.VulkanRayTracingPipelineLowering;
 pub const ShaderBindingTableDescriptor = core.ShaderBindingTableDescriptor;
 pub const DepthBiasDescriptor = core.DepthBiasDescriptor;
 pub const ColorWriteMask = core.ColorWriteMask;

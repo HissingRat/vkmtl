@@ -19,6 +19,7 @@ See `phase1.md`.
 ## Phase 2: Vulkan Ray Tracing Pipeline Lowering
 
 - Lower ray tracing descriptors to Vulkan KHR ray tracing pipelines.
+- Add Vulkan ray tracing lowering metadata for shader group counts and recursion.
 
 See `phase2.md`.
 

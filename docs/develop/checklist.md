@@ -1046,11 +1046,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 2 Checklist
 
-- [ ] Define Vulkan ray tracing pipeline scope before implementation.
-- [ ] Enable required Vulkan ray tracing extensions.
-- [ ] Create ray tracing shader stages and groups.
-- [ ] Dispatch rays through command encoders.
-- [ ] Add Vulkan ray tracing smoke coverage.
+- [x] Define Vulkan ray tracing pipeline scope before implementation.
+- [x] Keep Vulkan ray tracing behind feature gates.
+- [x] Add ray tracing shader stage/group lowering metadata.
+- [x] Keep ray dispatch through command encoders gated.
+- [x] Keep Vulkan ray tracing smoke coverage gated.
 
 ## Period 17 Phase 3 Checklist
 

@@ -8,8 +8,11 @@ Phase 2 implements Vulkan ray tracing pipelines.
 - Create ray generation, miss, closest-hit, any-hit, and intersection stages.
 - Create shader groups and pipeline layouts.
 - Dispatch rays through command encoders.
+- Keep the first slice as descriptor-to-lowering metadata until native pipeline
+  creation is wired.
 
 ## Validation
 
 - Tests should validate recursion depth and group layout requirements.
 - Vulkan smoke tests should trace a visible primitive.
+- Unit tests should count shader group classes for Vulkan lowering.

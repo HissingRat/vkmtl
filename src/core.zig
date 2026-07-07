@@ -1942,6 +1942,26 @@ pub const RayTracingPipelineDescriptor = struct {
     }
 };
 
+pub const VulkanRayTracingPipelineLowering = struct {
+    max_recursion_depth: u32,
+    ray_generation_groups: u32 = 0,
+    miss_groups: u32 = 0,
+    hit_groups: u32 = 0,
+    callable_groups: u32 = 0,
+
+    pub fn fromDescriptor(descriptor: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!VulkanRayTracingPipelineLowering {
+        try descriptor.validate(features, limits);
+        var lowering = VulkanRayTracingPipelineLowering{ .max_recursion_depth = descriptor.max_recursion_depth };
+        for (descriptor.shader_groups) |group| switch (group.kind) {
+            .ray_generation => lowering.ray_generation_groups += 1,
+            .miss => lowering.miss_groups += 1,
+            .hit => lowering.hit_groups += 1,
+            .callable => lowering.callable_groups += 1,
+        };
+        return lowering;
+    }
+};
+
 pub const ShaderBindingTableDescriptor = struct {
     stride: u64,
     ray_generation_count: u32 = 1,
@@ -8215,6 +8235,22 @@ test "acceleration structure descriptors estimate build sizes" {
     try (AccelerationStructureInstanceDescriptor{
         .instance_count = 1,
     }).validate(.{ .acceleration_structures = true });
+}
+
+test "Vulkan ray tracing lowering counts shader groups" {
+    const groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+        .{ .kind = .hit, .entry_point = "closest_hit" },
+    };
+    const lowering = try VulkanRayTracingPipelineLowering.fromDescriptor(.{
+        .shader_groups = groups[0..],
+        .max_recursion_depth = 2,
+    }, .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 4 });
+    try std.testing.expectEqual(@as(u32, 1), lowering.ray_generation_groups);
+    try std.testing.expectEqual(@as(u32, 1), lowering.miss_groups);
+    try std.testing.expectEqual(@as(u32, 1), lowering.hit_groups);
+    try std.testing.expectEqual(@as(u32, 2), lowering.max_recursion_depth);
 }
 
 test "texture usage can detect empty usage" {
