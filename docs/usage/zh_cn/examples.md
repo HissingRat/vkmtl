@@ -220,11 +220,23 @@ execution 仍由 `DeviceFeatures.multi_surface` gate。
 
 ## Native Interop Gallery
 
-Native interop 示例是显式高级样例，不应该变成普通示例的依赖。计划中的 case 包括：
+Native interop 示例是显式高级样例，不应该变成普通示例的依赖。
+
+`examples/external_texture` 会验证显式 external texture descriptor 和 runtime `ExternalTexture`
+wrapper。在所选 backend 暴露 external texture import 之前，它会打印清晰的 unsupported-feature
+信息。
+
+运行：
+
+```sh
+zig build run-external-texture
+```
+
+追踪的 case 包括：
 
 - `vulkan_native_handles`
 - `metal_native_handles`
-- `external_texture_import`
+- `external_texture_import` / `external_texture`
 - `native_command_insertion`
 
 Portable 示例应该继续使用公开 vkmtl abstraction。如果示例需要 native access，它应该被命名并记录为

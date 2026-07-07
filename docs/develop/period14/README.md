@@ -1,6 +1,6 @@
 # Period 14: Native Interop / External Resources
 
-Status: in progress.
+Status: completed.
 
 Goal: support explicit interop with platform APIs, engines, UI frameworks, and
 media pipelines while keeping native handles out of ordinary portable paths.
@@ -52,5 +52,7 @@ See `phase5.md`.
 ## Phase 6: External Texture Example
 
 - Add an example that samples from an imported or externally provided texture.
+- Provide the current feature-gated `examples/external_texture` wrapper smoke
+  path until native sampling import lands.
 
 See `phase6.md`.

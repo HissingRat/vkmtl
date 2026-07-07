@@ -934,11 +934,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 14 Phase 6 Checklist
 
-- [ ] Define external texture example scope before implementation.
-- [ ] Add `examples/external_texture`.
-- [ ] Import or wrap a generated/platform-provided texture source.
-- [ ] Sample through normal vkmtl render APIs after import.
-- [ ] Provide clear unsupported-feature fallback output.
+- [x] Define external texture example scope before implementation.
+- [x] Add `examples/external_texture`.
+- [x] Wrap an explicit backend texture handle through public vkmtl APIs.
+- [x] Keep imported-texture sampling gated until backend lowering.
+- [x] Provide clear unsupported-feature fallback output.
 
 ## Period 15 Phase 1 Checklist
 

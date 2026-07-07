@@ -441,6 +441,31 @@ pub fn build(b: *std.Build) void {
     const multi_window_step = b.step("run-multi-window", "Run the vkmtl multi-window feature-gate example");
     multi_window_step.dependOn(&multi_window_cmd.step);
 
+    const external_texture = b.addExecutable(.{
+        .name = "vkmtl-external-texture",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/external_texture/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    external_texture.root_module.linkLibrary(glfw);
+    b.installArtifact(external_texture);
+
+    const external_texture_cmd = b.addRunArtifact(external_texture);
+    external_texture_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, external_texture_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, external_texture_cmd);
+
+    const external_texture_step = b.step("run-external-texture", "Run the vkmtl external texture feature-gate example");
+    external_texture_step.dependOn(&external_texture_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

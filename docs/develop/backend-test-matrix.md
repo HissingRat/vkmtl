@@ -8,7 +8,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `linux_vulkan`: `zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan`
 - `windows_vulkan`: `zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan`
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
-- `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window`
+- `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture`
 
 ## Optional Rows
 

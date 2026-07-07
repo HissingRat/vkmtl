@@ -376,11 +376,24 @@ but native multiple swapchain execution remains gated by
 ## Native Interop Gallery
 
 Native interop examples are explicit advanced samples, not ordinary example
-dependencies. Planned cases are:
+dependencies.
+
+`examples/external_texture` exercises explicit external texture descriptor
+validation and the runtime `ExternalTexture` wrapper. It prints a clear
+unsupported-feature message until the selected backend exposes external texture
+import.
+
+Run it with:
+
+```sh
+zig build run-external-texture
+```
+
+Tracked cases include:
 
 - `vulkan_native_handles`
 - `metal_native_handles`
-- `external_texture_import`
+- `external_texture_import` / `external_texture`
 - `native_command_insertion`
 
 Portable examples should keep using public vkmtl abstractions. If an example
