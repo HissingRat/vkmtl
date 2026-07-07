@@ -1126,11 +1126,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 18 Phase 6 Checklist
 
-- [ ] Define long-run stability scope before implementation.
-- [ ] Add resource churn tests.
-- [ ] Add presentation resize/recreate loops.
-- [ ] Add shader/cache warm and cold loops.
-- [ ] Provide opt-in long-run commands.
+- [x] Define long-run stability scope before implementation.
+- [x] Add resource churn descriptor coverage.
+- [x] Add presentation resize/recreate loop metadata.
+- [x] Add shader/cache warm and cold loop metadata.
+- [x] Provide opt-in long-run command contract in docs.
 
 ## Period 19 Phase 1 Checklist
 

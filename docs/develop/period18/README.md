@@ -1,6 +1,6 @@
 # Period 18: Performance / Production Hardening
 
-Status: in progress.
+Status: completed.
 
 Goal: turn backend features from functional slices into production-ready paths
 with persistent caches, diagnostics, profiling, and long-run stability checks.
@@ -47,5 +47,6 @@ See `phase5.md`.
 ## Phase 6: Long-Run Stability Tests
 
 - Add stress and soak tests for resource churn and presentation loops.
+- Add stability run descriptors and diagnostics for opt-in stress commands.
 
 See `phase6.md`.

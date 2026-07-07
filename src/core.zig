@@ -907,6 +907,24 @@ pub const DebugLabelDescriptor = struct {
     }
 };
 
+pub const StabilityRunDescriptor = struct {
+    iterations: u32,
+    resource_churn: bool = true,
+    presentation_resize: bool = true,
+    shader_cache_warm_cold: bool = true,
+
+    pub fn validate(self: StabilityRunDescriptor) error{InvalidDrawCount}!void {
+        if (self.iterations == 0) return error.InvalidDrawCount;
+    }
+};
+
+pub const StabilityRunDiagnostics = struct {
+    iterations_completed: u32 = 0,
+    resources_created: u64 = 0,
+    resize_events: u64 = 0,
+    cache_cycles: u64 = 0,
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -6790,6 +6808,16 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     const plan = try DriverPipelineCachePlan.fromDescriptor(vulkan_cache, true, .{ .driver_pipeline_cache = true }, .{});
     try std.testing.expect(plan.load_existing);
     try std.testing.expect(plan.store_on_shutdown);
+
+    try (StabilityRunDescriptor{ .iterations = 120 }).validate();
+    try std.testing.expectError(error.InvalidDrawCount, (StabilityRunDescriptor{ .iterations = 0 }).validate());
+    const stability = StabilityRunDiagnostics{
+        .iterations_completed = 120,
+        .resources_created = 2048,
+        .resize_events = 16,
+        .cache_cycles = 2,
+    };
+    try std.testing.expectEqual(@as(u32, 120), stability.iterations_completed);
 }
 
 test "render pipeline descriptor validates shader stages and color targets" {
