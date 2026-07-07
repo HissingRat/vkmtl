@@ -824,6 +824,32 @@ pub const NativeHandles = union(Backend) {
     metal: MetalNativeHandles,
 };
 
+pub const NativeHandleLifetime = enum {
+    borrowed,
+};
+
+pub const NativeHandleView = struct {
+    handles: NativeHandles,
+    lifetime: NativeHandleLifetime = .borrowed,
+    mutable: bool = false,
+
+    pub fn backend(self: NativeHandleView) Backend {
+        return std.meta.activeTag(self.handles);
+    }
+
+    pub fn isBorrowed(self: NativeHandleView) bool {
+        return self.lifetime == .borrowed;
+    }
+
+    pub fn allowsMutation(self: NativeHandleView) bool {
+        return self.mutable;
+    }
+};
+
+pub fn nativeHandleView(handles: NativeHandles) NativeHandleView {
+    return .{ .handles = handles };
+}
+
 pub fn classifyError(err: anyerror) ErrorCategory {
     return switch (err) {
         error.DeviceLost => .device_lost,
@@ -5522,6 +5548,11 @@ test "native handle union carries backend-specific handles explicitly" {
 
     try std.testing.expectEqual(Backend.vulkan, std.meta.activeTag(handles));
     try std.testing.expectEqual(@as(usize, 3), handles.vulkan.device);
+
+    const view = nativeHandleView(handles);
+    try std.testing.expectEqual(Backend.vulkan, view.backend());
+    try std.testing.expect(view.isBorrowed());
+    try std.testing.expect(!view.allowsMutation());
 }
 
 test "adapter enumeration follows auto backend order" {

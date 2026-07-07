@@ -894,11 +894,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 14 Phase 1 Checklist
 
-- [ ] Define native handle stabilization scope before implementation.
-- [ ] Stabilize backend-tagged native handle view payloads.
-- [ ] Document borrowed lifetime and invalidation rules.
-- [ ] Keep ordinary portable APIs free of native handles.
-- [ ] Add explicit native-handle API tests.
+- [x] Define native handle stabilization scope before implementation.
+- [x] Stabilize backend-tagged native handle view payloads.
+- [x] Document borrowed lifetime and invalidation rules.
+- [x] Keep ordinary portable APIs free of native handles.
+- [x] Add explicit native-handle API tests.
 
 ## Period 14 Phase 2 Checklist
 

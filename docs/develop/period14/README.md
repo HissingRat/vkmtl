@@ -1,6 +1,6 @@
 # Period 14: Native Interop / External Resources
 
-Status: planned.
+Status: in progress.
 
 Goal: support explicit interop with platform APIs, engines, UI frameworks, and
 media pipelines while keeping native handles out of ordinary portable paths.
@@ -13,6 +13,7 @@ API.
 
 - Stabilize borrowed native handle views.
 - Document lifetimes and mutation rules.
+- Add a backend-tagged `NativeHandleView` wrapper for borrowed read-only access.
 
 See `phase1.md`.
 

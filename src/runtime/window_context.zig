@@ -2901,6 +2901,10 @@ pub const WindowContext = struct {
         };
     }
 
+    pub fn nativeHandleView(self: *WindowContext) !core.NativeHandleView {
+        return core.nativeHandleView(try self.nativeHandles());
+    }
+
     pub fn objectCacheDiagnostics(self: WindowContext) core.ObjectCacheDiagnostics {
         return self.tracker.objectCacheDiagnostics();
     }
