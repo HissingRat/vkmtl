@@ -40,6 +40,7 @@ See `phase3.md`.
 
 - Apply present mode selection per surface.
 - Map vsync intent to backend-native presentation settings.
+- Resolve unsupported present modes through a common fallback rule.
 
 See `phase4.md`.
 

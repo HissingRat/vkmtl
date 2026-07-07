@@ -4762,6 +4762,10 @@ pub const PresentMode = enum {
     fifo,
     mailbox,
     immediate,
+
+    pub fn requestsVsync(self: PresentMode) bool {
+        return self != .immediate;
+    }
 };
 
 pub const SurfaceResizePolicy = enum {
@@ -4781,6 +4785,34 @@ pub const PresentationDescriptor = struct {
     format: TextureFormat = .automatic,
     present_mode: PresentMode = .fifo,
     resize_policy: SurfaceResizePolicy = .suspend_when_zero,
+
+    pub fn withResolvedPresentMode(self: PresentationDescriptor, support: PresentModeSupport) PresentationDescriptor {
+        var descriptor = self;
+        descriptor.present_mode = support.resolve(self.present_mode);
+        return descriptor;
+    }
+};
+
+pub const PresentModeSupport = struct {
+    fifo: bool = true,
+    mailbox: bool = false,
+    immediate: bool = false,
+
+    pub fn supports(self: PresentModeSupport, mode: PresentMode) bool {
+        return switch (mode) {
+            .fifo => self.fifo,
+            .mailbox => self.mailbox,
+            .immediate => self.immediate,
+        };
+    }
+
+    pub fn resolve(self: PresentModeSupport, requested: PresentMode) PresentMode {
+        if (self.supports(requested)) return requested;
+        if (self.fifo) return .fifo;
+        if (self.mailbox) return .mailbox;
+        if (self.immediate) return .immediate;
+        return .fifo;
+    }
 };
 
 pub const PresentationResourceState = struct {
@@ -5564,6 +5596,29 @@ test "surface presentation handles configured and suspended extents" {
         .extent = .{ .width = 0, .height = 480 },
         .resize_policy = .recreate,
     }));
+}
+
+test "present mode support resolves backend fallbacks and vsync intent" {
+    const fifo_only = PresentModeSupport{};
+    try std.testing.expectEqual(PresentMode.fifo, fifo_only.resolve(.mailbox));
+    try std.testing.expectEqual(PresentMode.fifo, fifo_only.resolve(.immediate));
+
+    const low_latency = PresentModeSupport{
+        .fifo = true,
+        .mailbox = true,
+        .immediate = true,
+    };
+    try std.testing.expectEqual(PresentMode.mailbox, low_latency.resolve(.mailbox));
+    try std.testing.expectEqual(PresentMode.immediate, low_latency.resolve(.immediate));
+    try std.testing.expect(PresentMode.fifo.requestsVsync());
+    try std.testing.expect(PresentMode.mailbox.requestsVsync());
+    try std.testing.expect(!PresentMode.immediate.requestsVsync());
+
+    const descriptor = PresentationDescriptor{
+        .extent = .{ .width = 640, .height = 480 },
+        .present_mode = .mailbox,
+    };
+    try std.testing.expectEqual(PresentMode.fifo, descriptor.withResolvedPresentMode(fifo_only).present_mode);
 }
 
 test "surface collection manages multiple neutral surfaces" {

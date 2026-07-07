@@ -870,11 +870,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 13 Phase 4 Checklist
 
-- [ ] Define present mode/vsync scope before implementation.
-- [ ] Map public present modes to Vulkan present modes.
-- [ ] Map vsync intent to Metal presentation settings.
-- [ ] Document non-equivalent backend behavior.
-- [ ] Add present-mode selection tests.
+- [x] Define present mode/vsync scope before implementation.
+- [x] Add public present mode support and fallback helpers.
+- [x] Define vsync intent for Metal/Vulkan backend mapping.
+- [x] Document non-equivalent backend behavior.
+- [x] Add present-mode selection tests.
 
 ## Period 13 Phase 5 Checklist
 
