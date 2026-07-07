@@ -123,8 +123,9 @@ and layer range. Query them with `descriptor()`, `baseMipLevel()`,
 `SamplerDescriptor` includes compare, anisotropy, and border-color fields.
 Those advanced fields are capability-gated by `DeviceFeatures.sampler_compare`,
 `DeviceFeatures.sampler_anisotropy`, `DeviceFeatures.sampler_border_color`, and
-`DeviceLimits.max_sampler_anisotropy`. They are disabled by default until the
-backend mappings are implemented.
+`DeviceLimits.max_sampler_anisotropy`. Compare samplers and anisotropy now lower
+to Vulkan/Metal sampler creation; border color remains a descriptor-level shape
+and is disabled by default.
 
 `HeapDescriptor` defines the future advanced memory/heap shape. Default
 resource creation still owns memory internally, and `DeviceFeatures.heaps` is
@@ -392,21 +393,26 @@ Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also
 includes stencil attachments, transient attachment hints, and multiple color
-attachments. Current runtime lowering supports one color attachment and returns
-typed unsupported errors for stencil, transient, and MRT paths until native
-lowering is implemented.
+attachments. Current runtime lowering supports one color attachment; `transient`
+is currently preserved as a no-op performance hint. Stencil and MRT paths still
+return typed unsupported errors until native lowering is implemented.
 
 Dynamic render state descriptors include `Viewport`, `ScissorRect`,
 `BlendColor`, `StencilReference`, and `DepthBiasDescriptor`.
-`RenderCommandEncoder` exposes matching setters. These setters currently
-validate their inputs and return `UnsupportedDynamicRenderState` until backend
-lowering is wired.
+`RenderCommandEncoder` exposes matching setters. These setters validate inputs
+portably and lower to native Vulkan and Metal dynamic-state commands.
+`BlendColor`, `StencilReference`, and `DepthBiasDescriptor` affect final output
+only when the active render pipeline enables matching blend, stencil, or
+depth-bias state.
 
 Direct draw descriptors include `base_instance`; indexed draw descriptors also
-include `base_vertex`. Non-zero base fields are currently rejected with typed
-unsupported errors. Indirect and multi-draw descriptor shapes are available, and
-`RenderCommandEncoder` exposes matching methods that validate inputs before
-returning unsupported until backend lowering exists.
+include `base_vertex`. These base fields now lower to native Vulkan and Metal
+direct draw commands. Indirect draw lowers to the native backend and requires
+indirect buffers to use `.indirect` usage; `draw_count > 1` is expanded by
+stride into multiple single indirect draw commands. Explicit
+`drawPrimitivesMulti(...)` and `drawIndexedPrimitivesMulti(...)` lower through
+repeated direct draws for now, with room to replace that loop with a true
+backend-native multi-draw path later.
 
 Query support is currently descriptor-only. `QuerySetDescriptor` covers
 occlusion, timestamp, and pipeline statistics queries with feature gates.
@@ -424,12 +430,12 @@ try blit.endEncoding();
 try command_buffer.commit();
 ```
 
-The lowered blit slice supports buffer-to-buffer, buffer-to-texture, and
-texture-to-buffer copies. `CopyTextureToTextureDescriptor` and
-`FillBufferDescriptor` are public validation shapes now, and
-`BlitCommandEncoder.copyTextureToTexture(...)` / `fillBuffer(...)` validate
-resource usage and ranges before returning typed unsupported errors until native
-lowering is implemented.
+The lowered blit slice supports buffer-to-buffer, buffer-to-texture,
+texture-to-buffer, and texture-to-texture copies.
+`BlitCommandEncoder.fillBuffer(...)` also lowers to the native backend. Metal
+supports arbitrary byte ranges; Vulkan uses `vkCmdFillBuffer`, so Vulkan
+requires offset and size to be 4-byte aligned and returns
+`UnsupportedFillBuffer` otherwise.
 
 Compute work uses a Metal-style compute encoder:
 
@@ -454,10 +460,12 @@ and `ComputeCommandEncoder.dispatchThreads(...)` are convenience APIs that
 resolve total thread counts into threadgroup counts before using the same
 backend path.
 
-`DispatchThreadgroupsIndirectDescriptor` represents future indirect dispatch
+`DispatchThreadgroupsIndirectDescriptor` represents indirect dispatch
 arguments. Indirect buffers use `BufferUsage.indirect`; runtime
-`dispatchThreadgroupsIndirect(...)` validates usage, offset, and alignment
-before returning `UnsupportedDispatchIndirect` until backend lowering lands.
+`dispatchThreadgroupsIndirect(...)` validates usage, offset, alignment, and
+threadgroup size before lowering to Vulkan `vkCmdDispatchIndirect` or the Metal
+indirect dispatch path. Metal needs `threads_per_threadgroup_*`, so those fields
+stay in the descriptor; the Vulkan backend ignores them.
 
 Advanced compute shader requirements can be declared with
 `ComputeAtomicDescriptor` and `ThreadgroupMemoryDescriptor`. These are
@@ -514,15 +522,19 @@ try render_encoder.popDebugGroup();
 ```
 
 Descriptor labels are copied into runtime wrappers when resources or pipelines
-are created. `label()` returns the current borrowed label, and `setLabel(null)`
+are created, and they are synchronized to native object labels when the backend
+supports it. `label()` returns the current borrowed label, and `setLabel(null)`
 clears it.
 
 Debug groups and signposts are validated portably. Empty labels, underflow,
 overflow, and unclosed groups become `CommandEncodingError` values.
 `DebugSignpostDescriptor` is the shape-only marker descriptor, and command
 buffers plus render/blit/compute encoders expose `insertDebugSignpost(...)`.
-Native Vulkan debug-utils markers and Metal GPU capture markers can be lowered
-behind this API later.
+Metal command-buffer and encoder markers lower to Metal debug APIs. Vulkan
+render/blit/compute encoder markers lower to `EXT_debug_utils` while the command
+buffer is recording. Vulkan command-buffer-level markers remain portable
+validation only because vkmtl allows them before an encoder exists, while native
+Vulkan markers require a recording command buffer.
 
 ## Error Classification
 

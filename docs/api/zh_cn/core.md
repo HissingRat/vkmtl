@@ -100,8 +100,9 @@ Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和
 
 `SamplerDescriptor` 包含 compare、anisotropy 和 border-color 字段。这些高级字段通过
 `DeviceFeatures.sampler_compare`、`DeviceFeatures.sampler_anisotropy`、
-`DeviceFeatures.sampler_border_color` 和 `DeviceLimits.max_sampler_anisotropy` gate。当前默认关闭，
-直到后端 mapping 实现。
+`DeviceFeatures.sampler_border_color` 和 `DeviceLimits.max_sampler_anisotropy` gate。compare
+sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建；border color 仍然是
+descriptor-level shape，默认关闭。
 
 `HeapDescriptor` 定义 future advanced memory/heap shape。默认资源创建仍由 vkmtl 内部管理 memory；
 `DeviceFeatures.heaps` 在显式 Vulkan/Metal heap allocation 实现前保持 false。
@@ -326,18 +327,21 @@ error。
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
-lowering 支持一个 color attachment，并会对 stencil、transient 和 MRT 路径返回 typed
-unsupported error，直到 native lowering 接上。
+lowering 支持一个 color attachment；`transient` 目前作为 no-op 性能 hint 保留。stencil
+和 MRT 路径仍会返回 typed unsupported error，直到 native lowering 接上。
 
 Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`、
 `StencilReference` 和 `DepthBiasDescriptor`。`RenderCommandEncoder` 暴露对应 setter。
-这些 setter 当前会先校验输入，然后返回 `UnsupportedDynamicRenderState`，直到 backend
-lowering 接上。
+这些 setter 会先做 portable validation，然后下沉到 Vulkan 和 Metal 的 native dynamic
+state 命令。`BlendColor`、`StencilReference` 和 `DepthBiasDescriptor` 是否影响最终输出仍取决于
+当前 render pipeline 是否启用了对应 blend、stencil 或 depth-bias state。
 
 Direct draw descriptor 包含 `base_instance`；indexed draw descriptor 也包含 `base_vertex`。
-非零 base 字段当前会返回 typed unsupported error。Indirect 和 multi-draw descriptor shape
-已经存在，`RenderCommandEncoder` 也暴露对应方法；这些方法会先校验输入，再在 backend
-lowering 接上前返回 unsupported。
+这些 base 字段已经下沉到 Vulkan 和 Metal direct draw 命令。indirect draw 会下沉到
+native backend，并要求 indirect buffer 使用 `.indirect` usage；`draw_count > 1` 会按
+stride 拆成多条 single indirect draw。显式 `drawPrimitivesMulti(...)` /
+`drawIndexedPrimitivesMulti(...)` 也先通过 repeated direct draws lowering，后续可以在
+backend 支持真正 multi-draw 时替换为单条 native path。
 
 Query support 目前是 descriptor-only。`QuerySetDescriptor` 覆盖 occlusion、timestamp 和
 pipeline statistics query，并带 feature gate。`QueryResolveDescriptor` 和
@@ -355,11 +359,10 @@ try blit.endEncoding();
 try command_buffer.commit();
 ```
 
-当前 lowered blit slice 支持 buffer-to-buffer、buffer-to-texture 和
-texture-to-buffer。`CopyTextureToTextureDescriptor` 和 `FillBufferDescriptor`
-已经是 public validation shape；`BlitCommandEncoder.copyTextureToTexture(...)` /
-`fillBuffer(...)` 会先校验 resource usage 和范围，再在 native lowering 接上前返回 typed
-unsupported error。
+当前 lowered blit slice 支持 buffer-to-buffer、buffer-to-texture、texture-to-buffer 和
+texture-to-texture。`BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
+Metal 支持任意 byte range，Vulkan 使用 `vkCmdFillBuffer`，因此 Vulkan 路径要求 offset 和
+size 都按 4 字节对齐，否则返回 `UnsupportedFillBuffer`。
 
 Compute 使用 Metal 风格的 compute encoder：
 
@@ -382,10 +385,11 @@ try command_buffer.commit();
 维度；`DispatchThreadsDescriptor` 与 `ComputeCommandEncoder.dispatchThreads(...)` 是便利 API，
 会把总线程数 resolve 成 threadgroup 数量，然后走同一条 backend path。
 
-`DispatchThreadgroupsIndirectDescriptor` 表示未来的 indirect dispatch arguments。
+`DispatchThreadgroupsIndirectDescriptor` 表示 indirect dispatch arguments。
 Indirect buffer 使用 `BufferUsage.indirect`；runtime `dispatchThreadgroupsIndirect(...)`
-会先校验 usage、offset 和 alignment，然后在 backend lowering 接上前返回
-`UnsupportedDispatchIndirect`。
+会校验 usage、offset、alignment 和 threadgroup size，然后下发到 Vulkan 的
+`vkCmdDispatchIndirect` 或 Metal 的 indirect dispatch path。Metal 需要
+`threads_per_threadgroup_*`，所以这些字段也保留在 descriptor 里；Vulkan backend 会忽略它们。
 
 高级 compute shader 需求可以用 `ComputeAtomicDescriptor` 和
 `ThreadgroupMemoryDescriptor` 显式声明。这些目前是 validation shape，由
@@ -433,14 +437,16 @@ try render_encoder.insertDebugSignpost("draw batch");
 try render_encoder.popDebugGroup();
 ```
 
-资源或 pipeline 创建时，descriptor 里的 label 会写入 runtime wrapper。`label()` 返回当前借用
-label，`setLabel(null)` 会清空 label。
+资源或 pipeline 创建时，descriptor 里的 label 会写入 runtime wrapper，并在后端支持时同步到
+native object label。`label()` 返回当前借用 label，`setLabel(null)` 会清空 label。
 
-Debug group 和 signpost 现在先做可移植验证：空 label、stack underflow、stack overflow、
-未闭合 group 都会变成 `CommandEncodingError`。`DebugSignpostDescriptor` 是 shape-only marker
+Debug group 和 signpost 会做可移植验证：空 label、stack underflow、stack overflow、未闭合
+group 都会变成 `CommandEncodingError`。`DebugSignpostDescriptor` 是 shape-only marker
 descriptor；command buffer 以及 render/blit/compute encoder 都暴露
-`insertDebugSignpost(...)`。后续可以在不改用户代码的前提下，把这层 API 下沉到 Vulkan
-debug-utils marker 或 Metal GPU capture marker。
+`insertDebugSignpost(...)`。Metal command buffer/encoder marker 会下沉到 Metal debug API；
+Vulkan render/blit/compute encoder marker 会在 command buffer recording 期间下沉到
+`EXT_debug_utils`。Vulkan command-buffer-level marker 仍只保留 portable validation，因为该 API
+允许在 encoder 创建之前调用，而 Vulkan native marker 要求 command buffer 已经开始 recording。
 
 ## Error 分类
 

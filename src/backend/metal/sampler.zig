@@ -1,4 +1,5 @@
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 
@@ -27,6 +28,9 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.SamplerDescriptor) !Metal
         addressMode(descriptor.address_mode_w),
         descriptor.lod_min_clamp,
         descriptor.lod_max_clamp,
+        if (descriptor.compare_function != null) 1 else 0,
+        if (descriptor.compare_function) |compare| compareFunction(compare) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
+        descriptor.max_anisotropy,
         &handle,
     ));
 
@@ -37,6 +41,14 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.SamplerDescriptor) !Metal
 
 pub fn deinit(self: *MetalSamplerState) void {
     metal.vkmtl_metal_sampler_state_destroy(self.handle);
+}
+
+pub fn setLabel(self: *MetalSamplerState, label_value: ?[]const u8) void {
+    debug.ignore(metal.vkmtl_metal_sampler_state_set_label(
+        self.handle,
+        debug.labelPtr(label_value),
+        debug.labelLen(label_value),
+    ));
 }
 
 fn filter(value: core.SamplerMinMagFilter) metal.vkmtl_metal_filter {
@@ -59,6 +71,19 @@ fn addressMode(value: core.SamplerAddressMode) metal.vkmtl_metal_address_mode {
         .clamp_to_edge => metal.VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_EDGE,
         .repeat => metal.VKMTL_METAL_ADDRESS_MODE_REPEAT,
         .mirror_repeat => metal.VKMTL_METAL_ADDRESS_MODE_MIRROR_REPEAT,
+    };
+}
+
+fn compareFunction(value: core.CompareFunction) metal.vkmtl_metal_compare_function {
+    return switch (value) {
+        .never => metal.VKMTL_METAL_COMPARE_FUNCTION_NEVER,
+        .less => metal.VKMTL_METAL_COMPARE_FUNCTION_LESS,
+        .equal => metal.VKMTL_METAL_COMPARE_FUNCTION_EQUAL,
+        .less_equal => metal.VKMTL_METAL_COMPARE_FUNCTION_LESS_EQUAL,
+        .greater => metal.VKMTL_METAL_COMPARE_FUNCTION_GREATER,
+        .not_equal => metal.VKMTL_METAL_COMPARE_FUNCTION_NOT_EQUAL,
+        .greater_equal => metal.VKMTL_METAL_COMPARE_FUNCTION_GREATER_EQUAL,
+        .always => metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
     };
 }
 

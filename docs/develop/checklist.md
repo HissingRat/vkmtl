@@ -202,7 +202,7 @@ closed one by one as vkmtl moves from prototype to library.
   before a tagged release.
 - [x] Decide which `WindowContext` entry points stay for early users and which
   should move to future `Device` / `Queue` owners.
-- [ ] Add backend object debug labels where native APIs support them.
+- [x] Add backend object debug labels where native APIs support them.
 - [ ] Add a CI build matrix for macOS and Linux.
 - [ ] Document optional Vulkan validation layer setup.
 - [ ] Document Metal API validation notes for Xcode/local runs.
@@ -347,6 +347,7 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add anisotropy descriptor shape and validation.
 - [x] Add border-color descriptor shape.
 - [x] Report sampler support through features/limits.
+- [x] Lower compare sampler and anisotropy fields to native sampler creation.
 - [x] Document backend mapping limits.
 
 ## Period 3 Phase 7 Checklist
@@ -467,6 +468,7 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add indirect draw descriptor shapes.
 - [x] Add multi-draw descriptor shapes and feature gate.
 - [x] Return typed unsupported errors for non-lowered draw forms.
+- [x] Lower direct base fields, indirect draw, and explicit multi-draw.
 - [x] Document draw command limits.
 
 ## Period 5 Phase 8 Checklist
@@ -539,6 +541,7 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add dispatch-indirect descriptor and alignment validation.
 - [x] Add indirect buffer usage metadata.
 - [x] Gate dispatch indirect until native lowering lands.
+- [x] Lower dispatch indirect to Vulkan and Metal native commands.
 - [x] Document dispatch-indirect limits.
 
 ## Period 7 Phase 3 Checklist

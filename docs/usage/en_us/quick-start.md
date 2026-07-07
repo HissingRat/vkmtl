@@ -254,5 +254,7 @@ does not need to handle that argument itself.
   provide pixel data and higher-level asset systems.
 - GLFW is not part of vkmtl core. Use an external window adapter, like the
   example `zig_glfw` glue, to provide surface descriptors.
-- Runtime wrappers store borrowed debug labels and validate portable debug
-  groups. Native backend marker lowering is still future work.
+- Runtime wrappers store borrowed debug labels and synchronize native object
+  labels when supported. Metal markers and Vulkan encoder-level markers lower to
+  native debug APIs; Vulkan command-buffer-level markers remain portable
+  validation only.

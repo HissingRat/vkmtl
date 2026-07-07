@@ -299,6 +299,9 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_address_mode address_mode_w,
     float lod_min_clamp,
     float lod_max_clamp,
+    unsigned int compare_enabled,
+    vkmtl_metal_compare_function compare_function,
+    float max_anisotropy,
     vkmtl_metal_sampler_state **out_sampler
 ) {
     (void)owner;
@@ -310,6 +313,9 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     (void)address_mode_w;
     (void)lod_min_clamp;
     (void)lod_max_clamp;
+    (void)compare_enabled;
+    (void)compare_function;
+    (void)max_anisotropy;
     if (out_sampler != NULL) {
         *out_sampler = NULL;
     }
@@ -557,18 +563,91 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_sampler_state
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_viewport(
+    vkmtl_metal_render_command_encoder *encoder,
+    double x,
+    double y,
+    double width,
+    double height,
+    double near_z,
+    double far_z
+) {
+    (void)encoder;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
+    (void)near_z;
+    (void)far_z;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_scissor_rect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int x,
+    unsigned int y,
+    unsigned int width,
+    unsigned int height
+) {
+    (void)encoder;
+    (void)x;
+    (void)y;
+    (void)width;
+    (void)height;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_blend_color(
+    vkmtl_metal_render_command_encoder *encoder,
+    float red,
+    float green,
+    float blue,
+    float alpha
+) {
+    (void)encoder;
+    (void)red;
+    (void)green;
+    (void)blue;
+    (void)alpha;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_stencil_reference(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int reference
+) {
+    (void)encoder;
+    (void)reference;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
+    vkmtl_metal_render_command_encoder *encoder,
+    float constant,
+    float slope,
+    float clamp
+) {
+    (void)encoder;
+    (void)constant;
+    (void)slope;
+    (void)clamp;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     vkmtl_metal_render_command_encoder *encoder,
     unsigned int primitive_type,
     unsigned int vertex_start,
     unsigned int vertex_count,
-    unsigned int instance_count
+    unsigned int instance_count,
+    unsigned int base_instance
 ) {
     (void)encoder;
     (void)primitive_type;
     (void)vertex_start;
     (void)vertex_count;
     (void)instance_count;
+    (void)base_instance;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -578,7 +657,9 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     unsigned int index_type,
     unsigned int index_count,
     size_t index_buffer_offset,
-    unsigned int instance_count
+    unsigned int instance_count,
+    int base_vertex,
+    unsigned int base_instance
 ) {
     (void)encoder;
     (void)primitive_type;
@@ -586,6 +667,36 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     (void)index_count;
     (void)index_buffer_offset;
     (void)instance_count;
+    (void)base_vertex;
+    (void)base_instance;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives_indirect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset
+) {
+    (void)encoder;
+    (void)primitive_type;
+    (void)indirect_buffer;
+    (void)indirect_buffer_offset;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives_indirect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    unsigned int index_type,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset
+) {
+    (void)encoder;
+    (void)primitive_type;
+    (void)index_type;
+    (void)indirect_buffer;
+    (void)indirect_buffer_offset;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -668,6 +779,23 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups(
     (void)threadgroup_count_x;
     (void)threadgroup_count_y;
     (void)threadgroup_count_z;
+    (void)threads_per_threadgroup_x;
+    (void)threads_per_threadgroup_y;
+    (void)threads_per_threadgroup_z;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups_indirect(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset,
+    unsigned int threads_per_threadgroup_x,
+    unsigned int threads_per_threadgroup_y,
+    unsigned int threads_per_threadgroup_z
+) {
+    (void)encoder;
+    (void)indirect_buffer;
+    (void)indirect_buffer_offset;
     (void)threads_per_threadgroup_x;
     (void)threads_per_threadgroup_y;
     (void)threads_per_threadgroup_z;
@@ -779,9 +907,298 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_buffer(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *source,
+    vkmtl_metal_texture *destination,
+    unsigned int source_x,
+    unsigned int source_y,
+    unsigned int source_z,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int source_mip_level,
+    unsigned int source_slice,
+    unsigned int destination_x,
+    unsigned int destination_y,
+    unsigned int destination_z,
+    unsigned int destination_mip_level,
+    unsigned int destination_slice
+) {
+    (void)encoder;
+    (void)source;
+    (void)destination;
+    (void)source_x;
+    (void)source_y;
+    (void)source_z;
+    (void)width;
+    (void)height;
+    (void)depth;
+    (void)source_mip_level;
+    (void)source_slice;
+    (void)destination_x;
+    (void)destination_y;
+    (void)destination_z;
+    (void)destination_mip_level;
+    (void)destination_slice;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_fill_buffer(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    size_t size,
+    unsigned int value
+) {
+    (void)encoder;
+    (void)buffer;
+    (void)offset;
+    (void)size;
+    (void)value;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_end_encoding(
     vkmtl_metal_blit_command_encoder *encoder
 ) {
     (void)encoder;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_buffer_set_label(
+    vkmtl_metal_buffer *buffer,
+    const char *label,
+    size_t label_len
+) {
+    (void)buffer;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_texture_set_label(
+    vkmtl_metal_texture *texture,
+    const char *label,
+    size_t label_len
+) {
+    (void)texture;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_texture_view_set_label(
+    vkmtl_metal_texture_view *view,
+    const char *label,
+    size_t label_len
+) {
+    (void)view;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_sampler_state_set_label(
+    vkmtl_metal_sampler_state *sampler,
+    const char *label,
+    size_t label_len
+) {
+    (void)sampler;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_shader_module_set_label(
+    vkmtl_metal_shader_module *shader,
+    const char *label,
+    size_t label_len
+) {
+    (void)shader;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_pipeline_state_set_label(
+    vkmtl_metal_render_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+) {
+    (void)pipeline;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
+    vkmtl_metal_compute_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+) {
+    (void)pipeline;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_set_label(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+) {
+    (void)command_buffer;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_push_debug_group(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+) {
+    (void)command_buffer;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_pop_debug_group(
+    vkmtl_metal_command_buffer *command_buffer
+) {
+    (void)command_buffer;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_insert_debug_signpost(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+) {
+    (void)command_buffer;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_label(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_push_debug_group(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_pop_debug_group(
+    vkmtl_metal_render_command_encoder *encoder
+) {
+    (void)encoder;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_insert_debug_signpost(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_label(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_push_debug_group(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_pop_debug_group(
+    vkmtl_metal_compute_command_encoder *encoder
+) {
+    (void)encoder;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_insert_debug_signpost(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_set_label(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_push_debug_group(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_pop_debug_group(
+    vkmtl_metal_blit_command_encoder *encoder
+) {
+    (void)encoder;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_insert_debug_signpost(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    (void)encoder;
+    (void)label;
+    (void)label_len;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }

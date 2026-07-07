@@ -470,6 +470,7 @@ pub const Buffer = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     length_value: usize,
     usage_value: core.BufferUsage = .{},
     storage_mode_value: core.ResourceStorageMode = .automatic,
@@ -507,6 +508,11 @@ pub const Buffer = struct {
     pub fn setLabel(self: *Buffer, label_value: ?[]const u8) void {
         assertAlive(self.alive, .buffer);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 
     pub fn usage(self: Buffer) core.BufferUsage {
@@ -616,6 +622,7 @@ pub const Texture = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     dimension_value: core.TextureDimension = .two_d,
     format_value: core.TextureFormat,
     usage_value: core.TextureUsage,
@@ -650,6 +657,11 @@ pub const Texture = struct {
     pub fn setLabel(self: *Texture, label_value: ?[]const u8) void {
         assertAlive(self.alive, .texture);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 
     pub fn format(self: Texture) core.TextureFormat {
@@ -732,11 +744,12 @@ pub const Texture = struct {
             .metal => |*metal| TextureView.Impl{ .metal = try metal.makeTextureView(descriptor) },
         };
         self.tracker.retain(.texture_view);
-        return switch (self.impl) {
-            .vulkan => .{
+        var view = switch (self.impl) {
+            .vulkan => TextureView{
                 .backend = .vulkan,
                 .tracker = self.tracker,
                 .label_value = descriptor.label,
+                .native_labels_enabled = true,
                 .format_value = resolved.format,
                 .dimension_value = resolved.dimension,
                 .usage_value = self.usage_value,
@@ -749,10 +762,11 @@ pub const Texture = struct {
                 .array_layer_count_value = resolved.array_layer_count,
                 .impl = impl,
             },
-            .metal => .{
+            .metal => TextureView{
                 .backend = .metal,
                 .tracker = self.tracker,
                 .label_value = descriptor.label,
+                .native_labels_enabled = true,
                 .format_value = resolved.format,
                 .dimension_value = resolved.dimension,
                 .usage_value = self.usage_value,
@@ -766,6 +780,8 @@ pub const Texture = struct {
                 .impl = impl,
             },
         };
+        view.setLabel(descriptor.label);
+        return view;
     }
 
     pub fn replaceRegion(
@@ -826,6 +842,7 @@ pub const TextureView = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     format_value: core.TextureFormat,
     dimension_value: core.TextureViewDimension = .automatic,
     usage_value: core.TextureUsage,
@@ -866,6 +883,11 @@ pub const TextureView = struct {
     pub fn setLabel(self: *TextureView, label_value: ?[]const u8) void {
         assertAlive(self.alive, .texture_view);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 
     pub fn format(self: TextureView) core.TextureFormat {
@@ -937,6 +959,7 @@ pub const SamplerState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     alive: bool = true,
     impl: Impl,
 
@@ -966,6 +989,11 @@ pub const SamplerState = struct {
     pub fn setLabel(self: *SamplerState, label_value: ?[]const u8) void {
         assertAlive(self.alive, .sampler_state);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 };
 
@@ -973,6 +1001,7 @@ pub const ShaderModule = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     alive: bool = true,
     impl: Impl,
 
@@ -1002,6 +1031,11 @@ pub const ShaderModule = struct {
     pub fn setLabel(self: *ShaderModule, label_value: ?[]const u8) void {
         assertAlive(self.alive, .shader_module);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 };
 
@@ -1009,6 +1043,7 @@ pub const RenderPipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     alive: bool = true,
     impl: Impl,
 
@@ -1038,6 +1073,11 @@ pub const RenderPipelineState = struct {
     pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
         assertAlive(self.alive, .render_pipeline_state);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 };
 
@@ -1045,6 +1085,7 @@ pub const ComputePipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
+    native_labels_enabled: bool = false,
     alive: bool = true,
     impl: Impl,
 
@@ -1074,6 +1115,11 @@ pub const ComputePipelineState = struct {
     pub fn setLabel(self: *ComputePipelineState, label_value: ?[]const u8) void {
         assertAlive(self.alive, .compute_pipeline_state);
         self.label_value = label_value;
+        if (!self.native_labels_enabled) return;
+        switch (self.impl) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        }
     }
 };
 
@@ -1309,7 +1355,6 @@ pub const RenderPassColorAttachmentDescriptor = struct {
     options: core.RenderPassAttachmentOptions = .{},
 
     fn validateRuntime(self: RenderPassColorAttachmentDescriptor, backend: core.Backend) !void {
-        if (self.options.transient) return RuntimeError.UnsupportedTransientAttachment;
         switch (self.target) {
             .current_drawable => {
                 if (self.resolve_target != null) return RuntimeError.InvalidRenderPassAttachment;
@@ -1371,7 +1416,6 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
 
     fn validateRuntime(self: RenderPassDepthAttachmentDescriptor, backend: core.Backend) !void {
         try self.toCore().validate();
-        if (self.options.transient) return RuntimeError.UnsupportedTransientAttachment;
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
@@ -1412,7 +1456,6 @@ pub const RenderPassStencilAttachmentDescriptor = struct {
 
     fn validateRuntime(self: RenderPassStencilAttachmentDescriptor, backend: core.Backend) !void {
         try self.toCore().validate();
-        if (self.options.transient) return RuntimeError.UnsupportedTransientAttachment;
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
@@ -1654,13 +1697,15 @@ pub const CommandBuffer = struct {
             .metal => |*metal| .{ .metal = try metal.makeRenderCommandEncoder(metalRenderPassDescriptor(descriptor)) },
         } else null;
 
-        return .{
+        var encoder = RenderCommandEncoder{
             .backend = self.backend,
             .command_buffer = self,
             .label_value = descriptor.label,
             .debug = debug_encoder,
             .impl = encoder_impl,
         };
+        encoder.setLabel(descriptor.label);
+        return encoder;
     }
 
     pub fn makeBlitCommandEncoder(self: *CommandBuffer) !BlitCommandEncoder {
@@ -1724,21 +1769,37 @@ pub const CommandBuffer = struct {
     pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
         assertObjectAlive(self.alive, "command_buffer");
         self.label_value = label_value;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        };
     }
 
     pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "command_buffer");
         try self.debug_groups.push(label_value);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
+            .metal => |*metal| metal.pushDebugGroup(label_value),
+        };
     }
 
     pub fn popDebugGroup(self: *CommandBuffer) !void {
         assertObjectAlive(self.alive, "command_buffer");
         try self.debug_groups.pop();
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.popDebugGroup(),
+            .metal => |*metal| metal.popDebugGroup(),
+        };
     }
 
     pub fn insertDebugSignpost(self: *CommandBuffer, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "command_buffer");
         try self.debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
+            .metal => |*metal| metal.insertDebugSignpost(label_value),
+        };
     }
 
     pub fn commit(self: *CommandBuffer) !void {
@@ -1862,12 +1923,17 @@ pub const BlitCommandEncoder = struct {
         try expectSameBackend(self.backend, destination.backend);
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        _ = try self.debug.copyTextureToTexture(
+        const resolved = try self.debug.copyTextureToTexture(
             descriptor,
             source.textureDescriptor(),
             destination.textureDescriptor(),
         );
-        return core.CommandEncodingError.UnsupportedTextureToTextureCopy;
+        _ = source.recordUsage(.copy_source);
+        _ = destination.recordUsage(.copy_destination);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.copyTextureToTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
+            .metal => |*metal| try metal.copyTextureToTexture(&source.impl.metal, &destination.impl.metal, resolved),
+        };
     }
 
     pub fn fillBuffer(
@@ -1880,7 +1946,11 @@ pub const BlitCommandEncoder = struct {
         try expectSameBackend(self.backend, buffer.backend);
         if (!buffer.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
         try self.debug.fillBuffer(descriptor, buffer.length());
-        return core.CommandEncodingError.UnsupportedFillBuffer;
+        _ = buffer.recordUsage(.copy_destination);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.fillBuffer(&buffer.impl.vulkan, descriptor),
+            .metal => |*metal| try metal.fillBuffer(&buffer.impl.metal, descriptor),
+        };
     }
 
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
@@ -1904,21 +1974,37 @@ pub const BlitCommandEncoder = struct {
     pub fn setLabel(self: *BlitCommandEncoder, label_value: ?[]const u8) void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         self.label_value = label_value;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        };
     }
 
     pub fn pushDebugGroup(self: *BlitCommandEncoder, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         try self.debug_groups.push(label_value);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
+            .metal => |*metal| metal.pushDebugGroup(label_value),
+        };
     }
 
     pub fn popDebugGroup(self: *BlitCommandEncoder) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         try self.debug_groups.pop();
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.popDebugGroup(),
+            .metal => |*metal| metal.popDebugGroup(),
+        };
     }
 
     pub fn insertDebugSignpost(self: *BlitCommandEncoder, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         try self.debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
+            .metal => |*metal| metal.insertDebugSignpost(label_value),
+        };
     }
 
     pub fn selectedBackend(self: BlitCommandEncoder) core.Backend {
@@ -2012,7 +2098,11 @@ pub const ComputeCommandEncoder = struct {
             .{ .compute_dispatch_indirect = true },
             core.defaultDeviceLimits(self.backend),
         );
-        return core.CommandEncodingError.UnsupportedDispatchIndirect;
+        _ = indirect_buffer.recordUsage(.indirect_buffer);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.dispatchThreadgroupsIndirect(&indirect_buffer.impl.vulkan, descriptor),
+            .metal => |*metal| try metal.dispatchThreadgroupsIndirect(&indirect_buffer.impl.metal, descriptor),
+        };
     }
 
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
@@ -2036,21 +2126,37 @@ pub const ComputeCommandEncoder = struct {
     pub fn setLabel(self: *ComputeCommandEncoder, label_value: ?[]const u8) void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         self.label_value = label_value;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        };
     }
 
     pub fn pushDebugGroup(self: *ComputeCommandEncoder, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug_groups.push(label_value);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
+            .metal => |*metal| metal.pushDebugGroup(label_value),
+        };
     }
 
     pub fn popDebugGroup(self: *ComputeCommandEncoder) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug_groups.pop();
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.popDebugGroup(),
+            .metal => |*metal| metal.popDebugGroup(),
+        };
     }
 
     pub fn insertDebugSignpost(self: *ComputeCommandEncoder, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
+            .metal => |*metal| metal.insertDebugSignpost(label_value),
+        };
     }
 
     pub fn selectedBackend(self: ComputeCommandEncoder) core.Backend {
@@ -2132,31 +2238,46 @@ pub const RenderCommandEncoder = struct {
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.setViewport(viewport);
-        return RuntimeError.UnsupportedDynamicRenderState;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setViewport(viewport),
+            .metal => |*metal| try metal.setViewport(viewport),
+        };
     }
 
     pub fn setScissorRect(self: *RenderCommandEncoder, rect: core.ScissorRect) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.setScissorRect(rect);
-        return RuntimeError.UnsupportedDynamicRenderState;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setScissorRect(rect),
+            .metal => |*metal| try metal.setScissorRect(rect),
+        };
     }
 
     pub fn setBlendColor(self: *RenderCommandEncoder, color: core.BlendColor) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.setBlendColor(color);
-        return RuntimeError.UnsupportedDynamicRenderState;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setBlendColor(color),
+            .metal => |*metal| try metal.setBlendColor(color),
+        };
     }
 
     pub fn setStencilReference(self: *RenderCommandEncoder, reference: core.StencilReference) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.setStencilReference(reference);
-        return RuntimeError.UnsupportedDynamicRenderState;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setStencilReference(reference),
+            .metal => |*metal| try metal.setStencilReference(reference),
+        };
     }
 
     pub fn setDepthBias(self: *RenderCommandEncoder, descriptor: core.DepthBiasDescriptor) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.setDepthBias(descriptor);
-        return RuntimeError.UnsupportedDynamicRenderState;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setDepthBias(descriptor),
+            .metal => |*metal| try metal.setDepthBias(descriptor),
+        };
     }
 
     pub fn drawPrimitives(
@@ -2165,7 +2286,7 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.drawPrimitives(descriptor);
-        try validateDrawPrimitivesLowering(descriptor, .{});
+        try validateDrawPrimitivesLowering(descriptor, .{ .draw_base_instance = true });
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawPrimitives(descriptor),
             .metal => |*metal| try metal.drawPrimitives(descriptor),
@@ -2178,7 +2299,10 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.drawIndexedPrimitives(descriptor);
-        try validateDrawIndexedPrimitivesLowering(descriptor, .{});
+        try validateDrawIndexedPrimitivesLowering(descriptor, .{
+            .draw_base_vertex = true,
+            .draw_base_instance = true,
+        });
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawIndexedPrimitives(descriptor),
             .metal => |*metal| try metal.drawIndexedPrimitives(descriptor),
@@ -2193,8 +2317,30 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.alive, "render_command_encoder");
         assertAlive(indirect_buffer.alive, .buffer);
         try expectSameBackend(self.backend, indirect_buffer.backend);
+        if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
         try self.debug.drawPrimitivesIndirect(descriptor);
-        return core.CommandEncodingError.UnsupportedIndirectDraw;
+        try validateIndirectDrawRange(descriptor.buffer_offset, descriptor.draw_count, descriptor.stride, indirect_buffer.length(), 16);
+        _ = indirect_buffer.recordUsage(.indirect_buffer);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                var draw = descriptor;
+                draw.draw_count = 1;
+                draw.stride = 0;
+                for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
+                    draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 16);
+                    try vulkan.drawPrimitivesIndirect(&indirect_buffer.impl.vulkan, draw);
+                }
+            },
+            .metal => |*metal| {
+                var draw = descriptor;
+                draw.draw_count = 1;
+                draw.stride = 0;
+                for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
+                    draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 16);
+                    try metal.drawPrimitivesIndirect(&indirect_buffer.impl.metal, draw);
+                }
+            },
+        };
     }
 
     pub fn drawIndexedPrimitivesIndirect(
@@ -2205,8 +2351,30 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.alive, "render_command_encoder");
         assertAlive(indirect_buffer.alive, .buffer);
         try expectSameBackend(self.backend, indirect_buffer.backend);
+        if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
         try self.debug.drawIndexedPrimitivesIndirect(descriptor);
-        return core.CommandEncodingError.UnsupportedIndirectDraw;
+        try validateIndirectDrawRange(descriptor.buffer_offset, descriptor.draw_count, descriptor.stride, indirect_buffer.length(), 20);
+        _ = indirect_buffer.recordUsage(.indirect_buffer);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                var draw = descriptor;
+                draw.draw_count = 1;
+                draw.stride = 0;
+                for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
+                    draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 20);
+                    try vulkan.drawIndexedPrimitivesIndirect(&indirect_buffer.impl.vulkan, draw);
+                }
+            },
+            .metal => |*metal| {
+                var draw = descriptor;
+                draw.draw_count = 1;
+                draw.stride = 0;
+                for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
+                    draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 20);
+                    try metal.drawIndexedPrimitivesIndirect(&indirect_buffer.impl.metal, draw);
+                }
+            },
+        };
     }
 
     pub fn drawPrimitivesMulti(
@@ -2215,7 +2383,9 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.drawPrimitivesMulti(descriptor);
-        return core.CommandEncodingError.UnsupportedMultiDraw;
+        for (descriptor.draws) |draw| {
+            try self.drawPrimitives(draw);
+        }
     }
 
     pub fn drawIndexedPrimitivesMulti(
@@ -2224,7 +2394,9 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.drawIndexedPrimitivesMulti(descriptor);
-        return core.CommandEncodingError.UnsupportedMultiDraw;
+        for (descriptor.draws) |draw| {
+            try self.drawIndexedPrimitives(draw);
+        }
     }
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
@@ -2248,21 +2420,37 @@ pub const RenderCommandEncoder = struct {
     pub fn setLabel(self: *RenderCommandEncoder, label_value: ?[]const u8) void {
         assertObjectAlive(self.alive, "render_command_encoder");
         self.label_value = label_value;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        };
     }
 
     pub fn pushDebugGroup(self: *RenderCommandEncoder, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug_groups.push(label_value);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
+            .metal => |*metal| metal.pushDebugGroup(label_value),
+        };
     }
 
     pub fn popDebugGroup(self: *RenderCommandEncoder) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug_groups.pop();
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.popDebugGroup(),
+            .metal => |*metal| metal.popDebugGroup(),
+        };
     }
 
     pub fn insertDebugSignpost(self: *RenderCommandEncoder, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "render_command_encoder");
         try self.debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
+            .metal => |*metal| metal.insertDebugSignpost(label_value),
+        };
     }
 
     pub fn selectedBackend(self: RenderCommandEncoder) core.Backend {
@@ -2397,13 +2585,15 @@ pub const Queue = struct {
             .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
             .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer() },
         };
-        return .{
+        var command_buffer = CommandBuffer{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
             .debug = debug,
             .impl = impl,
         };
+        command_buffer.setLabel(descriptor.label);
+        return command_buffer;
     }
 };
 
@@ -2570,15 +2760,18 @@ pub const Device = struct {
             .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(descriptor) },
         };
         self.tracker.retain(.buffer);
-        return .{
+        var buffer = Buffer{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .native_labels_enabled = true,
             .length_value = length,
             .usage_value = descriptor.usage,
             .storage_mode_value = descriptor.storage_mode,
             .impl = impl,
         };
+        buffer.setLabel(descriptor.label);
+        return buffer;
     }
 
     pub fn makeShaderModule(self: *Device, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
@@ -2592,12 +2785,15 @@ pub const Device = struct {
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.shader_module);
         self.tracker.recordObjectCreation(.shader_module, fingerprint, .{}, elapsed_ns);
-        return .{
+        var shader_module = ShaderModule{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .native_labels_enabled = true,
             .impl = impl,
         };
+        shader_module.setLabel(descriptor.label);
+        return shader_module;
     }
 
     pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
@@ -2616,12 +2812,15 @@ pub const Device = struct {
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.render_pipeline_state);
         self.tracker.recordObjectCreation(.render_pipeline, fingerprint, .{}, elapsed_ns);
-        return .{
+        var pipeline = RenderPipelineState{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .native_labels_enabled = true,
             .impl = impl,
         };
+        pipeline.setLabel(descriptor.label);
+        return pipeline;
     }
 
     pub fn makeComputePipelineState(self: *Device, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
@@ -2638,12 +2837,15 @@ pub const Device = struct {
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.compute_pipeline_state);
         self.tracker.recordObjectCreation(.compute_pipeline, fingerprint, .{}, elapsed_ns);
-        return .{
+        var pipeline = ComputePipelineState{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .native_labels_enabled = true,
             .impl = impl,
         };
+        pipeline.setLabel(descriptor.label);
+        return pipeline;
     }
 
     pub fn makeBindGroupLayout(self: *Device, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
@@ -2755,16 +2957,19 @@ pub const Device = struct {
             .metal => |*metal| Texture.Impl{ .metal = try metal.makeTexture(descriptor) },
         };
         self.tracker.retain(.texture);
-        return .{
+        var texture = Texture{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .native_labels_enabled = true,
             .dimension_value = descriptor.dimension,
             .format_value = descriptor.format,
             .usage_value = descriptor.usage,
             .sample_count_value = descriptor.sample_count,
             .impl = impl,
         };
+        texture.setLabel(descriptor.label);
+        return texture;
     }
 
     pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
@@ -2789,12 +2994,15 @@ pub const Device = struct {
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.sampler_state);
         self.tracker.recordObjectCreation(.sampler, fingerprint, .{}, elapsed_ns);
-        return .{
+        var sampler = SamplerState{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .native_labels_enabled = true,
             .impl = impl,
         };
+        sampler.setLabel(descriptor.label);
+        return sampler;
     }
 
     fn shaderCompilerOptions(self: Device) ShaderCompiler.CompilerOptions {
@@ -3234,6 +3442,32 @@ fn validateDrawIndexedPrimitivesLowering(
     if (descriptor.base_instance != 0 and !features.draw_base_instance) return core.CommandEncodingError.UnsupportedBaseInstance;
 }
 
+fn validateIndirectDrawBuffer(offset: u64, buffer_length: usize, argument_size: u64) core.CommandEncodingError!void {
+    const end = std.math.add(u64, offset, argument_size) catch return core.CommandEncodingError.InvalidIndirectBufferUsage;
+    if (end > buffer_length) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+}
+
+fn validateIndirectDrawRange(
+    offset: u64,
+    draw_count: u32,
+    stride: u32,
+    buffer_length: usize,
+    argument_size: u64,
+) core.CommandEncodingError!void {
+    const draw_stride = indirectDrawStride(stride, argument_size);
+    const last_draw = std.math.sub(u64, draw_count, 1) catch return core.CommandEncodingError.InvalidIndirectBufferUsage;
+    const last_offset = std.math.add(
+        u64,
+        offset,
+        std.math.mul(u64, last_draw, draw_stride) catch return core.CommandEncodingError.InvalidIndirectBufferUsage,
+    ) catch return core.CommandEncodingError.InvalidIndirectBufferUsage;
+    try validateIndirectDrawBuffer(last_offset, buffer_length, argument_size);
+}
+
+fn indirectDrawStride(stride: u32, default_stride: u64) u64 {
+    return if (stride == 0) default_stride else stride;
+}
+
 fn materializeVulkanBindGroupEntries(
     allocator: std.mem.Allocator,
     entries: []const BindGroupEntry,
@@ -3537,7 +3771,7 @@ test "runtime blit encoder records buffer usage transitions" {
     try std.testing.expectEqual(core.ResourceUsageKind.copy_destination, destination.currentUsage().?);
 }
 
-test "runtime compute encoder validates dispatch indirect before unsupported gate" {
+test "runtime compute encoder lowers valid dispatch indirect and validates usage" {
     var tracker = ResourceTracker{};
     var command_buffer = CommandBuffer{ .backend = .vulkan };
     var encoder = ComputeCommandEncoder{
@@ -3560,10 +3794,8 @@ test "runtime compute encoder validates dispatch indirect before unsupported gat
         .impl = undefined,
     };
 
-    try std.testing.expectError(
-        core.CommandEncodingError.UnsupportedDispatchIndirect,
-        encoder.dispatchThreadgroupsIndirect(&indirect_buffer, .{}),
-    );
+    try encoder.dispatchThreadgroupsIndirect(&indirect_buffer, .{});
+    try std.testing.expectEqual(core.ResourceUsageKind.indirect_buffer, indirect_buffer.currentUsage().?);
     try std.testing.expectError(
         core.CommandEncodingError.InvalidIndirectBufferUsage,
         encoder.dispatchThreadgroupsIndirect(&storage_buffer, .{}),
@@ -4196,32 +4428,32 @@ test "runtime render encoder validates bind group binding" {
     try encoder.endEncoding();
 }
 
-test "runtime render encoder dynamic state methods are gated" {
+test "runtime render encoder dynamic state methods validate before backend lowering" {
     var command_buffer = CommandBuffer{ .backend = .vulkan };
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
         .color_attachments = color_attachments[0..],
     });
 
-    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setViewport(.{
+    try encoder.setViewport(.{
         .width = 640,
         .height = 480,
-    }));
-    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setScissorRect(.{
+    });
+    try encoder.setScissorRect(.{
         .width = 640,
         .height = 480,
-    }));
-    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setBlendColor(.{
+    });
+    try encoder.setBlendColor(.{
         .red = 1,
         .alpha = 1,
-    }));
-    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setStencilReference(.{
+    });
+    try encoder.setStencilReference(.{
         .value = 1,
-    }));
-    try std.testing.expectError(RuntimeError.UnsupportedDynamicRenderState, encoder.setDepthBias(.{
+    });
+    try encoder.setDepthBias(.{
         .enabled = true,
         .constant = 1,
-    }));
+    });
     try std.testing.expectError(core.CommandEncodingError.InvalidViewport, encoder.setViewport(.{
         .width = 0,
         .height = 480,
@@ -4230,7 +4462,7 @@ test "runtime render encoder dynamic state methods are gated" {
     try encoder.endEncoding();
 }
 
-test "runtime render encoder draw variants are gated" {
+test "runtime render encoder base draw fields lower while indirect variants are gated" {
     var command_buffer = CommandBuffer{ .backend = .vulkan };
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
@@ -4245,10 +4477,10 @@ test "runtime render encoder draw variants are gated" {
     };
     try encoder.setRenderPipelineState(&pipeline);
 
-    try std.testing.expectError(core.CommandEncodingError.UnsupportedBaseInstance, encoder.drawPrimitives(.{
+    try encoder.drawPrimitives(.{
         .vertex_count = 3,
         .base_instance = 1,
-    }));
+    });
     var index_buffer = Buffer{
         .backend = .vulkan,
         .tracker = &tracker,
@@ -4256,23 +4488,35 @@ test "runtime render encoder draw variants are gated" {
         .impl = undefined,
     };
     try encoder.setIndexBuffer(&index_buffer);
-    try std.testing.expectError(core.CommandEncodingError.UnsupportedBaseVertex, encoder.drawIndexedPrimitives(.{
+    try encoder.drawIndexedPrimitives(.{
         .index_count = 3,
         .base_vertex = 1,
-    }));
+        .base_instance = 1,
+    });
 
     var indirect_buffer = Buffer{
         .backend = .vulkan,
         .tracker = &tracker,
         .length_value = 64,
+        .usage_value = .{ .indirect = true },
         .impl = undefined,
     };
-    try std.testing.expectError(core.CommandEncodingError.UnsupportedIndirectDraw, encoder.drawPrimitivesIndirect(&indirect_buffer, .{}));
+    try encoder.drawPrimitivesIndirect(&indirect_buffer, .{});
+    try encoder.drawIndexedPrimitivesIndirect(&indirect_buffer, .{});
+    try encoder.drawPrimitivesIndirect(&indirect_buffer, .{
+        .draw_count = 2,
+        .stride = 16,
+    });
+    try std.testing.expectEqual(core.ResourceUsageKind.indirect_buffer, indirect_buffer.currentUsage().?);
 
     const draws = [_]core.DrawPrimitivesDescriptor{.{ .vertex_count = 3 }};
-    try std.testing.expectError(core.CommandEncodingError.UnsupportedMultiDraw, encoder.drawPrimitivesMulti(.{
+    try encoder.drawPrimitivesMulti(.{
         .draws = draws[0..],
-    }));
+    });
+    const indexed_draws = [_]core.DrawIndexedPrimitivesDescriptor{.{ .index_count = 3 }};
+    try encoder.drawIndexedPrimitivesMulti(.{
+        .draws = indexed_draws[0..],
+    });
 
     try encoder.endEncoding();
 }
@@ -4413,9 +4657,9 @@ test "runtime render pass descriptor rejects invalid texture targets" {
     const transient_color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
         .options = .{ .transient = true },
     }};
-    try std.testing.expectError(RuntimeError.UnsupportedTransientAttachment, (RenderPassDescriptor{
+    try (RenderPassDescriptor{
         .color_attachments = transient_color_attachments[0..],
-    }).validateRuntime(.vulkan));
+    }).validateRuntime(.vulkan);
 
     const drawable_color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     try std.testing.expectError(RuntimeError.UnsupportedStencilAttachment, (RenderPassDescriptor{

@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalShaderModule = @import("shader_module.zig");
@@ -42,6 +43,14 @@ pub fn init(
 
 pub fn deinit(self: *MetalComputePipelineState) void {
     metal.vkmtl_metal_compute_pipeline_state_destroy(self.handle);
+}
+
+pub fn setLabel(self: *MetalComputePipelineState, label_value: ?[]const u8) void {
+    debug.ignore(metal.vkmtl_metal_compute_pipeline_state_set_label(
+        self.handle,
+        debug.labelPtr(label_value),
+        debug.labelLen(label_value),
+    ));
 }
 
 fn check(status: metal.vkmtl_metal_status) Error!void {

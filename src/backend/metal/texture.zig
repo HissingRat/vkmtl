@@ -1,4 +1,5 @@
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalTextureView = @import("texture_view.zig");
@@ -72,6 +73,14 @@ pub fn mipLevelCount(self: MetalTexture) u32 {
 
 pub fn sampleCount(self: MetalTexture) u32 {
     return self.sample_count_value;
+}
+
+pub fn setLabel(self: *MetalTexture, label_value: ?[]const u8) void {
+    debug.ignore(metal.vkmtl_metal_texture_set_label(
+        self.handle,
+        debug.labelPtr(label_value),
+        debug.labelLen(label_value),
+    ));
 }
 
 pub fn makeTextureView(self: *const MetalTexture, descriptor: core.TextureViewDescriptor) !MetalTextureView {

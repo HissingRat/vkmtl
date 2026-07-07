@@ -1,4 +1,5 @@
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalTexture = @import("texture.zig");
 
@@ -37,6 +38,14 @@ pub fn init(texture: *const MetalTexture, descriptor: core.TextureViewDescriptor
 
 pub fn deinit(self: *MetalTextureView) void {
     metal.vkmtl_metal_texture_view_destroy(self.handle);
+}
+
+pub fn setLabel(self: *MetalTextureView, label_value: ?[]const u8) void {
+    debug.ignore(metal.vkmtl_metal_texture_view_set_label(
+        self.handle,
+        debug.labelPtr(label_value),
+        debug.labelLen(label_value),
+    ));
 }
 
 fn viewDimension(dimension: core.TextureViewDimension) metal.vkmtl_metal_texture_view_dimension {

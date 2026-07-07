@@ -1,4 +1,5 @@
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 
@@ -49,6 +50,14 @@ pub fn deinit(self: *MetalBuffer) void {
 
 pub fn length(self: MetalBuffer) usize {
     return self.length_value;
+}
+
+pub fn setLabel(self: *MetalBuffer, label_value: ?[]const u8) void {
+    debug.ignore(metal.vkmtl_metal_buffer_set_label(
+        self.handle,
+        debug.labelPtr(label_value),
+        debug.labelLen(label_value),
+    ));
 }
 
 pub fn mapRange(self: *MetalBuffer, descriptor: core.BufferMapDescriptor) !MappedRange {

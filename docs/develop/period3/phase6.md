@@ -17,6 +17,7 @@ capability-gated.
 
 - Border colors are descriptor-level only until both backend mappings are
   implemented.
-- Anisotropy is gated by `DeviceFeatures.sampler_anisotropy`.
-- Compare samplers and border colors are also feature-gated and disabled by
-  default.
+- Anisotropy is gated by `DeviceFeatures.sampler_anisotropy` and
+  `DeviceLimits.max_sampler_anisotropy`, then lowered into native sampler
+  creation.
+- Compare samplers are feature-gated and lowered into native sampler creation.

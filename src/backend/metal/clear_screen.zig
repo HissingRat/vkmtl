@@ -216,6 +216,8 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
 
 fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.metal);
+    result.debug_markers = true;
+    result.sampler_anisotropy = true;
     result.argument_buffers = capabilities.argument_buffers != 0;
     result.descriptor_indexing = false;
     result.sparse_textures = capabilities.sparse_textures != 0;
@@ -228,11 +230,15 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
 
 fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
     _ = capabilities;
-    return core.defaultDeviceFeatures(.metal);
+    var result = core.defaultDeviceFeatures(.metal);
+    result.debug_markers = true;
+    result.sampler_anisotropy = true;
+    return result;
 }
 
 fn limitsFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceLimits {
     var result = core.defaultDeviceLimits(.metal);
+    result.max_sampler_anisotropy = 16;
     if (capabilities.max_threads_per_threadgroup_total != 0) {
         result.max_compute_threads_per_threadgroup_x = capabilities.max_threads_per_threadgroup_width;
         result.max_compute_threads_per_threadgroup_y = capabilities.max_threads_per_threadgroup_height;

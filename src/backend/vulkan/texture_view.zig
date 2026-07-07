@@ -50,6 +50,10 @@ pub fn deinit(self: *VulkanTextureView) void {
     self.gc.dev.destroyImageView(self.handle, null);
 }
 
+pub fn setLabel(self: *VulkanTextureView, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.image_view, GraphicsContext.debugObjectHandle(self.handle), label_value);
+}
+
 pub fn transitionLayout(self: *const VulkanTextureView, cmdbuf: vk.CommandBuffer, new_layout: vk.ImageLayout) void {
     const old_layout = self.layout.*;
     if (old_layout == new_layout) return;

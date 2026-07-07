@@ -18,10 +18,10 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.SamplerDescriptor) !Vul
         .address_mode_v = addressMode(descriptor.address_mode_v),
         .address_mode_w = addressMode(descriptor.address_mode_w),
         .mip_lod_bias = 0,
-        .anisotropy_enable = .false,
-        .max_anisotropy = 1,
-        .compare_enable = .false,
-        .compare_op = .always,
+        .anisotropy_enable = if (descriptor.max_anisotropy > 1) .true else .false,
+        .max_anisotropy = descriptor.max_anisotropy,
+        .compare_enable = if (descriptor.compare_function != null) .true else .false,
+        .compare_op = if (descriptor.compare_function) |compare| compareFunction(compare) else .always,
         .min_lod = descriptor.lod_min_clamp,
         .max_lod = descriptor.lod_max_clamp,
         .border_color = .float_transparent_black,
@@ -36,6 +36,10 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.SamplerDescriptor) !Vul
 
 pub fn deinit(self: *VulkanSamplerState) void {
     self.gc.dev.destroySampler(self.handle, null);
+}
+
+pub fn setLabel(self: *VulkanSamplerState, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.sampler, GraphicsContext.debugObjectHandle(self.handle), label_value);
 }
 
 fn filter(value: core.SamplerMinMagFilter) vk.Filter {
@@ -57,5 +61,18 @@ fn addressMode(value: core.SamplerAddressMode) vk.SamplerAddressMode {
         .clamp_to_edge => .clamp_to_edge,
         .repeat => .repeat,
         .mirror_repeat => .mirrored_repeat,
+    };
+}
+
+fn compareFunction(value: core.CompareFunction) vk.CompareOp {
+    return switch (value) {
+        .never => .never,
+        .less => .less,
+        .equal => .equal,
+        .less_equal => .less_or_equal,
+        .greater => .greater,
+        .not_equal => .not_equal,
+        .greater_equal => .greater_or_equal,
+        .always => .always,
     };
 }

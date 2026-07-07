@@ -57,6 +57,10 @@ pub fn length(self: VulkanBuffer) usize {
     return self.length_value;
 }
 
+pub fn setLabel(self: *VulkanBuffer, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.buffer, GraphicsContext.debugObjectHandle(self.handle), label_value);
+}
+
 pub fn mapRange(self: *VulkanBuffer, descriptor: core.BufferMapDescriptor) !MappedRange {
     if (!self.cpu_visible) return core.BufferError.BufferNotCpuVisible;
     try descriptor.validate(self.length_value);
@@ -113,6 +117,7 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
     if (usage.index) flags.index_buffer_bit = true;
     if (usage.uniform) flags.uniform_buffer_bit = true;
     if (usage.storage) flags.storage_buffer_bit = true;
+    if (usage.indirect) flags.indirect_buffer_bit = true;
 
     if (usage.isEmpty()) {
         flags.transfer_dst_bit = true;

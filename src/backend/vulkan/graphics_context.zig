@@ -31,6 +31,7 @@ allocator: Allocator,
 vkb: BaseWrapper,
 instance: Instance,
 debug_messenger: vk.DebugUtilsMessengerEXT,
+debug_utils_enabled: bool,
 surface: vk.SurfaceKHR,
 pdev: vk.PhysicalDevice,
 props: vk.PhysicalDeviceProperties,
@@ -48,6 +49,7 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     self.vkb = try loadBaseWrapper(surface_provider);
     try ensureBaseDispatchAvailable(self.vkb);
     self.debug_messenger = .null_handle;
+    self.debug_utils_enabled = false;
 
     const use_validation_layers = enable_validation_layers and try checkLayerSupport(&self.vkb, allocator);
 
@@ -105,6 +107,7 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
             },
             .pfn_user_callback = debugCallback,
         }, null);
+        self.debug_utils_enabled = true;
     }
 
     self.surface = try createSurface(self.instance, surface_provider);
@@ -128,6 +131,8 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     self.present_queue = Queue.init(self.dev, candidate.queues.present_family);
     self.mem_props = self.instance.getPhysicalDeviceMemoryProperties(self.pdev);
     self.native_features_value = try queryNativeFeatures(self.instance, self.pdev, allocator);
+    self.native_features_value.debug_labels = self.debug_utils_enabled;
+    self.native_features_value.debug_markers = self.debug_utils_enabled;
     self.features_value = queryUsableFeatures(self.native_features_value);
     self.limits_value = queryLimits(self.props, self.features_value);
     self.limits_value.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
@@ -175,6 +180,61 @@ pub fn formatCapabilities(self: GraphicsContext, format: core.TextureFormat) cor
     if (format == .automatic) return .{};
     const props = self.instance.getPhysicalDeviceFormatProperties(self.pdev, imageFormat(format));
     return formatCapabilitiesFromVulkanFeatures(props.optimal_tiling_features);
+}
+
+pub fn setDebugName(self: GraphicsContext, object_type: vk.ObjectType, object_handle: u64, label_value: ?[]const u8) void {
+    if (!self.debug_utils_enabled) return;
+    if (self.dev.wrapper.dispatch.vkSetDebugUtilsObjectNameEXT == null) return;
+
+    const label_z = if (label_value) |label|
+        self.allocator.dupeZ(u8, label) catch return
+    else
+        null;
+    defer if (label_z) |label| self.allocator.free(label);
+
+    self.dev.setDebugUtilsObjectNameEXT(&.{
+        .object_type = object_type,
+        .object_handle = object_handle,
+        .p_object_name = if (label_z) |label| label.ptr else null,
+    }) catch {};
+}
+
+pub fn beginDebugLabel(self: GraphicsContext, cmdbuf: vk.CommandBuffer, label_value: []const u8) void {
+    if (!self.debug_utils_enabled) return;
+    if (self.dev.wrapper.dispatch.vkCmdBeginDebugUtilsLabelEXT == null) return;
+
+    const label_z = self.allocator.dupeZ(u8, label_value) catch return;
+    defer self.allocator.free(label_z);
+    const info = debugLabelInfo(label_z.ptr);
+    self.dev.cmdBeginDebugUtilsLabelEXT(cmdbuf, &info);
+}
+
+pub fn endDebugLabel(self: GraphicsContext, cmdbuf: vk.CommandBuffer) void {
+    if (!self.debug_utils_enabled) return;
+    if (self.dev.wrapper.dispatch.vkCmdEndDebugUtilsLabelEXT == null) return;
+
+    self.dev.cmdEndDebugUtilsLabelEXT(cmdbuf);
+}
+
+pub fn insertDebugLabel(self: GraphicsContext, cmdbuf: vk.CommandBuffer, label_value: []const u8) void {
+    if (!self.debug_utils_enabled) return;
+    if (self.dev.wrapper.dispatch.vkCmdInsertDebugUtilsLabelEXT == null) return;
+
+    const label_z = self.allocator.dupeZ(u8, label_value) catch return;
+    defer self.allocator.free(label_z);
+    const info = debugLabelInfo(label_z.ptr);
+    self.dev.cmdInsertDebugUtilsLabelEXT(cmdbuf, &info);
+}
+
+pub fn debugObjectHandle(handle: anytype) u64 {
+    return @intCast(@intFromEnum(handle));
+}
+
+fn debugLabelInfo(label: [*:0]const u8) vk.DebugUtilsLabelEXT {
+    return .{
+        .p_label_name = label,
+        .color = .{ 0.2, 0.6, 1.0, 1.0 },
+    };
 }
 
 pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
@@ -269,7 +329,7 @@ fn queryNativeFeatures(instance: Instance, pdev: vk.PhysicalDevice, allocator: A
 fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.vulkan);
 
-    result.sampler_anisotropy = false;
+    result.sampler_anisotropy = native_features.sampler_anisotropy;
     result.independent_blend = false;
     result.tessellation = false;
     result.wireframe_fill_mode = false;
@@ -290,6 +350,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures
 
     result.native_handles = native_features.native_handles;
     result.debug_labels = native_features.debug_labels;
+    result.debug_markers = native_features.debug_markers;
     return result;
 }
 

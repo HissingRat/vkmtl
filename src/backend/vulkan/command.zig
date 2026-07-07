@@ -89,6 +89,24 @@ pub const CommandBuffer = struct {
         self.cmdbuf = .null_handle;
     }
 
+    pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
+        self.gc.setDebugName(.command_buffer, GraphicsContext.debugObjectHandle(self.cmdbuf), label_value);
+    }
+
+    pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) void {
+        _ = self;
+        _ = label_value;
+    }
+
+    pub fn popDebugGroup(self: *CommandBuffer) void {
+        _ = self;
+    }
+
+    pub fn insertDebugSignpost(self: *CommandBuffer, label_value: []const u8) void {
+        _ = self;
+        _ = label_value;
+    }
+
     pub fn makeRenderCommandEncoder(
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
@@ -426,6 +444,23 @@ pub const RenderCommandEncoder = struct {
     index_buffer: vk.Buffer = .null_handle,
     pipeline_layout: vk.PipelineLayout = .null_handle,
 
+    pub fn setLabel(self: *RenderCommandEncoder, label_value: ?[]const u8) void {
+        _ = self;
+        _ = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *RenderCommandEncoder, label_value: []const u8) void {
+        self.gc.beginDebugLabel(self.cmdbuf, label_value);
+    }
+
+    pub fn popDebugGroup(self: *RenderCommandEncoder) void {
+        self.gc.endDebugLabel(self.cmdbuf);
+    }
+
+    pub fn insertDebugSignpost(self: *RenderCommandEncoder, label_value: []const u8) void {
+        self.gc.insertDebugLabel(self.cmdbuf, label_value);
+    }
+
     pub fn setRenderPipelineState(self: *RenderCommandEncoder, pipeline: *VulkanRenderPipelineState) !void {
         if (pipeline.uses_depth != self.uses_depth_pass) return core.CommandEncodingError.DepthStateRenderPassMismatch;
         if (pipeline.sample_count != self.sample_count) return core.CommandEncodingError.SampleCountRenderPassMismatch;
@@ -466,6 +501,57 @@ pub const RenderCommandEncoder = struct {
         );
     }
 
+    pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
+        try viewport.validate();
+        self.gc.dev.cmdSetViewport(self.cmdbuf, 0, &.{.{
+            .x = viewport.x,
+            .y = viewport.y,
+            .width = viewport.width,
+            .height = viewport.height,
+            .min_depth = viewport.min_depth,
+            .max_depth = viewport.max_depth,
+        }});
+    }
+
+    pub fn setScissorRect(self: *RenderCommandEncoder, rect: core.ScissorRect) !void {
+        try rect.validate();
+        self.gc.dev.cmdSetScissor(self.cmdbuf, 0, &.{.{
+            .offset = .{
+                .x = @intCast(rect.x),
+                .y = @intCast(rect.y),
+            },
+            .extent = .{
+                .width = rect.width,
+                .height = rect.height,
+            },
+        }});
+    }
+
+    pub fn setBlendColor(self: *RenderCommandEncoder, color: core.BlendColor) !void {
+        try color.validate();
+        const constants = [4]f32{ color.red, color.green, color.blue, color.alpha };
+        self.gc.dev.cmdSetBlendConstants(self.cmdbuf, &constants);
+    }
+
+    pub fn setStencilReference(self: *RenderCommandEncoder, reference: core.StencilReference) !void {
+        try reference.validate();
+        self.gc.dev.cmdSetStencilReference(
+            self.cmdbuf,
+            .{ .front_bit = true, .back_bit = true },
+            reference.value,
+        );
+    }
+
+    pub fn setDepthBias(self: *RenderCommandEncoder, descriptor: core.DepthBiasDescriptor) !void {
+        try descriptor.validate();
+        self.gc.dev.cmdSetDepthBias(
+            self.cmdbuf,
+            descriptor.constant,
+            descriptor.clamp,
+            descriptor.slope,
+        );
+    }
+
     pub fn drawPrimitives(
         self: *RenderCommandEncoder,
         descriptor: core.DrawPrimitivesDescriptor,
@@ -476,7 +562,7 @@ pub const RenderCommandEncoder = struct {
             descriptor.vertex_count,
             descriptor.instance_count,
             descriptor.vertex_start,
-            0,
+            descriptor.base_instance,
         );
     }
 
@@ -496,8 +582,46 @@ pub const RenderCommandEncoder = struct {
             descriptor.index_count,
             descriptor.instance_count,
             0,
+            descriptor.base_vertex,
+            descriptor.base_instance,
+        );
+    }
+
+    pub fn drawPrimitivesIndirect(
+        self: *RenderCommandEncoder,
+        indirect_buffer: *const VulkanBuffer,
+        descriptor: core.DrawPrimitivesIndirectDescriptor,
+    ) !void {
+        try descriptor.validate();
+        if (descriptor.draw_count != 1) return core.CommandEncodingError.UnsupportedMultiDraw;
+        self.gc.dev.cmdDrawIndirect(
+            self.cmdbuf,
+            indirect_buffer.handle,
+            descriptor.buffer_offset,
+            descriptor.draw_count,
+            indirectStride(descriptor.stride, 16),
+        );
+    }
+
+    pub fn drawIndexedPrimitivesIndirect(
+        self: *RenderCommandEncoder,
+        indirect_buffer: *const VulkanBuffer,
+        descriptor: core.DrawIndexedPrimitivesIndirectDescriptor,
+    ) !void {
+        try descriptor.validate();
+        if (descriptor.draw_count != 1) return core.CommandEncodingError.UnsupportedMultiDraw;
+        self.gc.dev.cmdBindIndexBuffer(
+            self.cmdbuf,
+            self.index_buffer,
             0,
-            0,
+            indexType(descriptor.index_type),
+        );
+        self.gc.dev.cmdDrawIndexedIndirect(
+            self.cmdbuf,
+            indirect_buffer.handle,
+            descriptor.buffer_offset,
+            descriptor.draw_count,
+            indirectStride(descriptor.stride, 20),
         );
     }
 
@@ -513,6 +637,23 @@ pub const RenderCommandEncoder = struct {
 pub const BlitCommandEncoder = struct {
     gc: *const GraphicsContext,
     cmdbuf: vk.CommandBuffer,
+
+    pub fn setLabel(self: *BlitCommandEncoder, label_value: ?[]const u8) void {
+        _ = self;
+        _ = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *BlitCommandEncoder, label_value: []const u8) void {
+        self.gc.beginDebugLabel(self.cmdbuf, label_value);
+    }
+
+    pub fn popDebugGroup(self: *BlitCommandEncoder) void {
+        self.gc.endDebugLabel(self.cmdbuf);
+    }
+
+    pub fn insertDebugSignpost(self: *BlitCommandEncoder, label_value: []const u8) void {
+        self.gc.insertDebugLabel(self.cmdbuf, label_value);
+    }
 
     pub fn copyBufferToBuffer(
         self: *BlitCommandEncoder,
@@ -565,6 +706,48 @@ pub const BlitCommandEncoder = struct {
         source.layout = old_layout;
     }
 
+    pub fn copyTextureToTexture(
+        self: *BlitCommandEncoder,
+        source: *VulkanTexture,
+        destination: *VulkanTexture,
+        resolved: core.ResolvedTextureTextureCopy,
+    ) !void {
+        const old_source_layout = source.layout;
+        const old_destination_layout = destination.layout;
+        source.transitionLayout(self.cmdbuf, old_source_layout, .transfer_src_optimal);
+        destination.transitionLayout(self.cmdbuf, old_destination_layout, .transfer_dst_optimal);
+        self.gc.dev.cmdCopyImage(
+            self.cmdbuf,
+            source.handle,
+            .transfer_src_optimal,
+            destination.handle,
+            .transfer_dst_optimal,
+            &.{imageCopy(source, destination, resolved)},
+        );
+        source.transitionLayout(self.cmdbuf, .transfer_src_optimal, old_source_layout);
+        destination.transitionLayout(self.cmdbuf, .transfer_dst_optimal, .shader_read_only_optimal);
+        source.layout = old_source_layout;
+        destination.layout = .shader_read_only_optimal;
+    }
+
+    pub fn fillBuffer(
+        self: *BlitCommandEncoder,
+        buffer: *const VulkanBuffer,
+        descriptor: core.FillBufferDescriptor,
+    ) !void {
+        if (descriptor.offset % 4 != 0 or descriptor.size % 4 != 0) {
+            return core.CommandEncodingError.UnsupportedFillBuffer;
+        }
+        const repeated = @as(u32, descriptor.value) * 0x01010101;
+        self.gc.dev.cmdFillBuffer(
+            self.cmdbuf,
+            buffer.handle,
+            descriptor.offset,
+            descriptor.size,
+            repeated,
+        );
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         try self.gc.dev.endCommandBuffer(self.cmdbuf);
     }
@@ -574,6 +757,23 @@ pub const ComputeCommandEncoder = struct {
     gc: *const GraphicsContext,
     cmdbuf: vk.CommandBuffer,
     pipeline_layout: vk.PipelineLayout = .null_handle,
+
+    pub fn setLabel(self: *ComputeCommandEncoder, label_value: ?[]const u8) void {
+        _ = self;
+        _ = label_value;
+    }
+
+    pub fn pushDebugGroup(self: *ComputeCommandEncoder, label_value: []const u8) void {
+        self.gc.beginDebugLabel(self.cmdbuf, label_value);
+    }
+
+    pub fn popDebugGroup(self: *ComputeCommandEncoder) void {
+        self.gc.endDebugLabel(self.cmdbuf);
+    }
+
+    pub fn insertDebugSignpost(self: *ComputeCommandEncoder, label_value: []const u8) void {
+        self.gc.insertDebugLabel(self.cmdbuf, label_value);
+    }
 
     pub fn setComputePipelineState(self: *ComputeCommandEncoder, pipeline: *VulkanComputePipelineState) !void {
         self.gc.dev.cmdBindPipeline(self.cmdbuf, .compute, pipeline.handle);
@@ -616,6 +816,18 @@ pub const ComputeCommandEncoder = struct {
         );
     }
 
+    pub fn dispatchThreadgroupsIndirect(
+        self: *ComputeCommandEncoder,
+        indirect_buffer: *const VulkanBuffer,
+        descriptor: core.DispatchThreadgroupsIndirectDescriptor,
+    ) !void {
+        self.gc.dev.cmdDispatchIndirect(
+            self.cmdbuf,
+            indirect_buffer.handle,
+            descriptor.offset,
+        );
+    }
+
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
         try self.gc.dev.endCommandBuffer(self.cmdbuf);
     }
@@ -643,6 +855,49 @@ fn bufferImageCopy(texture: *const VulkanTexture, resolved: core.ResolvedBufferT
             .depth = if (texture.descriptor.dimension == .three_d) resolved.region.size.depth else 1,
         },
     };
+}
+
+fn imageCopy(
+    source: *const VulkanTexture,
+    destination: *const VulkanTexture,
+    resolved: core.ResolvedTextureTextureCopy,
+) vk.ImageCopy {
+    return .{
+        .src_subresource = imageCopySubresource(source, resolved.source_mip_level, resolved.source_slice),
+        .src_offset = imageCopyOffset(source.descriptor.dimension, resolved.source_region.origin),
+        .dst_subresource = imageCopySubresource(destination, resolved.destination_mip_level, resolved.destination_slice),
+        .dst_offset = imageCopyOffset(destination.descriptor.dimension, resolved.destination_origin),
+        .extent = imageCopyExtent(source.descriptor.dimension, resolved.source_region.size),
+    };
+}
+
+fn imageCopySubresource(texture: *const VulkanTexture, mip_level: u32, slice: u32) vk.ImageSubresourceLayers {
+    return .{
+        .aspect_mask = .{ .color_bit = true },
+        .mip_level = mip_level,
+        .base_array_layer = if (texture.descriptor.dimension == .three_d) 0 else slice,
+        .layer_count = 1,
+    };
+}
+
+fn imageCopyOffset(dimension: core.TextureDimension, origin: core.Origin3D) vk.Offset3D {
+    return .{
+        .x = @intCast(origin.x),
+        .y = if (dimension == .one_d) 0 else @intCast(origin.y),
+        .z = if (dimension == .three_d) @intCast(origin.z) else 0,
+    };
+}
+
+fn imageCopyExtent(dimension: core.TextureDimension, size: core.Extent3D) vk.Extent3D {
+    return .{
+        .width = size.width,
+        .height = if (dimension == .one_d) 1 else size.height,
+        .depth = if (dimension == .three_d) size.depth else 1,
+    };
+}
+
+fn indirectStride(stride: u32, default_stride: u32) u32 {
+    return if (stride == 0) default_stride else stride;
 }
 
 fn indexType(index_type: core.IndexType) vk.IndexType {

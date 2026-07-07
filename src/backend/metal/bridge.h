@@ -202,6 +202,11 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
 );
 void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer);
 size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer);
+vkmtl_metal_status vkmtl_metal_buffer_set_label(
+    vkmtl_metal_buffer *buffer,
+    const char *label,
+    size_t label_len
+);
 vkmtl_metal_status vkmtl_metal_buffer_contents(
     vkmtl_metal_buffer *buffer,
     void **out_contents
@@ -242,6 +247,11 @@ unsigned int vkmtl_metal_texture_width(const vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_height(const vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_depth_or_array_layers(const vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_mip_level_count(const vkmtl_metal_texture *texture);
+vkmtl_metal_status vkmtl_metal_texture_set_label(
+    vkmtl_metal_texture *texture,
+    const char *label,
+    size_t label_len
+);
 vkmtl_metal_status vkmtl_metal_texture_replace_region(
     vkmtl_metal_texture *texture,
     unsigned int x,
@@ -269,6 +279,11 @@ vkmtl_metal_status vkmtl_metal_texture_view_create(
     vkmtl_metal_texture_view **out_view
 );
 void vkmtl_metal_texture_view_destroy(vkmtl_metal_texture_view *view);
+vkmtl_metal_status vkmtl_metal_texture_view_set_label(
+    vkmtl_metal_texture_view *view,
+    const char *label,
+    size_t label_len
+);
 
 vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_clear_screen *owner,
@@ -280,9 +295,17 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_address_mode address_mode_w,
     float lod_min_clamp,
     float lod_max_clamp,
+    unsigned int compare_enabled,
+    vkmtl_metal_compare_function compare_function,
+    float max_anisotropy,
     vkmtl_metal_sampler_state **out_sampler
 );
 void vkmtl_metal_sampler_state_destroy(vkmtl_metal_sampler_state *sampler);
+vkmtl_metal_status vkmtl_metal_sampler_state_set_label(
+    vkmtl_metal_sampler_state *sampler,
+    const char *label,
+    size_t label_len
+);
 
 vkmtl_metal_status vkmtl_metal_shader_module_create_msl(
     vkmtl_metal_clear_screen *owner,
@@ -291,6 +314,11 @@ vkmtl_metal_status vkmtl_metal_shader_module_create_msl(
     vkmtl_metal_shader_module **out_shader
 );
 void vkmtl_metal_shader_module_destroy(vkmtl_metal_shader_module *shader);
+vkmtl_metal_status vkmtl_metal_shader_module_set_label(
+    vkmtl_metal_shader_module *shader,
+    const char *label,
+    size_t label_len
+);
 
 vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
@@ -312,6 +340,11 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_render_pipeline_state **out_pipeline
 );
 void vkmtl_metal_render_pipeline_state_destroy(vkmtl_metal_render_pipeline_state *pipeline);
+vkmtl_metal_status vkmtl_metal_render_pipeline_state_set_label(
+    vkmtl_metal_render_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+);
 
 vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
@@ -321,12 +354,35 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     vkmtl_metal_compute_pipeline_state **out_pipeline
 );
 void vkmtl_metal_compute_pipeline_state_destroy(vkmtl_metal_compute_pipeline_state *pipeline);
+vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
+    vkmtl_metal_compute_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+);
 
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer **out_command_buffer
 );
 void vkmtl_metal_command_buffer_destroy(vkmtl_metal_command_buffer *command_buffer);
+vkmtl_metal_status vkmtl_metal_command_buffer_set_label(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_push_debug_group(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_pop_debug_group(
+    vkmtl_metal_command_buffer *command_buffer
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_insert_debug_signpost(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+);
 vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
     vkmtl_metal_command_buffer *command_buffer
 );
@@ -349,6 +405,24 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     vkmtl_metal_render_command_encoder **out_encoder
 );
 void vkmtl_metal_render_command_encoder_destroy(vkmtl_metal_render_command_encoder *encoder);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_label(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_push_debug_group(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_pop_debug_group(
+    vkmtl_metal_render_command_encoder *encoder
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_insert_debug_signpost(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_pipeline(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_render_pipeline_state *pipeline
@@ -389,12 +463,46 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_sampler_state
     vkmtl_metal_sampler_state *sampler,
     unsigned int index
 );
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_viewport(
+    vkmtl_metal_render_command_encoder *encoder,
+    double x,
+    double y,
+    double width,
+    double height,
+    double near_z,
+    double far_z
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_scissor_rect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int x,
+    unsigned int y,
+    unsigned int width,
+    unsigned int height
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_blend_color(
+    vkmtl_metal_render_command_encoder *encoder,
+    float red,
+    float green,
+    float blue,
+    float alpha
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_stencil_reference(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int reference
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
+    vkmtl_metal_render_command_encoder *encoder,
+    float constant,
+    float slope,
+    float clamp
+);
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     vkmtl_metal_render_command_encoder *encoder,
     unsigned int primitive_type,
     unsigned int vertex_start,
     unsigned int vertex_count,
-    unsigned int instance_count
+    unsigned int instance_count,
+    unsigned int base_instance
 );
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     vkmtl_metal_render_command_encoder *encoder,
@@ -402,7 +510,22 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     unsigned int index_type,
     unsigned int index_count,
     size_t index_buffer_offset,
-    unsigned int instance_count
+    unsigned int instance_count,
+    int base_vertex,
+    unsigned int base_instance
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives_indirect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives_indirect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    unsigned int index_type,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset
 );
 vkmtl_metal_status vkmtl_metal_render_command_encoder_end_encoding(
     vkmtl_metal_render_command_encoder *encoder
@@ -413,6 +536,24 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_create(
     vkmtl_metal_compute_command_encoder **out_encoder
 );
 void vkmtl_metal_compute_command_encoder_destroy(vkmtl_metal_compute_command_encoder *encoder);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_label(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_push_debug_group(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_pop_debug_group(
+    vkmtl_metal_compute_command_encoder *encoder
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_insert_debug_signpost(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_pipeline(
     vkmtl_metal_compute_command_encoder *encoder,
     vkmtl_metal_compute_pipeline_state *pipeline
@@ -442,6 +583,14 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups(
     unsigned int threads_per_threadgroup_y,
     unsigned int threads_per_threadgroup_z
 );
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups_indirect(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset,
+    unsigned int threads_per_threadgroup_x,
+    unsigned int threads_per_threadgroup_y,
+    unsigned int threads_per_threadgroup_z
+);
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_end_encoding(
     vkmtl_metal_compute_command_encoder *encoder
 );
@@ -451,6 +600,24 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_create(
     vkmtl_metal_blit_command_encoder **out_encoder
 );
 void vkmtl_metal_blit_command_encoder_destroy(vkmtl_metal_blit_command_encoder *encoder);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_set_label(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_push_debug_group(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_pop_debug_group(
+    vkmtl_metal_blit_command_encoder *encoder
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_insert_debug_signpost(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+);
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_buffer(
     vkmtl_metal_blit_command_encoder *encoder,
     vkmtl_metal_buffer *source,
@@ -490,6 +657,31 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_buffer(
     unsigned int depth,
     unsigned int mip_level,
     unsigned int slice
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *source,
+    vkmtl_metal_texture *destination,
+    unsigned int source_x,
+    unsigned int source_y,
+    unsigned int source_z,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int source_mip_level,
+    unsigned int source_slice,
+    unsigned int destination_x,
+    unsigned int destination_y,
+    unsigned int destination_z,
+    unsigned int destination_mip_level,
+    unsigned int destination_slice
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_fill_buffer(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    size_t size,
+    unsigned int value
 );
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_end_encoding(
     vkmtl_metal_blit_command_encoder *encoder

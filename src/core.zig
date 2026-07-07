@@ -237,6 +237,7 @@ pub const ResourceUsageKind = enum {
     storage_buffer_read,
     storage_buffer_write,
     sampled_texture,
+    indirect_buffer,
     storage_texture_read,
     storage_texture_write,
     render_attachment_read,
@@ -252,6 +253,7 @@ pub const ResourceUsageKind = enum {
             .uniform_buffer,
             .storage_buffer_read,
             .sampled_texture,
+            .indirect_buffer,
             .storage_texture_read,
             .render_attachment_read,
             .copy_source,
@@ -1451,6 +1453,12 @@ pub fn defaultDeviceFeatures(_: Backend) DeviceFeatures {
     return .{
         .native_handles = true,
         .debug_labels = true,
+        .sampler_compare = true,
+        .sampler_anisotropy = true,
+        .draw_base_vertex = true,
+        .draw_base_instance = true,
+        .indirect_draw = true,
+        .compute_dispatch_indirect = true,
     };
 }
 
@@ -2972,6 +2980,9 @@ pub const DispatchThreadsDescriptor = struct {
 
 pub const DispatchThreadgroupsIndirectDescriptor = struct {
     offset: u64 = 0,
+    threads_per_threadgroup_x: u32 = 1,
+    threads_per_threadgroup_y: u32 = 1,
+    threads_per_threadgroup_z: u32 = 1,
 
     pub fn validate(
         self: DispatchThreadgroupsIndirectDescriptor,
@@ -2987,6 +2998,14 @@ pub const DispatchThreadgroupsIndirectDescriptor = struct {
             return CommandEncodingError.InvalidDispatchIndirectOffset;
         };
         if (end > buffer_length) return CommandEncodingError.InvalidDispatchIndirectOffset;
+        try (DispatchThreadgroupsDescriptor{
+            .threadgroup_count_x = 1,
+            .threadgroup_count_y = 1,
+            .threadgroup_count_z = 1,
+            .threads_per_threadgroup_x = self.threads_per_threadgroup_x,
+            .threads_per_threadgroup_y = self.threads_per_threadgroup_y,
+            .threads_per_threadgroup_z = self.threads_per_threadgroup_z,
+        }).validateForLimits(limits);
     }
 };
 
@@ -8661,18 +8680,22 @@ test "sampler descriptor validates lod range" {
 }
 
 test "sampler descriptor validates feature-gated fields" {
-    const default_features = defaultDeviceFeatures(.metal);
+    const disabled_features = DeviceFeatures{};
     const default_limits = defaultDeviceLimits(.metal);
 
     try std.testing.expectError(SamplerError.UnsupportedCompareSampler, (SamplerDescriptor{
         .compare_function = .less,
-    }).validateForDevice(default_features, default_limits));
+    }).validateForDevice(disabled_features, default_limits));
     try std.testing.expectError(SamplerError.UnsupportedSamplerAnisotropy, (SamplerDescriptor{
         .max_anisotropy = 4,
-    }).validateForDevice(default_features, default_limits));
+    }).validateForDevice(disabled_features, default_limits));
     try std.testing.expectError(SamplerError.UnsupportedSamplerBorderColor, (SamplerDescriptor{
         .border_color = .opaque_black,
-    }).validateForDevice(default_features, default_limits));
+    }).validateForDevice(disabled_features, default_limits));
+
+    try (SamplerDescriptor{
+        .compare_function = .less,
+    }).validateForDevice(defaultDeviceFeatures(.metal), default_limits);
 
     try (SamplerDescriptor{
         .max_anisotropy = 4,
@@ -9434,8 +9457,8 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.texture_arrays);
     try std.testing.expect(features.cube_textures);
     try std.testing.expect(features.multisample_textures);
-    try std.testing.expect(!features.sampler_compare);
-    try std.testing.expect(!features.sampler_anisotropy);
+    try std.testing.expect(features.sampler_compare);
+    try std.testing.expect(features.sampler_anisotropy);
     try std.testing.expect(!features.sampler_border_color);
     try std.testing.expect(!features.heaps);
     try std.testing.expect(!features.multi_surface);

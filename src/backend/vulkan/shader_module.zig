@@ -42,3 +42,7 @@ fn initWords(gc: *const GraphicsContext, words: []const u32) !VulkanShaderModule
 pub fn deinit(self: *VulkanShaderModule) void {
     self.gc.dev.destroyShaderModule(self.handle, null);
 }
+
+pub fn setLabel(self: *VulkanShaderModule, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.shader_module, GraphicsContext.debugObjectHandle(self.handle), label_value);
+}

@@ -126,7 +126,13 @@ pub fn init(
         .blend_constants = [_]f32{ 0, 0, 0, 0 },
     };
 
-    const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor };
+    const dynamic_states = [_]vk.DynamicState{
+        .viewport,
+        .scissor,
+        .blend_constants,
+        .stencil_reference,
+        .depth_bias,
+    };
     const dynamic_state = vk.PipelineDynamicStateCreateInfo{
         .flags = .{},
         .dynamic_state_count = dynamic_states.len,
@@ -188,6 +194,10 @@ pub fn deinit(self: *VulkanRenderPipelineState) void {
     self.gc.dev.destroyRenderPass(self.render_pass, null);
     self.gc.dev.destroyPipelineLayout(self.layout, null);
     destroyBindGroupLayouts(self.allocator, self.bind_group_layouts);
+}
+
+pub fn setLabel(self: *VulkanRenderPipelineState, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.pipeline, GraphicsContext.debugObjectHandle(self.handle), label_value);
 }
 
 fn createRenderPassForDescriptor(

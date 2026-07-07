@@ -71,6 +71,10 @@ pub fn deinit(self: *VulkanComputePipelineState) void {
     destroyBindGroupLayouts(self.allocator, self.bind_group_layouts);
 }
 
+pub fn setLabel(self: *VulkanComputePipelineState, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.pipeline, GraphicsContext.debugObjectHandle(self.handle), label_value);
+}
+
 fn makeBindGroupLayouts(
     gc: *const GraphicsContext,
     allocator: std.mem.Allocator,

@@ -5,7 +5,9 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <math.h>
 #import <stdio.h>
+#import <stdint.h>
 #import <stdlib.h>
 #import <string.h>
 
@@ -77,6 +79,104 @@ struct vkmtl_metal_blit_command_encoder {
 struct vkmtl_metal_compute_command_encoder {
     id<MTLComputeCommandEncoder> encoder;
 };
+
+static NSString *vkmtl_new_string_from_bytes(const char *bytes, size_t len) {
+    if (bytes == NULL) {
+        return nil;
+    }
+    return [[NSString alloc]
+        initWithBytes:bytes
+               length:len
+             encoding:NSUTF8StringEncoding];
+}
+
+static vkmtl_metal_status vkmtl_set_objc_label(
+    id object,
+    const char *label,
+    size_t label_len,
+    vkmtl_metal_status invalid_status
+) {
+    if (object == nil) {
+        return invalid_status;
+    }
+
+    @autoreleasepool {
+        NSString *label_string = vkmtl_new_string_from_bytes(label, label_len);
+        if (label != NULL && label_string == nil) {
+            return invalid_status;
+        }
+
+        if ([object respondsToSelector:@selector(setLabel:)]) {
+            [object setLabel:label_string];
+        }
+        [label_string release];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+static vkmtl_metal_status vkmtl_push_objc_debug_group(
+    id object,
+    const char *label,
+    size_t label_len,
+    vkmtl_metal_status invalid_status
+) {
+    if (object == nil || label == NULL || label_len == 0) {
+        return invalid_status;
+    }
+
+    @autoreleasepool {
+        NSString *label_string = vkmtl_new_string_from_bytes(label, label_len);
+        if (label_string == nil) {
+            return invalid_status;
+        }
+
+        if ([object respondsToSelector:@selector(pushDebugGroup:)]) {
+            [object pushDebugGroup:label_string];
+        }
+        [label_string release];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+static vkmtl_metal_status vkmtl_pop_objc_debug_group(
+    id object,
+    vkmtl_metal_status invalid_status
+) {
+    if (object == nil) {
+        return invalid_status;
+    }
+
+    @autoreleasepool {
+        if ([object respondsToSelector:@selector(popDebugGroup)]) {
+            [object popDebugGroup];
+        }
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+static vkmtl_metal_status vkmtl_insert_objc_debug_signpost(
+    id object,
+    const char *label,
+    size_t label_len,
+    vkmtl_metal_status invalid_status
+) {
+    if (object == nil || label == NULL || label_len == 0) {
+        return invalid_status;
+    }
+
+    @autoreleasepool {
+        NSString *label_string = vkmtl_new_string_from_bytes(label, label_len);
+        if (label_string == nil) {
+            return invalid_status;
+        }
+
+        if ([object respondsToSelector:@selector(insertDebugSignpost:)]) {
+            [object insertDebugSignpost:label_string];
+        }
+        [label_string release];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
 
 static id<MTLTexture> vkmtl_new_depth_texture(
     id<MTLDevice> device,
@@ -684,6 +784,22 @@ size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer) {
     return buffer->length;
 }
 
+vkmtl_metal_status vkmtl_metal_buffer_set_label(
+    vkmtl_metal_buffer *buffer,
+    const char *label,
+    size_t label_len
+) {
+    if (buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    return vkmtl_set_objc_label(
+        buffer->buffer,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_BUFFER
+    );
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_contents(
     vkmtl_metal_buffer *buffer,
     void **out_contents
@@ -906,6 +1022,22 @@ unsigned int vkmtl_metal_texture_mip_level_count(const vkmtl_metal_texture *text
     return texture->mip_level_count;
 }
 
+vkmtl_metal_status vkmtl_metal_texture_set_label(
+    vkmtl_metal_texture *texture,
+    const char *label,
+    size_t label_len
+) {
+    if (texture == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+    }
+    return vkmtl_set_objc_label(
+        texture->texture,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_TEXTURE
+    );
+}
+
 vkmtl_metal_status vkmtl_metal_texture_replace_region(
     vkmtl_metal_texture *texture,
     unsigned int x,
@@ -1015,6 +1147,22 @@ void vkmtl_metal_texture_view_destroy(vkmtl_metal_texture_view *view) {
     }
 }
 
+vkmtl_metal_status vkmtl_metal_texture_view_set_label(
+    vkmtl_metal_texture_view *view,
+    const char *label,
+    size_t label_len
+) {
+    if (view == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+    }
+    return vkmtl_set_objc_label(
+        view->texture,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW
+    );
+}
+
 vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_filter min_filter,
@@ -1025,6 +1173,9 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_address_mode address_mode_w,
     float lod_min_clamp,
     float lod_max_clamp,
+    unsigned int compare_enabled,
+    vkmtl_metal_compare_function compare_function,
+    float max_anisotropy,
     vkmtl_metal_sampler_state **out_sampler
 ) {
     if (out_sampler == NULL) {
@@ -1050,6 +1201,10 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
         descriptor.rAddressMode = vkmtl_sampler_address_mode(address_mode_w);
         descriptor.lodMinClamp = lod_min_clamp;
         descriptor.lodMaxClamp = lod_max_clamp;
+        if (compare_enabled != 0) {
+            descriptor.compareFunction = vkmtl_compare_function(compare_function);
+        }
+        descriptor.maxAnisotropy = (NSUInteger)fmaxf(1.0f, floorf(max_anisotropy));
 
         id<MTLSamplerState> metal_sampler = [owner->device newSamplerStateWithDescriptor:descriptor];
         [descriptor release];
@@ -1078,6 +1233,22 @@ void vkmtl_metal_sampler_state_destroy(vkmtl_metal_sampler_state *sampler) {
         [sampler->sampler release];
         free(sampler);
     }
+}
+
+vkmtl_metal_status vkmtl_metal_sampler_state_set_label(
+    vkmtl_metal_sampler_state *sampler,
+    const char *label,
+    size_t label_len
+) {
+    if (sampler == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_SAMPLER;
+    }
+    return vkmtl_set_objc_label(
+        sampler->sampler,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_SAMPLER
+    );
 }
 
 vkmtl_metal_status vkmtl_metal_shader_module_create_msl(
@@ -1136,6 +1307,22 @@ void vkmtl_metal_shader_module_destroy(vkmtl_metal_shader_module *shader) {
         [shader->library release];
         free(shader);
     }
+}
+
+vkmtl_metal_status vkmtl_metal_shader_module_set_label(
+    vkmtl_metal_shader_module *shader,
+    const char *label,
+    size_t label_len
+) {
+    if (shader == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_SHADER;
+    }
+    return vkmtl_set_objc_label(
+        shader->library,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_SHADER
+    );
 }
 
 vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
@@ -1317,6 +1504,22 @@ void vkmtl_metal_render_pipeline_state_destroy(vkmtl_metal_render_pipeline_state
     }
 }
 
+vkmtl_metal_status vkmtl_metal_render_pipeline_state_set_label(
+    vkmtl_metal_render_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+) {
+    if (pipeline == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    }
+    return vkmtl_set_objc_label(
+        pipeline->pipeline,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_PIPELINE
+    );
+}
+
 vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_shader_module *compute_shader,
@@ -1385,6 +1588,22 @@ void vkmtl_metal_compute_pipeline_state_destroy(vkmtl_metal_compute_pipeline_sta
     }
 }
 
+vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
+    vkmtl_metal_compute_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+) {
+    if (pipeline == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    }
+    return vkmtl_set_objc_label(
+        pipeline->pipeline,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_PIPELINE
+    );
+}
+
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer **out_command_buffer
@@ -1426,6 +1645,66 @@ void vkmtl_metal_command_buffer_destroy(vkmtl_metal_command_buffer *command_buff
         [command_buffer->command_buffer release];
         free(command_buffer);
     }
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_set_label(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+) {
+    if (command_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_set_objc_label(
+        command_buffer->command_buffer,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_push_debug_group(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+) {
+    if (command_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_push_objc_debug_group(
+        command_buffer->command_buffer,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_pop_debug_group(
+    vkmtl_metal_command_buffer *command_buffer
+) {
+    if (command_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_pop_objc_debug_group(
+        command_buffer->command_buffer,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_insert_debug_signpost(
+    vkmtl_metal_command_buffer *command_buffer,
+    const char *label,
+    size_t label_len
+) {
+    if (command_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_insert_objc_debug_signpost(
+        command_buffer->command_buffer,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
 }
 
 vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
@@ -1566,6 +1845,66 @@ void vkmtl_metal_render_command_encoder_destroy(vkmtl_metal_render_command_encod
     }
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_label(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_set_objc_label(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_push_debug_group(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_push_objc_debug_group(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_pop_debug_group(
+    vkmtl_metal_render_command_encoder *encoder
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_pop_objc_debug_group(
+        encoder->encoder,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_insert_debug_signpost(
+    vkmtl_metal_render_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_insert_objc_debug_signpost(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_pipeline(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_render_pipeline_state *pipeline
@@ -1699,23 +2038,130 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_sampler_state
     }
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_viewport(
+    vkmtl_metal_render_command_encoder *encoder,
+    double x,
+    double y,
+    double width,
+    double height,
+    double near_z,
+    double far_z
+) {
+    if (encoder == NULL || encoder->encoder == nil || width <= 0 || height <= 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        MTLViewport viewport = {
+            .originX = x,
+            .originY = y,
+            .width = width,
+            .height = height,
+            .znear = near_z,
+            .zfar = far_z,
+        };
+        [encoder->encoder setViewport:viewport];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_scissor_rect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int x,
+    unsigned int y,
+    unsigned int width,
+    unsigned int height
+) {
+    if (encoder == NULL || encoder->encoder == nil || width == 0 || height == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        MTLScissorRect rect = {
+            .x = x,
+            .y = y,
+            .width = width,
+            .height = height,
+        };
+        [encoder->encoder setScissorRect:rect];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_blend_color(
+    vkmtl_metal_render_command_encoder *encoder,
+    float red,
+    float green,
+    float blue,
+    float alpha
+) {
+    if (encoder == NULL || encoder->encoder == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setBlendColorRed:red green:green blue:blue alpha:alpha];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_stencil_reference(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int reference
+) {
+    if (encoder == NULL || encoder->encoder == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setStencilReferenceValue:reference];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
+    vkmtl_metal_render_command_encoder *encoder,
+    float constant,
+    float slope,
+    float clamp
+) {
+    if (encoder == NULL || encoder->encoder == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setDepthBias:constant slopeScale:slope clamp:clamp];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     vkmtl_metal_render_command_encoder *encoder,
     unsigned int primitive_type,
     unsigned int vertex_start,
     unsigned int vertex_count,
-    unsigned int instance_count
+    unsigned int instance_count,
+    unsigned int base_instance
 ) {
     if (encoder == NULL || encoder->encoder == nil || vertex_count == 0 || instance_count == 0) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
     @autoreleasepool {
-        [encoder->encoder
-            drawPrimitives:vkmtl_primitive_type(primitive_type)
-              vertexStart:vertex_start
-              vertexCount:vertex_count
-            instanceCount:instance_count];
+        if (base_instance == 0) {
+            [encoder->encoder
+                drawPrimitives:vkmtl_primitive_type(primitive_type)
+                  vertexStart:vertex_start
+                  vertexCount:vertex_count
+                instanceCount:instance_count];
+        } else {
+            [encoder->encoder
+                drawPrimitives:vkmtl_primitive_type(primitive_type)
+                  vertexStart:vertex_start
+                  vertexCount:vertex_count
+                instanceCount:instance_count
+                 baseInstance:base_instance];
+        }
         return VKMTL_METAL_STATUS_OK;
     }
 }
@@ -1726,7 +2172,9 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     unsigned int index_type,
     unsigned int index_count,
     size_t index_buffer_offset,
-    unsigned int instance_count
+    unsigned int instance_count,
+    int base_vertex,
+    unsigned int base_instance
 ) {
     if (encoder == NULL ||
         encoder->encoder == nil ||
@@ -1739,13 +2187,76 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     MTLIndexType metal_index_type = index_type == 32 ? MTLIndexTypeUInt32 : MTLIndexTypeUInt16;
 
     @autoreleasepool {
+        if (base_vertex == 0 && base_instance == 0) {
+            [encoder->encoder
+                drawIndexedPrimitives:vkmtl_primitive_type(primitive_type)
+                           indexCount:index_count
+                            indexType:metal_index_type
+                          indexBuffer:encoder->index_buffer
+                    indexBufferOffset:index_buffer_offset
+                        instanceCount:instance_count];
+        } else {
+            [encoder->encoder
+                drawIndexedPrimitives:vkmtl_primitive_type(primitive_type)
+                           indexCount:index_count
+                            indexType:metal_index_type
+                          indexBuffer:encoder->index_buffer
+                    indexBufferOffset:index_buffer_offset
+                        instanceCount:instance_count
+                          baseVertex:base_vertex
+                        baseInstance:base_instance];
+        }
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives_indirect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset
+) {
+    if (encoder == NULL ||
+        encoder->encoder == nil ||
+        indirect_buffer == NULL ||
+        indirect_buffer->buffer == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder
+            drawPrimitives:vkmtl_primitive_type(primitive_type)
+            indirectBuffer:indirect_buffer->buffer
+      indirectBufferOffset:indirect_buffer_offset];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives_indirect(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int primitive_type,
+    unsigned int index_type,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset
+) {
+    if (encoder == NULL ||
+        encoder->encoder == nil ||
+        encoder->index_buffer == nil ||
+        indirect_buffer == NULL ||
+        indirect_buffer->buffer == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    MTLIndexType metal_index_type = index_type == 32 ? MTLIndexTypeUInt32 : MTLIndexTypeUInt16;
+
+    @autoreleasepool {
         [encoder->encoder
             drawIndexedPrimitives:vkmtl_primitive_type(primitive_type)
-                       indexCount:index_count
                         indexType:metal_index_type
                       indexBuffer:encoder->index_buffer
-                indexBufferOffset:index_buffer_offset
-                    instanceCount:instance_count];
+                indexBufferOffset:0
+                   indirectBuffer:indirect_buffer->buffer
+             indirectBufferOffset:indirect_buffer_offset];
         return VKMTL_METAL_STATUS_OK;
     }
 }
@@ -1803,6 +2314,66 @@ void vkmtl_metal_compute_command_encoder_destroy(vkmtl_metal_compute_command_enc
         [encoder->encoder release];
         free(encoder);
     }
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_label(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_set_objc_label(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_push_debug_group(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_push_objc_debug_group(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_pop_debug_group(
+    vkmtl_metal_compute_command_encoder *encoder
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_pop_objc_debug_group(
+        encoder->encoder,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_insert_debug_signpost(
+    vkmtl_metal_compute_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_insert_objc_debug_signpost(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
 }
 
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_pipeline(
@@ -1901,6 +2472,34 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups_indirect(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_buffer *indirect_buffer,
+    size_t indirect_buffer_offset,
+    unsigned int threads_per_threadgroup_x,
+    unsigned int threads_per_threadgroup_y,
+    unsigned int threads_per_threadgroup_z
+) {
+    if (encoder == NULL ||
+        encoder->encoder == nil ||
+        indirect_buffer == NULL ||
+        indirect_buffer->buffer == nil ||
+        threads_per_threadgroup_x == 0 ||
+        threads_per_threadgroup_y == 0 ||
+        threads_per_threadgroup_z == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        MTLSize threads_per_threadgroup =
+            MTLSizeMake(threads_per_threadgroup_x, threads_per_threadgroup_y, threads_per_threadgroup_z);
+        [encoder->encoder dispatchThreadgroupsWithIndirectBuffer:indirect_buffer->buffer
+                                            indirectBufferOffset:indirect_buffer_offset
+                                           threadsPerThreadgroup:threads_per_threadgroup];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_end_encoding(
     vkmtl_metal_compute_command_encoder *encoder
 ) {
@@ -1954,6 +2553,66 @@ void vkmtl_metal_blit_command_encoder_destroy(vkmtl_metal_blit_command_encoder *
         [encoder->encoder release];
         free(encoder);
     }
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_set_label(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_set_objc_label(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_push_debug_group(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_push_objc_debug_group(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_pop_debug_group(
+    vkmtl_metal_blit_command_encoder *encoder
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_pop_objc_debug_group(
+        encoder->encoder,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_insert_debug_signpost(
+    vkmtl_metal_blit_command_encoder *encoder,
+    const char *label,
+    size_t label_len
+) {
+    if (encoder == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_insert_objc_debug_signpost(
+        encoder->encoder,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
 }
 
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_buffer(
@@ -2067,6 +2726,78 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_buffer(
           destinationOffset:buffer_offset
      destinationBytesPerRow:bytes_per_row
    destinationBytesPerImage:bytes_per_image];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *source,
+    vkmtl_metal_texture *destination,
+    unsigned int source_x,
+    unsigned int source_y,
+    unsigned int source_z,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth,
+    unsigned int source_mip_level,
+    unsigned int source_slice,
+    unsigned int destination_x,
+    unsigned int destination_y,
+    unsigned int destination_z,
+    unsigned int destination_mip_level,
+    unsigned int destination_slice
+) {
+    if (encoder == NULL ||
+        encoder->encoder == nil ||
+        source == NULL ||
+        source->texture == nil ||
+        destination == NULL ||
+        destination->texture == nil ||
+        width == 0 ||
+        height == 0 ||
+        depth == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder
+            copyFromTexture:source->texture
+                sourceSlice:source_slice
+                sourceLevel:source_mip_level
+               sourceOrigin:MTLOriginMake(source_x, source_y, source_z)
+                 sourceSize:MTLSizeMake(width, height, depth)
+                  toTexture:destination->texture
+           destinationSlice:destination_slice
+           destinationLevel:destination_mip_level
+          destinationOrigin:MTLOriginMake(destination_x, destination_y, destination_z)];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_fill_buffer(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    size_t size,
+    unsigned int value
+) {
+    if (encoder == NULL ||
+        encoder->encoder == nil ||
+        buffer == NULL ||
+        buffer->buffer == nil ||
+        size == 0 ||
+        offset > buffer->length ||
+        size > buffer->length - offset ||
+        value > 0xffu) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder
+            fillBuffer:buffer->buffer
+                 range:NSMakeRange(offset, size)
+                 value:(uint8_t)value];
         return VKMTL_METAL_STATUS_OK;
     }
 }

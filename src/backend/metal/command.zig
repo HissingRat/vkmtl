@@ -1,4 +1,5 @@
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalBindGroup = @import("bind_group.zig").MetalBindGroup;
 const MetalBuffer = @import("buffer.zig");
@@ -66,6 +67,34 @@ pub const CommandBuffer = struct {
         metal.vkmtl_metal_command_buffer_destroy(self.handle);
     }
 
+    pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
+        debug.ignore(metal.vkmtl_metal_command_buffer_set_label(
+            self.handle,
+            debug.labelPtr(label_value),
+            debug.labelLen(label_value),
+        ));
+    }
+
+    pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_command_buffer_push_debug_group(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
+    }
+
+    pub fn popDebugGroup(self: *CommandBuffer) void {
+        debug.ignore(metal.vkmtl_metal_command_buffer_pop_debug_group(self.handle));
+    }
+
+    pub fn insertDebugSignpost(self: *CommandBuffer, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_command_buffer_insert_debug_signpost(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
+    }
+
     pub fn makeRenderCommandEncoder(
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
@@ -128,6 +157,34 @@ pub const BlitCommandEncoder = struct {
 
     pub fn deinit(self: *BlitCommandEncoder) void {
         metal.vkmtl_metal_blit_command_encoder_destroy(self.handle);
+    }
+
+    pub fn setLabel(self: *BlitCommandEncoder, label_value: ?[]const u8) void {
+        debug.ignore(metal.vkmtl_metal_blit_command_encoder_set_label(
+            self.handle,
+            debug.labelPtr(label_value),
+            debug.labelLen(label_value),
+        ));
+    }
+
+    pub fn pushDebugGroup(self: *BlitCommandEncoder, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_blit_command_encoder_push_debug_group(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
+    }
+
+    pub fn popDebugGroup(self: *BlitCommandEncoder) void {
+        debug.ignore(metal.vkmtl_metal_blit_command_encoder_pop_debug_group(self.handle));
+    }
+
+    pub fn insertDebugSignpost(self: *BlitCommandEncoder, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_blit_command_encoder_insert_debug_signpost(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
     }
 
     pub fn copyBufferToBuffer(
@@ -194,6 +251,46 @@ pub const BlitCommandEncoder = struct {
         ));
     }
 
+    pub fn copyTextureToTexture(
+        self: *BlitCommandEncoder,
+        source: *const MetalTexture,
+        destination: *const MetalTexture,
+        resolved: core.ResolvedTextureTextureCopy,
+    ) !void {
+        try check(metal.vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
+            self.handle,
+            source.handle,
+            destination.handle,
+            resolved.source_region.origin.x,
+            resolved.source_region.origin.y,
+            resolved.source_region.origin.z,
+            resolved.source_region.size.width,
+            resolved.source_region.size.height,
+            resolved.source_region.size.depth,
+            resolved.source_mip_level,
+            resolved.source_slice,
+            resolved.destination_origin.x,
+            resolved.destination_origin.y,
+            resolved.destination_origin.z,
+            resolved.destination_mip_level,
+            resolved.destination_slice,
+        ));
+    }
+
+    pub fn fillBuffer(
+        self: *BlitCommandEncoder,
+        buffer: *const MetalBuffer,
+        descriptor: core.FillBufferDescriptor,
+    ) !void {
+        try check(metal.vkmtl_metal_blit_command_encoder_fill_buffer(
+            self.handle,
+            buffer.handle,
+            descriptor.offset,
+            descriptor.size,
+            descriptor.value,
+        ));
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         try check(metal.vkmtl_metal_blit_command_encoder_end_encoding(self.handle));
     }
@@ -206,6 +303,34 @@ pub const ComputeCommandEncoder = struct {
 
     pub fn deinit(self: *ComputeCommandEncoder) void {
         metal.vkmtl_metal_compute_command_encoder_destroy(self.handle);
+    }
+
+    pub fn setLabel(self: *ComputeCommandEncoder, label_value: ?[]const u8) void {
+        debug.ignore(metal.vkmtl_metal_compute_command_encoder_set_label(
+            self.handle,
+            debug.labelPtr(label_value),
+            debug.labelLen(label_value),
+        ));
+    }
+
+    pub fn pushDebugGroup(self: *ComputeCommandEncoder, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_compute_command_encoder_push_debug_group(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
+    }
+
+    pub fn popDebugGroup(self: *ComputeCommandEncoder) void {
+        debug.ignore(metal.vkmtl_metal_compute_command_encoder_pop_debug_group(self.handle));
+    }
+
+    pub fn insertDebugSignpost(self: *ComputeCommandEncoder, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_compute_command_encoder_insert_debug_signpost(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
     }
 
     pub fn setComputePipelineState(self: *ComputeCommandEncoder, pipeline: *MetalComputePipelineState) !void {
@@ -255,6 +380,21 @@ pub const ComputeCommandEncoder = struct {
             descriptor.threadgroup_count_x,
             descriptor.threadgroup_count_y,
             descriptor.threadgroup_count_z,
+            descriptor.threads_per_threadgroup_x,
+            descriptor.threads_per_threadgroup_y,
+            descriptor.threads_per_threadgroup_z,
+        ));
+    }
+
+    pub fn dispatchThreadgroupsIndirect(
+        self: *ComputeCommandEncoder,
+        indirect_buffer: *const MetalBuffer,
+        descriptor: core.DispatchThreadgroupsIndirectDescriptor,
+    ) !void {
+        try check(metal.vkmtl_metal_compute_command_encoder_dispatch_threadgroups_indirect(
+            self.handle,
+            indirect_buffer.handle,
+            descriptor.offset,
             descriptor.threads_per_threadgroup_x,
             descriptor.threads_per_threadgroup_y,
             descriptor.threads_per_threadgroup_z,
@@ -312,6 +452,34 @@ pub const RenderCommandEncoder = struct {
 
     pub fn deinit(self: *RenderCommandEncoder) void {
         metal.vkmtl_metal_render_command_encoder_destroy(self.handle);
+    }
+
+    pub fn setLabel(self: *RenderCommandEncoder, label_value: ?[]const u8) void {
+        debug.ignore(metal.vkmtl_metal_render_command_encoder_set_label(
+            self.handle,
+            debug.labelPtr(label_value),
+            debug.labelLen(label_value),
+        ));
+    }
+
+    pub fn pushDebugGroup(self: *RenderCommandEncoder, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_render_command_encoder_push_debug_group(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
+    }
+
+    pub fn popDebugGroup(self: *RenderCommandEncoder) void {
+        debug.ignore(metal.vkmtl_metal_render_command_encoder_pop_debug_group(self.handle));
+    }
+
+    pub fn insertDebugSignpost(self: *RenderCommandEncoder, label_value: []const u8) void {
+        debug.ignore(metal.vkmtl_metal_render_command_encoder_insert_debug_signpost(
+            self.handle,
+            debug.requiredLabelPtr(label_value),
+            label_value.len,
+        ));
     }
 
     pub fn setRenderPipelineState(self: *RenderCommandEncoder, pipeline: *MetalRenderPipelineState) !void {
@@ -387,6 +555,7 @@ pub const RenderCommandEncoder = struct {
             descriptor.vertex_start,
             descriptor.vertex_count,
             descriptor.instance_count,
+            descriptor.base_instance,
         ));
     }
 
@@ -402,6 +571,39 @@ pub const RenderCommandEncoder = struct {
             descriptor.index_count,
             descriptor.index_buffer_offset,
             descriptor.instance_count,
+            descriptor.base_vertex,
+            descriptor.base_instance,
+        ));
+    }
+
+    pub fn drawPrimitivesIndirect(
+        self: *RenderCommandEncoder,
+        indirect_buffer: *MetalBuffer,
+        descriptor: core.DrawPrimitivesIndirectDescriptor,
+    ) !void {
+        try descriptor.validate();
+        if (descriptor.draw_count != 1) return core.CommandEncodingError.UnsupportedMultiDraw;
+        try check(metal.vkmtl_metal_render_command_encoder_draw_primitives_indirect(
+            self.handle,
+            primitiveType(descriptor.primitive_type),
+            indirect_buffer.handle,
+            descriptor.buffer_offset,
+        ));
+    }
+
+    pub fn drawIndexedPrimitivesIndirect(
+        self: *RenderCommandEncoder,
+        indirect_buffer: *MetalBuffer,
+        descriptor: core.DrawIndexedPrimitivesIndirectDescriptor,
+    ) !void {
+        try descriptor.validate();
+        if (descriptor.draw_count != 1) return core.CommandEncodingError.UnsupportedMultiDraw;
+        try check(metal.vkmtl_metal_render_command_encoder_draw_indexed_primitives_indirect(
+            self.handle,
+            primitiveType(descriptor.primitive_type),
+            indexTypeBits(descriptor.index_type),
+            indirect_buffer.handle,
+            descriptor.buffer_offset,
         ));
     }
 
@@ -475,6 +677,59 @@ pub const RenderCommandEncoder = struct {
                 index,
             ));
         }
+    }
+
+    pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
+        try viewport.validate();
+        try check(metal.vkmtl_metal_render_command_encoder_set_viewport(
+            self.handle,
+            viewport.x,
+            viewport.y,
+            viewport.width,
+            viewport.height,
+            viewport.min_depth,
+            viewport.max_depth,
+        ));
+    }
+
+    pub fn setScissorRect(self: *RenderCommandEncoder, rect: core.ScissorRect) !void {
+        try rect.validate();
+        try check(metal.vkmtl_metal_render_command_encoder_set_scissor_rect(
+            self.handle,
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+        ));
+    }
+
+    pub fn setBlendColor(self: *RenderCommandEncoder, color: core.BlendColor) !void {
+        try color.validate();
+        try check(metal.vkmtl_metal_render_command_encoder_set_blend_color(
+            self.handle,
+            color.red,
+            color.green,
+            color.blue,
+            color.alpha,
+        ));
+    }
+
+    pub fn setStencilReference(self: *RenderCommandEncoder, reference: core.StencilReference) !void {
+        try reference.validate();
+        try check(metal.vkmtl_metal_render_command_encoder_set_stencil_reference(
+            self.handle,
+            reference.value,
+        ));
+    }
+
+    pub fn setDepthBias(self: *RenderCommandEncoder, descriptor: core.DepthBiasDescriptor) !void {
+        try descriptor.validate();
+        try check(metal.vkmtl_metal_render_command_encoder_set_depth_bias(
+            self.handle,
+            descriptor.constant,
+            descriptor.slope,
+            descriptor.clamp,
+        ));
     }
 };
 

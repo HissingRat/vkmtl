@@ -23,3 +23,5 @@ library that is easier to consume, document, validate, and distribute.
 - Examples are documented and runnable.
 - Public API names are consistent enough for early users.
 - Documentation has clear entry points for roadmap, checklist, API, and usage.
+- Backend-native debug labels are synchronized for real resource and pipeline
+  objects where the active backend exposes native labels.

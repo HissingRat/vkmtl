@@ -84,6 +84,10 @@ pub fn sampleCount(self: VulkanTexture) u32 {
     return self.descriptor.sample_count;
 }
 
+pub fn setLabel(self: *VulkanTexture, label_value: ?[]const u8) void {
+    self.gc.setDebugName(.image, GraphicsContext.debugObjectHandle(self.handle), label_value);
+}
+
 pub fn makeTextureView(self: *VulkanTexture, descriptor: core.TextureViewDescriptor) !VulkanTextureView {
     return try VulkanTextureView.init(self, descriptor);
 }

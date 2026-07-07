@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const debug = @import("debug.zig");
 const shader_artifact = @import("../../shader/artifact.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
@@ -50,6 +51,14 @@ fn initMsl(owner: *MetalClearScreen, source: []const u8) !MetalShaderModule {
 
 pub fn deinit(self: *MetalShaderModule) void {
     metal.vkmtl_metal_shader_module_destroy(self.handle);
+}
+
+pub fn setLabel(self: *MetalShaderModule, label_value: ?[]const u8) void {
+    debug.ignore(metal.vkmtl_metal_shader_module_set_label(
+        self.handle,
+        debug.labelPtr(label_value),
+        debug.labelLen(label_value),
+    ));
 }
 
 fn check(status: metal.vkmtl_metal_status) Error!void {
