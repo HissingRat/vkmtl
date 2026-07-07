@@ -19,6 +19,7 @@ See `phase1.md`.
 ## Phase 2: Metal Tessellation Lowering
 
 - Lower tessellation descriptors to Metal pipeline state and draw calls.
+- Add `MetalTessellationLowering` metadata including factor-buffer requirement.
 
 See `phase2.md`.
 

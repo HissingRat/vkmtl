@@ -998,11 +998,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 16 Phase 2 Checklist
 
-- [ ] Define Metal tessellation lowering scope before implementation.
-- [ ] Map public tessellation descriptors to Metal pipeline state.
-- [ ] Handle patch control point and partition mode differences.
-- [ ] Document Metal-specific constraints.
-- [ ] Add Metal tessellation smoke coverage.
+- [x] Define Metal tessellation lowering scope before implementation.
+- [x] Map public tessellation descriptors to Metal lowering metadata.
+- [x] Handle patch control point and partition mode differences.
+- [x] Document Metal-specific constraints.
+- [x] Keep Metal tessellation smoke coverage gated.
 
 ## Period 16 Phase 3 Checklist
 

@@ -1765,6 +1765,22 @@ pub const VulkanTessellationLowering = struct {
     }
 };
 
+pub const MetalTessellationLowering = struct {
+    patch_control_points: u32,
+    domain: TessellationDomain,
+    partition_mode: TessellationPartitionMode,
+    requires_factor_buffer: bool = true,
+
+    pub fn fromDescriptor(descriptor: TessellationDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!MetalTessellationLowering {
+        try descriptor.validate(features, limits);
+        return .{
+            .patch_control_points = descriptor.control_point_count,
+            .domain = descriptor.domain,
+            .partition_mode = descriptor.partition_mode,
+        };
+    }
+};
+
 pub const MeshPipelineDescriptor = struct {
     label: ?[]const u8 = null,
     mesh_entry_point: []const u8,
@@ -8044,6 +8060,18 @@ test "Vulkan tessellation lowering preserves patch metadata" {
     try std.testing.expectEqual(@as(u32, 4), lowering.patch_control_points);
     try std.testing.expectEqual(TessellationDomain.quad, lowering.domain);
     try std.testing.expectEqual(TessellationPartitionMode.fractional_even, lowering.partition_mode);
+}
+
+test "Metal tessellation lowering records factor buffer requirement" {
+    const lowering = try MetalTessellationLowering.fromDescriptor(.{
+        .control_point_count = 3,
+        .domain = .triangle,
+        .partition_mode = .integer,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 16 });
+    try std.testing.expectEqual(@as(u32, 3), lowering.patch_control_points);
+    try std.testing.expect(lowering.requires_factor_buffer);
 }
 
 test "texture usage can detect empty usage" {
