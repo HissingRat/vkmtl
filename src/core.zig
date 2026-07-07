@@ -119,6 +119,7 @@ pub const DeviceFeatures = struct {
     external_memory: bool = false,
     external_textures: bool = false,
     external_semaphores: bool = false,
+    native_command_insertion: bool = false,
     transfer_commands: bool = true,
     storage_buffers: bool = true,
     storage_textures: bool = true,
@@ -618,8 +619,10 @@ pub const AdvancedFeatureError = error{
     UnsupportedExternalMemory,
     UnsupportedExternalTextures,
     UnsupportedExternalSemaphores,
+    UnsupportedNativeCommandInsertion,
     InvalidExternalHandle,
     ExternalHandleBackendMismatch,
+    MissingNativeCommandCallback,
     UnsupportedTessellation,
     InvalidPatchControlPointCount,
     MissingTessellationStage,
@@ -850,6 +853,34 @@ pub fn nativeHandleView(handles: NativeHandles) NativeHandleView {
     return .{ .handles = handles };
 }
 
+pub const NativeCommandEncoderKind = enum {
+    render,
+    compute,
+    blit,
+};
+
+pub const NativeCommandInsertionPoint = enum {
+    before_portable_commands,
+    after_portable_commands,
+    inline_boundary,
+};
+
+pub const NativeCommandCallback = *const fn (context: ?*anyopaque, handles: NativeHandleView) void;
+
+pub const NativeCommandInsertionDescriptor = struct {
+    label: ?[]const u8 = null,
+    encoder: NativeCommandEncoderKind,
+    point: NativeCommandInsertionPoint = .inline_boundary,
+    callback: ?NativeCommandCallback = null,
+    context: ?*anyopaque = null,
+    inserts_resource_boundary: bool = true,
+
+    pub fn validate(self: NativeCommandInsertionDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        if (!features.native_command_insertion) return AdvancedFeatureError.UnsupportedNativeCommandInsertion;
+        if (self.callback == null) return AdvancedFeatureError.MissingNativeCommandCallback;
+    }
+};
+
 pub fn classifyError(err: anyerror) ErrorCategory {
     return switch (err) {
         error.DeviceLost => .device_lost,
@@ -931,6 +962,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedExternalMemory,
         error.UnsupportedExternalTextures,
         error.UnsupportedExternalSemaphores,
+        error.UnsupportedNativeCommandInsertion,
         error.UnsupportedTessellation,
         error.UnsupportedMeshShaders,
         error.UnsupportedTaskShaders,
@@ -1097,6 +1129,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.SparseRegionCountExceeded,
         error.InvalidExternalHandle,
         error.ExternalHandleBackendMismatch,
+        error.MissingNativeCommandCallback,
         error.InvalidPatchControlPointCount,
         error.MissingTessellationStage,
         error.MissingMeshStage,
@@ -7595,6 +7628,32 @@ test "external texture descriptors validate backend and feature gates" {
         .handle = .{ .kind = .vulkan_semaphore, .value = 1 },
         .timeline = true,
     }).validate(.vulkan, .{ .external_semaphores = true });
+}
+
+test "native command insertion descriptors are explicit and gated" {
+    const callback = struct {
+        fn call(context: ?*anyopaque, handles: NativeHandleView) void {
+            _ = context;
+            _ = handles;
+        }
+    }.call;
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedNativeCommandInsertion, (NativeCommandInsertionDescriptor{
+        .encoder = .render,
+        .callback = callback,
+    }).validate(.{}));
+
+    try std.testing.expectError(AdvancedFeatureError.MissingNativeCommandCallback, (NativeCommandInsertionDescriptor{
+        .encoder = .compute,
+    }).validate(.{ .native_command_insertion = true }));
+
+    try (NativeCommandInsertionDescriptor{
+        .label = "native render hook",
+        .encoder = .render,
+        .point = .after_portable_commands,
+        .callback = callback,
+        .inserts_resource_boundary = true,
+    }).validate(.{ .native_command_insertion = true });
 }
 
 test "sparse resource descriptors validate feature gates and alignment" {

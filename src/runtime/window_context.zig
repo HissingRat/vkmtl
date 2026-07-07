@@ -2469,6 +2469,10 @@ pub const Device = struct {
         try descriptor.validate(self.backend, self.features());
     }
 
+    pub fn validateNativeCommandInsertionDescriptor(self: Device, descriptor: core.NativeCommandInsertionDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features());
+    }
+
     pub fn validateTessellationDescriptor(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }

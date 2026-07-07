@@ -44,6 +44,8 @@ See `phase4.md`.
 ## Phase 5: Native Command Insertion Hooks
 
 - Provide controlled hooks for backend-native command insertion.
+- Add descriptor-level hooks with explicit callback, encoder kind, insertion
+  point, and resource-boundary metadata.
 
 See `phase5.md`.
 

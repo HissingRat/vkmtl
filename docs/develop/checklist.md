@@ -926,11 +926,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 14 Phase 5 Checklist
 
-- [ ] Define native command insertion scope before implementation.
-- [ ] Add explicit insertion points for render, compute, and blit encoders.
-- [ ] Expose backend-native command handles through callback descriptors.
-- [ ] Mark resource usage boundaries around native commands.
-- [ ] Document synchronization responsibility.
+- [x] Define native command insertion scope before implementation.
+- [x] Add explicit insertion points for render, compute, and blit encoders.
+- [x] Expose backend-native command handles through callback descriptors.
+- [x] Mark resource usage boundaries around native commands.
+- [x] Document synchronization responsibility.
 
 ## Period 14 Phase 6 Checklist
 
