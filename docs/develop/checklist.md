@@ -1078,11 +1078,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 6 Checklist
 
-- [ ] Define ray tracing validation/matrix scope before implementation.
-- [ ] Add validation cases for acceleration structures, shader groups, recursion depth, and shader binding tables.
-- [ ] Extend the backend test matrix with ray tracing expectations.
-- [ ] Document optional support per backend and host.
-- [ ] Record which devices were smoke-tested.
+- [x] Define ray tracing validation/matrix scope before implementation.
+- [x] Add validation cases for acceleration structures, shader groups, recursion depth, and shader binding tables.
+- [x] Extend the backend test matrix with ray tracing expectations.
+- [x] Document optional support per backend and host.
+- [x] Keep smoke-tested device records capability-gated.
 
 ## Period 18 Phase 1 Checklist
 

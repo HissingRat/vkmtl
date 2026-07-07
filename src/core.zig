@@ -8340,6 +8340,25 @@ test "shader binding table layout computes group offsets" {
     try std.testing.expectEqual(@as(u64, 448), layout.total_size);
 }
 
+test "ray tracing descriptors reject missing groups and invalid limits" {
+    const miss_only = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .miss, .entry_point = "miss" },
+    };
+    try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, (RayTracingPipelineDescriptor{
+        .shader_groups = miss_only[0..],
+    }).validate(.{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 4 }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, (RayTracingPipelineDescriptor{
+        .shader_groups = &.{.{ .kind = .ray_generation, .entry_point = "raygen" }},
+        .max_recursion_depth = 8,
+    }).validate(.{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 4 }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureInstanceDescriptor{
+        .instance_count = 0,
+    }).validate(.{ .acceleration_structures = true }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidShaderBindingTable, (ShaderBindingTableDescriptor{
+        .stride = 12,
+    }).validate(.{ .ray_tracing = true }, .{ .shader_binding_table_alignment = 64 }));
+}
+
 test "texture usage can detect empty usage" {
     try std.testing.expect((TextureUsage{}).isEmpty());
     try std.testing.expect(!(TextureUsage{ .shader_read = true }).isEmpty());

@@ -1,6 +1,6 @@
 # Period 17: Ray Tracing Backend
 
-Status: in progress.
+Status: completed.
 
 Goal: lower acceleration structures, ray tracing pipelines, and shader binding
 table descriptors to Vulkan and Metal ray tracing capabilities.
@@ -47,5 +47,7 @@ See `phase5.md`.
 ## Phase 6: Ray Tracing Validation And Matrix
 
 - Add validation and backend matrix coverage for ray tracing support.
+- Extend descriptor tests for invalid AS instances, missing raygen groups,
+  recursion limits, and SBT alignment.
 
 See `phase6.md`.
