@@ -798,11 +798,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 12 Phase 1 Checklist
 
-- [ ] Define advanced binding layout lowering scope before implementation.
-- [ ] Define cache keys and ownership for advanced layouts.
-- [ ] Keep the portable bind group path unchanged.
-- [ ] Document when applications should use the advanced binding path.
-- [ ] Add layout compatibility tests.
+- [x] Define advanced binding layout lowering scope before implementation.
+- [x] Define cache keys and ownership for advanced layouts.
+- [x] Keep the portable bind group path unchanged.
+- [x] Document when applications should use the advanced binding path.
+- [x] Add layout compatibility tests.
 
 ## Period 12 Phase 2 Checklist
 

@@ -288,6 +288,7 @@ pub const ShaderModule = runtime.ShaderModule;
 pub const RenderPipelineState = runtime.RenderPipelineState;
 pub const ComputePipelineState = runtime.ComputePipelineState;
 pub const BindGroupLayout = runtime.BindGroupLayout;
+pub const AdvancedBindGroupLayout = runtime.AdvancedBindGroupLayout;
 pub const BindGroupBufferBinding = runtime.BindGroupBufferBinding;
 pub const BindGroupResource = runtime.BindGroupResource;
 pub const BindGroupEntry = runtime.BindGroupEntry;

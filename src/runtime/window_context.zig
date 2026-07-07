@@ -37,6 +37,7 @@ pub const ResourceKind = enum {
     compute_pipeline_state,
     bind_group_layout,
     bind_group,
+    advanced_bind_group_layout,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -52,6 +53,7 @@ pub const ResourceTracker = struct {
     compute_pipeline_states: usize = 0,
     bind_group_layouts: usize = 0,
     bind_groups: usize = 0,
+    advanced_bind_group_layouts: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -131,13 +133,14 @@ pub const ResourceTracker = struct {
             self.render_pipeline_states != 0 or
             self.compute_pipeline_states != 0 or
             self.bind_group_layouts != 0 or
-            self.bind_groups != 0;
+            self.bind_groups != 0 or
+            self.advanced_bind_group_layouts != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -148,6 +151,7 @@ pub const ResourceTracker = struct {
                     self.compute_pipeline_states,
                     self.bind_group_layouts,
                     self.bind_groups,
+                    self.advanced_bind_group_layouts,
                 },
             );
         }
@@ -170,6 +174,7 @@ pub const ResourceTracker = struct {
             .compute_pipeline_state => &self.compute_pipeline_states,
             .bind_group_layout => &self.bind_group_layouts,
             .bind_group => &self.bind_groups,
+            .advanced_bind_group_layout => &self.advanced_bind_group_layouts,
         };
     }
 
@@ -1079,6 +1084,44 @@ pub const BindGroupLayout = struct {
     pub fn descriptor(self: BindGroupLayout) core.BindGroupLayoutDescriptor {
         assertAlive(self.alive, .bind_group_layout);
         return .{ .label = self.label_value, .entries = self.entries };
+    }
+};
+
+pub const AdvancedBindGroupLayout = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
+    model_value: core.AdvancedBindingModel,
+    ranges: []core.DescriptorIndexingRange,
+    alive: bool = true,
+
+    pub fn deinit(self: *AdvancedBindGroupLayout) void {
+        assertObjectAlive(self.alive, "advanced_bind_group_layout");
+        self.alive = false;
+        self.allocator.free(self.ranges);
+        self.tracker.release(.advanced_bind_group_layout);
+    }
+
+    pub fn selectedBackend(self: AdvancedBindGroupLayout) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: AdvancedBindGroupLayout) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn model(self: AdvancedBindGroupLayout) core.AdvancedBindingModel {
+        return self.model_value;
+    }
+
+    pub fn rangeCount(self: AdvancedBindGroupLayout) usize {
+        return self.ranges.len;
+    }
+
+    pub fn range(self: AdvancedBindGroupLayout, index: usize) ?core.DescriptorIndexingRange {
+        if (index >= self.ranges.len) return null;
+        return self.ranges[index];
     }
 };
 
@@ -2574,6 +2617,22 @@ pub const Device = struct {
         };
     }
 
+    pub fn makeAdvancedBindGroupLayout(self: *Device, descriptor: core.DescriptorIndexingLayoutDescriptor) !AdvancedBindGroupLayout {
+        try descriptor.validate(self.features(), self.limits());
+        const ranges = try self.allocator.dupe(core.DescriptorIndexingRange, descriptor.ranges);
+        errdefer self.allocator.free(ranges);
+
+        self.tracker.retain(.advanced_bind_group_layout);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .allocator = self.allocator,
+            .label_value = descriptor.label,
+            .model_value = descriptor.model,
+            .ranges = ranges,
+        };
+    }
+
     pub fn makeBindGroup(self: *Device, descriptor: BindGroupDescriptor) !BindGroup {
         const entries = try materializeBindGroupEntries(self.allocator, self.backend, descriptor);
         errdefer self.allocator.free(entries);
@@ -2941,6 +3000,11 @@ pub const WindowContext = struct {
         return try device_view.makeBindGroupLayout(descriptor);
     }
 
+    pub fn makeAdvancedBindGroupLayout(self: *WindowContext, descriptor: core.DescriptorIndexingLayoutDescriptor) !AdvancedBindGroupLayout {
+        var device_view = self.device();
+        return try device_view.makeAdvancedBindGroupLayout(descriptor);
+    }
+
     pub fn makeBindGroup(self: *WindowContext, descriptor: BindGroupDescriptor) !BindGroup {
         var device_view = self.device();
         return try device_view.makeBindGroup(descriptor);
@@ -3191,6 +3255,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .compute_pipeline_state => "compute_pipeline_state",
         .bind_group_layout => "bind_group_layout",
         .bind_group => "bind_group",
+        .advanced_bind_group_layout => "advanced_bind_group_layout",
     };
 }
 
@@ -3509,6 +3574,52 @@ test "runtime device validates advanced descriptors against selected capabilitie
             .entry_point = "raygen",
         }},
     }));
+}
+
+test "runtime advanced bind group layout snapshots descriptor ranges" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.argument_buffers = true;
+    report.limits.max_bindless_descriptors_per_range = 16;
+    report.limits.max_bindless_ranges_per_layout = 4;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = report,
+    };
+
+    const ranges = [_]core.DescriptorIndexingRange{.{
+        .binding = 3,
+        .resource = .sampled_texture,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 8,
+    }};
+
+    var layout = try device.makeAdvancedBindGroupLayout(.{
+        .label = "bindless textures",
+        .model = .argument_buffer,
+        .ranges = &ranges,
+    });
+    defer layout.deinit();
+
+    try std.testing.expectEqual(core.Backend.metal, layout.selectedBackend());
+    try std.testing.expectEqual(core.AdvancedBindingModel.argument_buffer, layout.model());
+    try std.testing.expectEqual(@as(usize, 1), layout.rangeCount());
+    try std.testing.expectEqual(@as(u32, 3), layout.range(0).?.binding);
+    try std.testing.expectEqual(@as(usize, 1), tracker.advanced_bind_group_layouts);
 }
 
 test "runtime adapter selection validates resolved adapter info" {
