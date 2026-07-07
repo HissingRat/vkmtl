@@ -12,3 +12,12 @@ Phase 4 connects Slang reflection to the advanced binding path.
 
 - Add reflection fixture tests for bindless declarations.
 - Ensure explicit descriptors can override derived layout data.
+
+## Current Status
+
+- `ShaderReflectionBinding` can describe resource arrays and bindless-style
+  bindings.
+- `deriveDescriptorIndexingLayoutFromReflection(...)` derives advanced binding
+  layout ranges from reflection metadata.
+- The helper keeps explicit descriptors possible while giving Slang reflection
+  a stable path into advanced binding layouts.

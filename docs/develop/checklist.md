@@ -822,11 +822,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 12 Phase 4 Checklist
 
-- [ ] Define Slang bindless reflection scope before implementation.
-- [ ] Parse resource-array metadata from reflection.
-- [ ] Derive advanced layout ranges from shader declarations.
-- [ ] Include advanced layout data in shader and pipeline cache keys.
-- [ ] Add reflection fixture tests.
+- [x] Define Slang bindless reflection scope before implementation.
+- [x] Parse resource-array metadata from reflection.
+- [x] Derive advanced layout ranges from shader declarations.
+- [x] Include advanced layout data in shader and pipeline cache keys.
+- [x] Add reflection fixture tests.
 
 ## Period 12 Phase 5 Checklist
 

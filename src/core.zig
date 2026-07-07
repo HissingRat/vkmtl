@@ -1513,6 +1513,10 @@ pub const ShaderReflectionBinding = struct {
     binding: u32,
     resource: BindingResourceKind,
     visibility: ShaderVisibility,
+    array_count: u32 = 1,
+    bindless: bool = false,
+    partially_bound: bool = false,
+    update_after_bind: bool = false,
 };
 
 pub const ShaderReflectionBindGroup = struct {
@@ -2130,8 +2134,51 @@ fn validateShaderStageReflectionShape(reflection: ShaderStageReflection) ShaderE
     for (reflection.bind_groups) |bind_group| {
         for (bind_group.bindings) |binding| {
             if (binding.visibility.isEmpty()) return ShaderError.InvalidShaderReflection;
+            if (binding.array_count == 0) return ShaderError.InvalidShaderReflection;
         }
     }
+}
+
+pub fn descriptorIndexingRangeCountForReflection(reflection: ShaderStageReflection) usize {
+    var count: usize = 0;
+    for (reflection.bind_groups) |bind_group| {
+        for (bind_group.bindings) |binding| {
+            if (binding.bindless or binding.array_count != 1) count += 1;
+        }
+    }
+    return count;
+}
+
+pub fn deriveDescriptorIndexingLayoutFromReflection(
+    reflection: ShaderStageReflection,
+    model: AdvancedBindingModel,
+    ranges: []DescriptorIndexingRange,
+) ShaderError!DescriptorIndexingLayoutDescriptor {
+    try validateShaderStageReflectionShape(reflection);
+    const required_count = descriptorIndexingRangeCountForReflection(reflection);
+    if (ranges.len < required_count) return ShaderError.InvalidShaderReflection;
+
+    var out_index: usize = 0;
+    for (reflection.bind_groups) |bind_group| {
+        _ = bind_group.index;
+        for (bind_group.bindings) |binding| {
+            if (!binding.bindless and binding.array_count == 1) continue;
+            ranges[out_index] = .{
+                .binding = binding.binding,
+                .resource = binding.resource,
+                .visibility = binding.visibility,
+                .descriptor_count = binding.array_count,
+                .partially_bound = binding.partially_bound,
+                .update_after_bind = binding.update_after_bind,
+            };
+            out_index += 1;
+        }
+    }
+
+    return .{
+        .model = model,
+        .ranges = ranges[0..required_count],
+    };
 }
 
 fn visibilityContains(container: ShaderVisibility, required: ShaderVisibility) bool {
@@ -6108,6 +6155,41 @@ test "render pipeline descriptor validates reflection against bind group layouts
         } } }},
         .color_attachments = color_attachments[0..],
     }).validate());
+}
+
+test "reflection derives descriptor indexing layout for bindless resources" {
+    const reflected_bindings = [_]ShaderReflectionBinding{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .array_count = 64,
+            .bindless = true,
+            .partially_bound = true,
+        },
+        .{
+            .binding = 1,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+        },
+    };
+    const reflected_groups = [_]ShaderReflectionBindGroup{
+        .{ .index = 0, .bindings = reflected_bindings[0..] },
+    };
+    const reflection = ShaderStageReflection{
+        .stage = .fragment,
+        .entry_point = "fs_main",
+        .bind_groups = reflected_groups[0..],
+    };
+
+    var ranges: [2]DescriptorIndexingRange = undefined;
+    const layout = try deriveDescriptorIndexingLayoutFromReflection(reflection, .argument_buffer, ranges[0..]);
+
+    try std.testing.expectEqual(@as(usize, 1), layout.ranges.len);
+    try std.testing.expectEqual(AdvancedBindingModel.argument_buffer, layout.model);
+    try std.testing.expectEqual(@as(u32, 0), layout.ranges[0].binding);
+    try std.testing.expectEqual(@as(u32, 64), layout.ranges[0].descriptor_count);
+    try std.testing.expect(layout.ranges[0].partially_bound);
 }
 
 test "render pipeline descriptor validates depth state" {
