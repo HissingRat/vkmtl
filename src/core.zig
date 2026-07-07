@@ -1806,6 +1806,23 @@ pub const MeshPipelineDescriptor = struct {
     }
 };
 
+pub const VulkanMeshPipelineLowering = struct {
+    mesh_entry_point: []const u8,
+    task_entry_point: ?[]const u8 = null,
+    mesh_threads_per_threadgroup: u32,
+    task_threads_per_threadgroup: u32 = 0,
+
+    pub fn fromDescriptor(descriptor: MeshPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!VulkanMeshPipelineLowering {
+        try descriptor.validate(features, limits);
+        return .{
+            .mesh_entry_point = descriptor.mesh_entry_point,
+            .task_entry_point = descriptor.task_entry_point,
+            .mesh_threads_per_threadgroup = descriptor.mesh_threads_per_threadgroup,
+            .task_threads_per_threadgroup = if (descriptor.task_entry_point != null) descriptor.task_threads_per_threadgroup else 0,
+        };
+    }
+};
+
 pub const AccelerationStructureKind = enum {
     bottom_level,
     top_level,
@@ -8072,6 +8089,21 @@ test "Metal tessellation lowering records factor buffer requirement" {
     }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 16 });
     try std.testing.expectEqual(@as(u32, 3), lowering.patch_control_points);
     try std.testing.expect(lowering.requires_factor_buffer);
+}
+
+test "Vulkan mesh pipeline lowering preserves optional task stage" {
+    const lowering = try VulkanMeshPipelineLowering.fromDescriptor(.{
+        .mesh_entry_point = "mesh_main",
+        .task_entry_point = "task_main",
+        .mesh_threads_per_threadgroup = 64,
+        .task_threads_per_threadgroup = 32,
+    }, .{ .mesh_shaders = true, .task_shaders = true }, .{
+        .max_mesh_threads_per_threadgroup = 128,
+        .max_task_threads_per_threadgroup = 64,
+    });
+    try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
+    try std.testing.expectEqualStrings("task_main", lowering.task_entry_point.?);
+    try std.testing.expectEqual(@as(u32, 64), lowering.mesh_threads_per_threadgroup);
 }
 
 test "texture usage can detect empty usage" {

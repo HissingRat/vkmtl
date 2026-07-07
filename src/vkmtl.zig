@@ -110,6 +110,7 @@ pub const TessellationDescriptor = core.TessellationDescriptor;
 pub const VulkanTessellationLowering = core.VulkanTessellationLowering;
 pub const MetalTessellationLowering = core.MetalTessellationLowering;
 pub const MeshPipelineDescriptor = core.MeshPipelineDescriptor;
+pub const VulkanMeshPipelineLowering = core.VulkanMeshPipelineLowering;
 pub const AccelerationStructureKind = core.AccelerationStructureKind;
 pub const AccelerationStructureDescriptor = core.AccelerationStructureDescriptor;
 pub const RayTracingShaderGroupKind = core.RayTracingShaderGroupKind;

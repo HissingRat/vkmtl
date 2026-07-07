@@ -26,6 +26,8 @@ See `phase2.md`.
 ## Phase 3: Vulkan Mesh / Task Shader Lowering
 
 - Lower mesh and task shader descriptors to Vulkan mesh shader pipelines.
+- Add `VulkanMeshPipelineLowering` metadata for mesh/task entry points and
+  threadgroup sizes.
 
 See `phase3.md`.
 

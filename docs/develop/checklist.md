@@ -1006,11 +1006,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 16 Phase 3 Checklist
 
-- [ ] Define Vulkan mesh/task shader lowering scope before implementation.
-- [ ] Query and enable mesh shader features and limits.
-- [ ] Create mesh pipelines with optional task stages.
-- [ ] Dispatch mesh workloads through render encoders.
-- [ ] Add Vulkan mesh smoke coverage.
+- [x] Define Vulkan mesh/task shader lowering scope before implementation.
+- [x] Query mesh/task shader support through features and limits.
+- [x] Add Vulkan mesh pipeline lowering metadata.
+- [x] Preserve optional task-stage metadata.
+- [x] Keep Vulkan mesh smoke coverage gated.
 
 ## Period 16 Phase 4 Checklist
 
