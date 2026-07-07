@@ -136,6 +136,13 @@ pub const examples = [_]ExampleEntry{
         .deterministic_output = "compute readback ok",
         .backend_expectation = "deterministic storage buffer and storage texture compute readback",
     },
+    .{
+        .name = "capability_dump",
+        .path = "examples/capability_dump",
+        .run_step = "run-capability-dump",
+        .kind = .presentation,
+        .backend_expectation = "prints selected backend capability report through public APIs",
+    },
 };
 
 pub fn validateExamples(entries: []const ExampleEntry) DevelopmentMatrixError!void {
@@ -589,7 +596,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 10), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 11), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {

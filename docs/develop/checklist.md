@@ -782,11 +782,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 11 Phase 5 Checklist
 
-- [ ] Define capability dump example scope before implementation.
-- [ ] Add `examples/capability_dump`.
-- [ ] Print backend, adapter, features, limits, and selected format capabilities.
-- [ ] Keep the example on public vkmtl APIs only.
-- [ ] Document expected smoke-test usage.
+- [x] Define capability dump example scope before implementation.
+- [x] Add `examples/capability_dump`.
+- [x] Print backend, adapter, features, limits, and selected format capabilities.
+- [x] Keep the example on public vkmtl APIs only.
+- [x] Document expected smoke-test usage.
 
 ## Period 11 Phase 6 Checklist
 

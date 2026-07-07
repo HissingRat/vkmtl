@@ -366,6 +366,31 @@ pub fn build(b: *std.Build) void {
     const compute_readback_step = b.step("run-compute-readback", "Run the vkmtl compute readback example");
     compute_readback_step.dependOn(&compute_readback_cmd.step);
 
+    const capability_dump = b.addExecutable(.{
+        .name = "vkmtl-capability-dump",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/capability_dump/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    capability_dump.root_module.linkLibrary(glfw);
+    b.installArtifact(capability_dump);
+
+    const capability_dump_cmd = b.addRunArtifact(capability_dump);
+    capability_dump_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, capability_dump_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, capability_dump_cmd);
+
+    const capability_dump_step = b.step("run-capability-dump", "Run the vkmtl backend capability dump example");
+    capability_dump_step.dependOn(&capability_dump_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

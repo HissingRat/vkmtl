@@ -13,3 +13,12 @@ Phase 5 adds a public example that shows what the selected backend can do.
 
 - The example should build without backend-private imports.
 - The output should be stable enough for smoke-test logs.
+
+## Current Status
+
+- `examples/capability_dump` prints adapter info, capability source, usable
+  features, native queried features, selected limits, and representative format
+  capabilities through public vkmtl APIs.
+- The example is available through `zig build run-capability-dump`.
+- The example uses the same external windowing adapter boundary as the other
+  public examples.

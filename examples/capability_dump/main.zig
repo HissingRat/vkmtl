@@ -1,0 +1,93 @@
+const std = @import("std");
+const vkmtl = @import("vkmtl");
+const glfw = @import("zig_glfw");
+const common = @import("vkmtl_examples_common");
+
+const app_name = "vkmtl capability dump";
+
+pub fn main() !void {
+    try glfw.init();
+    defer glfw.terminate();
+
+    const window = try glfw.createWindow(.{
+        .width = 320,
+        .height = 240,
+        .title = app_name,
+    });
+    defer glfw.destroyWindow(window);
+
+    var debug_allocator = std.heap.DebugAllocator(.{}){};
+    defer _ = debug_allocator.deinit();
+    const allocator = debug_allocator.allocator();
+
+    var context = try vkmtl.WindowContext.init(allocator, .{
+        .app_name = app_name,
+        .backend = .auto,
+        .surface = common.surfaceDescriptor(window),
+        .presentation = common.presentationDescriptor(window, .fifo),
+    });
+    defer context.deinit();
+
+    var device = context.device();
+    dumpAdapter(device.adapterInfo());
+    dumpReport(device.capabilityReport());
+    dumpFormatCaps(&device, .rgba8_unorm);
+    dumpFormatCaps(&device, .bgra8_unorm_srgb);
+    dumpFormatCaps(&device, .depth32_float);
+}
+
+fn dumpAdapter(adapter: vkmtl.AdapterInfo) void {
+    std.debug.print("backend: {s}\n", .{@tagName(adapter.backend)});
+    std.debug.print("adapter: {s}\n", .{adapter.name});
+    if (adapter.vendor.len != 0) std.debug.print("vendor: {s}\n", .{adapter.vendor});
+    std.debug.print("device type: {s}\n", .{@tagName(adapter.device_type)});
+}
+
+fn dumpReport(report: vkmtl.DeviceCapabilityReport) void {
+    std.debug.print("capability source: {s}\n", .{@tagName(report.source)});
+    std.debug.print("usable features:\n", .{});
+    dumpFeatureSet(report.features);
+    std.debug.print("native queried features:\n", .{});
+    dumpFeatureSet(report.native_features);
+    std.debug.print("limits:\n", .{});
+    std.debug.print("  max vertex buffers: {}\n", .{report.limits.max_vertex_buffer_slots});
+    std.debug.print("  max bind groups: {}\n", .{report.limits.max_bind_group_slots});
+    std.debug.print("  max color attachments: {}\n", .{report.limits.max_color_attachments});
+    std.debug.print("  max sample count: {}\n", .{report.limits.max_sample_count});
+    std.debug.print("  max compute threads/threadgroup: {}\n", .{report.limits.max_compute_total_threads_per_threadgroup});
+    std.debug.print("  max bindless descriptors/range: {}\n", .{report.limits.max_bindless_descriptors_per_range});
+}
+
+fn dumpFeatureSet(features: vkmtl.DeviceFeatures) void {
+    std.debug.print("  runtime slang: {}\n", .{features.runtime_slang});
+    std.debug.print("  shader reflection: {}\n", .{features.shader_reflection});
+    std.debug.print("  render pipelines: {}\n", .{features.render_pipelines});
+    std.debug.print("  compute pipelines: {}\n", .{features.compute_pipelines});
+    std.debug.print("  bind groups: {}\n", .{features.bind_groups});
+    std.debug.print("  native handles: {}\n", .{features.native_handles});
+    std.debug.print("  descriptor indexing: {}\n", .{features.descriptor_indexing});
+    std.debug.print("  argument buffers: {}\n", .{features.argument_buffers});
+    std.debug.print("  sparse buffers: {}\n", .{features.sparse_buffers});
+    std.debug.print("  sparse textures: {}\n", .{features.sparse_textures});
+    std.debug.print("  external textures: {}\n", .{features.external_textures});
+    std.debug.print("  tessellation: {}\n", .{features.tessellation});
+    std.debug.print("  mesh shaders: {}\n", .{features.mesh_shaders});
+    std.debug.print("  ray tracing: {}\n", .{features.ray_tracing});
+    std.debug.print("  driver pipeline cache: {}\n", .{features.driver_pipeline_cache});
+    std.debug.print("  Metal binary archive: {}\n", .{features.metal_binary_archive});
+}
+
+fn dumpFormatCaps(device: *vkmtl.Device, format: vkmtl.TextureFormat) void {
+    const caps = device.getFormatCaps(format);
+    std.debug.print("format {s}: sampled={}, storage={}, color={}, depth_stencil={}, filterable={}, blendable={}, copy_src={}, copy_dst={}\n", .{
+        @tagName(format),
+        caps.sampled,
+        caps.storage,
+        caps.color_attachment,
+        caps.depth_stencil_attachment,
+        caps.filterable,
+        caps.blendable,
+        caps.copy_source,
+        caps.copy_destination,
+    });
+}

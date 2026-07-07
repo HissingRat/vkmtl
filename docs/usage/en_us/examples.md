@@ -304,6 +304,25 @@ Current compute coverage is intentionally deterministic: storage buffer writes,
 storage texture writes, transfer readback, reflection-derived bind group
 layouts, and byte validation before process exit.
 
+## Capability Dump
+
+`examples/capability_dump` prints the selected backend, adapter identity,
+capability source, usable features, native queried features, selected limits,
+and representative format capabilities.
+
+Run it with:
+
+```sh
+zig build run-capability-dump
+```
+
+For backend debugging:
+
+```sh
+zig build run-capability-dump -Dvulkan
+VKMTL_BACKEND=metal zig build run-capability-dump
+```
+
 ## Compute Gallery
 
 Period 9 tracks the broader compute gallery in `src/development_matrix.zig`.
