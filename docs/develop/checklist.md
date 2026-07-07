@@ -910,11 +910,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 14 Phase 3 Checklist
 
-- [ ] Define Metal interop scope before implementation.
-- [ ] Wrap existing Metal textures or buffers through explicit descriptors.
-- [ ] Support Metal shared events where available.
-- [ ] Preserve ownership boundaries with external owners.
-- [ ] Add macOS smoke coverage where practical.
+- [x] Define Metal interop scope before implementation.
+- [x] Add Metal texture, buffer, and shared-event descriptor shapes.
+- [x] Support Metal shared event validation where available.
+- [x] Preserve ownership boundaries with external owners.
+- [x] Add descriptor coverage and keep macOS smoke coverage gated.
 
 ## Period 14 Phase 4 Checklist
 

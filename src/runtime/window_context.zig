@@ -2425,7 +2425,15 @@ pub const Device = struct {
         try descriptor.validate(self.backend, self.features());
     }
 
+    pub fn validateExternalBufferDescriptor(self: Device, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.backend, self.features());
+    }
+
     pub fn validateExternalSemaphoreDescriptor(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.backend, self.features());
+    }
+
+    pub fn validateExternalEventDescriptor(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.backend, self.features());
     }
 

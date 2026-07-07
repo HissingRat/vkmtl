@@ -28,6 +28,8 @@ See `phase2.md`.
 ## Phase 3: Metal Texture / Buffer / Event Interop
 
 - Import and wrap Metal textures, buffers, and events where supported.
+- Add Metal buffer and shared-event descriptor validation with explicit borrowed
+  ownership.
 
 See `phase3.md`.
 

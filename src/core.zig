@@ -3354,7 +3354,9 @@ pub const ExternalHandleKind = enum {
     win32_handle,
     vulkan_memory,
     iosurface,
+    metal_buffer,
     metal_texture,
+    metal_shared_event,
     vulkan_image,
     vulkan_semaphore,
 
@@ -3371,11 +3373,18 @@ pub const ExternalHandleKind = enum {
     pub fn isMetalSpecific(self: ExternalHandleKind) bool {
         return switch (self) {
             .iosurface,
+            .metal_buffer,
             .metal_texture,
+            .metal_shared_event,
             => true,
             else => false,
         };
     }
+};
+
+pub const ExternalResourceOwnership = enum {
+    borrowed,
+    transferred,
 };
 
 pub const ExternalHandleDescriptor = struct {
@@ -3389,7 +3398,7 @@ pub const ExternalHandleDescriptor = struct {
             if (backend != selected_backend) return AdvancedFeatureError.ExternalHandleBackendMismatch;
         }
         switch (self.kind) {
-            .iosurface, .metal_texture => if (selected_backend != .metal) return AdvancedFeatureError.ExternalHandleBackendMismatch,
+            .iosurface, .metal_buffer, .metal_texture, .metal_shared_event => if (selected_backend != .metal) return AdvancedFeatureError.ExternalHandleBackendMismatch,
             .vulkan_memory, .vulkan_image, .vulkan_semaphore => if (selected_backend != .vulkan) return AdvancedFeatureError.ExternalHandleBackendMismatch,
             .opaque_fd, .win32_handle => {},
         }
@@ -3401,6 +3410,7 @@ pub const ExternalMemoryDescriptor = struct {
     handle: ExternalHandleDescriptor,
     size: u64,
     dedicated: bool = false,
+    ownership: ExternalResourceOwnership = .borrowed,
 
     pub fn validate(
         self: ExternalMemoryDescriptor,
@@ -3416,6 +3426,24 @@ pub const ExternalMemoryDescriptor = struct {
     }
 };
 
+pub const ExternalBufferDescriptor = struct {
+    label: ?[]const u8 = null,
+    handle: ExternalHandleDescriptor,
+    length: u64,
+    usage: BufferUsage = .{ .storage = true },
+    ownership: ExternalResourceOwnership = .borrowed,
+
+    pub fn validate(
+        self: ExternalBufferDescriptor,
+        selected_backend: Backend,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!void {
+        if (!features.external_memory) return AdvancedFeatureError.UnsupportedExternalMemory;
+        if (self.length == 0) return AdvancedFeatureError.InvalidExternalHandle;
+        try self.handle.validateForBackend(selected_backend);
+    }
+};
+
 pub const ExternalTextureDescriptor = struct {
     label: ?[]const u8 = null,
     handle: ExternalHandleDescriptor,
@@ -3424,6 +3452,7 @@ pub const ExternalTextureDescriptor = struct {
     height: u32,
     depth_or_array_layers: u32 = 1,
     usage: TextureUsage = .{ .shader_read = true },
+    ownership: ExternalResourceOwnership = .borrowed,
 
     pub fn validate(
         self: ExternalTextureDescriptor,
@@ -3445,9 +3474,25 @@ pub const ExternalTextureDescriptor = struct {
 pub const ExternalSemaphoreDescriptor = struct {
     handle: ExternalHandleDescriptor,
     timeline: bool = false,
+    ownership: ExternalResourceOwnership = .borrowed,
 
     pub fn validate(
         self: ExternalSemaphoreDescriptor,
+        selected_backend: Backend,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!void {
+        if (!features.external_semaphores) return AdvancedFeatureError.UnsupportedExternalSemaphores;
+        try self.handle.validateForBackend(selected_backend);
+    }
+};
+
+pub const ExternalEventDescriptor = struct {
+    handle: ExternalHandleDescriptor,
+    shared: bool = true,
+    ownership: ExternalResourceOwnership = .borrowed,
+
+    pub fn validate(
+        self: ExternalEventDescriptor,
         selected_backend: Backend,
         features: DeviceFeatures,
     ) AdvancedFeatureError!void {
@@ -7494,6 +7539,27 @@ test "external texture descriptors validate backend and feature gates" {
         .value = 1,
         .backend = .metal,
     };
+    try std.testing.expect(ExternalHandleKind.metal_buffer.isMetalSpecific());
+    try std.testing.expect(!ExternalHandleKind.vulkan_memory.isMetalSpecific());
+
+    const external_buffer = ExternalBufferDescriptor{
+        .handle = .{ .kind = .metal_buffer, .value = 3 },
+        .length = 256,
+        .ownership = .borrowed,
+    };
+    try std.testing.expectEqual(ExternalResourceOwnership.borrowed, external_buffer.ownership);
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalMemory, external_buffer.validate(.metal, .{}));
+    try external_buffer.validate(.metal, .{ .external_memory = true });
+    try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, external_buffer.validate(.vulkan, .{ .external_memory = true }));
+
+    try (ExternalEventDescriptor{
+        .handle = .{ .kind = .metal_shared_event, .value = 4 },
+        .shared = true,
+    }).validate(.metal, .{ .external_semaphores = true });
+    try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, (ExternalEventDescriptor{
+        .handle = .{ .kind = .metal_shared_event, .value = 4 },
+    }).validate(.vulkan, .{ .external_semaphores = true }));
+
     const external_texture = ExternalTextureDescriptor{
         .handle = metal_handle,
         .format = .rgba8_unorm,
