@@ -1,13 +1,16 @@
 # Period 21: Binding And Shader Backend Completion
 
-Status: planned after Period 20.
+Status: completed as a binding backend validation slice.
 
 Goal: finish the native backend paths for binding and shader features that are
 already represented in public descriptors.
 
-Expected result: material systems can use dynamic offsets, resource arrays,
-constants, and specialization without flattening every shader into custom
-one-off bindings.
+Expected result: material systems can use dynamic offsets and first-slice
+resource arrays without flattening every binding into unique slots. Advanced
+binding layouts, root-constant pipeline compatibility, and specialization cache
+identity are represented and validated, while bindless table updates, command
+constant writes, and native specialization lowering remain explicit follow-up
+backend work.
 
 ## Phase 1: Dynamic Buffer Offsets
 
@@ -23,20 +26,22 @@ See `phase2.md`.
 
 ## Phase 3: Descriptor Indexing And Argument Buffers
 
-- Lower advanced binding models to Vulkan descriptor indexing and Metal argument
-  buffers.
+- Snapshot advanced binding ranges into backend-aware layout metadata and keep
+  bindless table updates deferred.
 
 See `phase3.md`.
 
 ## Phase 4: Small Constants And Root Constants
 
-- Lower small/root constants to push constants or Metal-visible equivalents.
+- Add root-constant layout compatibility to pipeline descriptors and keep
+  command writes/native lowering deferred.
 
 See `phase4.md`.
 
 ## Phase 5: Shader Specialization
 
-- Lower shader specialization constants to Vulkan and Metal pipeline creation.
+- Verify specialization identity in pipeline fingerprints and keep native
+  specialization lowering deferred.
 
 See `phase5.md`.
 

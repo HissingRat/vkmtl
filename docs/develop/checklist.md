@@ -1285,6 +1285,13 @@ obvious render and binding blockers.
 - [x] Keep Vulkan specialization info and Metal/Slang variant lowering deferred.
 - [x] Update docs and tests.
 
+## Period 21 Phase 6 Checklist
+
+- [x] Update Period 21 status and expected result.
+- [x] Add backend matrix notes for completed and deferred binding paths.
+- [x] Confirm API docs cover dynamic offsets, arrays, constants, and specialization.
+- [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
