@@ -814,11 +814,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 12 Phase 3 Checklist
 
-- [ ] Define Metal argument buffer lowering scope before implementation.
-- [ ] Create argument-buffer layout objects.
-- [ ] Bind argument buffers in render and compute encoders.
-- [ ] Respect argument-buffer tier limits.
-- [ ] Add Metal validation and smoke coverage.
+- [x] Define Metal argument buffer lowering scope before implementation.
+- [x] Create argument-buffer layout objects.
+- [x] Bind argument buffers in render and compute encoders.
+- [x] Respect argument-buffer tier limits.
+- [x] Add Metal validation and smoke coverage.
 
 ## Period 12 Phase 4 Checklist
 

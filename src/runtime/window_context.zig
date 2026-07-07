@@ -5,6 +5,7 @@ const build_options = @import("vkmtl_build_options");
 const ShaderCompiler = @import("../shader/compiler.zig");
 const ShaderReflection = @import("../shader/reflection.zig");
 const MetalBuffer = @import("../backend/metal/buffer.zig");
+const MetalAdvancedBindGroupBackend = @import("../backend/metal/advanced_binding.zig");
 const MetalBindGroupBackend = @import("../backend/metal/bind_group.zig");
 const MetalCommand = @import("../backend/metal/command.zig");
 const MetalComputePipelineState = @import("../backend/metal/compute_pipeline.zig");
@@ -1100,7 +1101,7 @@ pub const AdvancedBindGroupLayout = struct {
 
     const Impl = union(core.Backend) {
         vulkan: VulkanAdvancedBindGroupBackend,
-        metal: void,
+        metal: MetalAdvancedBindGroupBackend,
     };
 
     pub fn deinit(self: *AdvancedBindGroupLayout) void {
@@ -2634,7 +2635,7 @@ pub const Device = struct {
         errdefer self.allocator.free(ranges);
         const impl: ?AdvancedBindGroupLayout.Impl = switch (self.impl.*) {
             .vulkan => |*vulkan| .{ .vulkan = try VulkanAdvancedBindGroupBackend.init(vulkan.gc, descriptor) },
-            .metal => null,
+            .metal => .{ .metal = try MetalAdvancedBindGroupBackend.init(descriptor) },
         };
 
         self.tracker.retain(.advanced_bind_group_layout);
