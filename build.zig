@@ -416,6 +416,31 @@ pub fn build(b: *std.Build) void {
     const bindless_textures_step = b.step("run-bindless-textures", "Run the vkmtl bindless textures feature-gate example");
     bindless_textures_step.dependOn(&bindless_textures_cmd.step);
 
+    const multi_window = b.addExecutable(.{
+        .name = "vkmtl-multi-window",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/multi_window/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    multi_window.root_module.linkLibrary(glfw);
+    b.installArtifact(multi_window);
+
+    const multi_window_cmd = b.addRunArtifact(multi_window);
+    multi_window_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, multi_window_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, multi_window_cmd);
+
+    const multi_window_step = b.step("run-multi-window", "Run the vkmtl multi-window feature-gate example");
+    multi_window_step.dependOn(&multi_window_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

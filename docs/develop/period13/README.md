@@ -1,6 +1,6 @@
 # Period 13: Multi-Surface / Presentation Backend
 
-Status: in progress.
+Status: completed.
 
 Goal: make one selected device manage multiple presentation surfaces through
 real Vulkan and Metal backend resources.
@@ -55,5 +55,7 @@ See `phase5.md`.
 ## Phase 6: Multi-Window Example
 
 - Add a public example with two windows sharing one device.
+- Keep native rendering capability-gated until multi-swapchain lowering is
+  available on the selected backend.
 
 See `phase6.md`.

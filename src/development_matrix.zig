@@ -150,6 +150,13 @@ pub const examples = [_]ExampleEntry{
         .kind = .render,
         .backend_expectation = "advanced binding feature gate and bindless texture layout contract",
     },
+    .{
+        .name = "multi_window",
+        .path = "examples/multi_window",
+        .run_step = "run-multi-window",
+        .kind = .presentation,
+        .backend_expectation = "multi-surface registry and native multi-window feature gate",
+    },
 };
 
 pub fn validateExamples(entries: []const ExampleEntry) DevelopmentMatrixError!void {
@@ -603,7 +610,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 12), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 13), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {

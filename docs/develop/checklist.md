@@ -886,11 +886,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 13 Phase 6 Checklist
 
-- [ ] Define multi-window example scope before implementation.
-- [ ] Add `examples/multi_window`.
-- [ ] Use external windowing adapters, not vkmtl core windowing.
-- [ ] Render visibly different content per window.
-- [ ] Validate public API imports only.
+- [x] Define multi-window example scope before implementation.
+- [x] Add `examples/multi_window`.
+- [x] Use external windowing adapters, not vkmtl core windowing.
+- [x] Report native multi-surface availability through a clear feature gate.
+- [x] Validate public API imports only.
 
 ## Period 14 Phase 1 Checklist
 

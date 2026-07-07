@@ -351,7 +351,18 @@ where practical so they can become useful backend regression tests.
 
 ## Multi-Window Gallery
 
-Multi-window examples are planned, not implemented. The tracked cases are:
+`examples/multi_window` is the first multi-surface smoke example. It creates two
+external GLFW windows, registers both surfaces through public vkmtl
+`SurfaceCollection`, and reports whether the selected backend exposes native
+multi-window presentation through `DeviceFeatures.multi_surface`.
+
+Run it with:
+
+```sh
+zig build run-multi-window
+```
+
+The broader tracked cases are:
 
 - `single_device_multiple_surfaces`
 - `multiple_swapchains`
