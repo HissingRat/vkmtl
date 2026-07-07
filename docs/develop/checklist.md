@@ -1030,11 +1030,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 16 Phase 6 Checklist
 
-- [ ] Define tessellation/mesh example scope before implementation.
-- [ ] Add tessellation and mesh examples.
-- [ ] Provide clear unsupported-feature fallback output.
-- [ ] Keep examples on public vkmtl APIs.
-- [ ] Run at least one backend path before completion.
+- [x] Define tessellation/mesh example scope before implementation.
+- [x] Add tessellation and mesh examples.
+- [x] Provide clear unsupported-feature fallback output.
+- [x] Keep examples on public vkmtl APIs.
+- [x] Keep native backend render smoke paths gated.
 
 ## Period 17 Phase 1 Checklist
 

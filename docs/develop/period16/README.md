@@ -1,6 +1,6 @@
 # Period 16: Advanced Geometry Pipeline
 
-Status: in progress.
+Status: completed.
 
 Goal: lower tessellation and mesh/task shader descriptors to real backend
 pipelines where supported.
@@ -49,5 +49,6 @@ See `phase5.md`.
 ## Phase 6: Tessellation And Mesh Examples
 
 - Add examples that prove both advanced geometry paths.
+- Add feature-gated `examples/tessellation` and `examples/mesh_shader`.
 
 See `phase6.md`.

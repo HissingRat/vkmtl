@@ -491,6 +491,56 @@ pub fn build(b: *std.Build) void {
     const streaming_texture_step = b.step("run-streaming-texture", "Run the vkmtl streaming texture feature-gate example");
     streaming_texture_step.dependOn(&streaming_texture_cmd.step);
 
+    const tessellation = b.addExecutable(.{
+        .name = "vkmtl-tessellation",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/tessellation/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    tessellation.root_module.linkLibrary(glfw);
+    b.installArtifact(tessellation);
+
+    const tessellation_cmd = b.addRunArtifact(tessellation);
+    tessellation_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, tessellation_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, tessellation_cmd);
+
+    const tessellation_step = b.step("run-tessellation", "Run the vkmtl tessellation feature-gate example");
+    tessellation_step.dependOn(&tessellation_cmd.step);
+
+    const mesh_shader = b.addExecutable(.{
+        .name = "vkmtl-mesh-shader",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/mesh_shader/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    mesh_shader.root_module.linkLibrary(glfw);
+    b.installArtifact(mesh_shader);
+
+    const mesh_shader_cmd = b.addRunArtifact(mesh_shader);
+    mesh_shader_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, mesh_shader_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, mesh_shader_cmd);
+
+    const mesh_shader_step = b.step("run-mesh-shader", "Run the vkmtl mesh shader feature-gate example");
+    mesh_shader_step.dependOn(&mesh_shader_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

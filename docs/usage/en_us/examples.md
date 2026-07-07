@@ -410,3 +410,17 @@ Run it with:
 ```sh
 zig build run-streaming-texture
 ```
+
+## Advanced Geometry
+
+`examples/tessellation` and `examples/mesh_shader` exercise the tessellation and
+mesh pipeline descriptors plus backend lowering metadata. They print
+unsupported-feature messages until the selected backend exposes the required
+advanced geometry features.
+
+Run them with:
+
+```sh
+zig build run-tessellation
+zig build run-mesh-shader
+```

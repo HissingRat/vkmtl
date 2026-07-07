@@ -252,3 +252,16 @@ backend 暴露 sparse 或 tiled texture 之前，它会打印 unsupported-featur
 ```sh
 zig build run-streaming-texture
 ```
+
+## Advanced Geometry
+
+`examples/tessellation` 和 `examples/mesh_shader` 会验证 tessellation / mesh pipeline descriptor
+以及 backend lowering metadata。在所选 backend 暴露对应 advanced geometry features 之前，它们会打印
+unsupported-feature 信息。
+
+运行：
+
+```sh
+zig build run-tessellation
+zig build run-mesh-shader
+```
