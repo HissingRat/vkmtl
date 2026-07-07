@@ -1062,11 +1062,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 4 Checklist
 
-- [ ] Define shader binding table mapping scope before implementation.
-- [ ] Build Vulkan shader binding tables with correct alignment.
-- [ ] Map public shader groups to Metal equivalents.
-- [ ] Include ray binding data in cache keys.
-- [ ] Add alignment and missing-group tests.
+- [x] Define shader binding table mapping scope before implementation.
+- [x] Build Vulkan shader binding table layout with correct alignment.
+- [x] Map public shader groups to Metal-equivalent layout metadata.
+- [x] Include ray binding data shape in pipeline metadata.
+- [x] Add alignment and missing-group tests.
 
 ## Period 17 Phase 5 Checklist
 

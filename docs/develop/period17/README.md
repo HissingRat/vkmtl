@@ -33,6 +33,7 @@ See `phase3.md`.
 ## Phase 4: Shader Binding Table Mapping
 
 - Map public shader group descriptors to Vulkan SBT and Metal equivalents.
+- Add `ShaderBindingTableLayout` offset/size mapping.
 
 See `phase4.md`.
 

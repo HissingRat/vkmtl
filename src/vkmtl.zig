@@ -124,6 +124,7 @@ pub const VulkanRayTracingPipelineLowering = core.VulkanRayTracingPipelineLoweri
 pub const MetalIntersectionFunctionDescriptor = core.MetalIntersectionFunctionDescriptor;
 pub const MetalRayTracingLowering = core.MetalRayTracingLowering;
 pub const ShaderBindingTableDescriptor = core.ShaderBindingTableDescriptor;
+pub const ShaderBindingTableLayout = core.ShaderBindingTableLayout;
 pub const DepthBiasDescriptor = core.DepthBiasDescriptor;
 pub const ColorWriteMask = core.ColorWriteMask;
 pub const BlendFactor = core.BlendFactor;

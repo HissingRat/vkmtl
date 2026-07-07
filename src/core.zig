@@ -2009,6 +2009,32 @@ pub const ShaderBindingTableDescriptor = struct {
     }
 };
 
+pub const ShaderBindingTableLayout = struct {
+    ray_generation_offset: u64 = 0,
+    miss_offset: u64 = 0,
+    hit_offset: u64 = 0,
+    callable_offset: u64 = 0,
+    total_size: u64 = 0,
+
+    pub fn fromDescriptor(descriptor: ShaderBindingTableDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!ShaderBindingTableLayout {
+        try descriptor.validate(features, limits);
+        const raygen_size = @as(u64, descriptor.ray_generation_count) * descriptor.stride;
+        const miss_offset = raygen_size;
+        const miss_size = @as(u64, descriptor.miss_count) * descriptor.stride;
+        const hit_offset = miss_offset + miss_size;
+        const hit_size = @as(u64, descriptor.hit_count) * descriptor.stride;
+        const callable_offset = hit_offset + hit_size;
+        const callable_size = @as(u64, descriptor.callable_count) * descriptor.stride;
+        return .{
+            .ray_generation_offset = 0,
+            .miss_offset = miss_offset,
+            .hit_offset = hit_offset,
+            .callable_offset = callable_offset,
+            .total_size = callable_offset + callable_size,
+        };
+    }
+};
+
 pub const DepthBiasDescriptor = struct {
     enabled: bool = false,
     constant: f32 = 0,
@@ -8297,6 +8323,21 @@ test "Metal ray tracing lowering counts function table entries" {
     }, intersections[0..], .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
     try std.testing.expectEqual(@as(u32, 3), lowering.function_table_entries);
     try std.testing.expectEqual(@as(u32, 1), lowering.intersection_function_count);
+}
+
+test "shader binding table layout computes group offsets" {
+    const layout = try ShaderBindingTableLayout.fromDescriptor(.{
+        .stride = 64,
+        .ray_generation_count = 1,
+        .miss_count = 2,
+        .hit_count = 3,
+        .callable_count = 1,
+    }, .{ .ray_tracing = true }, .{ .shader_binding_table_alignment = 64 });
+    try std.testing.expectEqual(@as(u64, 0), layout.ray_generation_offset);
+    try std.testing.expectEqual(@as(u64, 64), layout.miss_offset);
+    try std.testing.expectEqual(@as(u64, 192), layout.hit_offset);
+    try std.testing.expectEqual(@as(u64, 384), layout.callable_offset);
+    try std.testing.expectEqual(@as(u64, 448), layout.total_size);
 }
 
 test "texture usage can detect empty usage" {
