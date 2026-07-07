@@ -26,6 +26,9 @@ pub fn init(
     const compute_entry = try allocator.dupeZ(u8, descriptor.compute.entry_point);
     defer allocator.free(compute_entry);
 
+    var compute_specialization = try SpecializationState.init(allocator, descriptor.compute.specialization);
+    defer compute_specialization.deinit();
+
     const bind_group_layouts = try makeBindGroupLayouts(gc, allocator, descriptor.bind_group_layouts);
     errdefer destroyBindGroupLayouts(allocator, bind_group_layouts);
 
@@ -49,6 +52,7 @@ pub fn init(
             .stage = .{ .compute_bit = true },
             .module = compute_module.handle,
             .p_name = compute_entry,
+            .p_specialization_info = compute_specialization.infoPtr(),
         },
         .layout = layout,
         .base_pipeline_handle = .null_handle,
@@ -143,4 +147,73 @@ fn shaderStageFlags(visibility: core.ShaderVisibility) vk.ShaderStageFlags {
         .fragment_bit = visibility.fragment,
         .compute_bit = visibility.compute,
     };
+}
+
+const SpecializationState = struct {
+    allocator: ?std.mem.Allocator = null,
+    entries: []vk.SpecializationMapEntry = &.{},
+    data: []u8 = &.{},
+    info: vk.SpecializationInfo = .{},
+
+    fn empty() SpecializationState {
+        return .{};
+    }
+
+    fn init(
+        allocator: std.mem.Allocator,
+        descriptor: core.ShaderSpecializationDescriptor,
+    ) !SpecializationState {
+        if (descriptor.constants.len == 0) return empty();
+
+        const entries = try allocator.alloc(vk.SpecializationMapEntry, descriptor.constants.len);
+        errdefer allocator.free(entries);
+        const data = try allocator.alloc(u8, descriptor.constants.len * 4);
+        errdefer allocator.free(data);
+
+        var offset: u32 = 0;
+        for (descriptor.constants, entries) |constant, *entry| {
+            entry.* = .{
+                .constant_id = constant.id,
+                .offset = offset,
+                .size = 4,
+            };
+            writeSpecializationValue(data[offset..][0..4], constant.value);
+            offset += 4;
+        }
+
+        return .{
+            .allocator = allocator,
+            .entries = entries,
+            .data = data,
+            .info = .{
+                .map_entry_count = @intCast(entries.len),
+                .p_map_entries = entries.ptr,
+                .data_size = data.len,
+                .p_data = data.ptr,
+            },
+        };
+    }
+
+    fn deinit(self: *SpecializationState) void {
+        if (self.allocator) |allocator| {
+            allocator.free(self.entries);
+            allocator.free(self.data);
+        }
+        self.* = undefined;
+    }
+
+    fn infoPtr(self: *const SpecializationState) ?*const vk.SpecializationInfo {
+        if (self.entries.len == 0) return null;
+        return &self.info;
+    }
+};
+
+fn writeSpecializationValue(out: []u8, value: core.ShaderSpecializationValue) void {
+    const bits: u32 = switch (value) {
+        .bool => |v| if (v) 1 else 0,
+        .i32 => |v| @bitCast(v),
+        .u32 => |v| v,
+        .f32 => |v| @bitCast(v),
+    };
+    std.mem.writeInt(u32, out[0..4], bits, .little);
 }

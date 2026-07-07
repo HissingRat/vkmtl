@@ -3150,8 +3150,8 @@ pub const Device = struct {
         try descriptor.validate();
         try validateRuntimeRenderPipelineShape(descriptor, self.features());
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
-        try validateRuntimeSpecialization(descriptor.vertex);
-        if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment);
+        try validateRuntimeSpecialization(descriptor.vertex, self.features());
+        if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment, self.features());
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
         const root_constant_ranges = try copyRootConstantRanges(self.allocator, descriptor.root_constant_layout);
         errdefer self.allocator.free(root_constant_ranges);
@@ -3181,7 +3181,7 @@ pub const Device = struct {
     pub fn makeComputePipelineState(self: *Device, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
         try descriptor.validate();
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
-        try validateRuntimeSpecialization(descriptor.compute);
+        try validateRuntimeSpecialization(descriptor.compute, self.features());
         try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
         const root_constant_ranges = try copyRootConstantRanges(self.allocator, descriptor.root_constant_layout);
         errdefer self.allocator.free(root_constant_ranges);
@@ -3837,8 +3837,11 @@ fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor)
     _ = descriptor;
 }
 
-fn validateRuntimeSpecialization(stage: core.ProgrammableStageDescriptor) core.ShaderError!void {
-    if (stage.specialization.constants.len != 0) return core.ShaderError.UnsupportedShaderSpecialization;
+fn validateRuntimeSpecialization(
+    stage: core.ProgrammableStageDescriptor,
+    features: core.DeviceFeatures,
+) core.ShaderError!void {
+    try stage.specialization.validate(features);
 }
 
 fn validateRuntimeRootConstantLayout(
@@ -5248,7 +5251,7 @@ test "runtime command encoders write root constants with pipeline layout validat
     }));
 }
 
-test "runtime specialization gate rejects non-empty specialization descriptors" {
+test "runtime specialization gate honors device feature support" {
     const constants = [_]core.ShaderSpecializationConstant{.{
         .id = 0,
         .name = "variant",
@@ -5258,7 +5261,12 @@ test "runtime specialization gate rejects non-empty specialization descriptors" 
         .module = .{ .source = .{ .slang = "shader source" } },
         .stage = .vertex,
         .specialization = .{ .constants = constants[0..] },
-    }));
+    }, .{}));
+    try validateRuntimeSpecialization(.{
+        .module = .{ .source = .{ .slang = "shader source" } },
+        .stage = .vertex,
+        .specialization = .{ .constants = constants[0..] },
+    }, .{ .shader_specialization = true });
 }
 
 test "runtime pipeline fingerprints include shader specialization constants" {
