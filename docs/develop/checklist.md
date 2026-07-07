@@ -854,11 +854,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 13 Phase 2 Checklist
 
-- [ ] Define multiple swapchain/drawable scope before implementation.
-- [ ] Support multiple Vulkan swapchains for one device.
-- [ ] Support multiple Metal drawable streams for one device.
-- [ ] Isolate per-surface extent, format, present mode, and frame state.
-- [ ] Add per-surface state tests.
+- [x] Define multiple swapchain/drawable scope before implementation.
+- [x] Add neutral per-surface presentation resource state.
+- [x] Keep future Vulkan swapchain and Metal drawable streams capability-gated.
+- [x] Isolate per-surface extent, format, present mode, and frame state.
+- [x] Add per-surface state tests.
 
 ## Period 13 Phase 3 Checklist
 

@@ -22,6 +22,8 @@ See `phase1.md`.
 
 - Support multiple Vulkan swapchains.
 - Support multiple Metal layers or drawable streams.
+- Keep neutral per-surface presentation resource state isolated before native
+  swapchain objects are attached.
 
 See `phase2.md`.
 

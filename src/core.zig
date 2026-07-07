@@ -4782,6 +4782,33 @@ pub const PresentationDescriptor = struct {
     resize_policy: SurfaceResizePolicy = .suspend_when_zero,
 };
 
+pub const PresentationResourceState = struct {
+    configured: bool = false,
+    extent: Extent2D = .{ .width = 0, .height = 0 },
+    format: TextureFormat = .automatic,
+    present_mode: PresentMode = .fifo,
+    frame_in_flight: bool = false,
+    generation: u64 = 0,
+
+    pub fn configure(self: *PresentationResourceState, descriptor: PresentationDescriptor) void {
+        self.configured = true;
+        self.extent = descriptor.extent;
+        self.format = descriptor.format;
+        self.present_mode = descriptor.present_mode;
+        self.frame_in_flight = false;
+        self.generation +%= 1;
+    }
+
+    pub fn suspendPresentation(self: *PresentationResourceState, descriptor: PresentationDescriptor) void {
+        self.configured = false;
+        self.extent = descriptor.extent;
+        self.format = descriptor.format;
+        self.present_mode = descriptor.present_mode;
+        self.frame_in_flight = false;
+        self.generation +%= 1;
+    }
+};
+
 pub const ClearColorLike = struct {
     red: f32 = 0,
     green: f32 = 0,
@@ -4914,6 +4941,7 @@ pub const Surface = struct {
     descriptor: SurfaceDescriptor,
     state: SurfaceState = .unconfigured,
     presentation: ?PresentationDescriptor = null,
+    presentation_state: PresentationResourceState = .{},
 
     pub fn selectedBackend(self: Surface) Backend {
         return self.backend;
@@ -4928,6 +4956,7 @@ pub const Surface = struct {
             if (descriptor.resize_policy == .suspend_when_zero) {
                 self.state = .suspended;
                 self.presentation = descriptor;
+                self.presentation_state.suspendPresentation(descriptor);
                 return;
             }
             return SurfaceError.InvalidSurfaceExtent;
@@ -4935,6 +4964,7 @@ pub const Surface = struct {
 
         self.state = .configured;
         self.presentation = descriptor;
+        self.presentation_state.configure(descriptor);
     }
 
     pub fn resize(self: *Surface, extent: Extent2D) SurfaceError!void {
@@ -4956,6 +4986,7 @@ pub const SurfaceInfo = struct {
     provider: SurfaceProvider,
     state: SurfaceState,
     presentation: ?PresentationDescriptor = null,
+    presentation_state: PresentationResourceState = .{},
 };
 
 pub const SurfaceCollection = struct {
@@ -5015,6 +5046,7 @@ pub const SurfaceCollection = struct {
         entry.alive = false;
         entry.surface.state = .unconfigured;
         entry.surface.presentation = null;
+        entry.surface.presentation_state = .{};
     }
 
     pub fn get(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!*Surface {
@@ -5030,6 +5062,7 @@ pub const SurfaceCollection = struct {
             .provider = surface.provider(),
             .state = surface.state,
             .presentation = surface.presentation,
+            .presentation_state = surface.presentation_state,
         };
     }
 
@@ -5569,6 +5602,56 @@ test "surface collection manages multiple neutral surfaces" {
     try std.testing.expect(handle_a.generation != handle_c.generation);
     try std.testing.expect(collection.contains(handle_c));
     try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.info(handle_a));
+}
+
+test "surface collection isolates presentation resource state per surface" {
+    var collection = SurfaceCollection.init(std.testing.allocator, .vulkan);
+    defer collection.deinit();
+
+    var window_a: u8 = 0;
+    var window_b: u8 = 0;
+    const handle_a = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_a,
+        },
+    }, .{
+        .extent = .{ .width = 640, .height = 480 },
+        .format = .rgba8_unorm,
+        .present_mode = .fifo,
+    });
+    const handle_b = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_b,
+        },
+    }, .{
+        .extent = .{ .width = 320, .height = 240 },
+        .format = .bgra8_unorm_srgb,
+        .present_mode = .mailbox,
+    });
+
+    const initial_a = (try collection.info(handle_a)).presentation_state;
+    const initial_b = (try collection.info(handle_b)).presentation_state;
+    try std.testing.expect(initial_a.configured);
+    try std.testing.expect(initial_b.configured);
+    try std.testing.expectEqual(@as(u32, 640), initial_a.extent.width);
+    try std.testing.expectEqual(@as(u32, 320), initial_b.extent.width);
+    try std.testing.expectEqual(PresentMode.mailbox, initial_b.present_mode);
+
+    try collection.resize(handle_a, .{ .width = 1024, .height = 768 });
+    const resized_a = (try collection.info(handle_a)).presentation_state;
+    const unchanged_b = (try collection.info(handle_b)).presentation_state;
+    try std.testing.expectEqual(@as(u32, 1024), resized_a.extent.width);
+    try std.testing.expect(resized_a.generation > initial_a.generation);
+    try std.testing.expectEqual(@as(u32, 320), unchanged_b.extent.width);
+    try std.testing.expectEqual(initial_b.generation, unchanged_b.generation);
+
+    try collection.resize(handle_b, .{ .width = 0, .height = 0 });
+    const suspended_b = (try collection.info(handle_b)).presentation_state;
+    try std.testing.expect(!suspended_b.configured);
+    try std.testing.expectEqual(SurfaceState.suspended, (try collection.info(handle_b)).state);
+    try std.testing.expectEqual(@as(u32, 1024), (try collection.info(handle_a)).presentation_state.extent.width);
 }
 
 test "buffer descriptor resolves length from explicit length or bytes" {
