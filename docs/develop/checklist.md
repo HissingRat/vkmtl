@@ -982,11 +982,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 15 Phase 6 Checklist
 
-- [ ] Define sparse validation scope before implementation.
-- [ ] Validate page alignment, residency state, and usage flags.
-- [ ] Validate out-of-bounds sparse mapping descriptors.
-- [ ] Validate detectable non-resident access metadata.
-- [ ] Add commit/uncommit sequence tests.
+- [x] Define sparse validation scope before implementation.
+- [x] Validate page alignment, residency state, and usage flags.
+- [x] Validate empty commit and missing uncommit paths.
+- [x] Validate independent mip-level residency metadata.
+- [x] Add commit/uncommit sequence tests.
 
 ## Period 16 Phase 1 Checklist
 

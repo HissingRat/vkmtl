@@ -1,6 +1,6 @@
 # Period 15: Sparse / Tiled Resources Backend
 
-Status: in progress.
+Status: completed.
 
 Goal: lower sparse and tiled resource descriptors to backend-native residency
 and page-commit mechanisms for large textures, virtual resources, and streaming
@@ -51,5 +51,6 @@ See `phase5.md`.
 ## Phase 6: Sparse Validation Coverage
 
 - Validate page alignment, residency state, and unsupported access.
+- Add missing-uncommit, empty-commit, and independent mip-level validation.
 
 See `phase6.md`.

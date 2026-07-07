@@ -7956,6 +7956,36 @@ test "sparse residency map tracks commits and rejects overlaps" {
         .residency = .evicted,
     }} });
     try std.testing.expectEqual(@as(usize, 0), map.diagnostics().texture_regions);
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{ .buffers = &.{.{
+        .offset = 0,
+        .size = 4096,
+        .page_size = 4096,
+        .residency = .evicted,
+    }} }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseMappingCommitDescriptor{}).validate(.{
+        .sparse_buffers = true,
+        .sparse_textures = true,
+    }, .{
+        .sparse_buffer_page_size = 4096,
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+    }));
+
+    try map.apply(.{ .textures = &.{
+        .{
+            .mip_level = 0,
+            .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
+            .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+        },
+        .{
+            .mip_level = 1,
+            .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
+            .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+        },
+    } });
+    try std.testing.expectEqual(@as(usize, 2), map.diagnostics().texture_regions);
 }
 
 test "sparse mip tail descriptor validates page alignment" {
