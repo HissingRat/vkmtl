@@ -185,6 +185,13 @@ pub const examples = [_]ExampleEntry{
         .kind = .render,
         .backend_expectation = "mesh shader descriptor validation and lowering feature gate",
     },
+    .{
+        .name = "ray_traced_triangle",
+        .path = "examples/ray_traced_triangle",
+        .run_step = "run-ray-traced-triangle",
+        .kind = .render,
+        .backend_expectation = "ray tracing descriptor, AS metadata, and SBT feature gate",
+    },
 };
 
 pub fn validateExamples(entries: []const ExampleEntry) DevelopmentMatrixError!void {
@@ -638,7 +645,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 17), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 18), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {

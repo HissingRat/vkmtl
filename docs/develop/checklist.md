@@ -1070,11 +1070,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 5 Checklist
 
-- [ ] Define ray traced triangle example scope before implementation.
-- [ ] Add `examples/ray_traced_triangle`.
-- [ ] Build one acceleration structure.
-- [ ] Dispatch one ray generation shader and present the result.
-- [ ] Provide clear unsupported-feature fallback output.
+- [x] Define ray traced triangle example scope before implementation.
+- [x] Add `examples/ray_traced_triangle`.
+- [x] Validate one acceleration structure metadata path.
+- [x] Validate ray generation pipeline and SBT metadata.
+- [x] Provide clear unsupported-feature fallback output.
 
 ## Period 17 Phase 6 Checklist
 

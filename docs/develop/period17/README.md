@@ -40,6 +40,7 @@ See `phase4.md`.
 ## Phase 5: Basic Ray Traced Triangle Example
 
 - Add the smallest visible ray tracing example.
+- Add feature-gated `examples/ray_traced_triangle` descriptor/SBT smoke path.
 
 See `phase5.md`.
 

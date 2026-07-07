@@ -424,3 +424,16 @@ Run them with:
 zig build run-tessellation
 zig build run-mesh-shader
 ```
+
+## Ray Tracing
+
+`examples/ray_traced_triangle` validates the public ray tracing descriptor path:
+acceleration-structure metadata, ray tracing pipeline groups, and shader binding
+table layout. It prints unsupported-feature messages until the selected backend
+exposes ray tracing.
+
+Run it with:
+
+```sh
+zig build run-ray-traced-triangle
+```

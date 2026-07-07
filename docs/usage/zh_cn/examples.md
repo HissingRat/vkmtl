@@ -265,3 +265,15 @@ unsupported-feature 信息。
 zig build run-tessellation
 zig build run-mesh-shader
 ```
+
+## Ray Tracing
+
+`examples/ray_traced_triangle` 会验证公开 ray tracing descriptor 路径：acceleration structure
+metadata、ray tracing pipeline groups 和 shader binding table layout。在所选 backend 暴露 ray
+tracing 之前，它会打印 unsupported-feature 信息。
+
+运行：
+
+```sh
+zig build run-ray-traced-triangle
+```

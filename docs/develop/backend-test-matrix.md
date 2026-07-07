@@ -10,6 +10,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
+- `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
 
 ## Optional Rows
 
