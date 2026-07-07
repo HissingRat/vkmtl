@@ -1277,6 +1277,14 @@ obvious render and binding blockers.
 - [x] Keep command writes/native lowering deferred until the Metal slot model is finalized.
 - [x] Update docs and tests.
 
+## Period 21 Phase 5 Checklist
+
+- [x] Define shader-specialization lowering scope before implementation.
+- [x] Verify specialization data participates in runtime pipeline fingerprints.
+- [x] Preserve typed runtime rejection for unsupported non-empty specialization.
+- [x] Keep Vulkan specialization info and Metal/Slang variant lowering deferred.
+- [x] Update docs and tests.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

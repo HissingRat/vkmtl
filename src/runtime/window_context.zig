@@ -4585,6 +4585,42 @@ test "runtime specialization gate rejects non-empty specialization descriptors" 
     }));
 }
 
+test "runtime pipeline fingerprints include shader specialization constants" {
+    const color_attachments = [_]core.RenderPipelineColorAttachmentDescriptor{.{
+        .format = .rgba8_unorm,
+    }};
+    const module = core.ShaderModuleDescriptor{
+        .source = .{ .slang = "shader source" },
+    };
+    const constants_a = [_]core.ShaderSpecializationConstant{.{
+        .id = 0,
+        .name = "variant",
+        .value = .{ .u32 = 1 },
+    }};
+    const constants_b = [_]core.ShaderSpecializationConstant{.{
+        .id = 0,
+        .name = "variant",
+        .value = .{ .u32 = 2 },
+    }};
+
+    const descriptor_a = core.RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+            .specialization = .{ .constants = constants_a[0..] },
+        },
+        .color_attachments = color_attachments[0..],
+    };
+    var descriptor_b = descriptor_a;
+    descriptor_b.vertex.specialization = .{ .constants = constants_b[0..] };
+
+    var hash_a: u64 = 0;
+    hashRenderPipelineDescriptor(&hash_a, descriptor_a);
+    var hash_b: u64 = 0;
+    hashRenderPipelineDescriptor(&hash_b, descriptor_b);
+    try std.testing.expect(hash_a != hash_b);
+}
+
 test "runtime root constant layout gate validates pipeline compatibility" {
     const ranges = [_]core.RootConstantRange{.{
         .visibility = .{ .vertex = true },

@@ -196,10 +196,10 @@ defer vertex_descriptor.deinit();
 
 `ProgrammableStageDescriptor.specialization` 可以携带
 `ShaderSpecializationDescriptor`，为后续 shader variants 预留。
-`ShaderLibraryCacheKeyDescriptor` 也包含 specialization 输入，这样未来 variant cache
-可以区分不同 specialization。Descriptor 层会校验重复 ID、重复名称和空名称。当前
-runtime pipeline 创建会用 `UnsupportedShaderSpecialization` 拒绝非空 specialization，
-而不是静默忽略。
+`ShaderLibraryCacheKeyDescriptor` 和 runtime pipeline fingerprint 都包含 specialization
+输入，这样 variant cache 可以区分不同 specialization。Descriptor 层会校验重复 ID、重复名称
+和空名称。当前 runtime pipeline 创建会用 `UnsupportedShaderSpecialization` 拒绝非空
+specialization，而不是静默忽略。
 
 Render pipeline raster state 包含 cull mode、front face、fill mode、depth bias 和
 conservative-rasterization flag。Cull mode 和 front face 已在现有 lowering 路径里。

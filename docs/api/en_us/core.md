@@ -229,11 +229,11 @@ defer vertex_descriptor.deinit();
 
 `ProgrammableStageDescriptor.specialization` accepts
 `ShaderSpecializationDescriptor` data for future shader variants.
-`ShaderLibraryCacheKeyDescriptor` also includes specialization inputs so future
-variant caches can distinguish them. The descriptor layer validates duplicate
-IDs, duplicate names, and empty names. Runtime pipeline creation currently
-rejects non-empty specialization data with `UnsupportedShaderSpecialization`
-instead of ignoring it.
+`ShaderLibraryCacheKeyDescriptor` and runtime pipeline fingerprints include
+specialization inputs so variant caches can distinguish them. The descriptor
+layer validates duplicate IDs, duplicate names, and empty names. Runtime
+pipeline creation currently rejects non-empty specialization data with
+`UnsupportedShaderSpecialization` instead of ignoring it.
 
 Render pipeline raster state includes cull mode, front face, fill mode, depth
 bias, and a conservative-rasterization flag. Cull mode and front face are part

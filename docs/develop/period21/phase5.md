@@ -13,3 +13,10 @@ Phase 5 lowers shader specialization metadata into native pipeline creation.
 
 - Add reflection and pipeline-creation tests for typed constants.
 - Add cache-key tests for specialization identity.
+
+## Result
+
+- Runtime pipeline fingerprints include shader specialization constants.
+- Descriptor validation continues to reject duplicate IDs, duplicate names, and empty names.
+- Runtime pipeline creation still rejects non-empty specialization with `UnsupportedShaderSpecialization`.
+- Native Vulkan specialization info and Metal/Slang variant lowering remain deferred to the shader variant slice.
