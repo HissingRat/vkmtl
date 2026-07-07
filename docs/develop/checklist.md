@@ -347,7 +347,6 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add anisotropy descriptor shape and validation.
 - [x] Add border-color descriptor shape.
 - [x] Report sampler support through features/limits.
-- [x] Lower compare sampler and anisotropy fields to native sampler creation.
 - [x] Document backend mapping limits.
 
 ## Period 3 Phase 7 Checklist
@@ -468,7 +467,6 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add indirect draw descriptor shapes.
 - [x] Add multi-draw descriptor shapes and feature gate.
 - [x] Return typed unsupported errors for non-lowered draw forms.
-- [x] Lower direct base fields, indirect draw, and explicit multi-draw.
 - [x] Document draw command limits.
 
 ## Period 5 Phase 8 Checklist
@@ -541,7 +539,6 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Add dispatch-indirect descriptor and alignment validation.
 - [x] Add indirect buffer usage metadata.
 - [x] Gate dispatch indirect until native lowering lands.
-- [x] Lower dispatch indirect to Vulkan and Metal native commands.
 - [x] Document dispatch-indirect limits.
 
 ## Period 7 Phase 3 Checklist
@@ -1137,6 +1134,9 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 19 Phase 1 Checklist
 
+Period 19 is deferred until the backend completion periods have removed the
+obvious render and binding blockers.
+
 - [ ] Define voxel world example contract before implementation.
 - [ ] Add `examples/voxel_world` as a public API example target.
 - [ ] Keep gameplay, networking, save files, and full engine concerns out of scope.
@@ -1190,6 +1190,23 @@ closed one by one as vkmtl moves from prototype to library.
 - [ ] Identify vkmtl API friction found while building the example.
 - [ ] Identify backend bottlenecks exposed by chunk streaming.
 - [ ] Decide which findings become future periods or maintenance tasks.
+
+## Period 20 Phase 1 Checklist
+
+- [x] Define blend lowering scope before implementation.
+- [ ] Lower blend factors and operations to Vulkan pipeline color blend state.
+- [ ] Lower blend factors and operations to Metal render pipeline color state.
+- [ ] Keep independent blend deferred to the MRT phase.
+- [ ] Update API docs and backend completion period notes.
+- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
+## Period 20 Phase 2 Checklist
+
+- [ ] Define raster/depth-bias backend lowering scope before implementation.
+- [ ] Lower pipeline depth-bias state to Vulkan and Metal.
+- [ ] Lower wireframe / line fill mode where supported.
+- [ ] Keep conservative rasterization capability-gated.
+- [ ] Update tests and docs with backend-specific limits.
 
 ## First Backend-Independent Triangle Checklist
 

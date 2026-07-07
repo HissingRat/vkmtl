@@ -14,9 +14,8 @@ lowering explicit about unsupported combinations.
 ## Current Limits
 
 - Existing runtime lowering supports one color attachment.
-- Stencil attachment lowering is validation/API shape first.
-- Transient attachment metadata is accepted as a no-op performance hint until
-  backend-specific transient allocation is implemented.
+- Stencil and transient attachment lowering are validation/API shape first.
 - Multiple color attachments are represented in descriptors, but runtime
   lowering currently returns `UnsupportedMultipleRenderTargets`.
-- Stencil attachment lowering returns `UnsupportedStencilAttachment`.
+- Stencil and transient attachment lowering return `UnsupportedStencilAttachment`
+  and `UnsupportedTransientAttachment` respectively.
