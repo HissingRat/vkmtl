@@ -1013,6 +1013,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.MissingSurfaceSource,
         error.InvalidSurfaceExtent,
         error.InvalidSurfaceHandle,
+        error.InvalidSurfaceFrameState,
         error.InvalidBufferLength,
         error.InitialDataTooLarge,
         error.InitialDataRequiresCpuVisibleStorage,
@@ -4822,6 +4823,8 @@ pub const PresentationResourceState = struct {
     present_mode: PresentMode = .fifo,
     frame_in_flight: bool = false,
     generation: u64 = 0,
+    submitted_frame_serial: u64 = 0,
+    completed_frame_serial: u64 = 0,
 
     pub fn configure(self: *PresentationResourceState, descriptor: PresentationDescriptor) void {
         self.configured = true;
@@ -4839,6 +4842,22 @@ pub const PresentationResourceState = struct {
         self.present_mode = descriptor.present_mode;
         self.frame_in_flight = false;
         self.generation +%= 1;
+    }
+
+    pub fn beginFrame(self: *PresentationResourceState) SurfaceError!u64 {
+        if (!self.configured) return SurfaceError.InvalidSurfaceExtent;
+        if (self.frame_in_flight) return SurfaceError.InvalidSurfaceFrameState;
+        self.submitted_frame_serial += 1;
+        self.frame_in_flight = true;
+        return self.submitted_frame_serial;
+    }
+
+    pub fn completeFrame(self: *PresentationResourceState, serial: u64) SurfaceError!void {
+        if (!self.frame_in_flight or serial != self.submitted_frame_serial) {
+            return SurfaceError.InvalidSurfaceFrameState;
+        }
+        self.completed_frame_serial = serial;
+        self.frame_in_flight = false;
     }
 };
 
@@ -4967,6 +4986,7 @@ pub const SurfaceError = error{
     MissingSurfaceSource,
     InvalidSurfaceExtent,
     InvalidSurfaceHandle,
+    InvalidSurfaceFrameState,
     SurfaceLost,
 };
 
@@ -5014,6 +5034,17 @@ pub const Surface = struct {
         self.presentation_state.configured = false;
         self.presentation_state.frame_in_flight = false;
         self.presentation_state.generation +%= 1;
+    }
+
+    pub fn beginFrame(self: *Surface) SurfaceError!u64 {
+        if (self.state == .lost) return SurfaceError.SurfaceLost;
+        if (self.state != .configured) return SurfaceError.InvalidSurfaceExtent;
+        return self.presentation_state.beginFrame();
+    }
+
+    pub fn completeFrame(self: *Surface, serial: u64) SurfaceError!void {
+        if (self.state == .lost) return SurfaceError.SurfaceLost;
+        try self.presentation_state.completeFrame(serial);
     }
 };
 
@@ -5121,6 +5152,14 @@ pub const SurfaceCollection = struct {
 
     pub fn markLost(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!void {
         (try self.get(handle)).markLost();
+    }
+
+    pub fn beginFrame(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!u64 {
+        return try (try self.get(handle)).beginFrame();
+    }
+
+    pub fn completeFrame(self: *SurfaceCollection, handle: SurfaceHandle, serial: u64) SurfaceError!void {
+        try (try self.get(handle)).completeFrame(serial);
     }
 
     pub fn liveCount(self: SurfaceCollection) usize {
@@ -5733,6 +5772,49 @@ test "surface collection isolates presentation resource state per surface" {
     }));
     try collection.remove(handle_b);
     try std.testing.expectError(SurfaceError.InvalidSurfaceHandle, collection.info(handle_b));
+}
+
+test "surface collection tracks independent frame pacing counters" {
+    var collection = SurfaceCollection.init(std.testing.allocator, .metal);
+    defer collection.deinit();
+
+    var window_a: u8 = 0;
+    var window_b: u8 = 0;
+    const handle_a = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_a,
+        },
+    }, .{
+        .extent = .{ .width = 640, .height = 480 },
+    });
+    const handle_b = try collection.add(.{
+        .source = .{
+            .provider = .external,
+            .window = &window_b,
+        },
+    }, .{
+        .extent = .{ .width = 320, .height = 240 },
+    });
+
+    const frame_a_1 = try collection.beginFrame(handle_a);
+    try std.testing.expectEqual(@as(u64, 1), frame_a_1);
+    try std.testing.expectError(SurfaceError.InvalidSurfaceFrameState, collection.beginFrame(handle_a));
+
+    const frame_b_1 = try collection.beginFrame(handle_b);
+    try std.testing.expectEqual(@as(u64, 1), frame_b_1);
+    try collection.completeFrame(handle_b, frame_b_1);
+    try std.testing.expectEqual(@as(u64, 1), (try collection.info(handle_b)).presentation_state.completed_frame_serial);
+    try std.testing.expectEqual(@as(u64, 0), (try collection.info(handle_a)).presentation_state.completed_frame_serial);
+
+    try std.testing.expectError(SurfaceError.InvalidSurfaceFrameState, collection.completeFrame(handle_a, frame_a_1 + 1));
+    try collection.completeFrame(handle_a, frame_a_1);
+    const frame_a_2 = try collection.beginFrame(handle_a);
+    try std.testing.expectEqual(@as(u64, 2), frame_a_2);
+
+    try collection.markLost(handle_a);
+    try std.testing.expectError(SurfaceError.SurfaceLost, collection.beginFrame(handle_a));
+    try std.testing.expect(!((try collection.info(handle_a)).presentation_state.frame_in_flight));
 }
 
 test "buffer descriptor resolves length from explicit length or bytes" {

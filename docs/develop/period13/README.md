@@ -48,6 +48,7 @@ See `phase4.md`.
 
 - Add per-surface frame serials.
 - Avoid one slow surface blocking unrelated surfaces unnecessarily.
+- Track independent begin/complete frame state per surface.
 
 See `phase5.md`.
 

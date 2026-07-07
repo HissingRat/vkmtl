@@ -878,11 +878,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 13 Phase 5 Checklist
 
-- [ ] Define frame pacing scope before implementation.
-- [ ] Track frame serials per surface.
-- [ ] Avoid one blocked surface stalling unrelated surfaces where possible.
-- [ ] Keep pacing diagnostics inspectable.
-- [ ] Add multi-surface frame counter tests.
+- [x] Define frame pacing scope before implementation.
+- [x] Track frame serials per surface.
+- [x] Avoid one blocked surface stalling unrelated surfaces where possible.
+- [x] Keep pacing diagnostics inspectable.
+- [x] Add multi-surface frame counter tests.
 
 ## Period 13 Phase 6 Checklist
 
