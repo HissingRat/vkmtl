@@ -40,6 +40,7 @@ See `phase4.md`.
 ## Phase 5: Debug Labels And Capture-Friendly Naming
 
 - Lower labels and debug groups to native backends consistently.
+- Add unified debug label descriptor validation for capture-friendly names.
 
 See `phase5.md`.
 

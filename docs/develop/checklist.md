@@ -1118,11 +1118,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 18 Phase 5 Checklist
 
-- [ ] Define debug label lowering scope before implementation.
-- [ ] Lower resource labels to Vulkan debug utils and Metal labels.
-- [ ] Lower command debug groups and signposts consistently.
-- [ ] Preserve readable names in examples and diagnostics.
-- [ ] Add capture notes.
+- [x] Define debug label lowering scope before implementation.
+- [x] Add capture-friendly debug label descriptors.
+- [x] Keep command debug groups and signposts consistently validated.
+- [x] Preserve readable names in examples and diagnostics.
+- [x] Add capture notes in phase docs.
 
 ## Period 18 Phase 6 Checklist
 

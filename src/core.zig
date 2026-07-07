@@ -890,6 +890,23 @@ pub const DriverPipelineCachePlan = struct {
     }
 };
 
+pub const DebugLabelTarget = enum {
+    resource,
+    command_buffer,
+    command_encoder,
+    queue,
+};
+
+pub const DebugLabelDescriptor = struct {
+    target: DebugLabelTarget,
+    label: []const u8,
+
+    pub fn validate(self: DebugLabelDescriptor) CommandEncodingError!void {
+        _ = self.target;
+        if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+    }
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -6140,6 +6157,14 @@ test "debug group stack validates labels and nesting" {
     var stack = DebugGroupStack{ .max_depth = 1 };
 
     try (DebugSignpostDescriptor{ .label = "frame marker" }).validate();
+    try (DebugLabelDescriptor{
+        .target = .resource,
+        .label = "albedo texture",
+    }).validate();
+    try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (DebugLabelDescriptor{
+        .target = .command_buffer,
+        .label = "",
+    }).validate());
     try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (DebugSignpostDescriptor{ .label = "" }).validate());
 
     try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, stack.push(""));
