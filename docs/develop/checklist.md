@@ -1241,6 +1241,15 @@ obvious render and binding blockers.
 - [x] Document remaining backend-specific render limits.
 - [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
+## Period 21 Phase 1 Checklist
+
+- [x] Define dynamic-offset lowering scope before implementation.
+- [x] Add dynamic-offset lists to render and compute `setBindGroup(...)`.
+- [x] Lower dynamic offsets to Vulkan descriptor-set dynamic offsets.
+- [x] Lower dynamic offsets to Metal buffer binding offsets.
+- [x] Validate count, alignment, buffer binding class, and backend range.
+- [x] Update docs and tests.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

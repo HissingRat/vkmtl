@@ -14,3 +14,10 @@ Phase 1 makes dynamic buffer offsets a real command-encoding feature.
 
 - Add tests for missing, extra, unaligned, and valid dynamic offsets.
 - Keep non-buffer dynamic offsets rejected.
+
+## Result
+
+- `BindGroupBinding.dynamic_offsets` carries per-bind dynamic buffer offsets.
+- Runtime validation rejects missing, extra, misaligned, and out-of-range dynamic offsets before backend calls.
+- Vulkan uses dynamic buffer descriptor types and passes dynamic offsets to `cmdBindDescriptorSets`.
+- Metal adds dynamic offsets to buffer base offsets when binding render or compute resources.

@@ -1178,6 +1178,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.MissingDynamicOffset,
         error.ExtraDynamicOffset,
         error.InvalidDynamicOffsetAlignment,
+        error.InvalidDynamicOffsetRange,
         error.EmptySmallConstantVisibility,
         error.EmptySmallConstantData,
         error.SmallConstantDataTooLarge,
@@ -2681,6 +2682,7 @@ pub const VertexBufferBinding = struct {
 
 pub const BindGroupBinding = struct {
     index: u32,
+    dynamic_offsets: []const DynamicOffset = &.{},
 
     pub fn validate(self: BindGroupBinding) CommandEncodingError!void {
         if (self.index >= max_bind_group_slots) return CommandEncodingError.InvalidBindGroupIndex;
@@ -5133,6 +5135,7 @@ pub const BindingError = error{
     MissingDynamicOffset,
     ExtraDynamicOffset,
     InvalidDynamicOffsetAlignment,
+    InvalidDynamicOffsetRange,
 };
 
 fn isAlignedU32(value: u32, alignment: u32) bool {

@@ -28,7 +28,7 @@ pub const VulkanBindGroupLayout = struct {
         for (descriptor.entries, bindings) |entry, *binding| {
             binding.* = .{
                 .binding = entry.binding,
-                .descriptor_type = descriptorTypeForKind(entry.resource),
+                .descriptor_type = descriptorTypeForLayoutEntry(entry),
                 .descriptor_count = 1,
                 .stage_flags = shaderStageFlags(entry.visibility),
             };
@@ -58,6 +58,7 @@ pub const VulkanBindGroup = struct {
     allocator: std.mem.Allocator,
     pool: vk.DescriptorPool,
     set: vk.DescriptorSet,
+    layout_entries: []core.BindGroupLayoutEntry,
     entries: []Entry,
 
     pub const BufferBinding = struct {
@@ -97,8 +98,10 @@ pub const VulkanBindGroup = struct {
             .p_set_layouts = &set_layouts,
         }, @ptrCast(&set));
 
-        try updateDescriptorSet(gc, allocator, set, entries);
+        try updateDescriptorSet(gc, allocator, set, layout.entries, entries);
 
+        const stored_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, layout.entries);
+        errdefer allocator.free(stored_layout_entries);
         const stored_entries = try allocator.dupe(Entry, entries);
         errdefer allocator.free(stored_entries);
 
@@ -107,13 +110,49 @@ pub const VulkanBindGroup = struct {
             .allocator = allocator,
             .pool = pool,
             .set = set,
+            .layout_entries = stored_layout_entries,
             .entries = stored_entries,
         };
     }
 
     pub fn deinit(self: *VulkanBindGroup) void {
         self.gc.dev.destroyDescriptorPool(self.pool, null);
+        self.allocator.free(self.layout_entries);
         self.allocator.free(self.entries);
+    }
+
+    pub fn dynamicOffsets(self: VulkanBindGroup, binding: core.BindGroupBinding) ![]u32 {
+        var dynamic_count: usize = 0;
+        for (self.layout_entries) |entry| {
+            if (entry.dynamic_offset) dynamic_count += 1;
+        }
+
+        const offsets = try self.allocator.alloc(u32, dynamic_count);
+        errdefer self.allocator.free(offsets);
+        if (dynamic_count == 0) return offsets;
+
+        const dynamic_entries = try self.allocator.alloc(core.BindGroupLayoutEntry, dynamic_count);
+        defer self.allocator.free(dynamic_entries);
+
+        var index: usize = 0;
+        for (self.layout_entries) |entry| {
+            if (!entry.dynamic_offset) continue;
+            dynamic_entries[index] = entry;
+            index += 1;
+        }
+        std.mem.sort(core.BindGroupLayoutEntry, dynamic_entries, {}, layoutEntryBindingLessThan);
+
+        const offset_list = core.DynamicOffsetList{ .offsets = binding.dynamic_offsets };
+        for (dynamic_entries, offsets) |entry, *out| {
+            const dynamic_offset = offset_list.offsetForBinding(entry.binding) orelse {
+                return core.BindingError.MissingDynamicOffset;
+            };
+            out.* = std.math.cast(u32, dynamic_offset) orelse {
+                return core.BindingError.InvalidDynamicOffsetRange;
+            };
+        }
+
+        return offsets;
     }
 };
 
@@ -122,22 +161,28 @@ fn createDescriptorPool(
     layout_entries: []const core.BindGroupLayoutEntry,
 ) !vk.DescriptorPool {
     var uniform_buffers: u32 = 0;
+    var dynamic_uniform_buffers: u32 = 0;
     var storage_buffers: u32 = 0;
+    var dynamic_storage_buffers: u32 = 0;
     var storage_textures: u32 = 0;
     var sampled_textures: u32 = 0;
     var samplers: u32 = 0;
 
     for (layout_entries) |entry| {
         switch (entry.resource) {
-            .uniform_buffer => uniform_buffers += 1,
-            .storage_buffer => storage_buffers += 1,
+            .uniform_buffer => {
+                if (entry.dynamic_offset) dynamic_uniform_buffers += 1 else uniform_buffers += 1;
+            },
+            .storage_buffer => {
+                if (entry.dynamic_offset) dynamic_storage_buffers += 1 else storage_buffers += 1;
+            },
             .storage_texture => storage_textures += 1,
             .sampled_texture => sampled_textures += 1,
             .sampler, .compare_sampler => samplers += 1,
         }
     }
 
-    var pool_sizes: [5]vk.DescriptorPoolSize = undefined;
+    var pool_sizes: [7]vk.DescriptorPoolSize = undefined;
     var pool_size_count: usize = 0;
     if (uniform_buffers != 0) {
         pool_sizes[pool_size_count] = .{
@@ -146,10 +191,24 @@ fn createDescriptorPool(
         };
         pool_size_count += 1;
     }
+    if (dynamic_uniform_buffers != 0) {
+        pool_sizes[pool_size_count] = .{
+            .type = .uniform_buffer_dynamic,
+            .descriptor_count = dynamic_uniform_buffers,
+        };
+        pool_size_count += 1;
+    }
     if (storage_buffers != 0) {
         pool_sizes[pool_size_count] = .{
             .type = .storage_buffer,
             .descriptor_count = storage_buffers,
+        };
+        pool_size_count += 1;
+    }
+    if (dynamic_storage_buffers != 0) {
+        pool_sizes[pool_size_count] = .{
+            .type = .storage_buffer_dynamic,
+            .descriptor_count = dynamic_storage_buffers,
         };
         pool_size_count += 1;
     }
@@ -186,6 +245,7 @@ fn updateDescriptorSet(
     gc: *const GraphicsContext,
     allocator: std.mem.Allocator,
     set: vk.DescriptorSet,
+    layout_entries: []const core.BindGroupLayoutEntry,
     entries: []const VulkanBindGroup.Entry,
 ) !void {
     const writes = try allocator.alloc(vk.WriteDescriptorSet, entries.len);
@@ -196,12 +256,15 @@ fn updateDescriptorSet(
     defer allocator.free(image_infos);
 
     for (entries, writes, 0..) |entry, *write, i| {
+        const layout_entry = layoutEntryForBinding(layout_entries, entry.binding) orelse {
+            return core.BindingError.ExtraBindGroupEntry;
+        };
         write.* = .{
             .dst_set = set,
             .dst_binding = entry.binding,
             .dst_array_element = 0,
             .descriptor_count = 1,
-            .descriptor_type = descriptorTypeForResource(entry.resource),
+            .descriptor_type = descriptorTypeForLayoutEntry(layout_entry),
             .p_image_info = undefined,
             .p_buffer_info = undefined,
             .p_texel_buffer_view = undefined,
@@ -256,6 +319,16 @@ fn descriptorTypeForKind(kind: core.BindingResourceKind) vk.DescriptorType {
     };
 }
 
+fn descriptorTypeForLayoutEntry(entry: core.BindGroupLayoutEntry) vk.DescriptorType {
+    return switch (entry.resource) {
+        .uniform_buffer => if (entry.dynamic_offset) .uniform_buffer_dynamic else .uniform_buffer,
+        .storage_buffer => if (entry.dynamic_offset) .storage_buffer_dynamic else .storage_buffer,
+        .storage_texture => .storage_image,
+        .sampled_texture => .sampled_image,
+        .sampler, .compare_sampler => .sampler,
+    };
+}
+
 fn descriptorTypeForResource(resource: VulkanBindGroup.Resource) vk.DescriptorType {
     return descriptorTypeForKind(switch (resource) {
         .uniform_buffer => core.BindingResourceKind.uniform_buffer,
@@ -265,6 +338,25 @@ fn descriptorTypeForResource(resource: VulkanBindGroup.Resource) vk.DescriptorTy
         .sampler => core.BindingResourceKind.sampler,
         .compare_sampler => core.BindingResourceKind.compare_sampler,
     });
+}
+
+fn layoutEntryForBinding(
+    entries: []const core.BindGroupLayoutEntry,
+    binding: u32,
+) ?core.BindGroupLayoutEntry {
+    for (entries) |entry| {
+        if (entry.binding == binding) return entry;
+    }
+    return null;
+}
+
+fn layoutEntryBindingLessThan(
+    context: void,
+    lhs: core.BindGroupLayoutEntry,
+    rhs: core.BindGroupLayoutEntry,
+) bool {
+    _ = context;
+    return lhs.binding < rhs.binding;
 }
 
 fn shaderStageFlags(visibility: core.ShaderVisibility) vk.ShaderStageFlags {

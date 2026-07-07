@@ -1,3 +1,4 @@
+const std = @import("std");
 const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
@@ -359,6 +360,7 @@ pub const ComputeCommandEncoder = struct {
                 .uniform_buffer, .storage_buffer => |buffer_binding| try self.setBufferResource(
                     buffer_binding,
                     layout_entry.binding,
+                    dynamicOffsetForBinding(binding, layout_entry),
                 ),
                 .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
                     texture_view,
@@ -411,12 +413,16 @@ pub const ComputeCommandEncoder = struct {
         self: *ComputeCommandEncoder,
         binding: MetalBindGroup.BufferBinding,
         index: u32,
+        dynamic_offset: u64,
     ) !void {
+        const buffer_offset = std.math.add(u64, binding.offset, dynamic_offset) catch {
+            return core.BindingError.InvalidDynamicOffsetRange;
+        };
         try check(metal.vkmtl_metal_compute_command_encoder_set_buffer(
             self.handle,
             binding.buffer.handle,
             index,
-            binding.offset,
+            buffer_offset,
         ));
     }
 
@@ -538,6 +544,7 @@ pub const RenderCommandEncoder = struct {
                     buffer_binding,
                     layout_entry.binding,
                     layout_entry.visibility,
+                    dynamicOffsetForBinding(binding, layout_entry),
                 ),
                 .storage_texture, .sampled_texture => |texture_view| try self.setTextureResource(
                     texture_view,
@@ -625,13 +632,17 @@ pub const RenderCommandEncoder = struct {
         binding: MetalBindGroup.BufferBinding,
         index: u32,
         visibility: core.ShaderVisibility,
+        dynamic_offset: u64,
     ) !void {
+        const buffer_offset = std.math.add(u64, binding.offset, dynamic_offset) catch {
+            return core.BindingError.InvalidDynamicOffsetRange;
+        };
         if (visibility.vertex) {
             try check(metal.vkmtl_metal_render_command_encoder_set_vertex_buffer(
                 self.handle,
                 binding.buffer.handle,
                 index,
-                binding.offset,
+                buffer_offset,
             ));
         }
         if (visibility.fragment) {
@@ -639,7 +650,7 @@ pub const RenderCommandEncoder = struct {
                 self.handle,
                 binding.buffer.handle,
                 index,
-                binding.offset,
+                buffer_offset,
             ));
         }
     }
@@ -741,6 +752,14 @@ pub const RenderCommandEncoder = struct {
         ));
     }
 };
+
+fn dynamicOffsetForBinding(
+    binding: core.BindGroupBinding,
+    layout_entry: core.BindGroupLayoutEntry,
+) u64 {
+    if (!layout_entry.dynamic_offset) return 0;
+    return (core.DynamicOffsetList{ .offsets = binding.dynamic_offsets }).offsetForBinding(layout_entry.binding) orelse 0;
+}
 
 fn indexTypeBits(index_type: core.IndexType) c_uint {
     return switch (index_type) {

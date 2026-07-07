@@ -308,12 +308,12 @@ validates that array counts are non-zero, dynamic offsets are used only with
 buffers, and storage textures are compute-only.
 
 Runtime bind group creation validates layout shape, resource class, backend
-match, whether referenced resources are alive, and whether storage textures
-were created with `shader_write` usage. Current native lowering supports only
-single resources (`array_count = 1`) and rejects dynamic-offset layouts with
-typed `UnsupportedResourceArray` / `UnsupportedDynamicBinding` errors until the
-later backend lowering phases. Render and compute encoders expose
-`setBindGroup(...)` for debug-validated command recording.
+match, whether referenced resources are alive, and whether storage resources
+satisfy the declared access intent. Current native lowering supports only
+single resources (`array_count = 1`) and rejects resource-array layouts with the
+typed `UnsupportedResourceArray` error until later backend lowering phases.
+Render and compute encoders expose `setBindGroup(...)` for debug-validated
+command recording.
 
 Storage resources can specify `BindGroupLayoutEntry.storage_access` as
 `.read`, `.write`, or `.read_write`. The metadata is valid only for storage
@@ -322,11 +322,23 @@ storage textures default to write access. Runtime bind group creation checks
 buffer `storage` usage and texture `shader_read` / `shader_write` usage against
 that access intent and records portable storage read/write usage transitions.
 
-`DynamicOffset` and `DynamicOffsetList` are the public validation shape for the
-future dynamic-offset command path. They validate that every dynamic buffer
-binding has one offset, that no non-dynamic binding receives an offset, and that
-offsets satisfy `DeviceLimits.min_uniform_buffer_offset_alignment` or
-`DeviceLimits.min_storage_buffer_offset_alignment`.
+`DynamicOffset` and `DynamicOffsetList` are the public validation shape for
+dynamic buffer offsets. Render and compute encoder `setBindGroup(...)` calls can
+pass per-bind offsets through `BindGroupBinding.dynamic_offsets`:
+
+```zig
+try encoder.setBindGroup(&bind_group, .{
+    .index = 0,
+    .dynamic_offsets = &.{.{ .binding = 0, .offset = 256 }},
+});
+```
+
+They validate that every dynamic buffer binding has one offset, that no
+non-dynamic binding receives an offset, and that offsets satisfy
+`DeviceLimits.min_uniform_buffer_offset_alignment` or
+`DeviceLimits.min_storage_buffer_offset_alignment`. Vulkan lowers them to
+dynamic descriptor offsets; Metal adds them to the buffer base offset when
+binding.
 
 `SmallConstantDescriptor` is the first portable shape for small per-draw or
 per-dispatch constant data. It is gated by `DeviceFeatures.small_constants`,

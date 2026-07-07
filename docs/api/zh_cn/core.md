@@ -263,9 +263,8 @@ storage texture 只允许 compute visibility。
 
 Runtime bind group 创建会校验 layout shape、资源类别、后端是否匹配、资源是否还活着，
 以及 storage resource usage 是否满足访问意图。当前 native lowering 只支持单资源
-binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` /
-`UnsupportedDynamicBinding` 错误拒绝 dynamic-offset layout；后续 backend lowering 阶段
-再接上真正的数组和动态 offset 支持。
+binding（`array_count = 1`），并会用明确的 `UnsupportedResourceArray` 错误拒绝 resource
+array layout；后续 backend lowering 阶段再接上真正的数组支持。
 
 Storage resource 可以在 `BindGroupLayoutEntry.storage_access` 上声明 `.read`、`.write` 或
 `.read_write`。这个 metadata 只允许用于 storage buffer 和 storage texture。Storage buffer 默认
@@ -273,10 +272,21 @@ read-write，storage texture 为了兼容现有 compute readback 示例默认 wr
 creation 会按这个访问意图检查 buffer `storage` usage，以及 texture `shader_read` /
 `shader_write` usage，并记录 portable storage read/write usage transition。
 
-`DynamicOffset` 和 `DynamicOffsetList` 是后续动态 offset 命令路径的公开校验 shape。
+`DynamicOffset` 和 `DynamicOffsetList` 是 dynamic buffer offset 的公开校验 shape。Render
+和 compute encoder 的 `setBindGroup(...)` 可以通过 `BindGroupBinding.dynamic_offsets`
+传入每次绑定的 offset：
+
+```zig
+try encoder.setBindGroup(&bind_group, .{
+    .index = 0,
+    .dynamic_offsets = &.{.{ .binding = 0, .offset = 256 }},
+});
+```
+
 它会校验每个 dynamic buffer binding 都有一个 offset、非 dynamic binding 没有收到 offset，
 并根据 `DeviceLimits.min_uniform_buffer_offset_alignment` 或
-`DeviceLimits.min_storage_buffer_offset_alignment` 检查对齐。
+`DeviceLimits.min_storage_buffer_offset_alignment` 检查对齐。Vulkan 会 lower 到 dynamic
+descriptor offsets；Metal 会把 dynamic offset 加到 buffer base offset 后再绑定。
 
 `SmallConstantDescriptor` 是小块 per-draw / per-dispatch 常量数据的第一版 portable shape。
 它由 `DeviceFeatures.small_constants`、`DeviceLimits.max_small_constant_bytes` 和

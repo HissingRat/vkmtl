@@ -1300,6 +1300,7 @@ pub const BindGroup = struct {
     allocator: std.mem.Allocator,
     label_value: ?[]const u8 = null,
     alive: bool = true,
+    layout_entries: []const core.BindGroupLayoutEntry = &.{},
     entries: []core.BindGroupEntry,
     impl: ?Impl = null,
 
@@ -1315,6 +1316,7 @@ pub const BindGroup = struct {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
+        self.allocator.free(self.layout_entries);
         self.allocator.free(self.entries);
         self.tracker.release(.bind_group);
     }
@@ -1338,6 +1340,11 @@ pub const BindGroup = struct {
             if (entry.binding == binding) return entry;
         }
         return null;
+    }
+
+    pub fn layoutDescriptor(self: BindGroup) core.BindGroupLayoutDescriptor {
+        assertAlive(self.alive, .bind_group);
+        return .{ .entries = self.layout_entries };
     }
 };
 
@@ -2079,6 +2086,7 @@ pub const ComputeCommandEncoder = struct {
         assertObjectAlive(self.alive, "compute_command_encoder");
         assertAlive(bind_group.alive, .bind_group);
         try expectSameBackend(self.backend, bind_group.backend);
+        try validateDynamicOffsetsForBindGroup(bind_group.*, binding);
         try self.debug.setBindGroup(binding);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.impl.?.vulkan, binding),
@@ -2259,6 +2267,7 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.alive, "render_command_encoder");
         assertAlive(bind_group.alive, .bind_group);
         try expectSameBackend(self.backend, bind_group.backend);
+        try validateDynamicOffsetsForBindGroup(bind_group.*, binding);
         try self.debug.setBindGroup(binding);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.impl.?.vulkan, binding),
@@ -2943,6 +2952,9 @@ pub const Device = struct {
         const entries = try materializeBindGroupEntries(self.allocator, self.backend, descriptor);
         errdefer self.allocator.free(entries);
 
+        const layout_entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.layout.entries);
+        errdefer self.allocator.free(layout_entries);
+
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| bind_group_impl: {
                 const vulkan_entries = try materializeVulkanBindGroupEntries(self.allocator, descriptor.entries);
@@ -2977,6 +2989,7 @@ pub const Device = struct {
             .tracker = self.tracker,
             .allocator = self.allocator,
             .label_value = descriptor.label,
+            .layout_entries = layout_entries,
             .entries = entries,
             .impl = impl,
         };
@@ -3385,6 +3398,16 @@ fn materializeBindGroupEntries(
     return entries;
 }
 
+fn validateDynamicOffsetsForBindGroup(
+    bind_group: BindGroup,
+    binding: core.BindGroupBinding,
+) core.BindingError!void {
+    try (core.DynamicOffsetList{ .offsets = binding.dynamic_offsets }).validate(
+        bind_group.layoutDescriptor(),
+        core.defaultDeviceLimits(bind_group.backend),
+    );
+}
+
 fn validateAndRecordStorageAccess(
     resource: BindGroupResource,
     layout_entry: core.BindGroupLayoutEntry,
@@ -3419,7 +3442,6 @@ fn validateAndRecordStorageAccess(
 fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor) core.BindingError!void {
     for (descriptor.entries) |entry| {
         if (entry.array_count != 1) return core.BindingError.UnsupportedResourceArray;
-        if (entry.dynamic_offset) return core.BindingError.UnsupportedDynamicBinding;
     }
 }
 
@@ -4345,9 +4367,46 @@ test "runtime bind group materialization validates resources against layout" {
     };
     tracker.retain(.bind_group_layout);
     defer dynamic_layout.deinit();
-    try std.testing.expectError(core.BindingError.UnsupportedDynamicBinding, materializeBindGroupEntries(allocator, .vulkan, .{
+    const materialized_dynamic = try materializeBindGroupEntries(allocator, .vulkan, .{
         .layout = &dynamic_layout,
-        .entries = entries[0..0],
+        .entries = entries[0..1],
+    });
+    defer allocator.free(materialized_dynamic);
+    try std.testing.expectEqual(core.BindingResourceKind.uniform_buffer, materialized_dynamic[0].resource.resourceKind());
+}
+
+test "runtime bind group dynamic offsets validate against layout" {
+    const layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 3,
+            .resource = .uniform_buffer,
+            .visibility = .{ .vertex = true },
+            .dynamic_offset = true,
+        },
+    };
+    var tracker = ResourceTracker{};
+    const bind_group = BindGroup{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = std.testing.allocator,
+        .layout_entries = layout_entries[0..],
+        .entries = &.{},
+    };
+
+    try validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+        .dynamic_offsets = &.{.{ .binding = 3, .offset = 256 }},
+    });
+    try std.testing.expectError(core.BindingError.MissingDynamicOffset, validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+    }));
+    try std.testing.expectError(core.BindingError.ExtraDynamicOffset, validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+        .dynamic_offsets = &.{.{ .binding = 4, .offset = 256 }},
+    }));
+    try std.testing.expectError(core.BindingError.InvalidDynamicOffsetAlignment, validateDynamicOffsetsForBindGroup(bind_group, .{
+        .index = 0,
+        .dynamic_offsets = &.{.{ .binding = 3, .offset = 4 }},
     }));
 }
 
@@ -4438,10 +4497,16 @@ test "runtime render encoder validates bind group binding" {
 
     var tracker = ResourceTracker{};
     var entries = [_]core.BindGroupEntry{};
+    var layout_entries = [_]core.BindGroupLayoutEntry{.{
+        .binding = 0,
+        .resource = .sampler,
+        .visibility = .{ .fragment = true },
+    }};
     var bind_group = BindGroup{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
+        .layout_entries = layout_entries[0..],
         .entries = entries[0..],
     };
     try encoder.setBindGroup(&bind_group, .{ .index = 0 });
@@ -4451,6 +4516,7 @@ test "runtime render encoder validates bind group binding" {
         .backend = .metal,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
+        .layout_entries = layout_entries[0..],
         .entries = entries[0..],
     };
     try std.testing.expectError(RuntimeError.BackendMismatch, encoder.setBindGroup(&metal_bind_group, .{ .index = 0 }));

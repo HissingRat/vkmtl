@@ -580,6 +580,8 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         try binding.validate();
         if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingRenderPipelineState;
+        const dynamic_offsets = try bind_group.dynamicOffsets(binding);
+        defer bind_group.allocator.free(dynamic_offsets);
 
         self.gc.dev.cmdBindDescriptorSets(
             self.cmdbuf,
@@ -587,7 +589,7 @@ pub const RenderCommandEncoder = struct {
             self.pipeline_layout,
             binding.index,
             &.{bind_group.set},
-            null,
+            if (dynamic_offsets.len == 0) null else dynamic_offsets,
         );
     }
 
@@ -888,6 +890,8 @@ pub const ComputeCommandEncoder = struct {
             .storage_texture => |texture_view| texture_view.transitionLayout(self.cmdbuf, .general),
             else => {},
         };
+        const dynamic_offsets = try bind_group.dynamicOffsets(binding);
+        defer bind_group.allocator.free(dynamic_offsets);
 
         self.gc.dev.cmdBindDescriptorSets(
             self.cmdbuf,
@@ -895,7 +899,7 @@ pub const ComputeCommandEncoder = struct {
             self.pipeline_layout,
             binding.index,
             &.{bind_group.set},
-            null,
+            if (dynamic_offsets.len == 0) null else dynamic_offsets,
         );
     }
 
