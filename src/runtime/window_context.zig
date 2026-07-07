@@ -416,12 +416,30 @@ fn hashRenderPipelineDescriptor(hash: *u64, descriptor: core.RenderPipelineDescr
     } else {
         hashBool(hash, false);
     }
+    hashRootConstantLayout(hash, descriptor.root_constant_layout);
 }
 
 fn hashComputePipelineDescriptor(hash: *u64, descriptor: core.ComputePipelineDescriptor) void {
     hashProgrammableStage(hash, descriptor.compute);
     hashU64(hash, descriptor.bind_group_layouts.len);
     for (descriptor.bind_group_layouts) |layout| hashBindGroupLayoutDescriptor(hash, layout);
+    hashRootConstantLayout(hash, descriptor.root_constant_layout);
+}
+
+fn hashRootConstantLayout(hash: *u64, layout: ?core.RootConstantLayoutDescriptor) void {
+    if (layout) |root_layout| {
+        hashBool(hash, true);
+        hashU64(hash, root_layout.ranges.len);
+        for (root_layout.ranges) |range| {
+            hashBool(hash, range.visibility.vertex);
+            hashBool(hash, range.visibility.fragment);
+            hashBool(hash, range.visibility.compute);
+            hashU64(hash, range.offset);
+            hashU64(hash, range.size);
+        }
+    } else {
+        hashBool(hash, false);
+    }
 }
 
 fn hashSamplerDescriptor(hash: *u64, descriptor: core.SamplerDescriptor) void {
@@ -2882,6 +2900,7 @@ pub const Device = struct {
     pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
         try descriptor.validate();
         try validateRuntimeRenderPipelineShape(descriptor, self.features());
+        try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.vertex);
         if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment);
         try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
@@ -2908,6 +2927,7 @@ pub const Device = struct {
 
     pub fn makeComputePipelineState(self: *Device, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
         try descriptor.validate();
+        try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.compute);
         try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
         var fingerprint = objectFingerprintStart(.compute_pipeline, self.backend);
@@ -3497,6 +3517,14 @@ fn validateFirstSliceBindGroupLayout(descriptor: core.BindGroupLayoutDescriptor)
 
 fn validateRuntimeSpecialization(stage: core.ProgrammableStageDescriptor) core.ShaderError!void {
     if (stage.specialization.constants.len != 0) return core.ShaderError.UnsupportedShaderSpecialization;
+}
+
+fn validateRuntimeRootConstantLayout(
+    layout: ?core.RootConstantLayoutDescriptor,
+    features: core.DeviceFeatures,
+    limits: core.DeviceLimits,
+) core.RootConstantError!void {
+    if (layout) |root_layout| try root_layout.validate(features, limits);
 }
 
 fn validateRuntimeRenderPipelineShape(
@@ -4555,6 +4583,27 @@ test "runtime specialization gate rejects non-empty specialization descriptors" 
         .stage = .vertex,
         .specialization = .{ .constants = constants[0..] },
     }));
+}
+
+test "runtime root constant layout gate validates pipeline compatibility" {
+    const ranges = [_]core.RootConstantRange{.{
+        .visibility = .{ .vertex = true },
+        .offset = 0,
+        .size = 16,
+    }};
+    const layout = core.RootConstantLayoutDescriptor{ .ranges = ranges[0..] };
+    const limits = core.DeviceLimits{
+        .max_root_constant_bytes = 64,
+        .root_constant_alignment = 4,
+    };
+
+    try std.testing.expectError(core.RootConstantError.UnsupportedRootConstants, validateRuntimeRootConstantLayout(
+        layout,
+        .{},
+        limits,
+    ));
+    try validateRuntimeRootConstantLayout(layout, .{ .root_constants = true }, limits);
+    try validateRuntimeRootConstantLayout(null, .{}, .{});
 }
 
 test "runtime render pipeline gate rejects unsupported raster state" {

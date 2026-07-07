@@ -1268,6 +1268,15 @@ obvious render and binding blockers.
 - [x] Keep bindless table resource updates explicitly deferred.
 - [x] Update docs and tests.
 
+## Period 21 Phase 4 Checklist
+
+- [x] Define constants lowering scope before implementation.
+- [x] Add root-constant layout slots to render and compute pipeline descriptors.
+- [x] Validate root-constant pipeline compatibility against device features and limits.
+- [x] Include root-constant layout metadata in pipeline fingerprints.
+- [x] Keep command writes/native lowering deferred until the Metal slot model is finalized.
+- [x] Update docs and tests.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

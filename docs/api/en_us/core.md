@@ -373,9 +373,11 @@ yet.
 `RootConstantWriteDescriptor` define the push/root-constant equivalent. They
 are gated by `DeviceFeatures.root_constants`,
 `DeviceLimits.max_root_constant_bytes`, and
-`DeviceLimits.root_constant_alignment`. The current API validates ranges and
-writes, but command encoder lowering to Vulkan push constants or Metal inline
-constants is still future work.
+`DeviceLimits.root_constant_alignment`. Render and compute pipeline descriptors
+carry an optional `root_constant_layout` so pipeline compatibility can be
+validated against the selected device. Command encoder writes and native
+lowering to Vulkan push constants or Metal inline constants are still future
+work.
 
 `BindGroupDescriptor` is the runtime descriptor that points at live resources.
 For pure descriptor validation or tests, root exports also expose the shape-only

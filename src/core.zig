@@ -2336,6 +2336,7 @@ pub const RenderPipelineDescriptor = struct {
     sample_count: u32 = 1,
     color_attachments: []const RenderPipelineColorAttachmentDescriptor = &.{},
     depth_stencil: ?DepthStencilDescriptor = null,
+    root_constant_layout: ?RootConstantLayoutDescriptor = null,
 
     pub fn validate(self: RenderPipelineDescriptor) (ShaderError || PipelineError || BindingError)!void {
         try self.vertex.validate(.vertex);
@@ -2389,6 +2390,7 @@ pub const ComputePipelineDescriptor = struct {
     label: ?[]const u8 = null,
     compute: ProgrammableStageDescriptor,
     bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
+    root_constant_layout: ?RootConstantLayoutDescriptor = null,
 
     pub fn validate(self: ComputePipelineDescriptor) (ShaderError || BindingError)!void {
         try self.compute.validate(.compute);
