@@ -1,5 +1,6 @@
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
+const VulkanAdvancedBinding = @import("advanced_binding.zig");
 const VulkanBindGroup = @import("bind_group.zig").VulkanBindGroup;
 const VulkanBuffer = @import("buffer.zig");
 const VulkanComputePipelineState = @import("compute_pipeline.zig");
@@ -593,6 +594,16 @@ pub const RenderCommandEncoder = struct {
         );
     }
 
+    pub fn setResourceTable(
+        self: *RenderCommandEncoder,
+        table: *const VulkanAdvancedBinding.ResourceTable,
+        binding: core.ResourceTableBinding,
+    ) !void {
+        try binding.validate();
+        if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingRenderPipelineState;
+        _ = table;
+    }
+
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
         try viewport.validate();
         self.gc.dev.cmdSetViewport(self.cmdbuf, 0, &.{.{
@@ -903,6 +914,16 @@ pub const ComputeCommandEncoder = struct {
             &.{bind_group.set},
             if (dynamic_offsets.len == 0) null else dynamic_offsets,
         );
+    }
+
+    pub fn setResourceTable(
+        self: *ComputeCommandEncoder,
+        table: *const VulkanAdvancedBinding.ResourceTable,
+        binding: core.ResourceTableBinding,
+    ) !void {
+        try binding.validate();
+        if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingComputePipelineState;
+        _ = table;
     }
 
     pub fn dispatchThreadgroups(

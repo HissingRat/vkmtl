@@ -1188,6 +1188,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ResourceTablePartiallyBoundUnsupported,
         error.ResourceTableUpdateAfterBindUnsupported,
         error.InvalidResourceTableResource,
+        error.ResourceTableVisibilityMismatch,
         error.EmptySmallConstantVisibility,
         error.EmptySmallConstantData,
         error.SmallConstantDataTooLarge,
@@ -2704,6 +2705,14 @@ pub const BindGroupBinding = struct {
     }
 };
 
+pub const ResourceTableBinding = struct {
+    index: u32,
+
+    pub fn validate(self: ResourceTableBinding) CommandEncodingError!void {
+        if (self.index >= max_bind_group_slots) return CommandEncodingError.InvalidBindGroupIndex;
+    }
+};
+
 pub const Viewport = struct {
     x: f32 = 0,
     y: f32 = 0,
@@ -3232,6 +3241,7 @@ pub const RenderCommandEncoderDebugState = struct {
     pipeline_set: bool = false,
     vertex_buffer_mask: u64 = 0,
     bind_group_mask: u64 = 0,
+    resource_table_mask: u64 = 0,
     index_buffer_set: bool = false,
     signpost_count: u32 = 0,
 
@@ -3261,6 +3271,15 @@ pub const RenderCommandEncoderDebugState = struct {
         try self.requireEncoding();
         try binding.validate();
         self.bind_group_mask |= @as(u64, 1) << @intCast(binding.index);
+    }
+
+    pub fn setResourceTable(
+        self: *RenderCommandEncoderDebugState,
+        binding: ResourceTableBinding,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try binding.validate();
+        self.resource_table_mask |= @as(u64, 1) << @intCast(binding.index);
     }
 
     pub fn setViewport(
@@ -3472,6 +3491,7 @@ pub const ComputeCommandEncoderDebugState = struct {
     state: ComputeCommandEncoderState = .encoding,
     pipeline_set: bool = false,
     bind_group_mask: u64 = 0,
+    resource_table_mask: u64 = 0,
     signpost_count: u32 = 0,
 
     pub fn setComputePipelineState(self: *ComputeCommandEncoderDebugState) CommandEncodingError!void {
@@ -3486,6 +3506,15 @@ pub const ComputeCommandEncoderDebugState = struct {
         try self.requireEncoding();
         try binding.validate();
         self.bind_group_mask |= @as(u64, 1) << @intCast(binding.index);
+    }
+
+    pub fn setResourceTable(
+        self: *ComputeCommandEncoderDebugState,
+        binding: ResourceTableBinding,
+    ) CommandEncodingError!void {
+        try self.requireEncoding();
+        try binding.validate();
+        self.resource_table_mask |= @as(u64, 1) << @intCast(binding.index);
     }
 
     pub fn dispatchThreadgroups(
@@ -5196,6 +5225,7 @@ pub const BindingError = error{
     ResourceTablePartiallyBoundUnsupported,
     ResourceTableUpdateAfterBindUnsupported,
     InvalidResourceTableResource,
+    ResourceTableVisibilityMismatch,
 };
 
 fn isAlignedU32(value: u32, alignment: u32) bool {
@@ -8118,6 +8148,11 @@ test "command debug state validates render pass ordering" {
     try encoder.insertDebugSignpost(.{ .label = "draw setup" });
     try encoder.setRenderPipelineState();
     try encoder.setVertexBuffer(.{ .index = 0 });
+    try encoder.setResourceTable(.{ .index = 1 });
+    try std.testing.expectEqual(@as(u64, 2), encoder.resource_table_mask);
+    try std.testing.expectError(CommandEncodingError.InvalidBindGroupIndex, encoder.setResourceTable(.{
+        .index = max_bind_group_slots,
+    }));
     try encoder.drawPrimitives(.{ .vertex_count = 3 });
     try encoder.endEncoding(&command_buffer);
     try std.testing.expectError(CommandEncodingError.InvalidRenderCommandEncoderState, encoder.insertDebugSignpost(.{ .label = "ended" }));
@@ -8190,6 +8225,8 @@ test "command debug state validates compute pass ordering" {
     }));
     try encoder.setComputePipelineState();
     try encoder.setBindGroup(.{ .index = 0 });
+    try encoder.setResourceTable(.{ .index = 1 });
+    try std.testing.expectEqual(@as(u64, 2), encoder.resource_table_mask);
     try encoder.insertDebugSignpost(.{ .label = "dispatch setup" });
     _ = try encoder.dispatchThreads(.{
         .thread_count_x = 7,

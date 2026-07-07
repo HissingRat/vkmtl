@@ -164,6 +164,7 @@ pub const RenderPassDescriptor = runtime.RenderPassDescriptor;
 pub const IndexType = core.IndexType;
 pub const VertexBufferBinding = core.VertexBufferBinding;
 pub const BindGroupBinding = core.BindGroupBinding;
+pub const ResourceTableBinding = core.ResourceTableBinding;
 pub const Viewport = core.Viewport;
 pub const ScissorRect = core.ScissorRect;
 pub const BlendColor = core.BlendColor;

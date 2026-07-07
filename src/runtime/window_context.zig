@@ -1418,6 +1418,25 @@ pub const ResourceTable = struct {
         return self.slots.len;
     }
 
+    pub fn visibility(self: ResourceTable) core.ShaderVisibility {
+        var out = core.ShaderVisibility{};
+        for (self.ranges) |range| {
+            out.vertex = out.vertex or range.visibility.vertex;
+            out.fragment = out.fragment or range.visibility.fragment;
+            out.compute = out.compute or range.visibility.compute;
+        }
+        return out;
+    }
+
+    pub fn supportsRenderEncoding(self: ResourceTable) bool {
+        const stages = self.visibility();
+        return stages.vertex or stages.fragment;
+    }
+
+    pub fn supportsComputeEncoding(self: ResourceTable) bool {
+        return self.visibility().compute;
+    }
+
     pub fn update(self: *ResourceTable, descriptor: ResourceTableUpdateDescriptor) !void {
         assertObjectAlive(self.alive, "resource_table");
         const resolved = try self.resolveSlot(descriptor.slot);
@@ -2285,6 +2304,25 @@ pub const ComputeCommandEncoder = struct {
         };
     }
 
+    pub fn setResourceTable(
+        self: *ComputeCommandEncoder,
+        table: *ResourceTable,
+        binding: core.ResourceTableBinding,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        assertObjectAlive(table.alive, "resource_table");
+        try expectSameBackend(self.backend, table.backend);
+        try binding.validate();
+        if (!table.supportsComputeEncoding()) return core.BindingError.ResourceTableVisibilityMismatch;
+        try table.validateReadyForBinding();
+        try self.debug.setResourceTable(binding);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setResourceTable(&table.impl.?.vulkan, binding),
+            .metal => |*metal| try metal.setResourceTable(&table.impl.?.metal, binding),
+        };
+        try table.markBoundForCommands();
+    }
+
     pub fn dispatchThreadgroups(
         self: *ComputeCommandEncoder,
         descriptor: core.DispatchThreadgroupsDescriptor,
@@ -2464,6 +2502,25 @@ pub const RenderCommandEncoder = struct {
             .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.impl.?.vulkan, binding),
             .metal => |*metal| try metal.setBindGroup(&bind_group.impl.?.metal, binding),
         };
+    }
+
+    pub fn setResourceTable(
+        self: *RenderCommandEncoder,
+        table: *ResourceTable,
+        binding: core.ResourceTableBinding,
+    ) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        assertObjectAlive(table.alive, "resource_table");
+        try expectSameBackend(self.backend, table.backend);
+        try binding.validate();
+        if (!table.supportsRenderEncoding()) return core.BindingError.ResourceTableVisibilityMismatch;
+        try table.validateReadyForBinding();
+        try self.debug.setResourceTable(binding);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setResourceTable(&table.impl.?.vulkan, binding),
+            .metal => |*metal| try metal.setResourceTable(&table.impl.?.metal, binding),
+        };
+        try table.markBoundForCommands();
     }
 
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
@@ -4314,7 +4371,7 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
         .capability_report = report,
     };
 
-    const ranges = [_]core.DescriptorIndexingRange{.{
+    var ranges = [_]core.DescriptorIndexingRange{.{
         .binding = 3,
         .resource = .sampled_texture,
         .visibility = .{ .fragment = true },
@@ -4476,7 +4533,7 @@ test "runtime resource table rejects update after bind without range support" {
         .capability_report = report,
     };
 
-    const ranges = [_]core.DescriptorIndexingRange{.{
+    var ranges = [_]core.DescriptorIndexingRange{.{
         .binding = 0,
         .resource = .sampler,
         .visibility = .{ .fragment = true },
@@ -4972,6 +5029,54 @@ test "runtime bind group dynamic offsets validate array elements" {
             .{ .binding = 3, .array_element = 2, .offset = 512 },
         },
     }));
+}
+
+test "runtime command encoders bind resource tables with validation" {
+    var tracker = ResourceTracker{};
+    var command_buffer = CommandBuffer{ .backend = .metal };
+    var sampler = SamplerState{
+        .backend = .metal,
+        .tracker = &tracker,
+        .impl = undefined,
+    };
+    var ranges = [_]core.DescriptorIndexingRange{.{
+        .binding = 0,
+        .resource = .sampler,
+        .visibility = .{ .fragment = true },
+        .descriptor_count = 1,
+    }};
+    var slots = [_]?BindGroupResource{.{ .sampler = &sampler }};
+    var table = ResourceTable{
+        .backend = .metal,
+        .tracker = &tracker,
+        .allocator = std.testing.allocator,
+        .model_value = .argument_buffer,
+        .ranges = ranges[0..],
+        .slots = slots[0..],
+    };
+    var render_encoder = RenderCommandEncoder{
+        .backend = .metal,
+        .command_buffer = &command_buffer,
+    };
+    try render_encoder.setResourceTable(&table, .{ .index = 1 });
+    try std.testing.expectEqual(@as(u64, 2), render_encoder.debug.resource_table_mask);
+    try std.testing.expectEqual(@as(u64, 1), table.bound_count);
+    try std.testing.expectError(core.BindingError.ResourceTableUpdateAfterBindUnsupported, table.clear(.{ .binding = 0 }));
+
+    var compute_encoder = ComputeCommandEncoder{
+        .backend = .metal,
+        .command_buffer = &command_buffer,
+    };
+    try std.testing.expectError(core.BindingError.ResourceTableVisibilityMismatch, compute_encoder.setResourceTable(&table, .{ .index = 0 }));
+
+    var vulkan_table = table;
+    vulkan_table.backend = .vulkan;
+    try std.testing.expectError(RuntimeError.BackendMismatch, render_encoder.setResourceTable(&vulkan_table, .{ .index = 0 }));
+
+    var empty_slots = [_]?BindGroupResource{null};
+    var incomplete_table = table;
+    incomplete_table.slots = empty_slots[0..];
+    try std.testing.expectError(core.BindingError.MissingResourceTableBinding, render_encoder.setResourceTable(&incomplete_table, .{ .index = 0 }));
 }
 
 test "runtime specialization gate rejects non-empty specialization descriptors" {

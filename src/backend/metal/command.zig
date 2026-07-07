@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
+const MetalAdvancedBinding = @import("advanced_binding.zig");
 const MetalBindGroup = @import("bind_group.zig").MetalBindGroup;
 const MetalBuffer = @import("buffer.zig");
 const MetalClearScreen = @import("clear_screen.zig");
@@ -378,6 +379,16 @@ pub const ComputeCommandEncoder = struct {
         }
     }
 
+    pub fn setResourceTable(
+        self: *ComputeCommandEncoder,
+        table: *const MetalAdvancedBinding.ResourceTable,
+        binding: core.ResourceTableBinding,
+    ) !void {
+        try binding.validate();
+        _ = self;
+        _ = table;
+    }
+
     pub fn dispatchThreadgroups(
         self: *ComputeCommandEncoder,
         descriptor: core.DispatchThreadgroupsDescriptor,
@@ -566,6 +577,16 @@ pub const RenderCommandEncoder = struct {
                 }
             }
         }
+    }
+
+    pub fn setResourceTable(
+        self: *RenderCommandEncoder,
+        table: *const MetalAdvancedBinding.ResourceTable,
+        binding: core.ResourceTableBinding,
+    ) !void {
+        try binding.validate();
+        _ = self;
+        _ = table;
     }
 
     pub fn drawPrimitives(
