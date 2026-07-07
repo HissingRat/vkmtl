@@ -1823,6 +1823,23 @@ pub const VulkanMeshPipelineLowering = struct {
     }
 };
 
+pub const MetalMeshPipelineLowering = struct {
+    mesh_entry_point: []const u8,
+    object_entry_point: ?[]const u8 = null,
+    mesh_threads_per_threadgroup: u32,
+    object_threads_per_threadgroup: u32 = 0,
+
+    pub fn fromDescriptor(descriptor: MeshPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!MetalMeshPipelineLowering {
+        try descriptor.validate(features, limits);
+        return .{
+            .mesh_entry_point = descriptor.mesh_entry_point,
+            .object_entry_point = descriptor.task_entry_point,
+            .mesh_threads_per_threadgroup = descriptor.mesh_threads_per_threadgroup,
+            .object_threads_per_threadgroup = if (descriptor.task_entry_point != null) descriptor.task_threads_per_threadgroup else 0,
+        };
+    }
+};
+
 pub const AccelerationStructureKind = enum {
     bottom_level,
     top_level,
@@ -8104,6 +8121,21 @@ test "Vulkan mesh pipeline lowering preserves optional task stage" {
     try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
     try std.testing.expectEqualStrings("task_main", lowering.task_entry_point.?);
     try std.testing.expectEqual(@as(u32, 64), lowering.mesh_threads_per_threadgroup);
+}
+
+test "Metal mesh pipeline lowering maps task stage to object function metadata" {
+    const lowering = try MetalMeshPipelineLowering.fromDescriptor(.{
+        .mesh_entry_point = "mesh_main",
+        .task_entry_point = "object_main",
+        .mesh_threads_per_threadgroup = 32,
+        .task_threads_per_threadgroup = 16,
+    }, .{ .mesh_shaders = true, .task_shaders = true }, .{
+        .max_mesh_threads_per_threadgroup = 64,
+        .max_task_threads_per_threadgroup = 32,
+    });
+    try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
+    try std.testing.expectEqualStrings("object_main", lowering.object_entry_point.?);
+    try std.testing.expectEqual(@as(u32, 16), lowering.object_threads_per_threadgroup);
 }
 
 test "texture usage can detect empty usage" {

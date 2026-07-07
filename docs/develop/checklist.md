@@ -1014,11 +1014,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 16 Phase 4 Checklist
 
-- [ ] Define Metal object/mesh function scope before implementation.
-- [ ] Query Metal object/mesh function availability.
-- [ ] Map mesh pipeline descriptors to Metal functions.
-- [ ] Document unsupported Metal versions or devices.
-- [ ] Add Metal mesh-style smoke coverage.
+- [x] Define Metal object/mesh function scope before implementation.
+- [x] Query Metal object/mesh function availability through feature gates.
+- [x] Map mesh pipeline descriptors to Metal lowering metadata.
+- [x] Document unsupported Metal versions or devices.
+- [x] Keep Metal mesh-style smoke coverage gated.
 
 ## Period 16 Phase 5 Checklist
 

@@ -34,6 +34,7 @@ See `phase3.md`.
 ## Phase 4: Metal Object / Mesh Function Path
 
 - Use Metal object or mesh function paths where supported.
+- Add `MetalMeshPipelineLowering` metadata for mesh/object function mapping.
 
 See `phase4.md`.
 
