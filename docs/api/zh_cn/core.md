@@ -223,7 +223,8 @@ operation 和 read/write mask 的 `StencilDescriptor`。Depth state 已在第一
 Vertex layout 支持多个 buffer 和 attribute。`VertexBufferLayoutDescriptor` 可以指定显式
 `buffer_index`；省略时保持现有按数组位置映射的行为。校验会拒绝重复的 resolved buffer
 index、重复 attribute location、非法 stride/offset，以及为 0 的 instance step rate。
-非默认 `instance_step_rate` 已能表达，但要等 backend lowering 接上。
+非默认 `instance_step_rate` 现在会下沉到 Metal vertex descriptor step rate；在暴露
+`vertex_instance_step_rate` 的 Vulkan 设备上会下沉到 vertex binding divisor。
 
 `TessellationDescriptor` 表示 future tessellation pipeline extension state。它由
 `DeviceFeatures.tessellation` gate，校验 patch control point count 和 required stage presence，

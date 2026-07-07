@@ -1532,7 +1532,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
                 vertex_descriptor.layouts[layout.buffer_index].stride = layout.stride;
                 vertex_descriptor.layouts[layout.buffer_index].stepFunction =
                     vkmtl_vertex_step_function(layout.step_function);
-                vertex_descriptor.layouts[layout.buffer_index].stepRate = 1;
+                vertex_descriptor.layouts[layout.buffer_index].stepRate = layout.step_rate;
             }
 
             for (size_t i = 0; i < vertex_attribute_count; i += 1) {

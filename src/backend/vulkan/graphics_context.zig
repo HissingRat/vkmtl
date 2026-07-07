@@ -117,7 +117,7 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     self.pdev = candidate.pdev;
     self.props = candidate.props;
 
-    const dev = try initializeCandidate(self.instance, candidate);
+    const dev = try initializeCandidate(self.instance, allocator, candidate);
 
     const vkd = try allocator.create(DeviceWrapper);
     errdefer allocator.destroy(vkd);
@@ -315,6 +315,7 @@ fn queryNativeFeatures(instance: Instance, pdev: vk.PhysicalDevice, allocator: A
         (native.sparse_residency_image_2d == .true or native.sparse_residency_image_3d == .true);
     result.tiled_textures = result.sparse_textures;
     result.descriptor_indexing = extensions.descriptor_indexing;
+    result.vertex_instance_step_rate = vertexAttributeDivisorFeatureSupported(instance, pdev, extensions);
     result.external_memory = extensions.external_memory;
     result.external_semaphores = extensions.external_semaphore;
     result.external_textures = extensions.external_memory;
@@ -333,6 +334,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures
     result.independent_blend = false;
     result.tessellation = false;
     result.wireframe_fill_mode = native_features.wireframe_fill_mode;
+    result.vertex_instance_step_rate = native_features.vertex_instance_step_rate;
     result.multi_draw = false;
     result.pipeline_statistics_queries = false;
     result.sparse_buffers = false;
@@ -377,6 +379,8 @@ fn queryLimits(props: vk.PhysicalDeviceProperties, queried_features: core.Device
 
 const VulkanExtensionSupport = struct {
     descriptor_indexing: bool = false,
+    vertex_attribute_divisor_khr: bool = false,
+    vertex_attribute_divisor_ext: bool = false,
     external_memory: bool = false,
     external_semaphore: bool = false,
     acceleration_structure: bool = false,
@@ -399,6 +403,8 @@ fn queryExtensionSupport(instance: Instance, pdev: vk.PhysicalDevice, allocator:
 fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []const u8) VulkanExtensionSupport {
     var result = current;
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_descriptor_indexing.name)) result.descriptor_indexing = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_vertex_attribute_divisor.name)) result.vertex_attribute_divisor_khr = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.ext_vertex_attribute_divisor.name)) result.vertex_attribute_divisor_ext = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_external_memory.name)) result.external_memory = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_external_semaphore.name)) result.external_semaphore = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_acceleration_structure.name)) result.acceleration_structure = true;
@@ -410,6 +416,36 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
         result.mesh_shader = true;
     }
     return result;
+}
+
+fn vertexAttributeDivisorExtensionName(support: VulkanExtensionSupport) ?[*:0]const u8 {
+    if (support.vertex_attribute_divisor_khr) return vk.extensions.khr_vertex_attribute_divisor.name;
+    if (support.vertex_attribute_divisor_ext) return vk.extensions.ext_vertex_attribute_divisor.name;
+    return null;
+}
+
+fn vertexAttributeDivisorFeatureSupported(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
+    support: VulkanExtensionSupport,
+) bool {
+    if (vertexAttributeDivisorExtensionName(support) == null) return false;
+
+    var divisor_features = vk.PhysicalDeviceVertexAttributeDivisorFeaturesEXT{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &divisor_features,
+        .features = .{},
+    };
+
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceFeatures2) |get_features2| {
+        get_features2(pdev, &features2);
+    } else if (instance.wrapper.dispatch.vkGetPhysicalDeviceFeatures2KHR) |get_features2_khr| {
+        get_features2_khr(pdev, &features2);
+    } else {
+        return false;
+    }
+
+    return divisor_features.vertex_attribute_instance_rate_divisor == .true;
 }
 
 fn formatCapabilitiesFromVulkanFeatures(format_features: vk.FormatFeatureFlags) core.FormatCapabilities {
@@ -463,13 +499,28 @@ fn createSurface(instance: Instance, surface_provider: core.VulkanSurfaceProvide
     return @enumFromInt(surface_handle);
 }
 
-fn initializeCandidate(instance: Instance, candidate: DeviceCandidate) !vk.Device {
+fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: DeviceCandidate) !vk.Device {
+    const extensions = try queryExtensionSupport(instance, candidate.pdev, allocator);
+    const enable_vertex_divisor = vertexAttributeDivisorFeatureSupported(instance, candidate.pdev, extensions);
+
+    var extension_names: std.ArrayList([*:0]const u8) = .empty;
+    defer extension_names.deinit(allocator);
+    try extension_names.appendSlice(allocator, &required_device_extensions);
+    if (enable_vertex_divisor) {
+        if (vertexAttributeDivisorExtensionName(extensions)) |extension_name| {
+            try extension_names.append(allocator, extension_name);
+        }
+    }
+
     const priority = [_]f32{1};
     const native_features = instance.getPhysicalDeviceFeatures(candidate.pdev);
-    const enabled_features = vk.PhysicalDeviceFeatures{
+    var enabled_features = vk.PhysicalDeviceFeatures{
         .sampler_anisotropy = native_features.sampler_anisotropy,
         .fill_mode_non_solid = native_features.fill_mode_non_solid,
         .depth_bias_clamp = native_features.depth_bias_clamp,
+    };
+    var vertex_divisor_features = vk.PhysicalDeviceVertexAttributeDivisorFeaturesEXT{
+        .vertex_attribute_instance_rate_divisor = if (enable_vertex_divisor) .true else .false,
     };
     const qci = [_]vk.DeviceQueueCreateInfo{
         .{
@@ -486,10 +537,11 @@ fn initializeCandidate(instance: Instance, candidate: DeviceCandidate) !vk.Devic
     const queue_count: u32 = if (candidate.queues.graphics_family == candidate.queues.present_family) 1 else 2;
 
     return try instance.createDevice(candidate.pdev, &.{
+        .p_next = if (enable_vertex_divisor) &vertex_divisor_features else null,
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,
-        .enabled_extension_count = required_device_extensions.len,
-        .pp_enabled_extension_names = @ptrCast(&required_device_extensions),
+        .enabled_extension_count = @intCast(extension_names.items.len),
+        .pp_enabled_extension_names = extension_names.items.ptr,
         .p_enabled_features = &enabled_features,
     }, null);
 }
@@ -653,6 +705,7 @@ test "missing Vulkan base dispatch reports VulkanUnavailable" {
 test "Vulkan extension support maps optional backend capabilities" {
     var support = VulkanExtensionSupport{};
     support = mergeExtensionSupport(support, vk.extensions.ext_descriptor_indexing.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_vertex_attribute_divisor.name);
     support = mergeExtensionSupport(support, vk.extensions.khr_external_memory.name);
     support = mergeExtensionSupport(support, vk.extensions.khr_external_semaphore.name);
     support = mergeExtensionSupport(support, vk.extensions.khr_acceleration_structure.name);
@@ -660,6 +713,11 @@ test "Vulkan extension support maps optional backend capabilities" {
     support = mergeExtensionSupport(support, vk.extensions.ext_mesh_shader.name);
 
     try std.testing.expect(support.descriptor_indexing);
+    try std.testing.expect(support.vertex_attribute_divisor_khr);
+    try std.testing.expectEqualStrings(
+        vk.extensions.khr_vertex_attribute_divisor.name,
+        std.mem.span(vertexAttributeDivisorExtensionName(support).?),
+    );
     try std.testing.expect(support.external_memory);
     try std.testing.expect(support.external_semaphore);
     try std.testing.expect(support.acceleration_structure);
@@ -670,6 +728,7 @@ test "Vulkan extension support maps optional backend capabilities" {
 test "Vulkan usable features stay conservative before backend lowering" {
     const native = core.DeviceFeatures{
         .wireframe_fill_mode = true,
+        .vertex_instance_step_rate = true,
         .descriptor_indexing = true,
         .sparse_buffers = true,
         .external_textures = true,
@@ -683,6 +742,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     const usable = queryUsableFeatures(native);
     try std.testing.expect(!usable.descriptor_indexing);
     try std.testing.expect(usable.wireframe_fill_mode);
+    try std.testing.expect(usable.vertex_instance_step_rate);
     try std.testing.expect(!usable.sparse_buffers);
     try std.testing.expect(!usable.external_textures);
     try std.testing.expect(!usable.tessellation);

@@ -26,6 +26,7 @@ paths. They are recorded here instead of rewriting the historical period notes:
 - Transient attachment metadata accepted as a no-op performance hint.
 - Single color attachment blend state lowering.
 - Pipeline depth-bias and wireframe / line fill mode lowering.
+- Vertex instance step-rate lowering.
 
 ## Goal
 
@@ -44,7 +45,7 @@ Tracked in `docs/develop/period20/`.
 - [x] Blend state lowering for color attachments.
 - [x] Pipeline depth-bias state lowering.
 - [x] Wireframe / line fill mode where the backend supports it.
-- [ ] Vertex instance step-rate lowering.
+- [x] Vertex instance step-rate lowering.
 - [ ] Stencil render pass and stencil pipeline state lowering.
 - [ ] Multiple render target render pass and pipeline lowering.
 

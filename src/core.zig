@@ -1465,6 +1465,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
 
     if (backend == .metal) {
         result.wireframe_fill_mode = true;
+        result.vertex_instance_step_rate = true;
     }
 
     return result;
@@ -1811,6 +1812,7 @@ pub const VertexBufferLayoutDescriptor = struct {
         if (self.resolvedBufferIndex(default_index) >= default_max_vertex_buffer_slots) return PipelineError.InvalidVertexBufferIndex;
         if (self.stride == 0 and self.attributes.len != 0) return PipelineError.InvalidVertexStride;
         if (self.instance_step_rate == 0) return PipelineError.InvalidInstanceStepRate;
+        if (self.step_function == .per_vertex and self.instance_step_rate != 1) return PipelineError.InvalidInstanceStepRate;
         for (self.attributes) |attribute| {
             if (attribute.offset > self.stride or vertexFormatSize(attribute.format) > self.stride - attribute.offset) {
                 return PipelineError.InvalidVertexAttributeOffset;
@@ -7495,6 +7497,18 @@ test "render pipeline descriptor rejects invalid shapes" {
         .vertex_descriptor = .{ .buffers = invalid_step_rate_buffers[0..] },
         .color_attachments = color_attachments[0..],
     }).validate());
+
+    const invalid_per_vertex_step_rate_buffers = [_]VertexBufferLayoutDescriptor{
+        .{ .stride = 8, .step_function = .per_vertex, .instance_step_rate = 2 },
+    };
+    try std.testing.expectError(PipelineError.InvalidInstanceStepRate, (RenderPipelineDescriptor{
+        .vertex = .{
+            .module = module,
+            .stage = .vertex,
+        },
+        .vertex_descriptor = .{ .buffers = invalid_per_vertex_step_rate_buffers[0..] },
+        .color_attachments = color_attachments[0..],
+    }).validate());
 }
 
 test "compute pipeline descriptor validates shader stage and layouts" {
@@ -9471,6 +9485,7 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.depth_bias);
     try std.testing.expect(features.wireframe_fill_mode);
     try std.testing.expect(features.blend_state);
+    try std.testing.expect(features.vertex_instance_step_rate);
     try std.testing.expect(!features.heaps);
     try std.testing.expect(!features.multi_surface);
 }

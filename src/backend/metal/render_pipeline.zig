@@ -106,6 +106,7 @@ fn makeVertexBufferLayouts(
             .buffer_index = slots.vertexBufferSlotUnchecked(buffer_index) orelse return core.CommandEncodingError.InvalidVertexBufferIndex,
             .stride = buffer.stride,
             .step_function = vertexStepFunction(buffer.step_function),
+            .step_rate = buffer.instance_step_rate,
         };
     }
     return layouts;

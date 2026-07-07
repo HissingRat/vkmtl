@@ -1208,6 +1208,14 @@ obvious render and binding blockers.
 - [x] Keep conservative rasterization capability-gated.
 - [x] Update tests and docs with backend-specific limits.
 
+## Period 20 Phase 3 Checklist
+
+- [x] Define vertex step-rate backend lowering scope before implementation.
+- [x] Lower Metal vertex descriptor step rates.
+- [x] Lower Vulkan vertex binding divisors where supported.
+- [x] Keep unsupported device paths feature-gated.
+- [x] Update docs and tests for instance stepping.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

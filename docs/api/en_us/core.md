@@ -262,7 +262,9 @@ Vertex layouts support multiple buffers and attributes. A
 is omitted, the descriptor keeps the existing array-index mapping. Validation
 rejects duplicate resolved buffer indices, duplicate attribute locations,
 invalid strides/offsets, and zero instance step rates. Non-default
-`instance_step_rate` is represented but gated until backend lowering is wired.
+`instance_step_rate` now lowers to Metal vertex descriptor step rates and to
+Vulkan vertex binding divisors when the selected device exposes
+`vertex_instance_step_rate`.
 
 `TessellationDescriptor` represents future tessellation pipeline extension
 state. It is gated by `DeviceFeatures.tessellation`, validates patch control

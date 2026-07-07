@@ -73,8 +73,15 @@ pub fn init(
     defer allocator.free(vertex_bindings);
     const vertex_attributes = try makeVertexAttributes(allocator, descriptor.vertex_descriptor);
     defer allocator.free(vertex_attributes);
+    const vertex_divisors = try makeVertexBindingDivisors(allocator, descriptor.vertex_descriptor);
+    defer allocator.free(vertex_divisors);
+    const vertex_divisor_state = vk.PipelineVertexInputDivisorStateCreateInfoEXT{
+        .vertex_binding_divisor_count = @intCast(vertex_divisors.len),
+        .p_vertex_binding_divisors = if (vertex_divisors.len == 0) undefined else vertex_divisors.ptr,
+    };
 
     const vertex_input = vk.PipelineVertexInputStateCreateInfo{
+        .p_next = if (vertex_divisors.len == 0) null else &vertex_divisor_state,
         .vertex_binding_description_count = @intCast(vertex_bindings.len),
         .p_vertex_binding_descriptions = if (vertex_bindings.len == 0) null else vertex_bindings.ptr,
         .vertex_attribute_description_count = @intCast(vertex_attributes.len),
@@ -358,6 +365,28 @@ fn makeVertexAttributes(
         }
     }
     return attributes;
+}
+
+fn makeVertexBindingDivisors(
+    allocator: std.mem.Allocator,
+    descriptor: core.VertexDescriptor,
+) ![]vk.VertexInputBindingDivisorDescriptionEXT {
+    var count: usize = 0;
+    for (descriptor.buffers) |buffer| {
+        if (buffer.step_function == .per_instance and buffer.instance_step_rate != 1) count += 1;
+    }
+
+    const divisors = try allocator.alloc(vk.VertexInputBindingDivisorDescriptionEXT, count);
+    var out_index: usize = 0;
+    for (descriptor.buffers, 0..) |buffer, binding| {
+        if (buffer.step_function != .per_instance or buffer.instance_step_rate == 1) continue;
+        divisors[out_index] = .{
+            .binding = buffer.resolvedBufferIndex(binding),
+            .divisor = buffer.instance_step_rate,
+        };
+        out_index += 1;
+    }
+    return divisors;
 }
 
 fn makeColorBlendAttachments(

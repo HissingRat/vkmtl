@@ -150,6 +150,7 @@ typedef struct vkmtl_metal_vertex_buffer_layout {
     unsigned int buffer_index;
     unsigned int stride;
     vkmtl_metal_vertex_step_function step_function;
+    unsigned int step_rate;
 } vkmtl_metal_vertex_buffer_layout;
 
 typedef struct vkmtl_metal_vertex_attribute {
