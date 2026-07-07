@@ -790,11 +790,11 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 11 Phase 6 Checklist
 
-- [ ] Define backend capability test scope before implementation.
-- [ ] Add tests for conservative defaults.
-- [ ] Add tests for query mapping completeness.
-- [ ] Update backend matrix notes for device-dependent expectations.
-- [ ] Validate capability reporting in CI or local backend smoke runs where practical.
+- [x] Define backend capability test scope before implementation.
+- [x] Add tests for conservative defaults.
+- [x] Add tests for query mapping completeness.
+- [x] Update backend matrix notes for device-dependent expectations.
+- [x] Validate capability reporting in CI or local backend smoke runs where practical.
 
 ## Period 12 Phase 1 Checklist
 

@@ -7827,6 +7827,23 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(!features.multi_surface);
 }
 
+test "default capability reports keep advanced backend gates closed" {
+    const report = defaultDeviceCapabilityReport(.vulkan);
+
+    try std.testing.expectEqual(Backend.vulkan, report.backend);
+    try std.testing.expectEqual(DeviceCapabilitySource.defaults, report.source);
+    try std.testing.expect(report.features.runtime_slang);
+    try std.testing.expect(report.native_features.runtime_slang);
+    try std.testing.expect(!report.features.descriptor_indexing);
+    try std.testing.expect(!report.features.argument_buffers);
+    try std.testing.expect(!report.features.sparse_buffers);
+    try std.testing.expect(!report.features.external_textures);
+    try std.testing.expect(!report.features.tessellation);
+    try std.testing.expect(!report.features.mesh_shaders);
+    try std.testing.expect(!report.features.ray_tracing);
+    try std.testing.expect(!report.features.driver_pipeline_cache);
+}
+
 test "default format capabilities describe current portable formats" {
     const color = defaultFormatCapabilities(.rgba8_unorm);
     try std.testing.expect(color.sampled);

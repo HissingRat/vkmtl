@@ -1,6 +1,6 @@
 # Period 11: Backend Capability Reality
 
-Status: planned.
+Status: completed backend capability baseline.
 
 Goal: make `DeviceFeatures`, `DeviceLimits`, and format capability reports
 truthful by filling them from real backend queries.

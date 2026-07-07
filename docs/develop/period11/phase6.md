@@ -14,3 +14,11 @@ Phase 6 locks capability reporting into the test matrix.
 - `zig build test` should cover mapping and validation helpers.
 - Backend smoke runs should record capability-dump output in release notes or
   test logs when possible.
+
+## Current Status
+
+- Core tests verify default capability reports stay conservative for advanced
+  backend gates.
+- Vulkan and Metal mapping tests cover queried native feature translation.
+- The backend test matrix now treats `run-capability-dump` as the smoke target
+  for capability reporting.
