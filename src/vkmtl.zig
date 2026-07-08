@@ -161,6 +161,7 @@ pub const MetalRayTracingLowering = core.MetalRayTracingLowering;
 pub const RayTracingPipelineLowering = core.RayTracingPipelineLowering;
 pub const MetalRayTracingMappingDescriptor = core.MetalRayTracingMappingDescriptor;
 pub const MetalRayTracingMappingPlan = core.MetalRayTracingMappingPlan;
+pub const MetalRayTracingExecutionMapping = runtime.MetalRayTracingExecutionMapping;
 pub const ShaderBindingTableDescriptor = core.ShaderBindingTableDescriptor;
 pub const ShaderBindingTableLayout = core.ShaderBindingTableLayout;
 pub const ShaderBindingTable = runtime.ShaderBindingTable;

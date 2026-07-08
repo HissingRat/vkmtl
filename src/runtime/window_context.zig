@@ -52,6 +52,7 @@ pub const ResourceKind = enum {
     acceleration_structure,
     ray_tracing_pipeline_state,
     shader_binding_table,
+    metal_ray_tracing_execution_mapping,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -87,6 +88,7 @@ pub const ResourceTracker = struct {
     acceleration_structures: usize = 0,
     ray_tracing_pipeline_states: usize = 0,
     shader_binding_tables: usize = 0,
+    metal_ray_tracing_execution_mappings: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -152,7 +154,8 @@ pub const ResourceTracker = struct {
             self.heaps +
             self.acceleration_structures +
             self.ray_tracing_pipeline_states +
-            self.shader_binding_tables;
+            self.shader_binding_tables +
+            self.metal_ray_tracing_execution_mappings;
     }
 
     pub fn diagnosticsSnapshot(self: ResourceTracker) core.RuntimeDiagnosticsSnapshot {
@@ -245,13 +248,14 @@ pub const ResourceTracker = struct {
             self.heaps != 0 or
             self.acceleration_structures != 0 or
             self.ray_tracing_pipeline_states != 0 or
-            self.shader_binding_tables != 0;
+            self.shader_binding_tables != 0 or
+            self.metal_ray_tracing_execution_mappings != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}, shader_binding_tables={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}, shader_binding_tables={}, metal_ray_tracing_execution_mappings={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -275,6 +279,7 @@ pub const ResourceTracker = struct {
                     self.acceleration_structures,
                     self.ray_tracing_pipeline_states,
                     self.shader_binding_tables,
+                    self.metal_ray_tracing_execution_mappings,
                 },
             );
         }
@@ -310,6 +315,7 @@ pub const ResourceTracker = struct {
             .acceleration_structure => &self.acceleration_structures,
             .ray_tracing_pipeline_state => &self.ray_tracing_pipeline_states,
             .shader_binding_table => &self.shader_binding_tables,
+            .metal_ray_tracing_execution_mapping => &self.metal_ray_tracing_execution_mappings,
         };
     }
 
@@ -1770,6 +1776,54 @@ pub const ShaderBindingTable = struct {
 
     fn recordDispatch(self: *ShaderBindingTable) void {
         self.dispatch_count += 1;
+    }
+};
+
+pub const MetalRayTracingExecutionMapping = struct {
+    backend: core.Backend = .metal,
+    tracker: *ResourceTracker,
+    allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.MetalRayTracingMappingDescriptor,
+    plan_value: core.MetalRayTracingMappingPlan,
+    alive: bool = true,
+
+    pub fn deinit(self: *MetalRayTracingExecutionMapping) void {
+        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
+        self.alive = false;
+        self.allocator.free(self.descriptor_value.pipeline.shader_groups);
+        self.allocator.free(self.descriptor_value.intersections);
+        self.tracker.release(.metal_ray_tracing_execution_mapping);
+    }
+
+    pub fn selectedBackend(self: MetalRayTracingExecutionMapping) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: MetalRayTracingExecutionMapping) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn descriptor(self: MetalRayTracingExecutionMapping) core.MetalRayTracingMappingDescriptor {
+        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
+        return self.descriptor_value;
+    }
+
+    pub fn plan(self: MetalRayTracingExecutionMapping) core.MetalRayTracingMappingPlan {
+        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
+        return self.plan_value;
+    }
+
+    pub fn functionTableEntryCount(self: MetalRayTracingExecutionMapping) u32 {
+        return self.plan().function_table_entries;
+    }
+
+    pub fn intersectionFunctionCount(self: MetalRayTracingExecutionMapping) u32 {
+        return self.plan().intersection_function_count;
+    }
+
+    pub fn requiresIntersectionFunctionTable(self: MetalRayTracingExecutionMapping) bool {
+        return self.plan().requires_intersection_function_table;
     }
 };
 
@@ -4285,6 +4339,36 @@ pub const Device = struct {
         );
     }
 
+    pub fn makeMetalRayTracingExecutionMapping(self: *Device, descriptor: core.MetalRayTracingMappingDescriptor) !MetalRayTracingExecutionMapping {
+        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
+        const plan = try core.MetalRayTracingMappingPlan.fromDescriptor(
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+        const shader_groups = try self.allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.pipeline.shader_groups);
+        errdefer self.allocator.free(shader_groups);
+        const intersections = try self.allocator.dupe(core.MetalIntersectionFunctionDescriptor, descriptor.intersections);
+        errdefer self.allocator.free(intersections);
+
+        self.tracker.retain(.metal_ray_tracing_execution_mapping);
+        return .{
+            .tracker = self.tracker,
+            .allocator = self.allocator,
+            .label_value = descriptor.function_table_label,
+            .descriptor_value = .{
+                .pipeline = .{
+                    .label = descriptor.pipeline.label,
+                    .shader_groups = shader_groups,
+                    .max_recursion_depth = descriptor.pipeline.max_recursion_depth,
+                },
+                .intersections = intersections,
+                .function_table_label = descriptor.function_table_label,
+            },
+            .plan_value = plan,
+        };
+    }
+
     pub fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5776,6 +5860,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .acceleration_structure => "acceleration_structure",
         .ray_tracing_pipeline_state => "ray_tracing_pipeline_state",
         .shader_binding_table => "shader_binding_table",
+        .metal_ray_tracing_execution_mapping => "metal_ray_tracing_execution_mapping",
     };
 }
 
@@ -6653,6 +6738,71 @@ test "runtime device plans Metal ray tracing mapping from native capabilities" {
     });
     try std.testing.expectEqual(@as(u32, 3), plan.function_table_entries);
     try std.testing.expect(plan.requires_intersection_function_table);
+}
+
+test "runtime creates Metal ray tracing execution mappings from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.limits.max_ray_tracing_recursion_depth = 2;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal execution mapping adapter",
+        },
+        .capability_report = report,
+    };
+
+    const groups = [_]core.RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+    };
+    const intersections = [_]core.MetalIntersectionFunctionDescriptor{
+        .{ .entry_point = "intersect_triangle" },
+    };
+    var mapping = try device.makeMetalRayTracingExecutionMapping(.{
+        .pipeline = .{
+            .shader_groups = groups[0..],
+            .max_recursion_depth = 1,
+        },
+        .intersections = intersections[0..],
+        .function_table_label = "rt table",
+    });
+    defer mapping.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.metal_ray_tracing_execution_mappings);
+    try std.testing.expectEqualStrings("rt table", mapping.label().?);
+    try std.testing.expectEqual(@as(u32, 3), mapping.functionTableEntryCount());
+    try std.testing.expectEqual(@as(u32, 1), mapping.intersectionFunctionCount());
+    try std.testing.expect(mapping.requiresIntersectionFunctionTable());
+
+    var vulkan_report = core.defaultDeviceCapabilityReport(.vulkan);
+    vulkan_report.native_features.ray_tracing = true;
+    var vulkan_device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan mapping adapter",
+        },
+        .capability_report = vulkan_report,
+    };
+    try std.testing.expectError(
+        core.AdvancedFeatureError.UnsupportedRayTracing,
+        vulkan_device.makeMetalRayTracingExecutionMapping(.{
+            .pipeline = .{
+                .shader_groups = groups[0..],
+            },
+        }),
+    );
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

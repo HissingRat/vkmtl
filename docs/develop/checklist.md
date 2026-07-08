@@ -1741,6 +1741,18 @@ obvious render and binding blockers.
 - [x] Document backend-private SBT record materialization and native dispatch
   commands as deferred to Period 30 Phase 3.
 
+## Period 29 Phase 4 Checklist
+
+- [x] Add runtime Metal ray tracing execution mapping objects owned by
+  `Device`.
+- [x] Keep Metal mapping creation gated by Metal backend and native ray tracing
+  feature reports.
+- [x] Preserve Metal function-table and intersection-function metadata.
+- [x] Add focused runtime tests for Metal creation and Vulkan unsupported
+  behavior.
+- [x] Document backend-private Metal acceleration/function-table execution as
+  deferred to Period 30 Phase 4.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
