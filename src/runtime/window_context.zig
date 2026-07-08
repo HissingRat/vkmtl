@@ -43,6 +43,7 @@ pub const ResourceKind = enum {
     resource_table,
     fence,
     event,
+    query_set,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -62,6 +63,7 @@ pub const ResourceTracker = struct {
     resource_tables: usize = 0,
     fences: usize = 0,
     events: usize = 0,
+    query_sets: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -145,13 +147,14 @@ pub const ResourceTracker = struct {
             self.advanced_bind_group_layouts != 0 or
             self.resource_tables != 0 or
             self.fences != 0 or
-            self.events != 0;
+            self.events != 0 or
+            self.query_sets != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, fences={}, events={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, fences={}, events={}, query_sets={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -166,6 +169,7 @@ pub const ResourceTracker = struct {
                     self.resource_tables,
                     self.fences,
                     self.events,
+                    self.query_sets,
                 },
             );
         }
@@ -192,6 +196,7 @@ pub const ResourceTracker = struct {
             .resource_table => &self.resource_tables,
             .fence => &self.fences,
             .event => &self.events,
+            .query_set => &self.query_sets,
         };
     }
 
@@ -1178,6 +1183,103 @@ pub const Event = struct {
     pub fn reset(self: *Event) void {
         assertObjectAlive(self.alive, "event");
         self.signaled_value = false;
+    }
+};
+
+pub const QuerySet = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.QuerySetDescriptor,
+    values: []u64,
+    available: []bool,
+    active_occlusion_query: ?u32 = null,
+    timestamp_counter: u64 = 1,
+    alive: bool = true,
+
+    pub fn deinit(self: *QuerySet) void {
+        assertObjectAlive(self.alive, "query_set");
+        self.alive = false;
+        self.allocator.free(self.values);
+        self.allocator.free(self.available);
+        self.tracker.release(.query_set);
+    }
+
+    pub fn selectedBackend(self: QuerySet) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: QuerySet) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *QuerySet, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "query_set");
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: QuerySet) core.QuerySetDescriptor {
+        assertObjectAlive(self.alive, "query_set");
+        return self.descriptor_value;
+    }
+
+    pub fn reset(self: *QuerySet) void {
+        assertObjectAlive(self.alive, "query_set");
+        @memset(self.values, 0);
+        @memset(self.available, false);
+        self.active_occlusion_query = null;
+        self.timestamp_counter = 1;
+    }
+
+    pub fn beginOcclusionQuery(self: *QuerySet, query_index: u32) core.QueryError!void {
+        assertObjectAlive(self.alive, "query_set");
+        try self.validateQueryType(.occlusion);
+        try self.validateQueryIndex(query_index);
+        if (self.active_occlusion_query != null) return core.QueryError.QueryNotReady;
+        self.available[query_index] = false;
+        self.active_occlusion_query = query_index;
+    }
+
+    pub fn endOcclusionQuery(self: *QuerySet) core.QueryError!void {
+        assertObjectAlive(self.alive, "query_set");
+        try self.validateQueryType(.occlusion);
+        const query_index = self.active_occlusion_query orelse return core.QueryError.QueryNotReady;
+        self.values[query_index] = 1;
+        self.available[query_index] = true;
+        self.active_occlusion_query = null;
+    }
+
+    pub fn writeTimestamp(self: *QuerySet, query_index: u32) core.QueryError!void {
+        assertObjectAlive(self.alive, "query_set");
+        try self.validateQueryType(.timestamp);
+        try self.validateQueryIndex(query_index);
+        self.values[query_index] = self.timestamp_counter;
+        self.timestamp_counter += 1;
+        self.available[query_index] = true;
+    }
+
+    pub fn readback(self: *QuerySet, readback_descriptor: core.QueryReadbackDescriptor) core.QueryError!void {
+        assertObjectAlive(self.alive, "query_set");
+        try readback_descriptor.validate(self.descriptor_value);
+        const first: usize = @intCast(readback_descriptor.first_query);
+        const count: usize = @intCast(readback_descriptor.query_count);
+        try self.requireAvailable(first, count);
+        @memcpy(readback_descriptor.destination[0..count], self.values[first..][0..count]);
+    }
+
+    fn validateQueryType(self: QuerySet, expected: core.QueryType) core.QueryError!void {
+        if (self.descriptor_value.query_type != expected) return core.QueryError.QueryTypeMismatch;
+    }
+
+    fn validateQueryIndex(self: QuerySet, query_index: u32) core.QueryError!void {
+        if (query_index >= self.descriptor_value.count) return core.QueryError.InvalidQueryRange;
+    }
+
+    fn requireAvailable(self: QuerySet, first: usize, count: usize) core.QueryError!void {
+        for (self.available[first..][0..count]) |available| {
+            if (!available) return core.QueryError.QueryNotReady;
+        }
     }
 };
 
@@ -2444,6 +2546,39 @@ pub const BlitCommandEncoder = struct {
         try recordTextureOwnershipTransfer(self.command_buffer.features_value, texture, descriptor);
     }
 
+    pub fn writeTimestamp(self: *BlitCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        assertObjectAlive(query_set.alive, "query_set");
+        try expectSameBackend(self.backend, query_set.backend);
+        try query_set.writeTimestamp(query_index);
+    }
+
+    pub fn resolveQuerySet(
+        self: *BlitCommandEncoder,
+        query_set: *QuerySet,
+        destination: *Buffer,
+        descriptor: core.QueryResolveDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        assertObjectAlive(query_set.alive, "query_set");
+        assertAlive(destination.alive, .buffer);
+        try expectSameBackend(self.backend, query_set.backend);
+        try expectSameBackend(self.backend, destination.backend);
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
+        try descriptor.validate(query_set.descriptor_value, core.defaultDeviceLimits(self.backend));
+        const first: usize = @intCast(descriptor.first_query);
+        const count: usize = @intCast(descriptor.query_count);
+        try query_set.requireAvailable(first, count);
+        const byte_count = std.math.mul(u64, descriptor.query_count, @sizeOf(u64)) catch return core.QueryError.InvalidQueryRange;
+        const end = std.math.add(u64, descriptor.destination_offset, byte_count) catch return core.QueryError.InvalidQueryRange;
+        if (end > destination.length()) return core.QueryError.InvalidQueryRange;
+        try destination.replaceBytes(
+            @intCast(descriptor.destination_offset),
+            std.mem.sliceAsBytes(query_set.values[first..][0..count]),
+        );
+        _ = destination.recordUsage(.copy_destination);
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         try self.debug_groups.requireEmpty();
@@ -2684,6 +2819,13 @@ pub const ComputeCommandEncoder = struct {
         try recordTextureOwnershipTransfer(self.command_buffer.features_value, texture, descriptor);
     }
 
+    pub fn writeTimestamp(self: *ComputeCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        assertObjectAlive(query_set.alive, "query_set");
+        try expectSameBackend(self.backend, query_set.backend);
+        try query_set.writeTimestamp(query_index);
+    }
+
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug_groups.requireEmpty();
@@ -2898,6 +3040,27 @@ pub const RenderCommandEncoder = struct {
             .vulkan => |*vulkan| try vulkan.setDepthBias(descriptor),
             .metal => |*metal| try metal.setDepthBias(descriptor),
         };
+    }
+
+    pub fn beginOcclusionQuery(self: *RenderCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        assertObjectAlive(query_set.alive, "query_set");
+        try expectSameBackend(self.backend, query_set.backend);
+        try query_set.beginOcclusionQuery(query_index);
+    }
+
+    pub fn endOcclusionQuery(self: *RenderCommandEncoder, query_set: *QuerySet) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        assertObjectAlive(query_set.alive, "query_set");
+        try expectSameBackend(self.backend, query_set.backend);
+        try query_set.endOcclusionQuery();
+    }
+
+    pub fn writeTimestamp(self: *RenderCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        assertObjectAlive(query_set.alive, "query_set");
+        try expectSameBackend(self.backend, query_set.backend);
+        try query_set.writeTimestamp(query_index);
     }
 
     pub fn drawPrimitives(
@@ -3355,6 +3518,28 @@ pub const Device = struct {
             .tracker = self.tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
+        };
+    }
+
+    pub fn makeQuerySet(self: *Device, descriptor: core.QuerySetDescriptor) !QuerySet {
+        try descriptor.validate(self.features());
+        const count: usize = @intCast(descriptor.count);
+        const values = try self.allocator.alloc(u64, count);
+        errdefer self.allocator.free(values);
+        const available = try self.allocator.alloc(bool, count);
+        errdefer self.allocator.free(available);
+        @memset(values, 0);
+        @memset(available, false);
+
+        self.tracker.retain(.query_set);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .allocator = self.allocator,
+            .label_value = descriptor.label,
+            .descriptor_value = descriptor,
+            .values = values,
+            .available = available,
         };
     }
 
@@ -4001,6 +4186,11 @@ pub const WindowContext = struct {
         return try device_view.makeEvent(descriptor);
     }
 
+    pub fn makeQuerySet(self: *WindowContext, descriptor: core.QuerySetDescriptor) !QuerySet {
+        var device_view = self.device();
+        return try device_view.makeQuerySet(descriptor);
+    }
+
     pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {
         var device_view = self.device();
         return try device_view.makeBuffer(descriptor);
@@ -4561,6 +4751,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .resource_table => "resource_table",
         .fence => "fence",
         .event => "event",
+        .query_set => "query_set",
     };
 }
 
@@ -5471,6 +5662,86 @@ test "runtime fences and events track lifecycle state" {
     try std.testing.expectError(core.CommandEncodingError.EventWaitTimeout, event.wait(.{}));
     try std.testing.expectError(core.CommandEncodingError.UnsupportedSharedEvents, device.makeEvent(.{
         .shared = true,
+    }));
+}
+
+test "runtime query sets support encoder writes and readback" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.vulkan),
+    };
+
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .queue_kind_value = .graphics,
+        .features_value = device.features(),
+        .impl = null,
+    };
+    var render_encoder = RenderCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .impl = null,
+    };
+    var compute_encoder = ComputeCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .impl = null,
+    };
+
+    var timestamps = try device.makeQuerySet(.{
+        .query_type = .timestamp,
+        .count = 2,
+    });
+    defer timestamps.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.query_sets);
+    try compute_encoder.writeTimestamp(&timestamps, 0);
+    try render_encoder.writeTimestamp(&timestamps, 1);
+    var timestamp_results = [_]u64{0} ** 2;
+    try timestamps.readback(.{
+        .first_query = 0,
+        .query_count = 2,
+        .destination = timestamp_results[0..],
+    });
+    try std.testing.expectEqual(@as(u64, 1), timestamp_results[0]);
+    try std.testing.expectEqual(@as(u64, 2), timestamp_results[1]);
+    try std.testing.expectError(core.QueryError.QueryTypeMismatch, render_encoder.beginOcclusionQuery(&timestamps, 0));
+
+    var occlusion = try device.makeQuerySet(.{
+        .query_type = .occlusion,
+        .count = 1,
+    });
+    defer occlusion.deinit();
+    var occlusion_results = [_]u64{0};
+    try std.testing.expectError(core.QueryError.QueryNotReady, occlusion.readback(.{
+        .first_query = 0,
+        .query_count = 1,
+        .destination = occlusion_results[0..],
+    }));
+    try render_encoder.beginOcclusionQuery(&occlusion, 0);
+    try render_encoder.endOcclusionQuery(&occlusion);
+    try occlusion.readback(.{
+        .first_query = 0,
+        .query_count = 1,
+        .destination = occlusion_results[0..],
+    });
+    try std.testing.expectEqual(@as(u64, 1), occlusion_results[0]);
+
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.pipeline_statistics_queries = false;
+    device.capability_report = report;
+    try std.testing.expectError(core.QueryError.UnsupportedPipelineStatisticsQueries, device.makeQuerySet(.{
+        .query_type = .pipeline_statistics,
+        .count = 1,
+        .pipeline_statistics = .{ .vertex_invocations = true },
     }));
 }
 

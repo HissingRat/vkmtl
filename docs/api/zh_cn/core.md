@@ -403,10 +403,11 @@ stride 拆成多条 single indirect draw。显式 `drawPrimitivesMulti(...)` /
 `drawIndexedPrimitivesMulti(...)` 也先通过 repeated direct draws lowering，后续可以在
 backend 支持真正 multi-draw 时替换为单条 native path。
 
-Query support 目前是 descriptor-only。`QuerySetDescriptor` 覆盖 occlusion、timestamp 和
-pipeline statistics query，并带 feature gate。`QueryResolveDescriptor` 和
-`QueryReadbackDescriptor` 会校验 query range 和 result alignment，但 runtime query pool
-以及 encoder command 是后续工作。
+Query support 现在从 portable `QuerySet` 对象开始。timestamp query 可以从 blit、
+compute 和 render encoder 写入，occlusion query 可以从 render encoder begin/end，
+query data 可以直接 readback，也可以 resolve 到 buffer。vkmtl 会校验 query range、
+result alignment、resource ownership 和 availability。pipeline statistics query 仍然
+通过 feature gate 保守关闭，等 native backend lowering 补齐后再开放。
 
 Transfer 使用 Metal 风格的 blit encoder：
 

@@ -332,6 +332,7 @@ pub const TextureView = runtime.TextureView;
 pub const SamplerState = runtime.SamplerState;
 pub const Fence = runtime.Fence;
 pub const Event = runtime.Event;
+pub const QuerySet = runtime.QuerySet;
 pub const ShaderModule = runtime.ShaderModule;
 pub const RenderPipelineState = runtime.RenderPipelineState;
 pub const ComputePipelineState = runtime.ComputePipelineState;

@@ -489,10 +489,12 @@ stride into multiple single indirect draw commands. Explicit
 repeated direct draws for now, with room to replace that loop with a true
 backend-native multi-draw path later.
 
-Query support is currently descriptor-only. `QuerySetDescriptor` covers
-occlusion, timestamp, and pipeline statistics queries with feature gates.
-`QueryResolveDescriptor` and `QueryReadbackDescriptor` validate query ranges and
-result alignment, but runtime query pools and encoder commands are future work.
+Runtime query support starts with portable `QuerySet` objects. Timestamp queries
+can be written from blit, compute, and render encoders, occlusion queries can be
+begun and ended from render encoders, and query data can be read back directly
+or resolved into a buffer. Query ranges, result alignment, resource ownership,
+and availability are validated by vkmtl. Pipeline statistics queries remain
+feature-gated until the native backend lowering is filled in.
 
 Transfer work uses a Metal-style blit encoder:
 

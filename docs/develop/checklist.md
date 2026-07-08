@@ -1388,12 +1388,12 @@ obvious render and binding blockers.
 
 ## Period 23 Phase 5 Checklist
 
-- [ ] Add runtime query set objects.
-- [ ] Lower occlusion, timestamp, and pipeline statistics query commands.
-- [ ] Add query resolve and readback helpers.
-- [ ] Keep unsupported query paths typed and capability-gated.
-- [ ] Add deterministic query tests where possible.
-- [ ] Add usage docs for query/profiling commands.
+- [x] Add runtime query set objects.
+- [x] Add occlusion and timestamp encoder commands, with pipeline statistics kept capability-gated.
+- [x] Add query resolve and readback helpers.
+- [x] Keep unsupported query paths typed and capability-gated.
+- [x] Add deterministic query tests where possible.
+- [x] Add usage docs for query/profiling commands.
 
 ## Period 23 Phase 6 Checklist
 

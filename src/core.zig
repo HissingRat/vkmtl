@@ -1145,6 +1145,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidQueryCount,
         error.InvalidQueryRange,
         error.InvalidQueryResultAlignment,
+        error.QueryTypeMismatch,
+        error.QueryNotReady,
         error.MissingPipelineStatistics,
         error.InvalidStencilClearValue,
         error.InvalidThreadgroupCount,
@@ -1482,6 +1484,8 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .explicit_resource_barriers = true,
         .fences = true,
         .events = true,
+        .occlusion_queries = true,
+        .timestamp_queries = true,
     };
 
     if (backend == .metal) {
@@ -2946,6 +2950,8 @@ pub const QueryError = error{
     InvalidQueryCount,
     InvalidQueryRange,
     InvalidQueryResultAlignment,
+    QueryTypeMismatch,
+    QueryNotReady,
     MissingPipelineStatistics,
     UnsupportedOcclusionQueries,
     UnsupportedTimestampQueries,
