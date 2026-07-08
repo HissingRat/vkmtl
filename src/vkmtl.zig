@@ -246,6 +246,7 @@ pub const SparseTextureLoweringMode = core.SparseTextureLoweringMode;
 pub const SparseTextureLowering = core.SparseTextureLowering;
 pub const SparseMipTailDescriptor = core.SparseMipTailDescriptor;
 pub const SparseTextureMappingDescriptor = core.SparseTextureMappingDescriptor;
+pub const SparseMappingCommitPlan = core.SparseMappingCommitPlan;
 pub const SparseMappingCommitDescriptor = core.SparseMappingCommitDescriptor;
 pub const SparseResidencyDiagnostics = core.SparseResidencyDiagnostics;
 pub const SparseResidencyMap = core.SparseResidencyMap;

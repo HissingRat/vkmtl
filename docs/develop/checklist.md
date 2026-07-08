@@ -1601,6 +1601,16 @@ obvious render and binding blockers.
 - [x] Document native sparse/tiled texture object creation and residency
   binding as deferred to Period 28 Phase 5.
 
+## Period 27 Phase 3 Checklist
+
+- [x] Add explicit sparse mapping commit planning.
+- [x] Track commit/evict counts, buffer bytes, and texture pages in commit
+  diagnostics.
+- [x] Extend residency-map diagnostics with resident bytes/pages.
+- [x] Expose commit planning through `Device` using native feature reports.
+- [x] Document native page binding and native heap-backed resource integration
+  as deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

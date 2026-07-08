@@ -13,6 +13,8 @@ Phase 5 finishes explicit backend-specific advanced access.
   for backends that expose compatible residency APIs.
 - Implement sparse/tiled texture runtime objects and native texture page
   binding for Vulkan sparse images and Metal sparse/tiled texture paths.
+- Connect runtime `Heap` reservations to native Vulkan memory suballocation and
+  Metal `MTLHeap`-backed buffer/texture creation where supported.
 
 ## Validation
 

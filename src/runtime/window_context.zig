@@ -3841,6 +3841,10 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!core.SparseMappingCommitPlan {
+        return try descriptor.plan(self.nativeFeatures(), self.limits());
+    }
+
     pub fn validateSparseBufferDescriptor(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5802,6 +5806,41 @@ test "runtime device plans sparse texture lowering from native capabilities" {
     try std.testing.expectEqual(core.SparseTextureLoweringMode.metal_tiled_texture, lowering.mode);
     try std.testing.expectEqual(@as(u32, 3), lowering.page_grid.width);
     try std.testing.expectEqual(@as(u32, 3), lowering.page_grid.height);
+}
+
+test "runtime device plans sparse mapping commits from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.sparse_buffers = false;
+    report.native_features.sparse_buffers = true;
+    report.limits.sparse_buffer_page_size = 4096;
+    report.limits.max_sparse_regions_per_commit = 2;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test sparse commit adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.SparseMappingCommitDescriptor{
+        .buffers = &.{.{
+            .offset = 0,
+            .size = 8192,
+        }},
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedSparseBuffers, device.validateSparseMappingCommit(descriptor));
+
+    const plan = try device.planSparseMappingCommit(descriptor);
+    try std.testing.expectEqual(@as(usize, 1), plan.total_regions);
+    try std.testing.expectEqual(@as(usize, 1), plan.buffer_commits);
+    try std.testing.expectEqual(@as(u64, 8192), plan.buffer_bytes);
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

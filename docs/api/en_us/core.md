@@ -153,7 +153,9 @@ residency management is future backend work. Period 27 adds
 `Device.planSparseBufferLowering(...)`, and
 `Device.planSparseTextureLowering(...)` so advanced applications can inspect
 native page size, texture page grids, page counts, and backend mapping before
-runtime sparse object creation is enabled.
+runtime sparse object creation is enabled. `SparseMappingCommitPlan` and
+`Device.planSparseMappingCommit(...)` summarize commit/evict counts, buffer
+bytes, and texture pages for residency update batches.
 
 External interop shapes are represented by `ExternalHandleDescriptor`,
 `ExternalMemoryDescriptor`, `ExternalBufferDescriptor`,

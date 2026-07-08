@@ -4581,6 +4581,28 @@ pub const SparseTextureMappingDescriptor = struct {
             return AdvancedFeatureError.InvalidSparseRegion;
         }
     }
+
+    pub fn pageCount(self: SparseTextureMappingDescriptor) AdvancedFeatureError!u64 {
+        try self.validate(.{ .sparse_textures = true, .tiled_textures = true }, .{});
+        const width_pages = sparseCeilDivU32(self.region.size.width, self.page_extent.width);
+        const height_pages = sparseCeilDivU32(self.region.size.height, self.page_extent.height);
+        const depth_pages = sparseCeilDivU32(self.region.size.depth, self.page_extent.depth);
+        return @as(u64, width_pages) * @as(u64, height_pages) * @as(u64, depth_pages);
+    }
+};
+
+pub const SparseMappingCommitPlan = struct {
+    total_regions: usize = 0,
+    buffer_commits: usize = 0,
+    buffer_evictions: usize = 0,
+    texture_commits: usize = 0,
+    texture_evictions: usize = 0,
+    buffer_bytes: u64 = 0,
+    texture_pages: u64 = 0,
+
+    pub fn hasEvictions(self: SparseMappingCommitPlan) bool {
+        return self.buffer_evictions != 0 or self.texture_evictions != 0;
+    }
 };
 
 pub const SparseMappingCommitDescriptor = struct {
@@ -4596,11 +4618,35 @@ pub const SparseMappingCommitDescriptor = struct {
         for (self.buffers) |buffer| try buffer.validate(features, limits);
         for (self.textures) |texture| try texture.validate(features, limits);
     }
+
+    pub fn plan(self: SparseMappingCommitDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!SparseMappingCommitPlan {
+        try self.validate(features, limits);
+        var result = SparseMappingCommitPlan{
+            .total_regions = self.buffers.len + self.textures.len,
+        };
+        for (self.buffers) |buffer| {
+            switch (buffer.residency) {
+                .resident => result.buffer_commits += 1,
+                .evicted => result.buffer_evictions += 1,
+            }
+            result.buffer_bytes = result.buffer_bytes +| buffer.size;
+        }
+        for (self.textures) |texture| {
+            switch (texture.residency) {
+                .resident => result.texture_commits += 1,
+                .evicted => result.texture_evictions += 1,
+            }
+            result.texture_pages = result.texture_pages +| (texture.pageCount() catch return AdvancedFeatureError.InvalidSparseRegion);
+        }
+        return result;
+    }
 };
 
 pub const SparseResidencyDiagnostics = struct {
     buffer_regions: usize = 0,
     texture_regions: usize = 0,
+    resident_buffer_bytes: u64 = 0,
+    resident_texture_pages: u64 = 0,
 };
 
 pub const SparseResidencyMap = struct {
@@ -4619,9 +4665,19 @@ pub const SparseResidencyMap = struct {
     }
 
     pub fn diagnostics(self: SparseResidencyMap) SparseResidencyDiagnostics {
+        var resident_buffer_bytes: u64 = 0;
+        var resident_texture_pages: u64 = 0;
+        for (self.buffers.items) |buffer| {
+            resident_buffer_bytes = resident_buffer_bytes +| buffer.size;
+        }
+        for (self.textures.items) |texture| {
+            resident_texture_pages = resident_texture_pages +| (texture.pageCount() catch 0);
+        }
         return .{
             .buffer_regions = self.buffers.items.len,
             .texture_regions = self.textures.items.len,
+            .resident_buffer_bytes = resident_buffer_bytes,
+            .resident_texture_pages = resident_texture_pages,
         };
     }
 
@@ -9272,6 +9328,7 @@ test "sparse residency map tracks commits and rejects overlaps" {
     };
     try map.apply(.{ .buffers = &.{buffer_region} });
     try std.testing.expectEqual(@as(usize, 1), map.diagnostics().buffer_regions);
+    try std.testing.expectEqual(@as(u64, 4096), map.diagnostics().resident_buffer_bytes);
     try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{
         .buffers = &.{.{
             .offset = 2048,
@@ -9293,6 +9350,23 @@ test "sparse residency map tracks commits and rejects overlaps" {
     };
     try map.apply(.{ .textures = &.{texture_region} });
     try std.testing.expectEqual(@as(usize, 1), map.diagnostics().texture_regions);
+    try std.testing.expectEqual(@as(u64, 1), map.diagnostics().resident_texture_pages);
+    const commit_plan = try (SparseMappingCommitDescriptor{
+        .buffers = &.{buffer_region},
+        .textures = &.{texture_region},
+    }).plan(.{ .sparse_buffers = true, .sparse_textures = true }, .{
+        .sparse_buffer_page_size = 4096,
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+        .max_sparse_regions_per_commit = 4,
+    });
+    try std.testing.expectEqual(@as(usize, 2), commit_plan.total_regions);
+    try std.testing.expectEqual(@as(usize, 1), commit_plan.buffer_commits);
+    try std.testing.expectEqual(@as(usize, 1), commit_plan.texture_commits);
+    try std.testing.expectEqual(@as(u64, 4096), commit_plan.buffer_bytes);
+    try std.testing.expectEqual(@as(u64, 1), commit_plan.texture_pages);
+    try std.testing.expect(!commit_plan.hasEvictions());
     try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{
         .textures = &.{.{
             .region = .{
@@ -9308,6 +9382,15 @@ test "sparse residency map tracks commits and rejects overlaps" {
         .residency = .evicted,
     }} });
     try std.testing.expectEqual(@as(usize, 0), map.diagnostics().texture_regions);
+    const eviction_plan = try (SparseMappingCommitDescriptor{
+        .buffers = &.{.{
+            .offset = 0,
+            .size = 4096,
+            .page_size = 4096,
+            .residency = .evicted,
+        }},
+    }).plan(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 });
+    try std.testing.expect(eviction_plan.hasEvictions());
 
     try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{ .buffers = &.{.{
         .offset = 0,

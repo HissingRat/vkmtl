@@ -125,6 +125,8 @@ Native residency management 仍是 future backend work。Period 27 新增
 `SparseBufferLowering`、`SparseTextureLowering`、`Device.planSparseBufferLowering(...)` 和
 `Device.planSparseTextureLowering(...)`，让高级应用能在 runtime sparse object creation 启用之前检查
 native page size、texture page grid、page count 和 backend mapping。
+`SparseMappingCommitPlan` 和 `Device.planSparseMappingCommit(...)` 会汇总 residency update batch
+里的 commit/evict 数量、buffer bytes 和 texture pages。
 
 External interop shape 由 `ExternalHandleDescriptor`、`ExternalMemoryDescriptor`、
 `ExternalBufferDescriptor`、`ExternalTextureDescriptor` 和 `ExternalSemaphoreDescriptor`
