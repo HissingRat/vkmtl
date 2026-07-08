@@ -1519,6 +1519,17 @@ obvious render and binding blockers.
 - [x] Document lifetime-safe native handle pooling as deferred to Period 28
   Phase 5.
 
+## Period 26 Phase 2 Checklist
+
+- [x] Add runtime driver-cache planning API.
+- [x] Validate driver pipeline cache / binary archive descriptors against
+  native feature reports.
+- [x] Detect whether a cache path already exists for warm-cache planning.
+- [x] Keep usable feature gates conservative until native pipeline creation
+  consumes the cache objects.
+- [x] Document native `VkPipelineCache` / `MTLBinaryArchive` lowering as
+  deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

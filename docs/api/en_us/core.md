@@ -620,6 +620,10 @@ pipeline cache and Metal binary archive support are gated by
 `DeviceFeatures.driver_pipeline_cache` and `DeviceFeatures.metal_binary_archive`.
 Identity includes backend, device, driver, shader hash, and schema version so
 future disk cache invalidation can be explicit.
+`Device.planDriverPipelineCache(...)` validates against native feature reports
+and returns `DriverPipelineCachePlan`, including whether the path already exists
+and whether shutdown should store a new blob. Pipeline creation does not consume
+native driver cache objects yet.
 
 ## Debug Labels And Groups
 

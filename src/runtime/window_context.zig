@@ -575,6 +575,16 @@ fn objectCreationElapsedNs(start: i128) u64 {
     return @intCast(delta);
 }
 
+fn pathExists(path: []const u8) bool {
+    if (builtin.os.tag == .windows) return false;
+    if (path.len == 0 or path.len >= std.Io.Dir.max_path_bytes) return false;
+    var buffer: [std.Io.Dir.max_path_bytes:0]u8 = undefined;
+    @memcpy(buffer[0..path.len], path);
+    buffer[path.len] = 0;
+    const sentinel_path = buffer[0..path.len :0];
+    return std.c.access(sentinel_path.ptr, 0) == 0;
+}
+
 pub const Buffer = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
@@ -3855,6 +3865,20 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn validateNativeDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.nativeFeatures(), self.limits());
+    }
+
+    pub fn planDriverPipelineCache(self: Device, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
+        try self.validateNativeDriverPipelineCacheDescriptor(descriptor);
+        return try core.DriverPipelineCachePlan.fromDescriptor(
+            descriptor,
+            pathExists(descriptor.path),
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
         return switch (self.impl.*) {
             .vulkan => |*vulkan| vulkan.formatCapabilities(format),
@@ -4526,6 +4550,11 @@ pub const WindowContext = struct {
 
     pub fn objectCacheDiagnostics(self: WindowContext) core.ObjectCacheDiagnostics {
         return self.tracker.objectCacheDiagnostics();
+    }
+
+    pub fn planDriverPipelineCache(self: *WindowContext, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
+        const device_view = self.device();
+        return try device_view.planDriverPipelineCache(descriptor);
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -5589,6 +5618,53 @@ test "runtime device validates advanced descriptors against selected capabilitie
             .entry_point = "raygen",
         }},
     }));
+}
+
+test "runtime plans driver pipeline caches from native feature reports" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.driver_pipeline_cache = false;
+    report.native_features.driver_pipeline_cache = true;
+    report.limits.max_driver_cache_identity_bytes = 128;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.DriverPipelineCacheDescriptor{
+        .path = "build.zig",
+        .kind = .vulkan_pipeline_cache,
+        .identity = .{
+            .backend = .vulkan,
+            .device_id = "device",
+            .driver_id = "driver",
+            .shader_hash = "shader",
+            .schema_version = "vkmtl-test",
+        },
+        .read_only = true,
+    };
+
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedDriverPipelineCache, device.validateDriverPipelineCacheDescriptor(descriptor));
+    const plan = try device.planDriverPipelineCache(descriptor);
+    try std.testing.expect(plan.load_existing);
+    try std.testing.expect(!plan.store_on_shutdown);
+
+    const missing_plan = try device.planDriverPipelineCache(.{
+        .path = "zig-out/definitely-missing-vkmtl-cache.bin",
+        .kind = .vulkan_pipeline_cache,
+        .identity = descriptor.identity,
+    });
+    try std.testing.expect(!missing_plan.load_existing);
+    try std.testing.expect(missing_plan.store_on_shutdown);
 }
 
 test "runtime advanced bind group layout snapshots descriptor ranges" {

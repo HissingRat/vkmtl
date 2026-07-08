@@ -517,6 +517,9 @@ Driver-level cache identity 由 `DriverCacheIdentityDescriptor` 和
 `DriverPipelineCacheDescriptor` 单独表示。Vulkan pipeline cache 和 Metal binary archive support 由
 `DeviceFeatures.driver_pipeline_cache` 与 `DeviceFeatures.metal_binary_archive` gate。Identity 包含
 backend、device、driver、shader hash 和 schema version，方便后续显式做 disk cache invalidation。
+`Device.planDriverPipelineCache(...)` 会按 native feature report 验证并返回
+`DriverPipelineCachePlan`，其中包括 path 是否已经存在，以及 shutdown 时是否应该写入新 blob。
+Pipeline creation 目前还不会消费 native driver cache object。
 
 ## Debug Label 与 Group
 
