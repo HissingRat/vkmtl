@@ -132,6 +132,7 @@ pub const TessellationLowering = core.TessellationLowering;
 pub const MeshPipelineDescriptor = core.MeshPipelineDescriptor;
 pub const VulkanMeshPipelineLowering = core.VulkanMeshPipelineLowering;
 pub const MetalMeshPipelineLowering = core.MetalMeshPipelineLowering;
+pub const MeshPipelineLowering = core.MeshPipelineLowering;
 pub const AccelerationStructureKind = core.AccelerationStructureKind;
 pub const AccelerationStructureDescriptor = core.AccelerationStructureDescriptor;
 pub const AccelerationStructureBuildSizes = core.AccelerationStructureBuildSizes;

@@ -320,7 +320,10 @@ requirements from native feature reports.
 `MeshPipelineDescriptor` represents future mesh/task shader pipeline metadata.
 It is gated by `DeviceFeatures.mesh_shaders` and `DeviceFeatures.task_shaders`,
 validates mesh and optional task entry points plus workgroup limits, and remains
-outside the base render pipeline.
+outside the base render pipeline until backend execution is enabled. Period 27
+adds `MeshPipelineLowering` and `Device.planMeshPipelineLowering(...)` so
+applications can inspect Vulkan task/mesh metadata or Metal object/mesh
+metadata from native feature reports.
 
 Ray tracing is isolated in advanced descriptors:
 `AccelerationStructureDescriptor`, `RayTracingPipelineDescriptor`, and

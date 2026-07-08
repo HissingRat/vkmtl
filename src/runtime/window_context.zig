@@ -3912,6 +3912,15 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planMeshPipelineLowering(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!core.MeshPipelineLowering {
+        return try core.MeshPipelineLowering.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateAccelerationStructureDescriptor(self: Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features());
     }
@@ -5885,6 +5894,45 @@ test "runtime device plans tessellation lowering from native capabilities" {
     try std.testing.expectEqual(@as(u32, 4), lowering.patchControlPoints());
     try std.testing.expectEqual(core.TessellationDomain.quad, lowering.domain());
     try std.testing.expect(lowering.requiresFactorBuffer());
+}
+
+test "runtime device plans mesh lowering from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.mesh_shaders = false;
+    report.features.task_shaders = false;
+    report.native_features.mesh_shaders = true;
+    report.native_features.task_shaders = true;
+    report.limits.max_mesh_threads_per_threadgroup = 128;
+    report.limits.max_task_threads_per_threadgroup = 64;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test mesh adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.MeshPipelineDescriptor{
+        .mesh_entry_point = "ms_main",
+        .task_entry_point = "ts_main",
+        .mesh_threads_per_threadgroup = 64,
+        .task_threads_per_threadgroup = 32,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedMeshShaders, device.validateMeshPipelineDescriptor(descriptor));
+
+    const lowering = try device.planMeshPipelineLowering(descriptor);
+    try std.testing.expectEqualStrings("ms_main", lowering.meshEntryPoint());
+    try std.testing.expectEqualStrings("ts_main", lowering.taskEntryPoint().?);
+    try std.testing.expectEqual(@as(u32, 64), lowering.meshThreadsPerThreadgroup());
+    try std.testing.expectEqual(@as(u32, 32), lowering.taskThreadsPerThreadgroup());
+    try std.testing.expect(lowering.hasTaskStage());
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

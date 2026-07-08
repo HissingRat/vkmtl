@@ -2352,6 +2352,55 @@ pub const MetalMeshPipelineLowering = struct {
     }
 };
 
+pub const MeshPipelineLowering = union(Backend) {
+    vulkan: VulkanMeshPipelineLowering,
+    metal: MetalMeshPipelineLowering,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: MeshPipelineDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!MeshPipelineLowering {
+        return switch (backend) {
+            .vulkan => .{ .vulkan = try VulkanMeshPipelineLowering.fromDescriptor(descriptor, features, limits) },
+            .metal => .{ .metal = try MetalMeshPipelineLowering.fromDescriptor(descriptor, features, limits) },
+        };
+    }
+
+    pub fn meshEntryPoint(self: MeshPipelineLowering) []const u8 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.mesh_entry_point,
+            .metal => |lowering| lowering.mesh_entry_point,
+        };
+    }
+
+    pub fn taskEntryPoint(self: MeshPipelineLowering) ?[]const u8 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.task_entry_point,
+            .metal => |lowering| lowering.object_entry_point,
+        };
+    }
+
+    pub fn meshThreadsPerThreadgroup(self: MeshPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.mesh_threads_per_threadgroup,
+            .metal => |lowering| lowering.mesh_threads_per_threadgroup,
+        };
+    }
+
+    pub fn taskThreadsPerThreadgroup(self: MeshPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.task_threads_per_threadgroup,
+            .metal => |lowering| lowering.object_threads_per_threadgroup,
+        };
+    }
+
+    pub fn hasTaskStage(self: MeshPipelineLowering) bool {
+        return self.taskEntryPoint() != null;
+    }
+};
+
 pub const AccelerationStructureKind = enum {
     bottom_level,
     top_level,

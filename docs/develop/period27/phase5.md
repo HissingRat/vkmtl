@@ -12,3 +12,18 @@ Phase 5 lowers mesh/task shader pipeline descriptors.
 
 - Add feature-gated pipeline tests.
 - Add a small mesh-shader example where supported.
+
+## Result
+
+- Added the backend-tagged `MeshPipelineLowering` plan type.
+- Added `Device.planMeshPipelineLowering(...)`, which uses native feature
+  reports while keeping ordinary public validation capability-gated.
+- Preserved Vulkan task/mesh metadata and Metal object/mesh metadata behind the
+  unified plan.
+- Added runtime tests that prove native mesh/task planning can be inspected
+  before the public feature is marked usable.
+
+## Deferred
+
+- Native mesh/task pipeline creation, shader stage attachment, and executable
+  mesh draw/dispatch commands remain deferred to Period 28 Phase 5.

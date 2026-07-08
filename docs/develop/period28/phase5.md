@@ -17,6 +17,9 @@ Phase 5 finishes explicit backend-specific advanced access.
   Metal `MTLHeap`-backed buffer/texture creation where supported.
 - Connect tessellation lowering plans to native Vulkan/Metal render pipeline
   creation, shader stage attachment, and executable draw commands.
+- Connect mesh/task lowering plans to native Vulkan task/mesh pipeline creation,
+  Metal object/mesh pipeline creation, and executable mesh draw/dispatch
+  commands.
 
 ## Validation
 

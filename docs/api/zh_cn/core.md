@@ -266,7 +266,9 @@ native feature report 检查 Vulkan patch metadata 或 Metal factor-buffer requi
 
 `MeshPipelineDescriptor` 表示 future mesh/task shader pipeline metadata。它由
 `DeviceFeatures.mesh_shaders` 和 `DeviceFeatures.task_shaders` gate，校验 mesh entry point、
-可选 task entry point 和 workgroup limits，并且保持在 base render pipeline 之外。
+可选 task entry point 和 workgroup limits，并且在 backend execution 启用前保持在 base render
+pipeline 之外。Period 27 新增 `MeshPipelineLowering` 和 `Device.planMeshPipelineLowering(...)`，
+让应用能通过 native feature report 检查 Vulkan task/mesh metadata 或 Metal object/mesh metadata。
 
 Ray tracing 被隔离在高级 descriptor 里：`AccelerationStructureDescriptor`、
 `RayTracingPipelineDescriptor` 和 `ShaderBindingTableDescriptor`。它们会在

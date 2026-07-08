@@ -1621,6 +1621,15 @@ obvious render and binding blockers.
 - [x] Document native tessellation pipeline creation and shader stage attachment
   as deferred to Period 28 Phase 5.
 
+## Period 27 Phase 5 Checklist
+
+- [x] Add a backend-tagged mesh/task lowering plan.
+- [x] Expose mesh/task lowering through `Device` using native feature reports.
+- [x] Keep public mesh/task validation gated by usable features.
+- [x] Add focused runtime tests for native mesh/task planning.
+- [x] Document native mesh/task pipeline creation and dispatch/draw commands as
+  deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
