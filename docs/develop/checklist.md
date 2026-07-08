@@ -1449,11 +1449,11 @@ obvious render and binding blockers.
 
 ## Period 24 Phase 6 Checklist
 
-- [ ] Update backend matrix entries for mipmaps, fills, copies, border colors, and heaps.
-- [ ] Add final resource utility validation tests.
-- [ ] Update usage/API docs for resource utility behavior.
-- [ ] Mark all new deferred work in a later period and phase.
-- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+- [x] Update backend matrix entries for mipmaps, fills, copies, border colors, and heaps.
+- [x] Add final resource utility validation tests.
+- [x] Update usage/API docs for resource utility behavior.
+- [x] Mark all new deferred work in a later period and phase.
+- [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
 ## First Backend-Independent Triangle Checklist
 

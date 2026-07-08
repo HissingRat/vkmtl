@@ -1,6 +1,6 @@
 # Period 24: Resource And Transfer Utility Completion
 
-Status: planned after Period 23.
+Status: completed resource utility validation slice.
 
 Goal: finish practical resource utilities needed by tools, texture pipelines,
 streaming systems, and asset upload paths.
@@ -10,7 +10,7 @@ buffer, mipmap, and memory-management operations.
 
 ## Phase 1: Automatic Mipmap Generation
 
-- Lower mipmap generation through Vulkan and Metal blit paths.
+- Lower full-texture mipmap generation through Vulkan and Metal blit paths.
 
 See `phase1.md`.
 
@@ -34,7 +34,8 @@ See `phase4.md`.
 
 ## Phase 5: Heaps And Transient Allocation
 
-- Add heap-backed resource creation and transient allocator behavior.
+- Add heap planning/reservation and transient allocation diagnostics. Native
+  heap-backed resource creation is deferred to Period 27 Phase 3.
 
 See `phase5.md`.
 

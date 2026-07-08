@@ -22,6 +22,9 @@ Current cases:
   cross-queue use until an explicit ownership transfer is recorded.
 - `query_readback`: timestamp and occlusion query sets validate availability,
   type, range, readback, and resolve paths before native work.
+- `resource_utilities`: mipmap generation, fill fallback selection, texture
+  copy compatibility, sampler border colors, heap planning, and transient
+  diagnostics keep typed validation.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

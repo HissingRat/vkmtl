@@ -458,7 +458,7 @@ See `docs/develop/period23/`.
 
 ## Period 24: Resource And Transfer Utility Completion
 
-Status: planned after Period 23.
+Status: completed resource utility validation slice.
 
 Goal: complete practical texture, buffer, mipmap, sampler, heap, and transient
 allocation utilities.

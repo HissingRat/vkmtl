@@ -496,6 +496,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .command = "zig build test",
         .expectation = "explicit barriers, fences/events, logical queues, ownership transfers, and query validation regressions pass",
     },
+    .{
+        .name = "resource_utility_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test",
+        .expectation = "mipmap generation, fill fallback, texture copy, sampler border color, and heap planning regressions pass",
+    },
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
@@ -656,6 +664,129 @@ pub fn validateSyncQueryMatrix(entries: []const SyncQueryMatrixEntry) Developmen
     }
 }
 
+pub const ResourceUtilityFeature = enum {
+    full_texture_mipmap_generation,
+    partial_mipmap_generation,
+    unaligned_fill_buffer,
+    texture_copy_array_layers,
+    texture_copy_compatible_color_formats,
+    depth_stencil_msaa_copies,
+    fixed_sampler_border_colors,
+    custom_sampler_border_colors,
+    heap_planning,
+    native_heap_backed_resources,
+    transient_allocation_diagnostics,
+};
+
+pub const ResourceUtilityMatrixEntry = struct {
+    feature: ResourceUtilityFeature,
+    public_api: []const u8,
+    vulkan_status: BackendFeatureStatus,
+    metal_status: BackendFeatureStatus,
+    deferred_to: ?[]const u8 = null,
+    validation: []const u8,
+
+    pub fn validate(self: ResourceUtilityMatrixEntry) DevelopmentMatrixError!void {
+        if (self.public_api.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        const deferred = self.vulkan_status == .deferred_native_lowering or self.metal_status == .deferred_native_lowering;
+        if (deferred and self.deferred_to == null) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
+    .{
+        .feature = .full_texture_mipmap_generation,
+        .public_api = "BlitCommandEncoder.generateMipmaps",
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "full texture mipmap generation validates usage, format, and range before backend lowering",
+    },
+    .{
+        .feature = .partial_mipmap_generation,
+        .public_api = "GenerateMipmapsDescriptor partial mip/layer ranges",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 6",
+        .validation = "partial ranges remain typed unsupported at runtime",
+    },
+    .{
+        .feature = .unaligned_fill_buffer,
+        .public_api = "BlitCommandEncoder.fillBuffer",
+        .vulkan_status = .portable_fallback,
+        .metal_status = .native_lowering,
+        .validation = "Vulkan aligned fills stay native and unaligned fills select staging fallback",
+    },
+    .{
+        .feature = .texture_copy_array_layers,
+        .public_api = "CopyTextureToTextureDescriptor.slice_count",
+        .vulkan_status = .native_lowering,
+        .metal_status = .portable_fallback,
+        .validation = "array-layer texture copies validate slice ranges and lower to Vulkan layer_count or Metal per-slice calls",
+    },
+    .{
+        .feature = .texture_copy_compatible_color_formats,
+        .public_api = "textureFormatsCopyCompatible",
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "copy-compatible color classes allow unorm/sRGB pairs while rejecting channel-order changes",
+    },
+    .{
+        .feature = .depth_stencil_msaa_copies,
+        .public_api = "CopyTextureToTextureDescriptor",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 6",
+        .validation = "depth/stencil and MSAA texture copies remain typed unsupported",
+    },
+    .{
+        .feature = .fixed_sampler_border_colors,
+        .public_api = "SamplerAddressMode.clamp_to_border and SamplerBorderColor",
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "fixed border colors are feature-gated and lower to native sampler state",
+    },
+    .{
+        .feature = .custom_sampler_border_colors,
+        .public_api = "SamplerBorderColor",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 6",
+        .validation = "custom border colors are intentionally absent from the portable enum",
+    },
+    .{
+        .feature = .heap_planning,
+        .public_api = "Device.makeHeap and Heap.reserve",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "heap planning validates feature gates, capacity, alignment, and reservation offsets",
+    },
+    .{
+        .feature = .native_heap_backed_resources,
+        .public_api = "Heap",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 27 Phase 3",
+        .validation = "native heap-backed resources remain capability-gated",
+    },
+    .{
+        .feature = .transient_allocation_diagnostics,
+        .public_api = "TransientAllocationDiagnostics",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "transient diagnostics count resources, requested units, and aliasable pairs",
+    },
+};
+
+pub fn validateResourceUtilityMatrix(entries: []const ResourceUtilityMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (entry.feature == other.feature) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 pub const ValidationCaseKind = enum {
     invalid_bind_group,
     invalid_texture_format,
@@ -666,6 +797,7 @@ pub const ValidationCaseKind = enum {
     runtime_sync_objects,
     logical_queue_ownership,
     query_readback,
+    resource_utilities,
 };
 
 pub const ValidationCase = struct {
@@ -737,6 +869,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .query_readback,
         .test_location = "src/runtime/window_context.zig runtime query sets support encoder writes and readback",
         .expectation = "timestamp and occlusion query sets validate availability, type, range, and feature gates",
+    },
+    .{
+        .name = "resource_utilities",
+        .kind = .resource_utilities,
+        .test_location = "src/core.zig and src/runtime/window_context.zig Period 24 resource utility tests",
+        .expectation = "mipmaps, fills, texture copies, sampler borders, heaps, and transient diagnostics keep typed validation",
     },
 };
 
@@ -870,12 +1008,15 @@ test "backend test matrix metadata is valid" {
     try validateBackendTestMatrix(backend_test_matrix[0..]);
     var configured_optional: usize = 0;
     var has_sync_query_regression = false;
+    var has_resource_utility_regression = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
         if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
+        if (std.mem.eql(u8, entry.name, "resource_utility_regression")) has_resource_utility_regression = true;
     }
     try std.testing.expect(configured_optional >= 1);
     try std.testing.expect(has_sync_query_regression);
+    try std.testing.expect(has_resource_utility_regression);
 }
 
 test "sync and query backend matrix is complete" {
@@ -902,6 +1043,32 @@ test "sync and query backend matrix is complete" {
     try std.testing.expect(escape_hatches >= 4);
     try std.testing.expect(capability_gated >= 3);
     try std.testing.expect(deferred_native >= 1);
+}
+
+test "resource utility backend matrix is complete" {
+    try validateResourceUtilityMatrix(resource_utility_matrix[0..]);
+
+    var seen = [_]bool{false} ** @typeInfo(ResourceUtilityFeature).@"enum".fields.len;
+    var native_paths: usize = 0;
+    var fallback_paths: usize = 0;
+    var deferred_paths: usize = 0;
+
+    for (resource_utility_matrix) |entry| {
+        seen[@intFromEnum(entry.feature)] = true;
+        if (entry.vulkan_status == .native_lowering or entry.metal_status == .native_lowering) native_paths += 1;
+        if (entry.vulkan_status == .portable_fallback or entry.metal_status == .portable_fallback) fallback_paths += 1;
+        if (entry.vulkan_status == .deferred_native_lowering or entry.metal_status == .deferred_native_lowering) {
+            deferred_paths += 1;
+            try std.testing.expect(entry.deferred_to != null);
+        }
+    }
+
+    for (seen) |was_seen| {
+        try std.testing.expect(was_seen);
+    }
+    try std.testing.expect(native_paths >= 4);
+    try std.testing.expect(fallback_paths >= 2);
+    try std.testing.expect(deferred_paths >= 3);
 }
 
 test "validation case inventory is valid" {

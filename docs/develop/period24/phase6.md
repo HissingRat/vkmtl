@@ -14,3 +14,14 @@ Phase 6 closes Period 24 with coverage and docs.
 - `zig build test`
 - `zig build`
 - Backend matrix updated for Vulkan and Metal.
+
+## Result
+
+- `src/development_matrix.zig` records the Period 24 resource utility matrix
+  and `resource_utility_regression` row.
+- `docs/develop/backend-test-matrix.md` separates native, fallback, portable
+  runtime, and deferred resource utility paths.
+- Deferred items are assigned to:
+  - Period 27 Phase 3 for native heap-backed resource creation.
+  - Period 28 Phase 6 for partial mipmap ranges, depth/stencil and MSAA copy
+    semantics, and custom sampler border colors.

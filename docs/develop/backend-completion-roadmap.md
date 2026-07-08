@@ -111,12 +111,14 @@ compute/transfer experiments, and explicit synchronization escape hatches.
 
 Tracked in `docs/develop/period24/`.
 
-- [ ] Automatic mipmap generation.
-- [ ] Non-4-byte-aligned `fillBuffer` fallback on Vulkan.
-- [ ] Broader texture copy format coverage.
-- [ ] Sampler border-color lowering where supported.
-- [ ] Heap-backed resource creation.
-- [ ] Transient allocation behavior.
+- [x] Full-texture automatic mipmap generation.
+- [x] Non-4-byte-aligned `fillBuffer` fallback on Vulkan.
+- [x] Broader texture copy format/layer coverage.
+- [x] Fixed sampler border-color lowering where supported.
+- [x] Heap planning and reservation diagnostics.
+- [x] Transient allocation diagnostics.
+- [ ] Partial mipmap ranges, depth/stencil/MSAA copies, custom border colors,
+  and native heap-backed resource creation.
 
 Expected result: texture tools, streaming systems, and memory-sensitive
 applications need fewer app-side workarounds.

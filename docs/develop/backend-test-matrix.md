@@ -11,6 +11,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, logical queues, ownership transfer validation, and query readback/resolve validation.
+- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, and transient diagnostics.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
 
@@ -64,3 +65,19 @@ conservative until the relevant backend period lands.
 | Timestamp queries | Portable runtime query set | Portable runtime query set | Available by default |
 | Occlusion queries | Portable runtime query set | Portable runtime query set | Available by default |
 | Pipeline statistics queries | Capability-gated | Capability-gated | Deferred native query lowering |
+
+## Period 24 Resource Utility Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Full-texture mipmap generation | Native image blits | Native `generateMipmapsForTexture` | Available through blit encoder |
+| Partial mip/layer mipmap generation | Deferred | Deferred | Period 28 Phase 6 parity decision |
+| Unaligned `fillBuffer` | Staging-copy fallback | Native byte-range fill | Public API accepts unaligned ranges |
+| Texture copy array layers | Native `layer_count` | Per-slice fallback loop | `slice_count` is public |
+| Compatible color-format copies | Native compatible copy class | Native compatible copy class | unorm/sRGB pairs in same channel order |
+| Depth/stencil and MSAA copies | Deferred | Deferred | Period 28 Phase 6 semantic decision |
+| Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
+| Custom sampler border colors | Deferred | Deferred | Period 28 Phase 6 parity decision |
+| Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
+| Native heap-backed resources | Deferred | Deferred | Period 27 Phase 3 native integration |
+| Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
