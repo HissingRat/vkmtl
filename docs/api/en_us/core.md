@@ -113,8 +113,8 @@ Mipmap helpers include `mipDimension(...)`,
 `maxMipLevelCountForExtent(...)`, `TextureDescriptor.maxMipLevelCount()`, and
 `TextureDescriptor.mipExtent(level)`. Texture descriptors reject mip counts
 larger than the texture extent can support. `GenerateMipmapsDescriptor` is a
-validated public shape for future automatic mip generation; current command
-encoders still require explicit upload or copy operations for each mip level.
+validated public shape for automatic mip generation; blit encoders can generate
+full-texture mip chains with `generateMipmaps(...)`.
 
 Runtime `TextureView` stores the resolved view format, dimension, mip range,
 and layer range. Query them with `descriptor()`, `baseMipLevel()`,
@@ -124,8 +124,9 @@ and layer range. Query them with `descriptor()`, `baseMipLevel()`,
 Those advanced fields are capability-gated by `DeviceFeatures.sampler_compare`,
 `DeviceFeatures.sampler_anisotropy`, `DeviceFeatures.sampler_border_color`, and
 `DeviceLimits.max_sampler_anisotropy`. Compare samplers and anisotropy now lower
-to Vulkan/Metal sampler creation; border color remains a descriptor-level shape
-and is disabled by default.
+to Vulkan/Metal sampler creation. Fixed border colors also lower to Vulkan and
+Metal sampler creation when address modes use `clamp_to_border`; custom border
+colors remain out of scope.
 
 `HeapDescriptor` defines the future advanced memory/heap shape. Default
 resource creation still owns memory internally, and `DeviceFeatures.heaps` is

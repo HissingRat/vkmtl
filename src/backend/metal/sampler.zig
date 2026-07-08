@@ -31,6 +31,7 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.SamplerDescriptor) !Metal
         if (descriptor.compare_function != null) 1 else 0,
         if (descriptor.compare_function) |compare| compareFunction(compare) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
         descriptor.max_anisotropy,
+        borderColor(descriptor.border_color orelse .transparent_black),
         &handle,
     ));
 
@@ -69,8 +70,17 @@ fn mipFilter(value: core.SamplerMipFilter) metal.vkmtl_metal_mip_filter {
 fn addressMode(value: core.SamplerAddressMode) metal.vkmtl_metal_address_mode {
     return switch (value) {
         .clamp_to_edge => metal.VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .clamp_to_border => metal.VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_BORDER,
         .repeat => metal.VKMTL_METAL_ADDRESS_MODE_REPEAT,
         .mirror_repeat => metal.VKMTL_METAL_ADDRESS_MODE_MIRROR_REPEAT,
+    };
+}
+
+fn borderColor(value: core.SamplerBorderColor) metal.vkmtl_metal_sampler_border_color {
+    return switch (value) {
+        .transparent_black => metal.VKMTL_METAL_SAMPLER_BORDER_COLOR_TRANSPARENT_BLACK,
+        .opaque_black => metal.VKMTL_METAL_SAMPLER_BORDER_COLOR_OPAQUE_BLACK,
+        .opaque_white => metal.VKMTL_METAL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE,
     };
 }
 

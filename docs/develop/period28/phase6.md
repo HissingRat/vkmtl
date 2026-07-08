@@ -12,6 +12,8 @@ Phase 6 turns parity into a maintained product artifact.
 - Decide depth/stencil and MSAA texture-copy semantics across Vulkan and Metal,
   including which cases are portable, backend-specific, or intentionally
   unsupported.
+- Decide whether custom sampler border colors are worth a portable API or
+  should remain a backend-specific extension path.
 
 ## Validation
 

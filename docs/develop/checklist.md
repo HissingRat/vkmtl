@@ -1431,12 +1431,12 @@ obvious render and binding blockers.
 
 ## Period 24 Phase 4 Checklist
 
-- [ ] Define sampler border color support and feature gates.
-- [ ] Map supported border colors to Vulkan sampler state.
-- [ ] Map supported border colors to Metal sampler state where available.
-- [ ] Add sampler validation tests for supported and unsupported cases.
-- [ ] Update feature reporting and compatibility docs.
-- [ ] Document deferred custom border-color cases.
+- [x] Define sampler border color support and feature gates.
+- [x] Map supported border colors to Vulkan sampler state.
+- [x] Map supported border colors to Metal sampler state where available.
+- [x] Add sampler validation tests for supported and unsupported cases.
+- [x] Update feature reporting and compatibility docs.
+- [x] Document deferred custom border-color cases.
 
 ## Period 24 Phase 5 Checklist
 

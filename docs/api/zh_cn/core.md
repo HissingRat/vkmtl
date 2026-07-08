@@ -93,7 +93,8 @@ portable format 的 sampled、storage、attachment、filter、mip、blend 和 co
 Mipmap helper 包括 `mipDimension(...)`、`maxMipLevelCountForExtent(...)`、
 `TextureDescriptor.maxMipLevelCount()` 和 `TextureDescriptor.mipExtent(level)`。Texture descriptor
 会拒绝超过 texture extent 能支持的 mip count。`GenerateMipmapsDescriptor` 是 future automatic
-mipmap generation 的公开可验证 shape；当前 command encoder 仍需要应用显式 upload/copy 每个 mip level。
+mipmap generation 的公开可验证 shape；blit encoder 可以用 `generateMipmaps(...)` 生成 full-texture
+mip chain。
 
 Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和 layer range。可以通过
 `descriptor()`、`baseMipLevel()`、`mipLevelCount()`、`baseArrayLayer()`、`arrayLayerCount()` 查询。
@@ -101,8 +102,8 @@ Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和
 `SamplerDescriptor` 包含 compare、anisotropy 和 border-color 字段。这些高级字段通过
 `DeviceFeatures.sampler_compare`、`DeviceFeatures.sampler_anisotropy`、
 `DeviceFeatures.sampler_border_color` 和 `DeviceLimits.max_sampler_anisotropy` gate。compare
-sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建；border color 仍然是
-descriptor-level shape，默认关闭。
+sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建。固定 border color 在 address mode 使用
+`clamp_to_border` 时也会下沉到 Vulkan 和 Metal sampler 创建；custom border color 暂不覆盖。
 
 `HeapDescriptor` 定义 future advanced memory/heap shape。默认资源创建仍由 vkmtl 内部管理 memory；
 `DeviceFeatures.heaps` 在显式 Vulkan/Metal heap allocation 实现前保持 false。

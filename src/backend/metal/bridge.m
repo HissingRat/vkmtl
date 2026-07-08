@@ -639,6 +639,8 @@ static MTLSamplerMipFilter vkmtl_sampler_mip_filter(vkmtl_metal_mip_filter filte
 
 static MTLSamplerAddressMode vkmtl_sampler_address_mode(vkmtl_metal_address_mode mode) {
     switch (mode) {
+        case VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_BORDER:
+            return MTLSamplerAddressModeClampToBorderColor;
         case VKMTL_METAL_ADDRESS_MODE_REPEAT:
             return MTLSamplerAddressModeRepeat;
         case VKMTL_METAL_ADDRESS_MODE_MIRROR_REPEAT:
@@ -646,6 +648,18 @@ static MTLSamplerAddressMode vkmtl_sampler_address_mode(vkmtl_metal_address_mode
         case VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_EDGE:
         default:
             return MTLSamplerAddressModeClampToEdge;
+    }
+}
+
+static MTLSamplerBorderColor vkmtl_sampler_border_color(vkmtl_metal_sampler_border_color color) {
+    switch (color) {
+        case VKMTL_METAL_SAMPLER_BORDER_COLOR_OPAQUE_BLACK:
+            return MTLSamplerBorderColorOpaqueBlack;
+        case VKMTL_METAL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE:
+            return MTLSamplerBorderColorOpaqueWhite;
+        case VKMTL_METAL_SAMPLER_BORDER_COLOR_TRANSPARENT_BLACK:
+        default:
+            return MTLSamplerBorderColorTransparentBlack;
     }
 }
 
@@ -1287,6 +1301,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     unsigned int compare_enabled,
     vkmtl_metal_compare_function compare_function,
     float max_anisotropy,
+    vkmtl_metal_sampler_border_color border_color,
     vkmtl_metal_sampler_state **out_sampler
 ) {
     if (out_sampler == NULL) {
@@ -1312,6 +1327,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
         descriptor.rAddressMode = vkmtl_sampler_address_mode(address_mode_w);
         descriptor.lodMinClamp = lod_min_clamp;
         descriptor.lodMaxClamp = lod_max_clamp;
+        descriptor.borderColor = vkmtl_sampler_border_color(border_color);
         if (compare_enabled != 0) {
             descriptor.compareFunction = vkmtl_compare_function(compare_function);
         }

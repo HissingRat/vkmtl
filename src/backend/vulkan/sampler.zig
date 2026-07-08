@@ -24,7 +24,7 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.SamplerDescriptor) !Vul
         .compare_op = if (descriptor.compare_function) |compare| compareFunction(compare) else .always,
         .min_lod = descriptor.lod_min_clamp,
         .max_lod = descriptor.lod_max_clamp,
-        .border_color = .float_transparent_black,
+        .border_color = borderColor(descriptor.border_color orelse .transparent_black),
         .unnormalized_coordinates = .false,
     }, null);
 
@@ -59,8 +59,17 @@ fn mipmapMode(value: core.SamplerMipFilter) vk.SamplerMipmapMode {
 fn addressMode(value: core.SamplerAddressMode) vk.SamplerAddressMode {
     return switch (value) {
         .clamp_to_edge => .clamp_to_edge,
+        .clamp_to_border => .clamp_to_border,
         .repeat => .repeat,
         .mirror_repeat => .mirrored_repeat,
+    };
+}
+
+fn borderColor(value: core.SamplerBorderColor) vk.BorderColor {
+    return switch (value) {
+        .transparent_black => .float_transparent_black,
+        .opaque_black => .float_opaque_black,
+        .opaque_white => .float_opaque_white,
     };
 }
 

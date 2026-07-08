@@ -1474,6 +1474,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .debug_labels = true,
         .sampler_compare = true,
         .sampler_anisotropy = true,
+        .sampler_border_color = true,
         .depth_bias = true,
         .blend_state = true,
         .stencil_state = true,
@@ -4616,6 +4617,7 @@ pub const SamplerMipFilter = enum {
 
 pub const SamplerAddressMode = enum {
     clamp_to_edge,
+    clamp_to_border,
     repeat,
     mirror_repeat,
 };
@@ -4658,7 +4660,11 @@ pub const SamplerDescriptor = struct {
             if (!features.sampler_anisotropy) return SamplerError.UnsupportedSamplerAnisotropy;
             if (self.max_anisotropy > limits.max_sampler_anisotropy) return SamplerError.InvalidMaxAnisotropy;
         }
-        if (self.border_color != null and !features.sampler_border_color) {
+        if ((self.border_color != null or
+            self.address_mode_u == .clamp_to_border or
+            self.address_mode_v == .clamp_to_border or
+            self.address_mode_w == .clamp_to_border) and !features.sampler_border_color)
+        {
             return SamplerError.UnsupportedSamplerBorderColor;
         }
     }
@@ -9011,9 +9017,17 @@ test "sampler descriptor validates feature-gated fields" {
     try std.testing.expectError(SamplerError.UnsupportedSamplerBorderColor, (SamplerDescriptor{
         .border_color = .opaque_black,
     }).validateForDevice(disabled_features, default_limits));
+    try std.testing.expectError(SamplerError.UnsupportedSamplerBorderColor, (SamplerDescriptor{
+        .address_mode_u = .clamp_to_border,
+    }).validateForDevice(disabled_features, default_limits));
 
     try (SamplerDescriptor{
         .compare_function = .less,
+    }).validateForDevice(defaultDeviceFeatures(.metal), default_limits);
+    try (SamplerDescriptor{
+        .address_mode_u = .clamp_to_border,
+        .address_mode_v = .clamp_to_border,
+        .border_color = .opaque_white,
     }).validateForDevice(defaultDeviceFeatures(.metal), default_limits);
 
     try (SamplerDescriptor{
@@ -9852,7 +9866,7 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(features.multisample_textures);
     try std.testing.expect(features.sampler_compare);
     try std.testing.expect(features.sampler_anisotropy);
-    try std.testing.expect(!features.sampler_border_color);
+    try std.testing.expect(features.sampler_border_color);
     try std.testing.expect(features.depth_bias);
     try std.testing.expect(features.wireframe_fill_mode);
     try std.testing.expect(features.blend_state);

@@ -112,9 +112,16 @@ typedef enum vkmtl_metal_mip_filter {
 
 typedef enum vkmtl_metal_address_mode {
     VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_EDGE = 0,
-    VKMTL_METAL_ADDRESS_MODE_REPEAT = 1,
-    VKMTL_METAL_ADDRESS_MODE_MIRROR_REPEAT = 2,
+    VKMTL_METAL_ADDRESS_MODE_CLAMP_TO_BORDER = 1,
+    VKMTL_METAL_ADDRESS_MODE_REPEAT = 2,
+    VKMTL_METAL_ADDRESS_MODE_MIRROR_REPEAT = 3,
 } vkmtl_metal_address_mode;
+
+typedef enum vkmtl_metal_sampler_border_color {
+    VKMTL_METAL_SAMPLER_BORDER_COLOR_TRANSPARENT_BLACK = 0,
+    VKMTL_METAL_SAMPLER_BORDER_COLOR_OPAQUE_BLACK = 1,
+    VKMTL_METAL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE = 2,
+} vkmtl_metal_sampler_border_color;
 
 typedef enum vkmtl_metal_vertex_format {
     VKMTL_METAL_VERTEX_FORMAT_FLOAT = 1,
@@ -362,6 +369,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     unsigned int compare_enabled,
     vkmtl_metal_compare_function compare_function,
     float max_anisotropy,
+    vkmtl_metal_sampler_border_color border_color,
     vkmtl_metal_sampler_state **out_sampler
 );
 void vkmtl_metal_sampler_state_destroy(vkmtl_metal_sampler_state *sampler);
