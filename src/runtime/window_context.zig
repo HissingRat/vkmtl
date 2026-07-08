@@ -1543,12 +1543,53 @@ pub const Heap = struct {
     }
 };
 
+const BackendPrivateAccelerationStructureHandle = struct {
+    backend: core.Backend,
+    kind: core.AccelerationStructureKind,
+    result_size: u64,
+    scratch_alignment: u64,
+    driver_bound: bool = false,
+
+    fn fromDescriptor(
+        backend: core.Backend,
+        descriptor: core.AccelerationStructureDescriptor,
+        sizes: core.AccelerationStructureBuildSizes,
+    ) BackendPrivateAccelerationStructureHandle {
+        return .{
+            .backend = backend,
+            .kind = descriptor.kind,
+            .result_size = sizes.result_size,
+            .scratch_alignment = 256,
+        };
+    }
+
+    fn matchesPlan(self: BackendPrivateAccelerationStructureHandle, plan: core.AccelerationStructureBuildPlan) bool {
+        return self.backend == plan.backend and
+            self.kind == plan.kind and
+            self.result_size >= plan.result_size and
+            self.scratch_alignment <= plan.scratch_alignment;
+    }
+};
+
+const BackendPrivateAccelerationStructureBuildRecord = struct {
+    backend: core.Backend,
+    mode: core.AccelerationStructureBuildMode,
+    scratch_offset: u64,
+    scratch_size: u64,
+    update_source_used: bool,
+    command_recorded: bool,
+    driver_submitted: bool = false,
+};
+
 pub const AccelerationStructure = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     label_value: ?[]const u8 = null,
     descriptor_value: core.AccelerationStructureDescriptor,
     sizes_value: core.AccelerationStructureBuildSizes,
+    native_handle: BackendPrivateAccelerationStructureHandle,
+    last_build_record: ?BackendPrivateAccelerationStructureBuildRecord = null,
+    build_count: u64 = 0,
     built_value: bool = false,
     alive: bool = true,
 
@@ -1598,9 +1639,57 @@ pub const AccelerationStructure = struct {
         return self.built_value;
     }
 
-    fn markBuilt(self: *AccelerationStructure) void {
+    pub fn hasBackendPrivateHandle(self: AccelerationStructure) bool {
         assertAlive(self.alive, .acceleration_structure);
+        return self.native_handle.matchesPlan(.{
+            .backend = self.backend,
+            .kind = self.descriptor_value.kind,
+            .mode = .build,
+            .primitive_count = self.descriptor_value.primitive_count,
+            .geometry_count = 1,
+            .result_size = self.sizes_value.result_size,
+            .scratch_size = self.sizes_value.scratch_size,
+            .scratch_alignment = self.native_handle.scratch_alignment,
+        });
+    }
+
+    pub fn backendPrivateBuildCount(self: AccelerationStructure) u64 {
+        assertAlive(self.alive, .acceleration_structure);
+        return self.build_count;
+    }
+
+    pub fn lastBuildRecordedBackendCommand(self: AccelerationStructure) bool {
+        assertAlive(self.alive, .acceleration_structure);
+        return if (self.last_build_record) |record| record.command_recorded else false;
+    }
+
+    pub fn lastBuildSubmittedToDriver(self: AccelerationStructure) bool {
+        assertAlive(self.alive, .acceleration_structure);
+        return if (self.last_build_record) |record| record.driver_submitted else false;
+    }
+
+    fn markBuilt(
+        self: *AccelerationStructure,
+        plan: core.AccelerationStructureBuildPlan,
+        resources: AccelerationStructureBuildResources,
+        command_recorded: bool,
+    ) core.AdvancedFeatureError!void {
+        assertAlive(self.alive, .acceleration_structure);
+        if (!self.native_handle.matchesPlan(plan)) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
         self.built_value = true;
+        self.build_count += 1;
+        const required_scratch = if (plan.mode == .update and plan.update_scratch_size != 0) plan.update_scratch_size else plan.scratch_size;
+        self.last_build_record = .{
+            .backend = plan.backend,
+            .mode = plan.mode,
+            .scratch_offset = resources.scratch_offset,
+            .scratch_size = required_scratch,
+            .update_source_used = resources.update_source != null,
+            .command_recorded = command_recorded,
+            .driver_submitted = false,
+        };
     }
 };
 
@@ -2959,7 +3048,7 @@ pub const CommandBuffer = struct {
         if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try resources.validate(self.backend, plan);
         _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
-        resources.result.markBuilt();
+        try resources.result.markBuilt(plan, resources, self.impl != null);
     }
 
     pub fn dispatchRays(
@@ -4279,13 +4368,19 @@ pub const Device = struct {
 
     pub fn makeAccelerationStructure(self: *Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!AccelerationStructure {
         try descriptor.validate(self.nativeFeatures());
+        const sizes = core.estimateAccelerationStructureBuildSizes(descriptor);
         self.tracker.retain(.acceleration_structure);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
-            .sizes_value = core.estimateAccelerationStructureBuildSizes(descriptor),
+            .sizes_value = sizes,
+            .native_handle = BackendPrivateAccelerationStructureHandle.fromDescriptor(
+                self.backend,
+                descriptor,
+                sizes,
+            ),
         };
     }
 
@@ -6487,6 +6582,8 @@ test "runtime encodes acceleration structure build resources from native capabil
     defer acceleration_structure.deinit();
     try std.testing.expectEqual(@as(usize, 1), tracker.acceleration_structures);
     try std.testing.expectEqualStrings("blas", acceleration_structure.label().?);
+    try std.testing.expect(acceleration_structure.hasBackendPrivateHandle());
+    try std.testing.expectEqual(@as(u64, 0), acceleration_structure.backendPrivateBuildCount());
 
     const plan = try device.planAccelerationStructureBuild(.{
         .acceleration_structure = descriptor,
@@ -6513,6 +6610,14 @@ test "runtime encodes acceleration structure build resources from native capabil
             .scratch = &bad_scratch,
         }).validate(.vulkan, plan),
     );
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        (AccelerationStructureBuildResources{
+            .result = &acceleration_structure,
+            .scratch = &scratch,
+            .scratch_offset = 1,
+        }).validate(.vulkan, plan),
+    );
 
     var command_buffer = CommandBuffer{
         .backend = .vulkan,
@@ -6523,6 +6628,9 @@ test "runtime encodes acceleration structure build resources from native capabil
         .scratch = &scratch,
     });
     try std.testing.expect(acceleration_structure.isBuilt());
+    try std.testing.expectEqual(@as(u64, 1), acceleration_structure.backendPrivateBuildCount());
+    try std.testing.expect(!acceleration_structure.lastBuildRecordedBackendCommand());
+    try std.testing.expect(!acceleration_structure.lastBuildSubmittedToDriver());
     try std.testing.expectEqual(core.ResourceUsageKind.acceleration_structure_scratch, scratch.currentUsage().?);
 }
 

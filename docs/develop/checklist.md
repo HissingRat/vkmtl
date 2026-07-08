@@ -1784,6 +1784,19 @@ obvious render and binding blockers.
   native dispatch lowering lands after Period 29.
 - [x] Verify examples build by default.
 
+## Period 30 Phase 1 Checklist
+
+- [x] Add backend-private acceleration-structure handle state to runtime
+  `AccelerationStructure` objects.
+- [x] Record backend-private build command metadata from
+  `CommandBuffer.encodeAccelerationStructureBuild(...)`.
+- [x] Preserve typed unsupported behavior through native feature gates.
+- [x] Add focused tests for scratch alignment, result resources, handle state,
+  and build command recording.
+- [x] Document that direct `VkAccelerationStructureKHR` /
+  `MTLAccelerationStructure` driver calls remain Period 31+ parity work after
+  the backend-private runtime boundary is stable.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

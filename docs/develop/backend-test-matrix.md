@@ -137,7 +137,7 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
-| Native acceleration-structure builds | Deferred | Deferred | Period 30 Phase 1 native execution |
+| Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; direct driver handles deferred to Period 31+ |
 | Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
 | Native ray tracing pipelines | Deferred | Deferred | Period 30 Phase 2 native execution |
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |

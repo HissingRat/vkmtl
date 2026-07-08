@@ -227,7 +227,8 @@ tracked in Period 30.
 
 Tracked in `docs/develop/period30/`.
 
-- [ ] Native acceleration structure handles and build commands.
+- [x] Backend-private acceleration structure handle state and build command
+  records. Direct driver AS handles are Period 31+ parity work.
 - [ ] Native ray tracing pipeline handles.
 - [ ] Native SBT records and dispatch commands.
 - [ ] Native Metal ray tracing dispatch integration.

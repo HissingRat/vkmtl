@@ -557,6 +557,7 @@ pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) Developmen
 
 pub const BackendFeatureStatus = enum {
     native_lowering,
+    backend_private_runtime,
     portable_runtime,
     portable_fallback,
     validation_noop,
@@ -1223,10 +1224,10 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
     .{
         .feature = .native_acceleration_structure_builds,
         .public_api = "AccelerationStructureBuildPlan",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 1",
-        .validation = "native acceleration-structure objects and build commands remain explicit backend work",
+        .vulkan_status = .backend_private_runtime,
+        .metal_status = .backend_private_runtime,
+        .deferred_to = "Period 31+ driver parity plan",
+        .validation = "runtime acceleration structures own backend-private handle state and build command records",
     },
     .{
         .feature = .ray_tracing_pipeline_planning,
@@ -1725,6 +1726,7 @@ test "ray tracing and native parity backend matrix is complete" {
     var deferred_paths: usize = 0;
     var period29_targets: usize = 0;
     var period30_targets: usize = 0;
+    var period31_plus_targets: usize = 0;
 
     for (ray_tracing_native_parity_matrix) |entry| {
         seen[@intFromEnum(entry.feature)] = true;
@@ -1736,6 +1738,7 @@ test "ray tracing and native parity backend matrix is complete" {
         if (entry.deferred_to) |target| {
             if (std.mem.startsWith(u8, target, "Period 29 ")) period29_targets += 1;
             if (std.mem.startsWith(u8, target, "Period 30 ")) period30_targets += 1;
+            if (std.mem.startsWith(u8, target, "Period 31+")) period31_plus_targets += 1;
         }
     }
 
@@ -1743,9 +1746,10 @@ test "ray tracing and native parity backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 5);
-    try std.testing.expect(deferred_paths >= 6);
+    try std.testing.expect(deferred_paths >= 5);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
-    try std.testing.expect(period30_targets >= 7);
+    try std.testing.expect(period30_targets >= 6);
+    try std.testing.expect(period31_plus_targets >= 1);
 }
 
 test "validation case inventory is valid" {
