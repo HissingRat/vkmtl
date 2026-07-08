@@ -340,7 +340,9 @@ expose Vulkan shader-group counts or Metal function-table metadata from native
 feature reports before executable ray tracing pipelines are enabled.
 `RayDispatchDescriptor`, `RayDispatchPlan`, and `Device.planRayDispatch(...)`
 combine shader binding table layout with dispatch dimensions and total ray
-counts before native ray dispatch commands are available.
+counts before native ray dispatch commands are available. Metal-specific ray
+tracing differences are explicit through `MetalRayTracingMappingDescriptor`,
+`MetalRayTracingMappingPlan`, and `Device.planMetalRayTracingMapping(...)`.
 
 ## Bindings
 

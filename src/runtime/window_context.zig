@@ -3948,6 +3948,15 @@ pub const Device = struct {
         );
     }
 
+    pub fn planMetalRayTracingMapping(self: Device, descriptor: core.MetalRayTracingMappingDescriptor) core.AdvancedFeatureError!core.MetalRayTracingMappingPlan {
+        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
+        return try core.MetalRayTracingMappingPlan.fromDescriptor(
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -6081,6 +6090,44 @@ test "runtime device plans ray dispatch from native capabilities" {
     });
     try std.testing.expectEqual(@as(u64, 32), plan.total_rays);
     try std.testing.expectEqual(@as(u64, 192), plan.sbt_size);
+}
+
+test "runtime device plans Metal ray tracing mapping from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.limits.max_ray_tracing_recursion_depth = 2;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal ray tracing adapter",
+        },
+        .capability_report = report,
+    };
+
+    const groups = [_]core.RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+    };
+    const intersections = [_]core.MetalIntersectionFunctionDescriptor{
+        .{ .entry_point = "intersect_triangle" },
+    };
+    const plan = try device.planMetalRayTracingMapping(.{
+        .pipeline = .{
+            .shader_groups = groups[0..],
+            .max_recursion_depth = 1,
+        },
+        .intersections = intersections[0..],
+    });
+    try std.testing.expectEqual(@as(u32, 3), plan.function_table_entries);
+    try std.testing.expect(plan.requires_intersection_function_table);
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

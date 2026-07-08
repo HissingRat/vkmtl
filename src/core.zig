@@ -2699,6 +2699,50 @@ pub const RayTracingPipelineLowering = union(Backend) {
     }
 };
 
+pub const MetalRayTracingMappingDescriptor = struct {
+    pipeline: RayTracingPipelineDescriptor,
+    intersections: []const MetalIntersectionFunctionDescriptor = &.{},
+    function_table_label: ?[]const u8 = null,
+
+    pub fn validate(self: MetalRayTracingMappingDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        _ = self.function_table_label;
+        _ = try MetalRayTracingLowering.fromDescriptor(
+            self.pipeline,
+            self.intersections,
+            features,
+            limits,
+        );
+    }
+};
+
+pub const MetalRayTracingMappingPlan = struct {
+    lowering: MetalRayTracingLowering,
+    function_table_entries: u32,
+    intersection_function_count: u32,
+    requires_function_table: bool = true,
+    requires_intersection_function_table: bool = false,
+    requires_acceleration_structure_resources: bool = true,
+
+    pub fn fromDescriptor(
+        descriptor: MetalRayTracingMappingDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!MetalRayTracingMappingPlan {
+        const lowering = try MetalRayTracingLowering.fromDescriptor(
+            descriptor.pipeline,
+            descriptor.intersections,
+            features,
+            limits,
+        );
+        return .{
+            .lowering = lowering,
+            .function_table_entries = lowering.function_table_entries,
+            .intersection_function_count = lowering.intersection_function_count,
+            .requires_intersection_function_table = lowering.intersection_function_count != 0,
+        };
+    }
+};
+
 pub const ShaderBindingTableDescriptor = struct {
     stride: u64,
     ray_generation_count: u32 = 1,
@@ -9930,6 +9974,29 @@ test "backend-tagged ray tracing lowering preserves group counts" {
     try std.testing.expectEqual(@as(u32, 1), lowering.rayGenerationGroupCount());
     try std.testing.expectEqual(@as(u32, 1), lowering.hitGroupCount());
     try std.testing.expectEqual(@as(u32, 3), lowering.functionTableEntryCount());
+}
+
+test "Metal ray tracing mapping plan records function table requirements" {
+    const groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+    };
+    const intersections = [_]MetalIntersectionFunctionDescriptor{
+        .{ .entry_point = "intersect_triangle" },
+    };
+    const plan = try MetalRayTracingMappingPlan.fromDescriptor(.{
+        .pipeline = .{
+            .shader_groups = groups[0..],
+            .max_recursion_depth = 1,
+        },
+        .intersections = intersections[0..],
+        .function_table_label = "triangle-functions",
+    }, .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
+    try std.testing.expectEqual(@as(u32, 3), plan.function_table_entries);
+    try std.testing.expectEqual(@as(u32, 1), plan.intersection_function_count);
+    try std.testing.expect(plan.requires_function_table);
+    try std.testing.expect(plan.requires_intersection_function_table);
+    try std.testing.expect(plan.requires_acceleration_structure_resources);
 }
 
 test "shader binding table layout computes group offsets" {

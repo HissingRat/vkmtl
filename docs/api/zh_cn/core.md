@@ -281,7 +281,9 @@ result size、scratch size 和 compaction intent。`RayTracingPipelineLowering` 
 `Device.planRayTracingPipelineLowering(...)` 会通过 native feature report 暴露 Vulkan shader
 group count 或 Metal function-table metadata，先于 executable ray tracing pipeline 接入。
 `RayDispatchDescriptor`、`RayDispatchPlan` 和 `Device.planRayDispatch(...)` 会把 shader binding
-table layout、dispatch dimensions 和 total ray count 合成可检查的 dispatch plan。
+table layout、dispatch dimensions 和 total ray count 合成可检查的 dispatch plan。Metal 特有的
+ray tracing 差异通过 `MetalRayTracingMappingDescriptor`、`MetalRayTracingMappingPlan` 和
+`Device.planMetalRayTracingMapping(...)` 显式表达。
 
 ## Binding
 

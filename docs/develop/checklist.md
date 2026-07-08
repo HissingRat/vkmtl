@@ -1670,6 +1670,16 @@ obvious render and binding blockers.
 - [x] Document native ray dispatch command encoding as deferred to Period 29
   Phase 3.
 
+## Period 28 Phase 4 Checklist
+
+- [x] Add explicit Metal ray tracing mapping descriptors and plans.
+- [x] Track function-table entries and intersection-function requirements.
+- [x] Expose Metal ray tracing mapping through `Device` using native feature
+  reports.
+- [x] Keep Metal-specific mapping outside the portable pipeline descriptor.
+- [x] Document executable Metal acceleration/intersection resource lowering as
+  deferred to Period 29 Phase 4.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
