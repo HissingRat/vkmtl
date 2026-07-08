@@ -225,6 +225,13 @@ Application code does not need to parse that argument itself.
 Precedence is: explicit `WindowContextOptions.shader_cache_dir` > `--cache-dir`
 runtime argument > default `vkmtl-cache`.
 
+Persistent runtime cache planning uses `RuntimeCacheManifestDescriptor`,
+`RuntimeCachePlanDescriptor`, and `RuntimeCachePlan`. The manifest records
+schema version, backend, source hash, and toolchain identity. Plans classify
+existing metadata as compatible, missing, stale, backend-mismatched,
+source-mismatched, or toolchain-mismatched while keeping the existing Slang
+artifact files inspectable.
+
 Programmable stages can optionally attach reflection data with
 `ProgrammableStageDescriptor.reflection`. Runtime pipeline creation validates
 reflection artifacts or inline reflection data against the explicit

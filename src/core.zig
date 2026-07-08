@@ -925,6 +925,92 @@ pub const DriverPipelineCachePlan = struct {
     }
 };
 
+pub const runtime_cache_schema_version: u32 = 1;
+
+pub const RuntimeCacheCompatibility = enum {
+    compatible,
+    missing,
+    stale_schema,
+    backend_mismatch,
+    source_hash_mismatch,
+    toolchain_mismatch,
+};
+
+pub const RuntimeCacheManifestDescriptor = struct {
+    schema_version: u32 = runtime_cache_schema_version,
+    backend: Backend,
+    source_hash: []const u8,
+    toolchain_id: []const u8,
+
+    pub fn validate(self: RuntimeCacheManifestDescriptor) ObjectCacheError!void {
+        if (self.source_hash.len == 0) return ObjectCacheError.EmptyObjectCacheSourceHash;
+        if (self.toolchain_id.len == 0) return ObjectCacheError.EmptyObjectCacheOptionsHash;
+    }
+
+    pub fn compatibilityWith(
+        self: RuntimeCacheManifestDescriptor,
+        existing: ?RuntimeCacheManifestDescriptor,
+    ) ObjectCacheError!RuntimeCacheCompatibility {
+        try self.validate();
+        const previous = existing orelse return .missing;
+        try previous.validate();
+        if (previous.schema_version != self.schema_version) return .stale_schema;
+        if (previous.backend != self.backend) return .backend_mismatch;
+        if (!std.mem.eql(u8, previous.source_hash, self.source_hash)) return .source_hash_mismatch;
+        if (!std.mem.eql(u8, previous.toolchain_id, self.toolchain_id)) return .toolchain_mismatch;
+        return .compatible;
+    }
+};
+
+pub const RuntimeCachePlanDescriptor = struct {
+    cache_dir: []const u8,
+    entry_name: []const u8,
+    manifest: RuntimeCacheManifestDescriptor,
+    existing_manifest: ?RuntimeCacheManifestDescriptor = null,
+
+    pub fn validate(self: RuntimeCachePlanDescriptor) ObjectCacheError!void {
+        if (self.cache_dir.len == 0) return ObjectCacheError.EmptyObjectCacheKey;
+        if (self.entry_name.len == 0) return ObjectCacheError.EmptyObjectCacheEntryPoint;
+        try self.manifest.validate();
+        if (self.existing_manifest) |existing| try existing.validate();
+    }
+};
+
+pub const RuntimeCachePlan = struct {
+    cache_dir: []const u8,
+    entry_name: []const u8,
+    manifest_path: []const u8,
+    artifact_dir: []const u8,
+    compatibility: RuntimeCacheCompatibility,
+    should_rebuild: bool,
+    should_write_manifest: bool,
+
+    pub fn fromDescriptor(
+        allocator: std.mem.Allocator,
+        descriptor: RuntimeCachePlanDescriptor,
+    ) (ObjectCacheError || std.mem.Allocator.Error)!RuntimeCachePlan {
+        try descriptor.validate();
+        const compatibility = try descriptor.manifest.compatibilityWith(descriptor.existing_manifest);
+        const artifact_dir = try std.fs.path.join(allocator, &.{ descriptor.cache_dir, descriptor.entry_name });
+        errdefer allocator.free(artifact_dir);
+        const manifest_path = try std.fs.path.join(allocator, &.{ artifact_dir, "vkmtl-cache-manifest.json" });
+        return .{
+            .cache_dir = descriptor.cache_dir,
+            .entry_name = descriptor.entry_name,
+            .manifest_path = manifest_path,
+            .artifact_dir = artifact_dir,
+            .compatibility = compatibility,
+            .should_rebuild = compatibility != .compatible,
+            .should_write_manifest = compatibility != .compatible,
+        };
+    }
+
+    pub fn deinit(self: RuntimeCachePlan, allocator: std.mem.Allocator) void {
+        allocator.free(self.manifest_path);
+        allocator.free(self.artifact_dir);
+    }
+};
+
 pub const DebugLabelTarget = enum {
     resource,
     command_buffer,
@@ -7183,6 +7269,43 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
         .cache_cycles = 2,
     };
     try std.testing.expectEqual(@as(u32, 120), stability.iterations_completed);
+}
+
+test "runtime cache manifests plan compatibility and stale entries" {
+    const manifest = RuntimeCacheManifestDescriptor{
+        .backend = .metal,
+        .source_hash = "source-a",
+        .toolchain_id = "slang-v2026.12.2",
+    };
+    try std.testing.expectEqual(RuntimeCacheCompatibility.missing, try manifest.compatibilityWith(null));
+    try std.testing.expectEqual(RuntimeCacheCompatibility.compatible, try manifest.compatibilityWith(manifest));
+    try std.testing.expectEqual(RuntimeCacheCompatibility.source_hash_mismatch, try manifest.compatibilityWith(.{
+        .backend = .metal,
+        .source_hash = "source-b",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(RuntimeCacheCompatibility.backend_mismatch, try manifest.compatibilityWith(.{
+        .backend = .vulkan,
+        .source_hash = "source-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(RuntimeCacheCompatibility.stale_schema, try manifest.compatibilityWith(.{
+        .schema_version = runtime_cache_schema_version + 1,
+        .backend = .metal,
+        .source_hash = "source-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+
+    const plan = try RuntimeCachePlan.fromDescriptor(std.testing.allocator, .{
+        .cache_dir = "vkmtl-cache",
+        .entry_name = "glow",
+        .manifest = manifest,
+        .existing_manifest = manifest,
+    });
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(RuntimeCacheCompatibility.compatible, plan.compatibility);
+    try std.testing.expect(!plan.should_rebuild);
+    try std.testing.expect(std.mem.endsWith(u8, plan.manifest_path, "vkmtl-cache-manifest.json"));
 }
 
 test "render pipeline descriptor validates shader stages and color targets" {

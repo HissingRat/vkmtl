@@ -188,6 +188,12 @@ Compute shader 使用 `compileComputeShader(...)` 和
 优先级是：显式 `WindowContextOptions.shader_cache_dir` > `--cache-dir` runtime 参数 > 默认
 `vkmtl-cache`。
 
+Persistent runtime cache planning 使用 `RuntimeCacheManifestDescriptor`、
+`RuntimeCachePlanDescriptor` 和 `RuntimeCachePlan`。Manifest 会记录 schema version、backend、
+source hash 和 toolchain identity。Plan 会把已有 metadata 分类为 compatible、missing、
+stale、backend mismatch、source mismatch 或 toolchain mismatch，同时保持现有 Slang artifact
+文件可检查。
+
 `ProgrammableStageDescriptor.reflection` 可以携带 reflection 数据。创建 runtime
 pipeline 时，vkmtl 会把 reflection artifact 或 inline reflection data 与显式
 `bind_group_layouts` 校验。`ShaderReflection` 也提供从 stage reflection 派生 bind

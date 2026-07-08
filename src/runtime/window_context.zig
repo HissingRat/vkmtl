@@ -3879,6 +3879,11 @@ pub const Device = struct {
         );
     }
 
+    pub fn planRuntimeCache(self: Device, descriptor: core.RuntimeCachePlanDescriptor) !core.RuntimeCachePlan {
+        if (descriptor.manifest.backend != self.backend) return core.ObjectCacheError.InvalidObjectCacheKey;
+        return try core.RuntimeCachePlan.fromDescriptor(self.allocator, descriptor);
+    }
+
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
         return switch (self.impl.*) {
             .vulkan => |*vulkan| vulkan.formatCapabilities(format),
@@ -4555,6 +4560,11 @@ pub const WindowContext = struct {
     pub fn planDriverPipelineCache(self: *WindowContext, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
         const device_view = self.device();
         return try device_view.planDriverPipelineCache(descriptor);
+    }
+
+    pub fn planRuntimeCache(self: *WindowContext, descriptor: core.RuntimeCachePlanDescriptor) !core.RuntimeCachePlan {
+        const device_view = self.device();
+        return try device_view.planRuntimeCache(descriptor);
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -5665,6 +5675,46 @@ test "runtime plans driver pipeline caches from native feature reports" {
     });
     try std.testing.expect(!missing_plan.load_existing);
     try std.testing.expect(missing_plan.store_on_shutdown);
+}
+
+test "runtime plans persistent cache manifests through device" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+
+    const manifest = core.RuntimeCacheManifestDescriptor{
+        .backend = .metal,
+        .source_hash = "source",
+        .toolchain_id = "slang",
+    };
+    const plan = try device.planRuntimeCache(.{
+        .cache_dir = "vkmtl-cache",
+        .entry_name = "shader",
+        .manifest = manifest,
+        .existing_manifest = null,
+    });
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(core.RuntimeCacheCompatibility.missing, plan.compatibility);
+    try std.testing.expect(plan.should_rebuild);
+    try std.testing.expectError(core.ObjectCacheError.InvalidObjectCacheKey, device.planRuntimeCache(.{
+        .cache_dir = "vkmtl-cache",
+        .entry_name = "shader",
+        .manifest = .{
+            .backend = .vulkan,
+            .source_hash = "source",
+            .toolchain_id = "slang",
+        },
+    }));
 }
 
 test "runtime advanced bind group layout snapshots descriptor ranges" {

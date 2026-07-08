@@ -1530,6 +1530,16 @@ obvious render and binding blockers.
 - [x] Document native `VkPipelineCache` / `MTLBinaryArchive` lowering as
   deferred to Period 28 Phase 5.
 
+## Period 26 Phase 3 Checklist
+
+- [x] Define runtime cache manifest schema versioning.
+- [x] Add compatibility states for missing, stale, backend-mismatched,
+  source-mismatched, and toolchain-mismatched cache entries.
+- [x] Add runtime cache planning API for artifact directory and manifest path.
+- [x] Keep existing inspectable Slang artifact layout stable.
+- [x] Document automatic manifest file read/write integration as deferred to
+  Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
