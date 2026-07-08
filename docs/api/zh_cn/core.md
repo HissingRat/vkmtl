@@ -514,6 +514,8 @@ Period 8 暴露 expensive native object 的 cache-key 和 diagnostics 形状：
 hit、miss、creation attempts、equivalent recreation attempts、bypassed reuse、
 suppressed diagnostics 和总创建耗时。可以通过 `device.objectCacheDiagnostics()` 或
 `context.objectCacheDiagnostics()` 读取快照。
+`device.runtimeDiagnostics()` 和 `context.runtimeDiagnostics()` 会返回同一份 object-cache
+快照，并附带 live resource 数量、deferred retirement 数量，以及 submitted/completed work serial。
 
 这些 diagnostics 现在会经过 runtime object-cache lookup path，覆盖 shader module、bind group
 layout、render pipeline、compute pipeline 和 sampler。它仍不能证明 backend-native handle 已经被
@@ -540,6 +542,19 @@ try render_encoder.popDebugGroup();
 
 资源或 pipeline 创建时，descriptor 里的 label 会写入 runtime wrapper，并在后端支持时同步到
 native object label。`label()` 返回当前借用 label，`setLabel(null)` 会清空 label。
+
+Capture-friendly name 可以用 `CaptureNameDescriptor` 或 runtime helper
+`device.writeCaptureName(...)` / `context.writeCaptureName(...)` 生成。如果 descriptor 没有写
+`backend`，runtime helper 会自动填入当前选择的 backend：
+
+```zig
+var name_buffer: [96]u8 = undefined;
+const capture_name = try device.writeCaptureName(.{
+    .scope = "frame",
+    .name = "main-pass",
+    .frame_index = frame_index,
+}, name_buffer[0..]);
+```
 
 Debug group 和 signpost 会做可移植验证：空 label、stack underflow、stack overflow、未闭合
 group 都会变成 `CommandEncodingError`。`DebugSignpostDescriptor` 是 shape-only marker

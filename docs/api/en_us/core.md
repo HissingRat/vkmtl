@@ -615,6 +615,9 @@ defaulted `cache_policy` field. `ObjectCacheDiagnostics` reports lookup hits,
 misses, creation attempts, equivalent recreation attempts, bypassed reuse,
 suppressed diagnostics, and total creation time. Read snapshots with
 `device.objectCacheDiagnostics()` or `context.objectCacheDiagnostics()`.
+`device.runtimeDiagnostics()` and `context.runtimeDiagnostics()` return the
+same object-cache snapshot together with live resource count, deferred
+retirement count, and submitted/completed work serials.
 
 These diagnostics now run through the runtime object-cache lookup path for
 shader modules, bind group layouts, render pipelines, compute pipelines, and
@@ -648,6 +651,20 @@ Descriptor labels are copied into runtime wrappers when resources or pipelines
 are created, and they are synchronized to native object labels when the backend
 supports it. `label()` returns the current borrowed label, and `setLabel(null)`
 clears it.
+
+Capture-friendly names can be built with `CaptureNameDescriptor` or the runtime
+helpers `device.writeCaptureName(...)` / `context.writeCaptureName(...)`.
+If the descriptor omits `backend`, the runtime helper fills in the selected
+backend:
+
+```zig
+var name_buffer: [96]u8 = undefined;
+const capture_name = try device.writeCaptureName(.{
+    .scope = "frame",
+    .name = "main-pass",
+    .frame_index = frame_index,
+}, name_buffer[0..]);
+```
 
 Debug groups and signposts are validated portably. Empty labels, underflow,
 overflow, and unclosed groups become `CommandEncodingError` values.

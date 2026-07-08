@@ -1540,6 +1540,17 @@ obvious render and binding blockers.
 - [x] Document automatic manifest file read/write integration as deferred to
   Period 28 Phase 5.
 
+## Period 26 Phase 4 Checklist
+
+- [x] Define a portable runtime diagnostics snapshot.
+- [x] Expose live resource, deferred retirement, submitted/completed work, and
+  object-cache diagnostics through `Device` and `WindowContext`.
+- [x] Add capture-friendly naming helpers that fill the selected backend when
+  applications do not specify one.
+- [x] Add focused tests for capture names and runtime diagnostics counters.
+- [x] Document native capture/profiler enrichment as deferred to Period 28
+  Phase 6.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

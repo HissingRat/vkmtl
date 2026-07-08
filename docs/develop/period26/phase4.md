@@ -13,3 +13,22 @@ Phase 4 makes backend work visible to developers.
 
 - Add diagnostics tests for counters and suppression policy.
 - Document capture setup for Vulkan and Metal.
+
+## Result
+
+- Added `RuntimeDiagnosticsSnapshot` for live resource count, deferred
+  retirement count, submitted/completed work serials, and object-cache
+  diagnostics.
+- Exposed `Device.runtimeDiagnostics()` and
+  `WindowContext.runtimeDiagnostics()`.
+- Added `CaptureNameDescriptor` plus `Device.writeCaptureName(...)` and
+  `WindowContext.writeCaptureName(...)`; runtime helpers fill the selected
+  backend when the descriptor omits it.
+- Added focused tests for capture-name formatting, resource churn counters,
+  pending-retirement counters, and object-cache diagnostics in the runtime
+  snapshot.
+
+## Deferred
+
+- Native capture/profiler enrichment beyond labels and marker lowering remains
+  deferred to Period 28 Phase 6.

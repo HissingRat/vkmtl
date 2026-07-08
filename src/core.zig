@@ -863,6 +863,22 @@ pub const ObjectCacheDiagnostics = struct {
     }
 };
 
+pub const RuntimeDiagnosticsSnapshot = struct {
+    live_resources: usize = 0,
+    pending_retirements: usize = 0,
+    submitted_work_serial: u64 = 0,
+    completed_work_serial: u64 = 0,
+    object_cache: ObjectCacheDiagnostics = .{},
+
+    pub fn hasPendingGpuWork(self: RuntimeDiagnosticsSnapshot) bool {
+        return self.completed_work_serial < self.submitted_work_serial;
+    }
+
+    pub fn hasLiveResources(self: RuntimeDiagnosticsSnapshot) bool {
+        return self.live_resources != 0;
+    }
+};
+
 pub const DriverCacheKind = enum {
     vulkan_pipeline_cache,
     metal_binary_archive,
@@ -1025,6 +1041,40 @@ pub const DebugLabelDescriptor = struct {
     pub fn validate(self: DebugLabelDescriptor) CommandEncodingError!void {
         _ = self.target;
         if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+    }
+};
+
+pub const CaptureNameDescriptor = struct {
+    scope: []const u8,
+    name: []const u8,
+    backend: ?Backend = null,
+    frame_index: ?u64 = null,
+
+    pub fn validate(self: CaptureNameDescriptor) CommandEncodingError!void {
+        if (self.scope.len == 0 or self.name.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+    }
+
+    pub fn formattedLength(self: CaptureNameDescriptor) CommandEncodingError!usize {
+        try self.validate();
+        var length = self.scope.len + 1 + self.name.len;
+        if (self.backend != null) length += " backend=".len + "vulkan".len;
+        if (self.frame_index != null) length += " frame=".len + 20;
+        return length;
+    }
+
+    pub fn write(self: CaptureNameDescriptor, buffer: []u8) CommandEncodingError![]const u8 {
+        const required = try self.formattedLength();
+        if (buffer.len < required) return CommandEncodingError.CaptureNameTooLong;
+        if (self.backend) |backend| {
+            if (self.frame_index) |frame_index| {
+                return std.fmt.bufPrint(buffer, "{s}:{s} backend={s} frame={}", .{ self.scope, self.name, @tagName(backend), frame_index }) catch return CommandEncodingError.CaptureNameTooLong;
+            }
+            return std.fmt.bufPrint(buffer, "{s}:{s} backend={s}", .{ self.scope, self.name, @tagName(backend) }) catch return CommandEncodingError.CaptureNameTooLong;
+        }
+        if (self.frame_index) |frame_index| {
+            return std.fmt.bufPrint(buffer, "{s}:{s} frame={}", .{ self.scope, self.name, frame_index }) catch return CommandEncodingError.CaptureNameTooLong;
+        }
+        return std.fmt.bufPrint(buffer, "{s}:{s}", .{ self.scope, self.name }) catch return CommandEncodingError.CaptureNameTooLong;
     }
 };
 
@@ -1260,6 +1310,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidBlendColor,
         error.InvalidStencilReference,
         error.EmptyDebugGroupLabel,
+        error.CaptureNameTooLong,
         error.DebugGroupStackOverflow,
         error.DebugGroupStackUnderflow,
         error.UnclosedDebugGroup,
@@ -3744,6 +3795,7 @@ pub const CommandEncodingError = error{
     InvalidStencilReference,
     InvalidDepthBias,
     EmptyDebugGroupLabel,
+    CaptureNameTooLong,
     DebugGroupStackOverflow,
     DebugGroupStackUnderflow,
     UnclosedDebugGroup,
@@ -6640,6 +6692,27 @@ test "debug group stack validates labels and nesting" {
     try std.testing.expectError(CommandEncodingError.UnclosedDebugGroup, stack.requireEmpty());
     try stack.pop();
     try stack.requireEmpty();
+}
+
+test "capture names format backend and frame context" {
+    var buffer: [96]u8 = undefined;
+    const name = try (CaptureNameDescriptor{
+        .scope = "frame",
+        .name = "main-pass",
+        .backend = .metal,
+        .frame_index = 17,
+    }).write(buffer[0..]);
+    try std.testing.expectEqualStrings("frame:main-pass backend=metal frame=17", name);
+
+    try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (CaptureNameDescriptor{
+        .scope = "",
+        .name = "main-pass",
+    }).write(buffer[0..]));
+    try std.testing.expectError(CommandEncodingError.CaptureNameTooLong, (CaptureNameDescriptor{
+        .scope = "frame",
+        .name = "main-pass",
+        .backend = .vulkan,
+    }).write(buffer[0..8]));
 }
 
 test "error classifier groups public error categories" {

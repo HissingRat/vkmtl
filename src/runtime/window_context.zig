@@ -124,6 +124,38 @@ pub const ResourceTracker = struct {
         return self.object_cache_diagnostics;
     }
 
+    pub fn liveResourceCount(self: ResourceTracker) usize {
+        return self.buffers +
+            self.textures +
+            self.texture_views +
+            self.sampler_states +
+            self.shader_modules +
+            self.render_pipeline_states +
+            self.compute_pipeline_states +
+            self.bind_group_layouts +
+            self.bind_groups +
+            self.advanced_bind_group_layouts +
+            self.resource_tables +
+            self.external_memories +
+            self.external_buffers +
+            self.external_semaphores +
+            self.external_events +
+            self.fences +
+            self.events +
+            self.query_sets +
+            self.heaps;
+    }
+
+    pub fn diagnosticsSnapshot(self: ResourceTracker) core.RuntimeDiagnosticsSnapshot {
+        return .{
+            .live_resources = self.liveResourceCount(),
+            .pending_retirements = self.pending_retirements,
+            .submitted_work_serial = self.submitted_work_serial,
+            .completed_work_serial = self.completed_work_serial,
+            .object_cache = self.object_cache_diagnostics,
+        };
+    }
+
     pub fn recordObjectCreation(
         self: *ResourceTracker,
         kind: core.ObjectCacheKind,
@@ -3895,6 +3927,20 @@ pub const Device = struct {
         return self.tracker.objectCacheDiagnostics();
     }
 
+    pub fn runtimeDiagnostics(self: Device) core.RuntimeDiagnosticsSnapshot {
+        return self.tracker.diagnosticsSnapshot();
+    }
+
+    pub fn writeCaptureName(
+        self: Device,
+        descriptor: core.CaptureNameDescriptor,
+        buffer: []u8,
+    ) core.CommandEncodingError![]const u8 {
+        var resolved = descriptor;
+        if (resolved.backend == null) resolved.backend = self.backend;
+        return try resolved.write(buffer);
+    }
+
     pub fn makeFence(self: *Device, descriptor: core.FenceDescriptor) !Fence {
         try descriptor.validate(self.features());
         self.tracker.retain(.fence);
@@ -4555,6 +4601,20 @@ pub const WindowContext = struct {
 
     pub fn objectCacheDiagnostics(self: WindowContext) core.ObjectCacheDiagnostics {
         return self.tracker.objectCacheDiagnostics();
+    }
+
+    pub fn runtimeDiagnostics(self: WindowContext) core.RuntimeDiagnosticsSnapshot {
+        return self.tracker.diagnosticsSnapshot();
+    }
+
+    pub fn writeCaptureName(
+        self: WindowContext,
+        descriptor: core.CaptureNameDescriptor,
+        buffer: []u8,
+    ) core.CommandEncodingError![]const u8 {
+        var resolved = descriptor;
+        if (resolved.backend == null) resolved.backend = self.backend;
+        return try resolved.write(buffer);
     }
 
     pub fn planDriverPipelineCache(self: *WindowContext, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
@@ -5473,6 +5533,27 @@ test "resource tracker records cache lookups and opt out policy" {
     try std.testing.expectEqual(@as(u64, 1), sampler_stats.reuse_bypassed_creations);
 }
 
+test "resource tracker exposes runtime diagnostics snapshot" {
+    var tracker = ResourceTracker{};
+    tracker.retain(.buffer);
+    tracker.retain(.texture);
+    const serial = tracker.submitWork();
+    tracker.release(.buffer);
+    tracker.recordObjectCreation(.shader_module, 77, .{}, 31);
+
+    const snapshot = tracker.diagnosticsSnapshot();
+    try std.testing.expectEqual(@as(usize, 1), snapshot.live_resources);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.pending_retirements);
+    try std.testing.expectEqual(@as(u64, serial), snapshot.submitted_work_serial);
+    try std.testing.expectEqual(@as(u64, 0), snapshot.completed_work_serial);
+    try std.testing.expect(snapshot.hasPendingGpuWork());
+    try std.testing.expect(snapshot.hasLiveResources());
+    try std.testing.expectEqual(@as(u64, 1), snapshot.object_cache.shader_modules.creation_attempts);
+
+    tracker.completeWork(serial);
+    try std.testing.expectEqual(@as(usize, 0), tracker.diagnosticsSnapshot().pending_retirements);
+}
+
 test "runtime blit encoder records buffer usage transitions" {
     var tracker = ResourceTracker{};
     var command_buffer = CommandBuffer{ .backend = .vulkan };
@@ -5675,6 +5756,36 @@ test "runtime plans driver pipeline caches from native feature reports" {
     });
     try std.testing.expect(!missing_plan.load_existing);
     try std.testing.expect(missing_plan.store_on_shutdown);
+}
+
+test "runtime device exposes diagnostics and capture names" {
+    var tracker = ResourceTracker{};
+    tracker.retain(.sampler_state);
+    tracker.recordObjectCreation(.sampler, 19, .{}, 5);
+    var backend_runtime: BackendRuntime = undefined;
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+
+    const snapshot = device.runtimeDiagnostics();
+    try std.testing.expectEqual(@as(usize, 1), snapshot.live_resources);
+    try std.testing.expectEqual(@as(u64, 1), snapshot.object_cache.samplers.creation_attempts);
+
+    var buffer: [64]u8 = undefined;
+    const name = try device.writeCaptureName(.{
+        .scope = "frame",
+        .name = "encoder",
+        .frame_index = 3,
+    }, buffer[0..]);
+    try std.testing.expectEqualStrings("frame:encoder backend=metal frame=3", name);
 }
 
 test "runtime plans persistent cache manifests through device" {
