@@ -1775,6 +1775,15 @@ obvious render and binding blockers.
   opt-in `StabilityRunPlan` planning.
 - [x] Add focused core and runtime tests for parity plans.
 
+## Period 29 Phase 7 Checklist
+
+- [x] Update `examples/ray_traced_triangle` from planning-only to runtime
+  contract APIs.
+- [x] Keep unsupported adapters reporting typed feature-gate messages.
+- [x] Document that the example does not render pixels until backend-private
+  native dispatch lowering lands after Period 29.
+- [x] Verify examples build by default.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

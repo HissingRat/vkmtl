@@ -433,11 +433,13 @@ zig build run-mesh-shader
 
 ## Ray Tracing
 
-`examples/ray_traced_triangle` validates the public ray tracing planning path:
-acceleration-structure build plans, ray tracing pipeline lowering, SBT/dispatch
-planning, and Metal mapping metadata when Metal is selected. It prints
-unsupported-feature messages until the selected backend exposes native ray
-tracing capabilities.
+`examples/ray_traced_triangle` validates the public ray tracing runtime
+contract: acceleration-structure objects, scratch-buffer validation, ray tracing
+pipeline state, shader binding table creation, ray dispatch planning, and Metal
+mapping metadata when Metal is selected. It prints unsupported-feature messages
+until the selected backend exposes native ray tracing capabilities. It is not a
+pixel-rendering sample yet; backend-private native dispatch lowering is tracked
+after Period 29.
 
 Run it with:
 

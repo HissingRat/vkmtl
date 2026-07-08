@@ -29,6 +29,7 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
+    var queue = context.queue();
     const geometry = [_]vkmtl.AccelerationStructureGeometryDescriptor{.{
         .kind = .triangles,
         .primitive_count = 1,
@@ -41,10 +42,23 @@ pub fn main() !void {
         },
         .geometries = geometry[0..],
     };
+    var acceleration_structure = device.makeAccelerationStructure(as_build.acceleration_structure) catch |err| {
+        std.debug.print("ray tracing unsupported: {s}\n", .{@errorName(err)});
+        return;
+    };
+    defer acceleration_structure.deinit();
+
     const as_plan = device.planAccelerationStructureBuild(as_build) catch |err| {
         std.debug.print("ray tracing unsupported: {s}\n", .{@errorName(err)});
         return;
     };
+    var scratch_buffer = try device.makeBuffer(.{
+        .label = "ray tracing scratch",
+        .length = @intCast(as_plan.scratch_size),
+        .usage = .{ .acceleration_structure_scratch = true },
+        .storage_mode = .private,
+    });
+    defer scratch_buffer.deinit();
 
     const groups = [_]vkmtl.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -55,10 +69,11 @@ pub fn main() !void {
         .shader_groups = groups[0..],
         .max_recursion_depth = 1,
     };
-    const pipeline_plan = device.planRayTracingPipelineLowering(pipeline) catch |err| {
+    var pipeline_state = device.makeRayTracingPipelineState(pipeline) catch |err| {
         std.debug.print("ray tracing pipeline unsupported: {s}\n", .{@errorName(err)});
         return;
     };
+    defer pipeline_state.deinit();
 
     const sbt = vkmtl.ShaderBindingTableDescriptor{
         .stride = @max(device.limits().shader_binding_table_alignment, 64),
@@ -66,36 +81,47 @@ pub fn main() !void {
         .miss_count = 1,
         .hit_count = 1,
     };
-    const dispatch_plan = device.planRayDispatch(sbt, .{
-        .width = 512,
-        .height = 384,
-    }) catch |err| {
-        std.debug.print("ray dispatch unsupported: {s}\n", .{@errorName(err)});
+    var shader_binding_table = device.makeShaderBindingTable(sbt) catch |err| {
+        std.debug.print("shader binding table unsupported: {s}\n", .{@errorName(err)});
         return;
     };
+    defer shader_binding_table.deinit();
 
     var metal_function_table_entries: u32 = 0;
     if (device.selectedBackend() == .metal) {
         const intersections = [_]vkmtl.MetalIntersectionFunctionDescriptor{.{
             .entry_point = "intersect_triangle",
         }};
-        const metal_plan = device.planMetalRayTracingMapping(.{
+        var metal_mapping = device.makeMetalRayTracingExecutionMapping(.{
             .pipeline = pipeline,
             .intersections = intersections[0..],
         }) catch |err| {
             std.debug.print("metal ray tracing mapping unsupported: {s}\n", .{@errorName(err)});
             return;
         };
-        metal_function_table_entries = metal_plan.function_table_entries;
+        defer metal_mapping.deinit();
+        metal_function_table_entries = metal_mapping.functionTableEntryCount();
     }
 
-    std.debug.print("ray traced triangle planning ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}\n", .{
+    var command_buffer = try queue.makeCommandBuffer();
+    try command_buffer.encodeAccelerationStructureBuild(as_plan, .{
+        .result = &acceleration_structure,
+        .scratch = &scratch_buffer,
+    });
+    const dispatch_plan = try command_buffer.dispatchRays(&pipeline_state, &shader_binding_table, .{
+        .width = 512,
+        .height = 384,
+    });
+    try command_buffer.commit();
+
+    std.debug.print("ray traced triangle runtime contract ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}\n", .{
         @tagName(device.selectedBackend()),
         as_plan.result_size,
         as_plan.scratch_size,
-        pipeline_plan.functionTableEntryCount(),
+        pipeline_state.functionTableEntryCount(),
         dispatch_plan.sbt_size,
         dispatch_plan.total_rays,
         metal_function_table_entries,
+        acceleration_structure.isBuilt(),
     });
 }
