@@ -88,6 +88,7 @@ pub fn main() !void {
     defer shader_binding_table.deinit();
 
     var metal_function_table_entries: u32 = 0;
+    var metal_backend_tables = false;
     if (device.selectedBackend() == .metal) {
         const intersections = [_]vkmtl.MetalIntersectionFunctionDescriptor{.{
             .entry_point = "intersect_triangle",
@@ -101,6 +102,7 @@ pub fn main() !void {
         };
         defer metal_mapping.deinit();
         metal_function_table_entries = metal_mapping.functionTableEntryCount();
+        metal_backend_tables = metal_mapping.hasBackendPrivateFunctionTables();
     }
 
     var command_buffer = try queue.makeCommandBuffer();
@@ -114,7 +116,15 @@ pub fn main() !void {
     });
     try command_buffer.commit();
 
-    std.debug.print("ray traced triangle runtime contract ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}\n", .{
+    const backend_private_runtime_ready =
+        acceleration_structure.hasBackendPrivateHandle() and
+        acceleration_structure.backendPrivateBuildCount() == 1 and
+        pipeline_state.hasBackendPrivatePipelineHandle() and
+        shader_binding_table.hasBackendPrivateRecords() and
+        shader_binding_table.dispatchCount() == 1 and
+        (device.selectedBackend() != .metal or metal_backend_tables);
+
+    std.debug.print("ray traced triangle backend-private runtime ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}, runtime_ready={}, driver_pixels=deferred_period31_plus\n", .{
         @tagName(device.selectedBackend()),
         as_plan.result_size,
         as_plan.scratch_size,
@@ -123,5 +133,6 @@ pub fn main() !void {
         dispatch_plan.total_rays,
         metal_function_table_entries,
         acceleration_structure.isBuilt(),
+        backend_private_runtime_ready,
     });
 }

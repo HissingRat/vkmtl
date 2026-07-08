@@ -1,11 +1,17 @@
-# Phase 7: Pixel-Producing Native Advanced Examples
+# Phase 7: Backend-Private Native Advanced Examples
 
-Phase 7 adds examples that prove native advanced backend execution.
+Phase 7 updates examples so they prove the backend-private runtime records added
+through Period 30.
+
+Status: completed for backend-private runtime verification in
+`examples/ray_traced_triangle`. Pixel-producing ray tracing examples are
+deferred to Period31+ driver/example work.
 
 ## Scope
 
-- Turn `examples/ray_traced_triangle` into a pixel-producing ray tracing sample
-  on supported adapters.
+- Turn `examples/ray_traced_triangle` into a sample that checks
+  acceleration-structure, ray tracing pipeline, SBT, dispatch, and Metal mapping
+  backend-private runtime records.
 - Add sparse/tiled, tessellation, mesh/task, or native interop examples only
   when they prove real backend execution.
 - Keep unsupported adapters reporting clear feature-gate messages.
@@ -13,4 +19,9 @@ Phase 7 adds examples that prove native advanced backend execution.
 ## Validation
 
 - Examples build by default.
-- Native examples run on supported local or CI hosts.
+- Native runtime-record examples run on supported local or CI hosts.
+
+## Deferred
+
+- Pixel-producing ray tracing and other driver-executed native advanced
+  examples are deferred to Period31+.

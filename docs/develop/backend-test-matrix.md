@@ -147,4 +147,4 @@ conservative until the relevant backend period lands.
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
 | Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; driver execution deferred to Period 31+ |
 | Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period31+ |
-| Native advanced examples | Feature-gated | Feature-gated | Period 30 Phase 7 examples |
+| Native advanced examples | Backend-private runtime sample | Backend-private runtime sample | Period 30 Phase 7 example record checks; pixel examples deferred to Period31+ |

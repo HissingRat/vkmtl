@@ -292,8 +292,12 @@ Period 29 新增这些 advanced path 的公开 runtime contract：
 `Device.makeShaderBindingTable(...)`、`CommandBuffer.dispatchRays(...)`，以及
 `MetalRayTracingExecutionMapping` /
 `Device.makeMetalRayTracingExecutionMapping(...)`。这些 API 由 native feature report gate，
-会验证 ownership、resource range 和 command intent。backend-private native handle 和真正输出像素的
-dispatch 继续在 Period 30 跟踪。
+会验证 ownership、resource range 和 command intent。
+
+Period 30 给这些对象补上 backend-private runtime record：acceleration structure handle/build
+record、ray tracing pipeline metadata、SBT record、dispatch record、Metal table metadata、
+advanced inventory routing，以及 parity diagnostics。driver-level ray tracing pixels 和更完整的
+native parity 继续在 Period31+ 跟踪。
 
 ## Binding
 

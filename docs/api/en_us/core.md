@@ -353,8 +353,13 @@ Period 29 adds public runtime contracts for those advanced paths:
 `MetalRayTracingExecutionMapping` /
 `Device.makeMetalRayTracingExecutionMapping(...)`. These APIs are gated by
 native feature reports and validate ownership, resource ranges, and command
-intent. Backend-private native handles and pixel-producing dispatch are tracked
-in Period 30.
+intent.
+
+Period 30 adds backend-private runtime records to those objects: acceleration
+structure handles/build records, ray tracing pipeline metadata, SBT records,
+dispatch records, Metal table metadata, advanced-inventory routing, and parity
+diagnostics. Driver-level ray tracing pixels and broader native parity are
+tracked in Period31+.
 
 ## Bindings
 

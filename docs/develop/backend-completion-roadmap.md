@@ -238,7 +238,8 @@ Tracked in `docs/develop/period30/`.
 - [x] Backend-private native advanced inventory and Period31+ driver routing.
 - [x] Backend-private parity validation plans and stability diagnostics.
   GPU-backed soak loops are Period31+ validation matrix work.
-- [ ] Pixel-producing native advanced examples.
+- [x] Backend-private native advanced example record checks. Pixel-producing
+  native advanced examples are Period31+ work.
 
 Expected result: supported Vulkan and Metal adapters execute the high-end paths
 that Period 29 made expressible through public runtime contracts.

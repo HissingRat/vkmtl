@@ -272,11 +272,12 @@ zig build run-mesh-shader
 
 ## Ray Tracing
 
-`examples/ray_traced_triangle` 会验证公开 ray tracing runtime contract：acceleration-structure
-对象、scratch buffer validation、ray tracing pipeline state、shader binding table 创建、
-ray dispatch planning，以及选择 Metal 时的 Metal mapping metadata。在所选 backend 暴露
-native ray tracing capability 之前，它会打印 unsupported-feature 信息。它还不是实际输出像素的
-ray tracing sample；backend-private native dispatch lowering 在 Period 29 之后继续跟踪。
+`examples/ray_traced_triangle` 会验证 ray tracing runtime contract 和 Period 30 的
+backend-private runtime record：acceleration-structure 对象、scratch buffer validation、
+ray tracing pipeline state、shader binding table 创建、ray dispatch record，以及选择 Metal
+时的 Metal table metadata。在所选 backend 暴露 native ray tracing capability 之前，它会打印
+unsupported-feature 信息。它还不是实际输出像素的 ray tracing sample；driver-level ray tracing
+pixels 是 Period31+ 工作。
 
 运行：
 

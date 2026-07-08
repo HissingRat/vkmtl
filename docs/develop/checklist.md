@@ -1853,6 +1853,17 @@ obvious render and binding blockers.
 - [x] Add focused core and runtime tests for parity diagnostics.
 - [x] Update backend and development matrices for parity/soak routing.
 
+## Period 30 Phase 7 Checklist
+
+- [x] Update `examples/ray_traced_triangle` to verify backend-private
+  acceleration-structure, ray tracing pipeline, SBT, dispatch, and Metal table
+  records.
+- [x] Keep unsupported adapters reporting clear feature-gate messages.
+- [x] Keep the example on public vkmtl APIs only.
+- [x] Document that true pixel-producing ray tracing examples are Period31+
+  driver/example work.
+- [x] Verify examples build by default.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

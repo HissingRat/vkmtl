@@ -190,7 +190,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/ray_traced_triangle",
         .run_step = "run-ray-traced-triangle",
         .kind = .render,
-        .backend_expectation = "ray tracing descriptor, AS metadata, and SBT feature gate",
+        .backend_expectation = "ray tracing descriptor, backend-private AS/pipeline/SBT records, and feature gate",
     },
 };
 
@@ -1300,10 +1300,10 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
     .{
         .feature = .advanced_native_examples,
         .public_api = "examples/ray_traced_triangle and future native advanced examples",
-        .vulkan_status = .capability_gated,
-        .metal_status = .capability_gated,
-        .deferred_to = "Period 30 Phase 7",
-        .validation = "current advanced examples stay feature-gated until native execution lands",
+        .vulkan_status = .backend_private_runtime,
+        .metal_status = .backend_private_runtime,
+        .deferred_to = "Period 31+ pixel-producing examples",
+        .validation = "ray_traced_triangle verifies backend-private runtime records while driver pixels remain future work",
     },
 };
 
@@ -1748,8 +1748,8 @@ test "ray tracing and native parity backend matrix is complete" {
     try std.testing.expect(runtime_paths >= 5);
     try std.testing.expectEqual(@as(usize, 0), deferred_paths);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
-    try std.testing.expect(period30_targets >= 1);
-    try std.testing.expect(period31_plus_targets >= 6);
+    try std.testing.expectEqual(@as(usize, 0), period30_targets);
+    try std.testing.expect(period31_plus_targets >= 7);
 }
 
 test "validation case inventory is valid" {
