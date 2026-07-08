@@ -1475,6 +1475,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .draw_base_instance = true,
         .indirect_draw = true,
         .compute_dispatch_indirect = true,
+        .explicit_resource_barriers = true,
     };
 
     if (backend == .metal) {

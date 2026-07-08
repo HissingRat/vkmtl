@@ -34,4 +34,5 @@ creation attempts；native object reuse 仍是后续 backend work。
 ## Commands
 
 保持 command recording 可预测。vkmtl 会校验 command encoder 顺序并追踪 resource usage transition；
-后续 backend lowering 会消费这些状态来生成显式 barrier。
+显式 `bufferBarrier(...)` 和 `textureBarrier(...)` 会用同一份状态做校验。Vulkan 会下沉到
+native barrier；Metal 会把它们当作 validation/no-op marker。

@@ -295,6 +295,26 @@ pub const BlitCommandEncoder = struct {
         ));
     }
 
+    pub fn bufferBarrier(
+        self: *BlitCommandEncoder,
+        buffer: *const MetalBuffer,
+        descriptor: core.BufferBarrierDescriptor,
+    ) !void {
+        _ = self;
+        _ = buffer;
+        _ = descriptor;
+    }
+
+    pub fn textureBarrier(
+        self: *BlitCommandEncoder,
+        texture: *MetalTexture,
+        descriptor: core.TextureBarrierDescriptor,
+    ) !void {
+        _ = self;
+        _ = texture;
+        _ = descriptor;
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         try check(metal.vkmtl_metal_blit_command_encoder_end_encoding(self.handle));
     }
@@ -432,6 +452,26 @@ pub const ComputeCommandEncoder = struct {
             descriptor.threads_per_threadgroup_y,
             descriptor.threads_per_threadgroup_z,
         ));
+    }
+
+    pub fn bufferBarrier(
+        self: *ComputeCommandEncoder,
+        buffer: *const MetalBuffer,
+        descriptor: core.BufferBarrierDescriptor,
+    ) !void {
+        _ = self;
+        _ = buffer;
+        _ = descriptor;
+    }
+
+    pub fn textureBarrier(
+        self: *ComputeCommandEncoder,
+        texture: *MetalTexture,
+        descriptor: core.TextureBarrierDescriptor,
+    ) !void {
+        _ = self;
+        _ = texture;
+        _ = descriptor;
     }
 
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {

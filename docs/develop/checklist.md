@@ -1349,6 +1349,58 @@ obvious render and binding blockers.
 - [x] Confirm feature gates return clear errors on unsupported backends.
 - [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
+## Period 23 Phase 1 Checklist
+
+- [x] Define explicit barrier encoder method names and ownership boundaries.
+- [x] Lower Vulkan buffer and texture barriers to command buffer barriers.
+- [x] Keep Metal mapping as validation/no-op synchronization markers.
+- [x] Update resource usage state when explicit barriers are recorded.
+- [x] Add tests for invalid before/after usage transitions.
+- [x] Update API and usage docs for executable explicit barriers.
+
+## Period 23 Phase 2 Checklist
+
+- [ ] Define runtime fence/event object ownership.
+- [ ] Add binary fence lifecycle operations.
+- [ ] Add timeline fence validation and state tracking where supported.
+- [ ] Add event/shared-event lifecycle operations behind feature gates.
+- [ ] Map Vulkan and Metal native synchronization where available.
+- [ ] Add lifecycle tests for wait, signal, reset, and destroy ordering.
+
+## Period 23 Phase 3 Checklist
+
+- [ ] Query queue capabilities from backend runtimes.
+- [ ] Route queue descriptors through runtime queue views.
+- [ ] Preserve graphics queue as the default fallback path.
+- [ ] Lower dedicated compute/transfer queue selection where supported.
+- [ ] Add queue-selection tests.
+- [ ] Document backend queue limitations.
+
+## Period 23 Phase 4 Checklist
+
+- [ ] Define queue ownership transfer resource state updates.
+- [ ] Lower Vulkan queue family ownership transfer barriers.
+- [ ] Keep Metal ownership transfers as validation/no-op behavior.
+- [ ] Validate illegal cross-queue access.
+- [ ] Add tests for missing and redundant ownership transfers.
+- [ ] Document backend differences.
+
+## Period 23 Phase 5 Checklist
+
+- [ ] Add runtime query set objects.
+- [ ] Lower occlusion, timestamp, and pipeline statistics query commands.
+- [ ] Add query resolve and readback helpers.
+- [ ] Keep unsupported query paths typed and capability-gated.
+- [ ] Add deterministic query tests where possible.
+- [ ] Add usage docs for query/profiling commands.
+
+## Period 23 Phase 6 Checklist
+
+- [ ] Update backend matrix entries for sync and query features.
+- [ ] Add final Period 23 validation tests.
+- [ ] Update docs that separate portable defaults from escape hatches.
+- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

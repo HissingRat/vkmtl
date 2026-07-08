@@ -147,15 +147,19 @@ Native handle import/export remains explicit future backend work.
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and
 write-after-write hazards. Blit copies, render attachments, vertex buffers, and
-index buffers already feed this state. Later Vulkan barrier lowering should
-consume these transitions.
+index buffers already feed this state. Explicit barrier commands also update
+the same tracked state.
 
 Manual barriers are an advanced escape hatch. `BufferBarrierDescriptor` and
 `TextureBarrierDescriptor` validate ranges and before/after usage transitions,
-and `ResourceUsageState.applyExplicitBarrier(...)` records an explicit tracked
-transition. Native explicit-barrier commands are gated by
-`DeviceFeatures.explicit_resource_barriers` and disabled by default; ordinary
-code should keep using the automatic usage-tracking path.
+and `ResourceUsageState.applyExplicitBarrier(...)` records the tracked
+transition. Use `BlitCommandEncoder.bufferBarrier(...)` /
+`textureBarrier(...)` or the matching compute encoder methods when an
+application needs an explicit synchronization point. Vulkan lowers these calls
+to `vkCmdPipelineBarrier`; Metal treats them as validation/no-op synchronization
+markers because ordinary Metal encoders already define most resource ordering.
+The path is gated by `DeviceFeatures.explicit_resource_barriers`; ordinary code
+should keep using the automatic usage-tracking path.
 
 Fence and event synchronization is descriptor-only in this period.
 `FenceDescriptor`, `FenceSignalDescriptor`, and `FenceWaitDescriptor` validate
@@ -494,6 +498,10 @@ texture-to-buffer, and texture-to-texture copies.
 supports arbitrary byte ranges; Vulkan uses `vkCmdFillBuffer`, so Vulkan
 requires offset and size to be 4-byte aligned and returns
 `UnsupportedFillBuffer` otherwise.
+
+Advanced users can insert explicit barriers from blit encoders with
+`bufferBarrier(...)` and `textureBarrier(...)`. These methods validate the
+descriptor against the tracked resource state before touching the backend.
 
 Compute work uses a Metal-style compute encoder:
 

@@ -873,6 +873,22 @@ pub const BlitCommandEncoder = struct {
         );
     }
 
+    pub fn bufferBarrier(
+        self: *BlitCommandEncoder,
+        buffer: *const VulkanBuffer,
+        descriptor: core.BufferBarrierDescriptor,
+    ) !void {
+        applyBufferBarrier(self.gc, self.cmdbuf, buffer, descriptor);
+    }
+
+    pub fn textureBarrier(
+        self: *BlitCommandEncoder,
+        texture: *VulkanTexture,
+        descriptor: core.TextureBarrierDescriptor,
+    ) !void {
+        applyTextureBarrier(self.gc, self.cmdbuf, texture, descriptor);
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         try self.gc.dev.endCommandBuffer(self.cmdbuf);
     }
@@ -983,10 +999,90 @@ pub const ComputeCommandEncoder = struct {
         );
     }
 
+    pub fn bufferBarrier(
+        self: *ComputeCommandEncoder,
+        buffer: *const VulkanBuffer,
+        descriptor: core.BufferBarrierDescriptor,
+    ) !void {
+        applyBufferBarrier(self.gc, self.cmdbuf, buffer, descriptor);
+    }
+
+    pub fn textureBarrier(
+        self: *ComputeCommandEncoder,
+        texture: *VulkanTexture,
+        descriptor: core.TextureBarrierDescriptor,
+    ) !void {
+        applyTextureBarrier(self.gc, self.cmdbuf, texture, descriptor);
+    }
+
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
         try self.gc.dev.endCommandBuffer(self.cmdbuf);
     }
 };
+
+fn applyBufferBarrier(
+    gc: *const GraphicsContext,
+    cmdbuf: vk.CommandBuffer,
+    buffer: *const VulkanBuffer,
+    descriptor: core.BufferBarrierDescriptor,
+) void {
+    const size = descriptor.size orelse @as(u64, @intCast(buffer.length_value)) - descriptor.offset;
+    const barrier = vk.BufferMemoryBarrier{
+        .src_access_mask = accessMaskForUsage(descriptor.before),
+        .dst_access_mask = accessMaskForUsage(descriptor.after),
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .buffer = buffer.handle,
+        .offset = descriptor.offset,
+        .size = size,
+    };
+
+    gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        stageMaskForUsage(descriptor.before),
+        stageMaskForUsage(descriptor.after),
+        .{},
+        null,
+        &.{barrier},
+        null,
+    );
+}
+
+fn applyTextureBarrier(
+    gc: *const GraphicsContext,
+    cmdbuf: vk.CommandBuffer,
+    texture: *VulkanTexture,
+    descriptor: core.TextureBarrierDescriptor,
+) void {
+    const new_layout = imageLayoutForUsage(texture.descriptor.format, descriptor.after);
+    const barrier = vk.ImageMemoryBarrier{
+        .src_access_mask = accessMaskForUsage(descriptor.before),
+        .dst_access_mask = accessMaskForUsage(descriptor.after),
+        .old_layout = imageLayoutForUsage(texture.descriptor.format, descriptor.before),
+        .new_layout = new_layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = texture.handle,
+        .subresource_range = .{
+            .aspect_mask = imageAspectMask(texture.descriptor.format),
+            .base_mip_level = descriptor.base_mip_level,
+            .level_count = descriptor.mip_level_count,
+            .base_array_layer = descriptor.base_array_layer,
+            .layer_count = descriptor.array_layer_count,
+        },
+    };
+
+    gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        stageMaskForUsage(descriptor.before),
+        stageMaskForUsage(descriptor.after),
+        .{},
+        null,
+        null,
+        &.{barrier},
+    );
+    texture.layout = new_layout;
+}
 
 fn bufferImageCopy(texture: *const VulkanTexture, resolved: core.ResolvedBufferTextureCopy) vk.BufferImageCopy {
     return .{
@@ -1067,5 +1163,96 @@ fn shaderStageFlags(visibility: core.ShaderVisibility) vk.ShaderStageFlags {
         .vertex_bit = visibility.vertex,
         .fragment_bit = visibility.fragment,
         .compute_bit = visibility.compute,
+    };
+}
+
+fn accessMaskForUsage(usage: core.ResourceUsageKind) vk.AccessFlags {
+    return switch (usage) {
+        .vertex_buffer => .{ .vertex_attribute_read_bit = true },
+        .index_buffer => .{ .index_read_bit = true },
+        .uniform_buffer => .{ .uniform_read_bit = true },
+        .storage_buffer_read,
+        .sampled_texture,
+        .storage_texture_read,
+        => .{ .shader_read_bit = true },
+        .storage_buffer_write,
+        .storage_texture_write,
+        => .{ .shader_read_bit = true, .shader_write_bit = true },
+        .indirect_buffer => .{ .indirect_command_read_bit = true },
+        .render_attachment_read => .{
+            .color_attachment_read_bit = true,
+            .depth_stencil_attachment_read_bit = true,
+        },
+        .render_attachment_write => .{
+            .color_attachment_write_bit = true,
+            .depth_stencil_attachment_write_bit = true,
+        },
+        .copy_source => .{ .transfer_read_bit = true },
+        .copy_destination => .{ .transfer_write_bit = true },
+        .present => .{ .memory_read_bit = true },
+    };
+}
+
+fn stageMaskForUsage(usage: core.ResourceUsageKind) vk.PipelineStageFlags {
+    return switch (usage) {
+        .vertex_buffer,
+        .index_buffer,
+        => .{ .vertex_input_bit = true },
+        .uniform_buffer,
+        .storage_buffer_read,
+        .storage_buffer_write,
+        .sampled_texture,
+        .storage_texture_read,
+        .storage_texture_write,
+        => .{
+            .vertex_shader_bit = true,
+            .fragment_shader_bit = true,
+            .compute_shader_bit = true,
+        },
+        .indirect_buffer => .{ .draw_indirect_bit = true },
+        .render_attachment_read,
+        .render_attachment_write,
+        => .{
+            .color_attachment_output_bit = true,
+            .early_fragment_tests_bit = true,
+            .late_fragment_tests_bit = true,
+        },
+        .copy_source,
+        .copy_destination,
+        => .{ .transfer_bit = true },
+        .present => .{ .bottom_of_pipe_bit = true },
+    };
+}
+
+fn imageLayoutForUsage(format: core.TextureFormat, usage: core.ResourceUsageKind) vk.ImageLayout {
+    return switch (usage) {
+        .sampled_texture => .shader_read_only_optimal,
+        .storage_texture_read,
+        .storage_texture_write,
+        => .general,
+        .render_attachment_read,
+        .render_attachment_write,
+        => if (core.isDepthFormat(format) or core.isStencilFormat(format))
+            .depth_stencil_attachment_optimal
+        else
+            .color_attachment_optimal,
+        .copy_source => .transfer_src_optimal,
+        .copy_destination => .transfer_dst_optimal,
+        .present => .present_src_khr,
+        .vertex_buffer,
+        .index_buffer,
+        .uniform_buffer,
+        .storage_buffer_read,
+        .storage_buffer_write,
+        .indirect_buffer,
+        => .general,
+    };
+}
+
+fn imageAspectMask(format: core.TextureFormat) vk.ImageAspectFlags {
+    return .{
+        .color_bit = !core.isDepthFormat(format) and !core.isStencilFormat(format),
+        .depth_bit = core.isDepthFormat(format),
+        .stencil_bit = core.isStencilFormat(format),
     };
 }

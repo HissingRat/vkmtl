@@ -120,14 +120,16 @@ texture shape。Native handle import/export 仍是显式 future backend work。
 
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、
-render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。后续 Vulkan
-barrier lowering 会消费这些 transition。
+render attachment、vertex buffer 和 index buffer 路径已经写入 usage state。显式 barrier
+command 也会更新同一份 tracked state。
 
 手动 barrier 是高级 escape hatch。`BufferBarrierDescriptor` 和
 `TextureBarrierDescriptor` 会校验范围与 before/after usage transition；
-`ResourceUsageState.applyExplicitBarrier(...)` 会记录显式 tracked transition。Native
-explicit-barrier command 由 `DeviceFeatures.explicit_resource_barriers` gate 控制，默认关闭；
-普通代码应该继续走自动 usage-tracking 路径。
+`ResourceUsageState.applyExplicitBarrier(...)` 会记录 tracked transition。需要显式同步点时，
+可以调用 `BlitCommandEncoder.bufferBarrier(...)` / `textureBarrier(...)`，或对应的
+compute encoder 方法。Vulkan 会下沉为 `vkCmdPipelineBarrier`；Metal 会作为 validation/no-op
+synchronization marker，因为普通 Metal encoder 已经定义了大多数 resource ordering。这个路径由
+`DeviceFeatures.explicit_resource_barriers` gate 控制；普通代码应该继续走自动 usage-tracking 路径。
 
 Fence 与 event synchronization 在这个 period 仍是 descriptor-only。
 `FenceDescriptor`、`FenceSignalDescriptor` 和 `FenceWaitDescriptor` 会在
@@ -413,6 +415,9 @@ try command_buffer.commit();
 texture-to-texture。`BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
 Metal 支持任意 byte range，Vulkan 使用 `vkCmdFillBuffer`，因此 Vulkan 路径要求 offset 和
 size 都按 4 字节对齐，否则返回 `UnsupportedFillBuffer`。
+
+高级用户可以在 blit encoder 上通过 `bufferBarrier(...)` 和 `textureBarrier(...)`
+插入显式 barrier。这些方法会先用 tracked resource state 校验 descriptor，再进入 backend。
 
 Compute 使用 Metal 风格的 compute encoder：
 

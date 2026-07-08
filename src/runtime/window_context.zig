@@ -1932,6 +1932,7 @@ pub const CommandBuffer = struct {
     label_value: ?[]const u8 = null,
     alive: bool = true,
     uses_current_drawable_pass: bool = false,
+    features_value: core.DeviceFeatures = .{},
     debug: core.CommandBufferDebugState = .{},
     debug_groups: core.DebugGroupStack = .{},
     impl: ?Impl = null,
@@ -2225,6 +2226,32 @@ pub const BlitCommandEncoder = struct {
         };
     }
 
+    pub fn bufferBarrier(
+        self: *BlitCommandEncoder,
+        buffer: *Buffer,
+        descriptor: core.BufferBarrierDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        try recordBufferBarrier(self.backend, self.command_buffer.features_value, buffer, descriptor);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.impl.vulkan, descriptor),
+            .metal => |*metal| try metal.bufferBarrier(&buffer.impl.metal, descriptor),
+        };
+    }
+
+    pub fn textureBarrier(
+        self: *BlitCommandEncoder,
+        texture: *Texture,
+        descriptor: core.TextureBarrierDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        try recordTextureBarrier(self.backend, self.command_buffer.features_value, texture, descriptor);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.impl.vulkan, descriptor),
+            .metal => |*metal| try metal.textureBarrier(&texture.impl.metal, descriptor),
+        };
+    }
+
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
         try self.debug_groups.requireEmpty();
@@ -2413,6 +2440,32 @@ pub const ComputeCommandEncoder = struct {
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.dispatchThreadgroupsIndirect(&indirect_buffer.impl.vulkan, descriptor),
             .metal => |*metal| try metal.dispatchThreadgroupsIndirect(&indirect_buffer.impl.metal, descriptor),
+        };
+    }
+
+    pub fn bufferBarrier(
+        self: *ComputeCommandEncoder,
+        buffer: *Buffer,
+        descriptor: core.BufferBarrierDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        try recordBufferBarrier(self.backend, self.command_buffer.features_value, buffer, descriptor);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.impl.vulkan, descriptor),
+            .metal => |*metal| try metal.bufferBarrier(&buffer.impl.metal, descriptor),
+        };
+    }
+
+    pub fn textureBarrier(
+        self: *ComputeCommandEncoder,
+        texture: *Texture,
+        descriptor: core.TextureBarrierDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        try recordTextureBarrier(self.backend, self.command_buffer.features_value, texture, descriptor);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.impl.vulkan, descriptor),
+            .metal => |*metal| try metal.textureBarrier(&texture.impl.metal, descriptor),
         };
     }
 
@@ -2939,6 +2992,7 @@ pub const Queue = struct {
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .features_value = self.features_value,
             .debug = debug,
             .impl = impl,
         };
@@ -3764,6 +3818,30 @@ fn materializeBindGroupEntries(
     }).validate();
 
     return entries;
+}
+
+fn recordBufferBarrier(
+    backend: core.Backend,
+    features: core.DeviceFeatures,
+    buffer: *Buffer,
+    descriptor: core.BufferBarrierDescriptor,
+) !void {
+    assertAlive(buffer.alive, .buffer);
+    try expectSameBackend(backend, buffer.backend);
+    try descriptor.validate(buffer.length(), features);
+    _ = try buffer.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+}
+
+fn recordTextureBarrier(
+    backend: core.Backend,
+    features: core.DeviceFeatures,
+    texture: *Texture,
+    descriptor: core.TextureBarrierDescriptor,
+) !void {
+    assertAlive(texture.alive, .texture);
+    try expectSameBackend(backend, texture.backend);
+    try descriptor.validate(texture.textureDescriptor(), features);
+    _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
 }
 
 fn validateDynamicOffsetsForBindGroup(
@@ -4784,6 +4862,91 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
     try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
     try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
+}
+
+test "runtime explicit barriers update resource usage state" {
+    var tracker = ResourceTracker{};
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .features_value = core.defaultDeviceFeatures(.vulkan),
+        .impl = null,
+    };
+    var blit = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .impl = null,
+    };
+
+    var buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 64,
+        .usage_value = .{ .copy_destination = true, .vertex = true },
+        .storage_mode_value = .shared,
+        .usage_state = .{ .current = .copy_destination },
+        .impl = undefined,
+    };
+
+    try blit.bufferBarrier(&buffer, .{
+        .before = .copy_destination,
+        .after = .vertex_buffer,
+        .offset = 0,
+        .size = 64,
+    });
+    try std.testing.expectEqual(core.ResourceUsageKind.vertex_buffer, buffer.currentUsage().?);
+    try std.testing.expectEqual(@as(usize, 1), buffer.usageBarrierCount());
+    try std.testing.expectError(core.CommandEncodingError.InvalidResourceBarrierState, blit.bufferBarrier(&buffer, .{
+        .before = .copy_destination,
+        .after = .index_buffer,
+    }));
+
+    const texture_descriptor = core.TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .usage = .{ .copy_destination = true, .shader_read = true },
+    };
+    var texture = Texture{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = texture_descriptor.format,
+        .usage_value = texture_descriptor.usage,
+        .sample_count_value = texture_descriptor.sample_count,
+        .usage_state = .{ .current = .copy_destination },
+        .impl = .{ .vulkan = .{
+            .gc = undefined,
+            .handle = .null_handle,
+            .memory = .null_handle,
+            .descriptor = texture_descriptor,
+            .layout = .undefined,
+            .width_value = texture_descriptor.width,
+            .height_value = texture_descriptor.height,
+            .depth_or_array_layers_value = texture_descriptor.depth_or_array_layers,
+            .mip_level_count_value = texture_descriptor.mip_level_count,
+        } },
+    };
+
+    try blit.textureBarrier(&texture, .{
+        .before = .copy_destination,
+        .after = .sampled_texture,
+    });
+    try std.testing.expectEqual(core.ResourceUsageKind.sampled_texture, texture.currentUsage().?);
+    try std.testing.expectEqual(@as(usize, 1), texture.usageBarrierCount());
+
+    var gated_command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .features_value = .{},
+        .impl = null,
+    };
+    var gated_compute = ComputeCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &gated_command_buffer,
+        .impl = null,
+    };
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedExplicitResourceBarrier, gated_compute.bufferBarrier(&buffer, .{
+        .before = .vertex_buffer,
+        .after = .copy_destination,
+    }));
 }
 
 test "runtime bind group materialization validates resources against layout" {
