@@ -1707,6 +1707,17 @@ obvious render and binding blockers.
 - [x] Document executable native advanced examples as deferred to Period 29
   Phase 7.
 
+## Period 29 Phase 1 Checklist
+
+- [x] Add runtime acceleration-structure objects owned by `Device`.
+- [x] Keep acceleration-structure creation gated by native feature reports.
+- [x] Add scratch/result resource validation for build plans.
+- [x] Add command-buffer build encoding metadata and built-state tracking.
+- [x] Add focused runtime tests for invalid scratch resources and successful
+  build encoding.
+- [x] Document that backend-private native AS handles are still deferred to
+  Period 30 Phase 1.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

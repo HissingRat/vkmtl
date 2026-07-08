@@ -118,6 +118,14 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
     if (usage.uniform) flags.uniform_buffer_bit = true;
     if (usage.storage) flags.storage_buffer_bit = true;
     if (usage.indirect) flags.indirect_buffer_bit = true;
+    if (usage.acceleration_structure_scratch) {
+        flags.storage_buffer_bit = true;
+        flags.shader_device_address_bit = true;
+    }
+    if (usage.shader_binding_table) {
+        flags.shader_binding_table_bit_khr = true;
+        flags.shader_device_address_bit = true;
+    }
 
     if (usage.isEmpty()) {
         flags.transfer_dst_bit = true;

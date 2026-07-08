@@ -237,8 +237,12 @@ pub const ResourceUsageKind = enum {
     uniform_buffer,
     storage_buffer_read,
     storage_buffer_write,
+    acceleration_structure_read,
+    acceleration_structure_write,
+    acceleration_structure_scratch,
     sampled_texture,
     indirect_buffer,
+    shader_binding_table,
     storage_texture_read,
     storage_texture_write,
     render_attachment_read,
@@ -253,14 +257,18 @@ pub const ResourceUsageKind = enum {
             .index_buffer,
             .uniform_buffer,
             .storage_buffer_read,
+            .acceleration_structure_read,
             .sampled_texture,
             .indirect_buffer,
+            .shader_binding_table,
             .storage_texture_read,
             .render_attachment_read,
             .copy_source,
             .present,
             => .read,
             .storage_buffer_write,
+            .acceleration_structure_write,
+            .acceleration_structure_scratch,
             .storage_texture_write,
             .render_attachment_write,
             .copy_destination,
@@ -735,6 +743,7 @@ pub const AdvancedFeatureError = error{
     UnsupportedAccelerationStructures,
     UnsupportedRayTracing,
     InvalidAccelerationStructureDescriptor,
+    InvalidAccelerationStructureResources,
     InvalidRayTracingPipeline,
     InvalidShaderBindingTable,
     UnsupportedDriverPipelineCache,
@@ -1613,6 +1622,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.MissingMeshStage,
         error.InvalidMeshThreadgroupSize,
         error.InvalidAccelerationStructureDescriptor,
+        error.InvalidAccelerationStructureResources,
         error.InvalidRayTracingPipeline,
         error.InvalidShaderBindingTable,
         error.EmptyDriverCachePath,
@@ -6682,6 +6692,8 @@ pub const BufferUsage = struct {
     uniform: bool = false,
     storage: bool = false,
     indirect: bool = false,
+    acceleration_structure_scratch: bool = false,
+    shader_binding_table: bool = false,
 
     pub fn isEmpty(self: BufferUsage) bool {
         return !self.copy_source and
@@ -6690,7 +6702,9 @@ pub const BufferUsage = struct {
             !self.index and
             !self.uniform and
             !self.storage and
-            !self.indirect;
+            !self.indirect and
+            !self.acceleration_structure_scratch and
+            !self.shader_binding_table;
     }
 };
 

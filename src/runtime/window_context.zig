@@ -49,6 +49,7 @@ pub const ResourceKind = enum {
     event,
     query_set,
     heap,
+    acceleration_structure,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -81,6 +82,7 @@ pub const ResourceTracker = struct {
     events: usize = 0,
     query_sets: usize = 0,
     heaps: usize = 0,
+    acceleration_structures: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -143,7 +145,8 @@ pub const ResourceTracker = struct {
             self.fences +
             self.events +
             self.query_sets +
-            self.heaps;
+            self.heaps +
+            self.acceleration_structures;
     }
 
     pub fn diagnosticsSnapshot(self: ResourceTracker) core.RuntimeDiagnosticsSnapshot {
@@ -233,13 +236,14 @@ pub const ResourceTracker = struct {
             self.fences != 0 or
             self.events != 0 or
             self.query_sets != 0 or
-            self.heaps != 0;
+            self.heaps != 0 or
+            self.acceleration_structures != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -260,6 +264,7 @@ pub const ResourceTracker = struct {
                     self.events,
                     self.query_sets,
                     self.heaps,
+                    self.acceleration_structures,
                 },
             );
         }
@@ -292,6 +297,7 @@ pub const ResourceTracker = struct {
             .event => &self.events,
             .query_set => &self.query_sets,
             .heap => &self.heaps,
+            .acceleration_structure => &self.acceleration_structures,
         };
     }
 
@@ -1519,6 +1525,112 @@ pub const Heap = struct {
     }
 };
 
+pub const AccelerationStructure = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.AccelerationStructureDescriptor,
+    sizes_value: core.AccelerationStructureBuildSizes,
+    built_value: bool = false,
+    alive: bool = true,
+
+    pub fn deinit(self: *AccelerationStructure) void {
+        assertAlive(self.alive, .acceleration_structure);
+        self.alive = false;
+        self.tracker.release(.acceleration_structure);
+    }
+
+    pub fn selectedBackend(self: AccelerationStructure) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: AccelerationStructure) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *AccelerationStructure, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .acceleration_structure);
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: AccelerationStructure) core.AccelerationStructureDescriptor {
+        assertAlive(self.alive, .acceleration_structure);
+        return self.descriptor_value;
+    }
+
+    pub fn buildSizes(self: AccelerationStructure) core.AccelerationStructureBuildSizes {
+        assertAlive(self.alive, .acceleration_structure);
+        return self.sizes_value;
+    }
+
+    pub fn resultSize(self: AccelerationStructure) u64 {
+        return self.buildSizes().result_size;
+    }
+
+    pub fn scratchSize(self: AccelerationStructure) u64 {
+        return self.buildSizes().scratch_size;
+    }
+
+    pub fn updateScratchSize(self: AccelerationStructure) u64 {
+        return self.buildSizes().update_scratch_size;
+    }
+
+    pub fn isBuilt(self: AccelerationStructure) bool {
+        assertAlive(self.alive, .acceleration_structure);
+        return self.built_value;
+    }
+
+    fn markBuilt(self: *AccelerationStructure) void {
+        assertAlive(self.alive, .acceleration_structure);
+        self.built_value = true;
+    }
+};
+
+pub const AccelerationStructureBuildResources = struct {
+    result: *AccelerationStructure,
+    scratch: *Buffer,
+    update_source: ?*AccelerationStructure = null,
+    scratch_offset: u64 = 0,
+
+    pub fn validate(
+        self: AccelerationStructureBuildResources,
+        backend: core.Backend,
+        plan: core.AccelerationStructureBuildPlan,
+    ) core.AdvancedFeatureError!void {
+        assertAlive(self.result.alive, .acceleration_structure);
+        assertAlive(self.scratch.alive, .buffer);
+        if (self.result.backend != backend or self.scratch.backend != backend) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (!self.scratch.usage_value.acceleration_structure_scratch) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (plan.scratch_alignment != 0 and self.scratch_offset % plan.scratch_alignment != 0) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        const required_scratch = if (plan.mode == .update and plan.update_scratch_size != 0) plan.update_scratch_size else plan.scratch_size;
+        const scratch_end = std.math.add(u64, self.scratch_offset, required_scratch) catch {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        };
+        if (scratch_end > @as(u64, @intCast(self.scratch.length()))) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (self.result.descriptor_value.kind != plan.kind or
+            self.result.descriptor_value.primitive_count != plan.primitive_count or
+            self.result.resultSize() < plan.result_size)
+        {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (plan.requiresUpdateSource()) {
+            const source = self.update_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            assertAlive(source.alive, .acceleration_structure);
+            if (source.backend != backend or source.descriptor_value.kind != plan.kind or !source.isBuilt()) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+        }
+    }
+};
+
 fn alignForwardU64(value: u64, alignment: u64) !u64 {
     if (alignment == 0) return error.InvalidAlignment;
     const remainder = value % alignment;
@@ -2639,6 +2751,19 @@ pub const CommandBuffer = struct {
             .vulkan => |*vulkan| try vulkan.presentDrawable(),
             .metal => |*metal| try metal.presentDrawable(),
         }
+    }
+
+    pub fn encodeAccelerationStructureBuild(
+        self: *CommandBuffer,
+        plan: core.AccelerationStructureBuildPlan,
+        resources: AccelerationStructureBuildResources,
+    ) !void {
+        assertObjectAlive(self.alive, "command_buffer");
+        if (self.debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try resources.validate(self.backend, plan);
+        _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
+        resources.result.markBuilt();
     }
 
     pub fn label(self: CommandBuffer) ?[]const u8 {
@@ -3936,6 +4061,18 @@ pub const Device = struct {
             descriptor,
             self.nativeFeatures(),
         );
+    }
+
+    pub fn makeAccelerationStructure(self: *Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!AccelerationStructure {
+        try descriptor.validate(self.nativeFeatures());
+        self.tracker.retain(.acceleration_structure);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .label_value = descriptor.label,
+            .descriptor_value = descriptor,
+            .sizes_value = core.estimateAccelerationStructureBuildSizes(descriptor),
+        };
     }
 
     pub fn validateRayTracingPipelineDescriptor(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!void {
@@ -5434,6 +5571,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .event => "event",
         .query_set => "query_set",
         .heap => "heap",
+        .acceleration_structure => "acceleration_structure",
     };
 }
 
@@ -6021,6 +6159,73 @@ test "runtime device plans acceleration structure builds from native capabilitie
     try std.testing.expectEqual(core.AccelerationStructureBuildMode.update, plan.mode);
     try std.testing.expectEqual(@as(u32, 2), plan.primitive_count);
     try std.testing.expect(plan.update_scratch_size > 0);
+}
+
+test "runtime encodes acceleration structure build resources from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.acceleration_structures = false;
+    report.native_features.acceleration_structures = true;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test acceleration build adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.AccelerationStructureDescriptor{
+        .label = "blas",
+        .kind = .bottom_level,
+        .primitive_count = 1,
+    };
+    var acceleration_structure = try device.makeAccelerationStructure(descriptor);
+    defer acceleration_structure.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.acceleration_structures);
+    try std.testing.expectEqualStrings("blas", acceleration_structure.label().?);
+
+    const plan = try device.planAccelerationStructureBuild(.{
+        .acceleration_structure = descriptor,
+        .geometries = &.{.{
+            .kind = .triangles,
+            .primitive_count = 1,
+            .vertex_stride = 24,
+        }},
+    });
+    var scratch = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = @intCast(plan.scratch_size),
+        .usage_value = .{ .acceleration_structure_scratch = true },
+        .impl = undefined,
+    };
+    var bad_scratch = scratch;
+    bad_scratch.usage_value = .{ .storage = true };
+
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        (AccelerationStructureBuildResources{
+            .result = &acceleration_structure,
+            .scratch = &bad_scratch,
+        }).validate(.vulkan, plan),
+    );
+
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    };
+    try command_buffer.encodeAccelerationStructureBuild(plan, .{
+        .result = &acceleration_structure,
+        .scratch = &scratch,
+    });
+    try std.testing.expect(acceleration_structure.isBuilt());
+    try std.testing.expectEqual(core.ResourceUsageKind.acceleration_structure_scratch, scratch.currentUsage().?);
 }
 
 test "runtime device plans ray tracing pipeline lowering from native capabilities" {
