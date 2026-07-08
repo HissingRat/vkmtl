@@ -635,6 +635,32 @@ and returns `DriverPipelineCachePlan`, including whether the path already exists
 and whether shutdown should store a new blob. Pipeline creation does not consume
 native driver cache objects yet.
 
+## Stability Diagnostics
+
+`StabilityRunDescriptor` describes opt-in long-run checks without forcing them
+into default tests. It can plan resource churn, presentation resize/recreate
+cycles, shader-cache warm/cold cycles, upload/readback cycles, and Vulkan
+unaligned `fillBuffer(...)` fallback checks:
+
+```zig
+const plan = try vkmtl.StabilityRunDescriptor{
+    .iterations = 120,
+}.plan();
+
+const diagnostics = vkmtl.StabilityRunDiagnostics.fromPlan(plan);
+```
+
+`StabilityRunPlan` contains expected counters. `StabilityRunDiagnostics` can
+also record runtime snapshots, including pending retirement warnings and maximum
+live resources observed. The current opt-in command is:
+
+```sh
+zig build run-stability-plan -- --iterations 120
+```
+
+Native GPU soak loops and persistent staging-buffer pools remain backend
+hardening work.
+
 ## Debug Labels And Groups
 
 Runtime resources, command buffers, and command encoders expose borrowed debug

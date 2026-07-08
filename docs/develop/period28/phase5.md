@@ -7,6 +7,8 @@ Phase 5 finishes explicit backend-specific advanced access.
 - Expose native handles only through intentional APIs.
 - Add insertion or callback points for features that cannot be portable.
 - Keep safety checks around encoder/queue state.
+- Implement persistent native staging-buffer pools and reusable upload rings for
+  backend paths that currently allocate temporary staging resources.
 
 ## Validation
 

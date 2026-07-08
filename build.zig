@@ -566,6 +566,26 @@ pub fn build(b: *std.Build) void {
     const ray_traced_triangle_step = b.step("run-ray-traced-triangle", "Run the vkmtl ray tracing feature-gate example");
     ray_traced_triangle_step.dependOn(&ray_traced_triangle_cmd.step);
 
+    const stability_plan = b.addExecutable(.{
+        .name = "vkmtl-stability-plan",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/stability_plan/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+            },
+        }),
+    });
+    b.installArtifact(stability_plan);
+
+    const stability_plan_cmd = b.addRunArtifact(stability_plan);
+    forwardRunArgs(b, stability_plan_cmd);
+
+    const stability_plan_step = b.step("run-stability-plan", "Run the vkmtl opt-in stability plan diagnostic");
+    stability_plan_step.dependOn(&stability_plan_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

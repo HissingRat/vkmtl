@@ -1022,6 +1022,35 @@ pub fn fillBufferUsesStagingFallback(descriptor: core.FillBufferDescriptor) bool
     return descriptor.offset % 4 != 0 or descriptor.size % 4 != 0;
 }
 
+pub const FillBufferFallbackDiagnostics = struct {
+    native_fills: u64 = 0,
+    staging_fallbacks: u64 = 0,
+    native_bytes: u64 = 0,
+    staging_bytes: u64 = 0,
+
+    pub fn totalFills(self: FillBufferFallbackDiagnostics) u64 {
+        return self.native_fills + self.staging_fallbacks;
+    }
+
+    pub fn totalBytes(self: FillBufferFallbackDiagnostics) u64 {
+        return self.native_bytes + self.staging_bytes;
+    }
+};
+
+pub fn fillBufferFallbackDiagnostics(descriptors: []const core.FillBufferDescriptor) FillBufferFallbackDiagnostics {
+    var diagnostics = FillBufferFallbackDiagnostics{};
+    for (descriptors) |descriptor| {
+        if (fillBufferUsesStagingFallback(descriptor)) {
+            diagnostics.staging_fallbacks += 1;
+            diagnostics.staging_bytes = diagnostics.staging_bytes +| descriptor.size;
+        } else {
+            diagnostics.native_fills += 1;
+            diagnostics.native_bytes = diagnostics.native_bytes +| descriptor.size;
+        }
+    }
+    return diagnostics;
+}
+
 pub const ComputeCommandEncoder = struct {
     gc: *const GraphicsContext,
     cmdbuf: vk.CommandBuffer,
@@ -1476,4 +1505,26 @@ test "Vulkan fill buffer fallback selection covers unaligned ranges" {
         .offset = 4,
         .size = 7,
     }));
+
+    const descriptors = [_]core.FillBufferDescriptor{
+        .{
+            .offset = 0,
+            .size = 16,
+        },
+        .{
+            .offset = 1,
+            .size = 8,
+        },
+        .{
+            .offset = 4,
+            .size = 7,
+        },
+    };
+    const diagnostics = fillBufferFallbackDiagnostics(descriptors[0..]);
+    try std.testing.expectEqual(@as(u64, 1), diagnostics.native_fills);
+    try std.testing.expectEqual(@as(u64, 2), diagnostics.staging_fallbacks);
+    try std.testing.expectEqual(@as(u64, 16), diagnostics.native_bytes);
+    try std.testing.expectEqual(@as(u64, 15), diagnostics.staging_bytes);
+    try std.testing.expectEqual(@as(u64, 3), diagnostics.totalFills());
+    try std.testing.expectEqual(@as(u64, 31), diagnostics.totalBytes());
 }

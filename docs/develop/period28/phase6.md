@@ -14,6 +14,8 @@ Phase 6 turns parity into a maintained product artifact.
   unsupported.
 - Decide whether custom sampler border colors are worth a portable API or
   should remain a backend-specific extension path.
+- Add GPU-backed resize/resource/upload soak loops once the production matrix
+  identifies which backend paths are ready for long-running native execution.
 
 ## Validation
 

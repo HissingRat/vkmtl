@@ -1078,14 +1078,77 @@ pub const CaptureNameDescriptor = struct {
     }
 };
 
+pub const StabilityRunError = error{
+    InvalidDrawCount,
+    InvalidStabilityRunInterval,
+    InvalidStabilityResourceCount,
+    InvalidCopySize,
+};
+
+pub const StabilityRunPlan = struct {
+    iterations: u32,
+    resize_events: u64,
+    resources_created: u64,
+    shader_cache_cycles: u64,
+    upload_readback_cycles: u64,
+    upload_bytes: u64,
+    vulkan_unaligned_fill_fallback_checks: u64,
+    max_live_resources: usize,
+
+    pub fn expectsResize(self: StabilityRunPlan) bool {
+        return self.resize_events != 0;
+    }
+
+    pub fn expectsUploadReadback(self: StabilityRunPlan) bool {
+        return self.upload_readback_cycles != 0;
+    }
+
+    pub fn expectsVulkanFillFallbackChecks(self: StabilityRunPlan) bool {
+        return self.vulkan_unaligned_fill_fallback_checks != 0;
+    }
+};
+
 pub const StabilityRunDescriptor = struct {
     iterations: u32,
     resource_churn: bool = true,
     presentation_resize: bool = true,
     shader_cache_warm_cold: bool = true,
+    upload_readback: bool = true,
+    vulkan_unaligned_fill_fallback: bool = true,
+    resize_interval: u32 = 60,
+    shader_cache_interval: u32 = 30,
+    upload_readback_interval: u32 = 1,
+    resources_per_iteration: u32 = 4,
+    upload_bytes_per_iteration: u64 = 4096,
+    max_live_resources: usize = 256,
 
-    pub fn validate(self: StabilityRunDescriptor) error{InvalidDrawCount}!void {
-        if (self.iterations == 0) return error.InvalidDrawCount;
+    pub fn validate(self: StabilityRunDescriptor) StabilityRunError!void {
+        if (self.iterations == 0) return StabilityRunError.InvalidDrawCount;
+        if (self.presentation_resize and self.resize_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
+        if (self.shader_cache_warm_cold and self.shader_cache_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
+        if (self.upload_readback and self.upload_readback_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
+        if (self.resource_churn and (self.resources_per_iteration == 0 or self.max_live_resources == 0)) {
+            return StabilityRunError.InvalidStabilityResourceCount;
+        }
+        if (self.upload_readback and self.upload_bytes_per_iteration == 0) return StabilityRunError.InvalidCopySize;
+    }
+
+    pub fn plan(self: StabilityRunDescriptor) StabilityRunError!StabilityRunPlan {
+        try self.validate();
+        const upload_cycles = stabilityScheduledCycles(self.upload_readback, self.iterations, self.upload_readback_interval);
+        return .{
+            .iterations = self.iterations,
+            .resize_events = stabilityScheduledCycles(self.presentation_resize, self.iterations, self.resize_interval),
+            .resources_created = if (self.resource_churn)
+                @as(u64, self.iterations) * @as(u64, self.resources_per_iteration)
+            else
+                0,
+            .shader_cache_cycles = stabilityScheduledCycles(self.shader_cache_warm_cold, self.iterations, self.shader_cache_interval),
+            .upload_readback_cycles = upload_cycles,
+            .upload_bytes = saturatingMulU64(upload_cycles, self.upload_bytes_per_iteration),
+            .vulkan_unaligned_fill_fallback_checks = if (self.vulkan_unaligned_fill_fallback) upload_cycles else 0,
+            .max_live_resources = if (self.resource_churn) self.max_live_resources else 0,
+        };
     }
 };
 
@@ -1094,7 +1157,45 @@ pub const StabilityRunDiagnostics = struct {
     resources_created: u64 = 0,
     resize_events: u64 = 0,
     cache_cycles: u64 = 0,
+    upload_readback_cycles: u64 = 0,
+    upload_bytes: u64 = 0,
+    vulkan_unaligned_fill_fallback_checks: u64 = 0,
+    max_live_resources: usize = 0,
+    leak_reports: u64 = 0,
+    pending_retirement_warnings: u64 = 0,
+    backend_errors: u64 = 0,
+
+    pub fn fromPlan(plan: StabilityRunPlan) StabilityRunDiagnostics {
+        return .{
+            .iterations_completed = plan.iterations,
+            .resources_created = plan.resources_created,
+            .resize_events = plan.resize_events,
+            .cache_cycles = plan.shader_cache_cycles,
+            .upload_readback_cycles = plan.upload_readback_cycles,
+            .upload_bytes = plan.upload_bytes,
+            .vulkan_unaligned_fill_fallback_checks = plan.vulkan_unaligned_fill_fallback_checks,
+            .max_live_resources = plan.max_live_resources,
+        };
+    }
+
+    pub fn recordRuntimeSnapshot(self: *StabilityRunDiagnostics, snapshot: RuntimeDiagnosticsSnapshot) void {
+        self.max_live_resources = @max(self.max_live_resources, snapshot.live_resources);
+        if (snapshot.pending_retirements != 0) self.pending_retirement_warnings += 1;
+    }
+
+    pub fn hasFailures(self: StabilityRunDiagnostics) bool {
+        return self.leak_reports != 0 or self.backend_errors != 0;
+    }
 };
+
+fn stabilityScheduledCycles(enabled: bool, iterations: u32, interval: u32) u64 {
+    if (!enabled) return 0;
+    return (@as(u64, iterations) + @as(u64, interval) - 1) / @as(u64, interval);
+}
+
+fn saturatingMulU64(a: u64, b: u64) u64 {
+    return std.math.mul(u64, a, b) catch std.math.maxInt(u64);
+}
 
 pub const VulkanNativeHandles = struct {
     instance: usize,
@@ -1459,6 +1560,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.EmptyDriverCacheIdentity,
         error.DriverCacheBackendMismatch,
         error.DriverCacheIdentityTooLarge,
+        error.InvalidStabilityRunInterval,
+        error.InvalidStabilityResourceCount,
         => .validation,
 
         error.SlangCompilationFailed,
@@ -7333,15 +7436,40 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     try std.testing.expect(plan.load_existing);
     try std.testing.expect(plan.store_on_shutdown);
 
-    try (StabilityRunDescriptor{ .iterations = 120 }).validate();
+    const stability_plan = try (StabilityRunDescriptor{ .iterations = 120 }).plan();
+    try std.testing.expectEqual(@as(u64, 2), stability_plan.resize_events);
+    try std.testing.expectEqual(@as(u64, 480), stability_plan.resources_created);
+    try std.testing.expectEqual(@as(u64, 4), stability_plan.shader_cache_cycles);
+    try std.testing.expectEqual(@as(u64, 120), stability_plan.upload_readback_cycles);
+    try std.testing.expectEqual(@as(u64, 120), stability_plan.vulkan_unaligned_fill_fallback_checks);
+    try std.testing.expect(stability_plan.expectsResize());
+    try std.testing.expect(stability_plan.expectsUploadReadback());
+    try std.testing.expect(stability_plan.expectsVulkanFillFallbackChecks());
+
     try std.testing.expectError(error.InvalidDrawCount, (StabilityRunDescriptor{ .iterations = 0 }).validate());
-    const stability = StabilityRunDiagnostics{
-        .iterations_completed = 120,
-        .resources_created = 2048,
-        .resize_events = 16,
-        .cache_cycles = 2,
-    };
+    try std.testing.expectError(error.InvalidStabilityRunInterval, (StabilityRunDescriptor{
+        .iterations = 1,
+        .resize_interval = 0,
+    }).validate());
+    try std.testing.expectError(error.InvalidStabilityResourceCount, (StabilityRunDescriptor{
+        .iterations = 1,
+        .resources_per_iteration = 0,
+    }).validate());
+    try std.testing.expectError(error.InvalidCopySize, (StabilityRunDescriptor{
+        .iterations = 1,
+        .upload_bytes_per_iteration = 0,
+    }).validate());
+
+    var stability = StabilityRunDiagnostics.fromPlan(stability_plan);
     try std.testing.expectEqual(@as(u32, 120), stability.iterations_completed);
+    try std.testing.expectEqual(@as(u64, 480), stability.resources_created);
+    try std.testing.expect(!stability.hasFailures());
+    stability.recordRuntimeSnapshot(.{
+        .live_resources = 12,
+        .pending_retirements = 1,
+    });
+    try std.testing.expectEqual(@as(usize, 256), stability.max_live_resources);
+    try std.testing.expectEqual(@as(u64, 1), stability.pending_retirement_warnings);
 }
 
 test "runtime cache manifests plan compatibility and stale entries" {

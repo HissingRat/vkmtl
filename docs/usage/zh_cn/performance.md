@@ -38,3 +38,14 @@ creation attempts；native object reuse 仍是后续 backend work。
 native barrier；Metal 会把它们当作 validation/no-op marker。
 Vulkan 上 `fillBuffer(...)` 在 offset 和 size 都 4-byte aligned 时最便宜；unaligned range 会走
 staging-copy fallback。
+
+## Stability Plans
+
+如果想在不开窗口的情况下检查 long-run 压力规划，可以使用 opt-in stability planner：
+
+```sh
+zig build run-stability-plan -- --iterations 120
+```
+
+这个命令会打印 resize、resource churn、shader cache、upload，以及 Vulkan unaligned-fill fallback
+的计划计数。完整 GPU soak loop 仍属于后续 backend hardening 工作。

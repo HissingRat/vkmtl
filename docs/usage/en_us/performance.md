@@ -43,3 +43,16 @@ tracks resource usage transitions. Explicit `bufferBarrier(...)` and
 to native barriers and Metal treats them as validation/no-op markers.
 `fillBuffer(...)` is cheapest on Vulkan when offset and size are 4-byte aligned;
 unaligned ranges use a staging-copy fallback.
+
+## Stability Plans
+
+Use the opt-in stability planner when checking expected long-run pressure
+without opening a window:
+
+```sh
+zig build run-stability-plan -- --iterations 120
+```
+
+This command prints the planned resize, resource churn, shader cache, upload,
+and Vulkan unaligned-fill fallback counters. Full GPU soak loops remain
+backend-hardening work.

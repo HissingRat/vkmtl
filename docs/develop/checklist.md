@@ -1551,6 +1551,19 @@ obvious render and binding blockers.
 - [x] Document native capture/profiler enrichment as deferred to Period 28
   Phase 6.
 
+## Period 26 Phase 5 Checklist
+
+- [x] Define stability run planning and diagnostic semantics before adding
+  backend soak runners.
+- [x] Add resource churn, resize, shader-cache, upload/readback, and Vulkan
+  unaligned-fill fallback counters to stability diagnostics.
+- [x] Add an opt-in `run-stability-plan` command that normal test runs do not
+  execute.
+- [x] Add Vulkan unaligned `fillBuffer(...)` fallback diagnostics for long-run
+  staging checks.
+- [x] Document persistent native staging-buffer pooling as deferred to Period
+  28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
