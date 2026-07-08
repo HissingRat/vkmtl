@@ -3691,6 +3691,14 @@ pub const Device = struct {
         };
     }
 
+    pub fn presentModeSupport(self: Device) core.PresentModeSupport {
+        return core.defaultPresentModeSupport(self.backend);
+    }
+
+    pub fn resolvePresentMode(self: Device, requested: core.PresentMode) core.PresentModeResolution {
+        return self.presentModeSupport().resolveWithDiagnostics(requested);
+    }
+
     pub fn queueWithDescriptor(self: *Device, descriptor: core.QueueDescriptor) !Queue {
         const device_features = self.features();
         try descriptor.validate(device_features, self.queueCapabilities());
@@ -4247,6 +4255,16 @@ pub const WindowContext = struct {
     pub fn queueCapabilities(self: *WindowContext) core.QueueCapabilities {
         var device_view = self.device();
         return device_view.queueCapabilities();
+    }
+
+    pub fn presentModeSupport(self: *WindowContext) core.PresentModeSupport {
+        const device_view = self.device();
+        return device_view.presentModeSupport();
+    }
+
+    pub fn resolvePresentMode(self: *WindowContext, requested: core.PresentMode) core.PresentModeResolution {
+        const device_view = self.device();
+        return device_view.resolvePresentMode(requested);
     }
 
     pub fn surface(self: *WindowContext) Surface {
@@ -5550,6 +5568,8 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
     try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
     try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
+    try std.testing.expect(context.presentModeSupport().fifo);
+    try std.testing.expectEqual(core.PresentMode.fifo, context.resolvePresentMode(.immediate).selected);
 }
 
 test "runtime device creates multi surface collections" {

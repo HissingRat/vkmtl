@@ -5715,6 +5715,20 @@ pub const PresentationDescriptor = struct {
     }
 };
 
+pub const PresentModeResolution = struct {
+    requested: PresentMode,
+    selected: PresentMode,
+    support: PresentModeSupport,
+
+    pub fn fellBack(self: PresentModeResolution) bool {
+        return self.requested != self.selected;
+    }
+
+    pub fn requestsVsync(self: PresentModeResolution) bool {
+        return self.selected.requestsVsync();
+    }
+};
+
 pub const PresentModeSupport = struct {
     fifo: bool = true,
     mailbox: bool = false,
@@ -5734,6 +5748,35 @@ pub const PresentModeSupport = struct {
         if (self.mailbox) return .mailbox;
         if (self.immediate) return .immediate;
         return .fifo;
+    }
+
+    pub fn resolveWithDiagnostics(self: PresentModeSupport, requested: PresentMode) PresentModeResolution {
+        return .{
+            .requested = requested,
+            .selected = self.resolve(requested),
+            .support = self,
+        };
+    }
+};
+
+pub fn defaultPresentModeSupport(backend: Backend) PresentModeSupport {
+    _ = backend;
+    return .{ .fifo = true };
+}
+
+pub const FramePacingDiagnostics = struct {
+    configured: bool = false,
+    extent: Extent2D = .{ .width = 0, .height = 0 },
+    format: TextureFormat = .automatic,
+    present_mode: PresentMode = .fifo,
+    requests_vsync: bool = true,
+    frame_in_flight: bool = false,
+    generation: u64 = 0,
+    submitted_frame_serial: u64 = 0,
+    completed_frame_serial: u64 = 0,
+
+    pub fn pendingFrameCount(self: FramePacingDiagnostics) u64 {
+        return self.submitted_frame_serial - self.completed_frame_serial;
     }
 };
 
@@ -5779,6 +5822,20 @@ pub const PresentationResourceState = struct {
         }
         self.completed_frame_serial = serial;
         self.frame_in_flight = false;
+    }
+
+    pub fn diagnostics(self: PresentationResourceState) FramePacingDiagnostics {
+        return .{
+            .configured = self.configured,
+            .extent = self.extent,
+            .format = self.format,
+            .present_mode = self.present_mode,
+            .requests_vsync = self.present_mode.requestsVsync(),
+            .frame_in_flight = self.frame_in_flight,
+            .generation = self.generation,
+            .submitted_frame_serial = self.submitted_frame_serial,
+            .completed_frame_serial = self.completed_frame_serial,
+        };
     }
 };
 
@@ -5967,6 +6024,10 @@ pub const Surface = struct {
         if (self.state == .lost) return SurfaceError.SurfaceLost;
         try self.presentation_state.completeFrame(serial);
     }
+
+    pub fn framePacingDiagnostics(self: Surface) FramePacingDiagnostics {
+        return self.presentation_state.diagnostics();
+    }
 };
 
 pub const SurfaceHandle = struct {
@@ -6081,6 +6142,10 @@ pub const SurfaceCollection = struct {
 
     pub fn completeFrame(self: *SurfaceCollection, handle: SurfaceHandle, serial: u64) SurfaceError!void {
         try (try self.get(handle)).completeFrame(serial);
+    }
+
+    pub fn framePacingDiagnostics(self: *SurfaceCollection, handle: SurfaceHandle) SurfaceError!FramePacingDiagnostics {
+        return (try self.get(handle)).framePacingDiagnostics();
     }
 
     pub fn liveCount(self: SurfaceCollection) usize {
@@ -6639,6 +6704,12 @@ test "present mode support resolves backend fallbacks and vsync intent" {
         .present_mode = .mailbox,
     };
     try std.testing.expectEqual(PresentMode.fifo, descriptor.withResolvedPresentMode(fifo_only).present_mode);
+    const resolution = fifo_only.resolveWithDiagnostics(.immediate);
+    try std.testing.expectEqual(PresentMode.immediate, resolution.requested);
+    try std.testing.expectEqual(PresentMode.fifo, resolution.selected);
+    try std.testing.expect(resolution.fellBack());
+    try std.testing.expect(resolution.requestsVsync());
+    try std.testing.expectEqual(PresentMode.fifo, defaultPresentModeSupport(.metal).resolve(.immediate));
 }
 
 test "surface collection manages multiple neutral surfaces" {
@@ -6785,7 +6856,10 @@ test "surface collection tracks independent frame pacing counters" {
     const frame_b_1 = try collection.beginFrame(handle_b);
     try std.testing.expectEqual(@as(u64, 1), frame_b_1);
     try collection.completeFrame(handle_b, frame_b_1);
-    try std.testing.expectEqual(@as(u64, 1), (try collection.info(handle_b)).presentation_state.completed_frame_serial);
+    const diagnostics_b = try collection.framePacingDiagnostics(handle_b);
+    try std.testing.expectEqual(@as(u64, 1), diagnostics_b.completed_frame_serial);
+    try std.testing.expectEqual(@as(u64, 0), diagnostics_b.pendingFrameCount());
+    try std.testing.expect(diagnostics_b.requests_vsync);
     try std.testing.expectEqual(@as(u64, 0), (try collection.info(handle_a)).presentation_state.completed_frame_serial);
 
     try std.testing.expectError(SurfaceError.InvalidSurfaceFrameState, collection.completeFrame(handle_a, frame_a_1 + 1));

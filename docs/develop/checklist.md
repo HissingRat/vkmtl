@@ -1463,6 +1463,15 @@ obvious render and binding blockers.
 - [x] Add independent resize/handle validation tests.
 - [x] Document native multi-swapchain lowering as deferred to Period 28 Phase 5.
 
+## Period 25 Phase 2 Checklist
+
+- [x] Define present-mode support and resolution diagnostics.
+- [x] Add device/window helpers for present-mode fallback decisions.
+- [x] Add frame pacing diagnostics for submitted/completed frame state.
+- [x] Keep backend support conservative until native per-surface queries land.
+- [x] Document native present-mode query/display-sync mapping as deferred to
+  Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

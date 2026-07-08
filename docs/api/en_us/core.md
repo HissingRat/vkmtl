@@ -48,6 +48,15 @@ generation handles for resize/remove validation. It does not create multiple
 native swapchains yet; complete native multi-window support is gated by
 `DeviceFeatures.multi_surface`.
 
+Presentation helpers include `PresentModeSupport`,
+`PresentModeResolution`, `defaultPresentModeSupport(...)`, and
+`FramePacingDiagnostics`. `Device.presentModeSupport()` and
+`WindowContext.presentModeSupport()` expose the conservative support table for
+the selected backend, while `resolvePresentMode(...)` reports whether a
+requested present mode fell back. `SurfaceCollection.framePacingDiagnostics(...)`
+reports per-surface configured state, selected mode, vsync intent, generation,
+frame-in-flight state, and submitted/completed frame serials.
+
 ## Resources
 
 Starting in Period 2, the long-term resource creation entry point is the runtime
