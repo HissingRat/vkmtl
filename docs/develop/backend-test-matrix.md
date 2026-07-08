@@ -12,6 +12,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, logical queues, ownership transfer validation, and query readback/resolve validation.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, and transient diagnostics.
+- `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
 
@@ -81,3 +82,20 @@ conservative until the relevant backend period lands.
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
 | Native heap-backed resources | Deferred | Deferred | Period 27 Phase 3 native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
+
+## Period 25 Platform And Interop Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Surface registry | Portable runtime state | Portable runtime state | `Device.makeSurfaceCollection(...)` |
+| Native multi-surface presentation | Deferred | Deferred | Period 28 Phase 5 native escape hatch |
+| Present-mode resolution | Portable runtime fallback | Portable runtime fallback | `PresentModeSupport` and `FramePacingDiagnostics` |
+| Native present-mode query | Deferred | Deferred | Period 28 Phase 5 platform query |
+| External memory / buffer wrappers | Portable runtime wrappers | Portable runtime wrappers | Feature-gated descriptors and lifetime tracking |
+| Native external memory import | Deferred | Deferred | Period 28 Phase 5 native import |
+| External texture wrapper | Portable runtime wrapper | Portable runtime wrapper | `ExternalTexture` wrapper |
+| Native external texture import | Deferred | Deferred | Period 28 Phase 5 native import |
+| External sync wrappers | Portable runtime wrappers | Portable runtime wrappers | `ExternalSynchronizationDescriptor` validation |
+| Native external sync wait/signal | Deferred | Deferred | Period 28 Phase 5 native lowering |
+| Native command insertion API | Capability-gated | Capability-gated | Encoder methods validate explicit callbacks |
+| Native command handle lowering | Deferred | Deferred | Period 28 Phase 5 native handle view |

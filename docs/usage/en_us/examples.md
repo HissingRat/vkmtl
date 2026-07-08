@@ -380,9 +380,11 @@ Native interop examples are explicit advanced samples, not ordinary example
 dependencies.
 
 `examples/external_texture` exercises explicit external texture descriptor
-validation and the runtime `ExternalTexture` wrapper. It prints a clear
-unsupported-feature message until the selected backend exposes external texture
-import.
+validation and the runtime `ExternalTexture` wrapper. Period 25 also exposes
+`ExternalMemory`, `ExternalBuffer`, `ExternalSemaphore`, `ExternalEvent`, and
+`ExternalSynchronizationDescriptor` for advanced interop validation. The
+example prints a clear unsupported-feature message until the selected backend
+exposes external texture import.
 
 Run it with:
 
@@ -399,6 +401,9 @@ Tracked cases include:
 
 Portable examples should keep using public vkmtl abstractions. If an example
 needs native access, it should be named and documented as a native interop case.
+Native multi-surface presentation, external resource import, external
+wait/signal lowering, and command encoder native handle views are tracked for
+Period 28 Phase 5.
 
 ## Streaming Texture
 

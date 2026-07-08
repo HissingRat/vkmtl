@@ -25,6 +25,9 @@ Current cases:
 - `resource_utilities`: mipmap generation, fill fallback selection, texture
   copy compatibility, sampler border colors, heap planning, and transient
   diagnostics keep typed validation.
+- `platform_interop`: surface registries, present-mode diagnostics, external
+  memory/buffer/texture wrappers, external sync wrappers, and native insertion
+  gates keep typed validation.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

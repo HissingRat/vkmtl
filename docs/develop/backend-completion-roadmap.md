@@ -127,14 +127,18 @@ applications need fewer app-side workarounds.
 
 Tracked in `docs/develop/period25/`.
 
-- [ ] Multi-surface / multi-window runtime support.
-- [ ] External memory / texture import.
-- [ ] External semaphore / shared event interop.
-- [ ] Native command insertion escape hatch.
-- [ ] Backend capability dump example and conformance checks.
+- [x] Multi-surface / multi-window runtime support.
+- [x] External memory / texture wrapper APIs.
+- [x] External semaphore / shared event wrapper APIs.
+- [x] Native command insertion escape hatch API.
+- [x] Backend capability and interop matrix checks.
+- [ ] Native multi-surface presentation, external memory/texture import,
+  external sync wait/signal, and native command handle lowering.
 
 Expected result: vkmtl can sit inside larger native apps and tooling without
-owning every resource itself.
+owning every resource itself. Current Period 25 coverage provides public API,
+typed validation, wrappers, and examples; native interop lowering is routed to
+Period 28 Phase 5.
 
 ## Wave 7: Object Cache And Production Hardening
 

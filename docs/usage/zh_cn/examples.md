@@ -224,8 +224,9 @@ execution 仍由 `DeviceFeatures.multi_surface` gate。
 Native interop 示例是显式高级样例，不应该变成普通示例的依赖。
 
 `examples/external_texture` 会验证显式 external texture descriptor 和 runtime `ExternalTexture`
-wrapper。在所选 backend 暴露 external texture import 之前，它会打印清晰的 unsupported-feature
-信息。
+wrapper。Period 25 也暴露了 `ExternalMemory`、`ExternalBuffer`、`ExternalSemaphore`、
+`ExternalEvent` 和 `ExternalSynchronizationDescriptor`，用于高级 interop validation。在所选
+backend 暴露 external texture import 之前，它会打印清晰的 unsupported-feature 信息。
 
 运行：
 
@@ -242,6 +243,8 @@ zig build run-external-texture
 
 Portable 示例应该继续使用公开 vkmtl abstraction。如果示例需要 native access，它应该被命名并记录为
 native interop case。
+Native multi-surface presentation、external resource import、external wait/signal
+lowering，以及 command encoder native handle view 会在 Period 28 Phase 5 继续补。
 
 ## Streaming Texture
 

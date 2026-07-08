@@ -504,6 +504,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .command = "zig build test",
         .expectation = "mipmap generation, fill fallback, texture copy, sampler border color, and heap planning regressions pass",
     },
+    .{
+        .name = "platform_interop_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test",
+        .expectation = "surface registries, present-mode diagnostics, external wrappers, external sync validation, and native insertion gates pass",
+    },
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
@@ -787,6 +795,139 @@ pub fn validateResourceUtilityMatrix(entries: []const ResourceUtilityMatrixEntry
     }
 }
 
+pub const PlatformInteropFeature = enum {
+    surface_registry,
+    native_multi_surface,
+    present_mode_resolution,
+    native_present_mode_query,
+    external_memory_and_buffer_wrappers,
+    native_external_memory_import,
+    external_texture_wrapper,
+    native_external_texture_import,
+    external_sync_wrappers,
+    native_external_sync_lowering,
+    native_command_insertion_api,
+    native_command_handle_lowering,
+};
+
+pub const PlatformInteropMatrixEntry = struct {
+    feature: PlatformInteropFeature,
+    public_api: []const u8,
+    vulkan_status: BackendFeatureStatus,
+    metal_status: BackendFeatureStatus,
+    deferred_to: ?[]const u8 = null,
+    validation: []const u8,
+
+    pub fn validate(self: PlatformInteropMatrixEntry) DevelopmentMatrixError!void {
+        if (self.public_api.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        const deferred = self.vulkan_status == .deferred_native_lowering or self.metal_status == .deferred_native_lowering;
+        if (deferred and self.deferred_to == null) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
+    .{
+        .feature = .surface_registry,
+        .public_api = "Device.makeSurfaceCollection and SurfaceCollection",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "surface registries track independent descriptors, resize state, frame state, and generation handles",
+    },
+    .{
+        .feature = .native_multi_surface,
+        .public_api = "DeviceFeatures.multi_surface",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native multiple-swapchain and multiple-layer presentation remains feature-gated",
+    },
+    .{
+        .feature = .present_mode_resolution,
+        .public_api = "PresentModeSupport and FramePacingDiagnostics",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "present-mode fallback and frame pacing counters are deterministic runtime state",
+    },
+    .{
+        .feature = .native_present_mode_query,
+        .public_api = "Device.presentModeSupport",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "surface-specific native present-mode/display-sync support remains conservative",
+    },
+    .{
+        .feature = .external_memory_and_buffer_wrappers,
+        .public_api = "ExternalMemory and ExternalBuffer",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "external memory and buffer wrappers validate handles, ownership, backend, and lifetime",
+    },
+    .{
+        .feature = .native_external_memory_import,
+        .public_api = "Device.makeExternalMemory and Device.makeExternalBuffer",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native Vulkan memory import and Metal buffer wrapping remain feature-gated",
+    },
+    .{
+        .feature = .external_texture_wrapper,
+        .public_api = "ExternalTexture",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "external texture wrappers validate texture shape, backend handle kind, ownership, and lifetime",
+    },
+    .{
+        .feature = .native_external_texture_import,
+        .public_api = "Device.makeExternalTexture",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native Vulkan image import and Metal texture wrapping remain feature-gated",
+    },
+    .{
+        .feature = .external_sync_wrappers,
+        .public_api = "ExternalSemaphore, ExternalEvent, and ExternalSynchronizationDescriptor",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "external synchronization wrappers validate backend ownership before commit",
+    },
+    .{
+        .feature = .native_external_sync_lowering,
+        .public_api = "CommandBuffer.commitWithExternalSynchronization",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native semaphore/shared-event wait and signal integration remains feature-gated",
+    },
+    .{
+        .feature = .native_command_insertion_api,
+        .public_api = "Render/Compute/BlitCommandEncoder.insertNativeCommands",
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "native insertion validates feature gate, callback presence, and encoder kind",
+    },
+    .{
+        .feature = .native_command_handle_lowering,
+        .public_api = "NativeCommandInsertionDescriptor",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "real command-buffer and command-encoder native handle views remain feature-gated",
+    },
+};
+
+pub fn validatePlatformInteropMatrix(entries: []const PlatformInteropMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (entry.feature == other.feature) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 pub const ValidationCaseKind = enum {
     invalid_bind_group,
     invalid_texture_format,
@@ -798,6 +939,7 @@ pub const ValidationCaseKind = enum {
     logical_queue_ownership,
     query_readback,
     resource_utilities,
+    platform_interop,
 };
 
 pub const ValidationCase = struct {
@@ -875,6 +1017,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .resource_utilities,
         .test_location = "src/core.zig and src/runtime/window_context.zig Period 24 resource utility tests",
         .expectation = "mipmaps, fills, texture copies, sampler borders, heaps, and transient diagnostics keep typed validation",
+    },
+    .{
+        .name = "platform_interop",
+        .kind = .platform_interop,
+        .test_location = "src/core.zig and src/runtime/window_context.zig Period 25 platform interop tests",
+        .expectation = "surface registries, present diagnostics, external wrappers, external sync, and native insertion gates keep typed validation",
     },
 };
 
@@ -1009,14 +1157,17 @@ test "backend test matrix metadata is valid" {
     var configured_optional: usize = 0;
     var has_sync_query_regression = false;
     var has_resource_utility_regression = false;
+    var has_platform_interop_regression = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
         if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
         if (std.mem.eql(u8, entry.name, "resource_utility_regression")) has_resource_utility_regression = true;
+        if (std.mem.eql(u8, entry.name, "platform_interop_regression")) has_platform_interop_regression = true;
     }
     try std.testing.expect(configured_optional >= 1);
     try std.testing.expect(has_sync_query_regression);
     try std.testing.expect(has_resource_utility_regression);
+    try std.testing.expect(has_platform_interop_regression);
 }
 
 test "sync and query backend matrix is complete" {
@@ -1069,6 +1220,32 @@ test "resource utility backend matrix is complete" {
     try std.testing.expect(native_paths >= 4);
     try std.testing.expect(fallback_paths >= 2);
     try std.testing.expect(deferred_paths >= 3);
+}
+
+test "platform interop backend matrix is complete" {
+    try validatePlatformInteropMatrix(platform_interop_matrix[0..]);
+
+    var seen = [_]bool{false} ** @typeInfo(PlatformInteropFeature).@"enum".fields.len;
+    var runtime_paths: usize = 0;
+    var capability_gated: usize = 0;
+    var deferred_paths: usize = 0;
+
+    for (platform_interop_matrix) |entry| {
+        seen[@intFromEnum(entry.feature)] = true;
+        if (entry.vulkan_status == .portable_runtime or entry.metal_status == .portable_runtime) runtime_paths += 1;
+        if (entry.vulkan_status == .capability_gated or entry.metal_status == .capability_gated) capability_gated += 1;
+        if (entry.vulkan_status == .deferred_native_lowering or entry.metal_status == .deferred_native_lowering) {
+            deferred_paths += 1;
+            try std.testing.expect(entry.deferred_to != null);
+        }
+    }
+
+    for (seen) |was_seen| {
+        try std.testing.expect(was_seen);
+    }
+    try std.testing.expect(runtime_paths >= 5);
+    try std.testing.expect(capability_gated >= 1);
+    try std.testing.expect(deferred_paths >= 5);
 }
 
 test "validation case inventory is valid" {

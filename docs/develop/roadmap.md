@@ -474,7 +474,7 @@ See `docs/develop/period24/`.
 
 ## Period 25: Platform, Surface, And Interop Completion
 
-Status: planned after Period 24.
+Status: completed platform/interop validation slice.
 
 Goal: support multi-surface applications and explicit native interop with
 external resources and synchronization primitives.

@@ -1500,6 +1500,14 @@ obvious render and binding blockers.
 - [x] Document native command-buffer/encoder handle lowering as deferred to
   Period 28 Phase 5.
 
+## Period 25 Phase 6 Checklist
+
+- [x] Add platform/interop backend matrix entries.
+- [x] Add final validation case coverage for Period 25.
+- [x] Update usage/API/developer docs for the interop slice.
+- [x] Mark all new deferred native interop work in a later period and phase.
+- [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

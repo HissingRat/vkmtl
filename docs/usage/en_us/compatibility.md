@@ -56,9 +56,10 @@ Sparse buffers/textures map toward Vulkan sparse resources and Metal tiled or
 sparse texture concepts. The current descriptors validate page-aligned mapping
 intent only.
 
-External texture and semaphore interop uses explicit platform/backend handle
-descriptors. It is related to native handles, but it is not part of ordinary
-portable resource creation.
+External memory, buffer, texture, semaphore, and shared-event interop use
+explicit platform/backend handle descriptors. Runtime wrappers validate
+ownership and backend compatibility, while native import and wait/signal
+lowering remain advanced feature-gated work.
 
 Tessellation is represented by `TessellationDescriptor` and remains an optional
 render pipeline extension, not a default portable render path.
