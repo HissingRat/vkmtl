@@ -105,8 +105,10 @@ Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和
 sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建。固定 border color 在 address mode 使用
 `clamp_to_border` 时也会下沉到 Vulkan 和 Metal sampler 创建；custom border color 暂不覆盖。
 
-`HeapDescriptor` 定义 future advanced memory/heap shape。默认资源创建仍由 vkmtl 内部管理 memory；
-`DeviceFeatures.heaps` 在显式 Vulkan/Metal heap allocation 实现前保持 false。
+`HeapDescriptor` 定义显式 heap planning。`Device.makeHeap(...)` 由 `DeviceFeatures.heaps`
+gate，返回的 runtime `Heap` 可以通过 `reserve(...)` 追踪 aligned reservation。默认资源创建仍由
+vkmtl 内部管理 memory；native Vulkan `VkDeviceMemory` suballocation 和 Metal `MTLHeap`
+backed buffer/texture creation 是后续 backend work。
 
 Sparse/tiled resource shape 由 `SparseBufferMappingDescriptor`、
 `SparseTextureMappingDescriptor` 和 `SparseMappingCommitDescriptor` 表示。它们会在

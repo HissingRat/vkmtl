@@ -44,6 +44,7 @@ pub const ResourceKind = enum {
     fence,
     event,
     query_set,
+    heap,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -64,6 +65,7 @@ pub const ResourceTracker = struct {
     fences: usize = 0,
     events: usize = 0,
     query_sets: usize = 0,
+    heaps: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -148,13 +150,14 @@ pub const ResourceTracker = struct {
             self.resource_tables != 0 or
             self.fences != 0 or
             self.events != 0 or
-            self.query_sets != 0;
+            self.query_sets != 0 or
+            self.heaps != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, fences={}, events={}, query_sets={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, fences={}, events={}, query_sets={}, heaps={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -170,6 +173,7 @@ pub const ResourceTracker = struct {
                     self.fences,
                     self.events,
                     self.query_sets,
+                    self.heaps,
                 },
             );
         }
@@ -197,6 +201,7 @@ pub const ResourceTracker = struct {
             .fence => &self.fences,
             .event => &self.events,
             .query_set => &self.query_sets,
+            .heap => &self.heaps,
         };
     }
 
@@ -1185,6 +1190,75 @@ pub const Event = struct {
         self.signaled_value = false;
     }
 };
+
+pub const Heap = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.HeapDescriptor,
+    reserved_bytes: u64 = 0,
+    alive: bool = true,
+
+    pub fn deinit(self: *Heap) void {
+        assertObjectAlive(self.alive, "heap");
+        self.alive = false;
+        self.tracker.release(.heap);
+    }
+
+    pub fn selectedBackend(self: Heap) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: Heap) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *Heap, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "heap");
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: Heap) core.HeapDescriptor {
+        return self.descriptor_value;
+    }
+
+    pub fn size(self: Heap) u64 {
+        return self.descriptor_value.size;
+    }
+
+    pub fn storageMode(self: Heap) core.HeapStorageMode {
+        return self.descriptor_value.storage_mode;
+    }
+
+    pub fn reservedBytes(self: Heap) u64 {
+        return self.reserved_bytes;
+    }
+
+    pub fn remainingBytes(self: Heap) u64 {
+        return self.size() - self.reserved_bytes;
+    }
+
+    pub fn reserve(self: *Heap, allocation: core.HeapAllocationDescriptor) core.HeapError!core.HeapAllocationInfo {
+        assertObjectAlive(self.alive, "heap");
+        try allocation.validate(self.descriptor_value);
+        const offset = alignForwardU64(self.reserved_bytes, allocation.alignment) catch return core.HeapError.HeapOutOfMemory;
+        const end = std.math.add(u64, offset, allocation.size) catch return core.HeapError.HeapOutOfMemory;
+        if (end > self.size()) return core.HeapError.HeapOutOfMemory;
+        self.reserved_bytes = end;
+        return .{
+            .offset = offset,
+            .size = allocation.size,
+            .alignment = allocation.alignment,
+        };
+    }
+};
+
+fn alignForwardU64(value: u64, alignment: u64) !u64 {
+    if (alignment == 0) return error.InvalidAlignment;
+    const remainder = value % alignment;
+    if (remainder == 0) return value;
+    return try std.math.add(u64, value, alignment - remainder);
+}
 
 pub const QuerySet = struct {
     backend: core.Backend,
@@ -3579,6 +3653,25 @@ pub const Device = struct {
         };
     }
 
+    pub fn makeHeap(self: *Device, descriptor: core.HeapDescriptor) !Heap {
+        try descriptor.validate(self.features());
+        self.tracker.retain(.heap);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .label_value = descriptor.label,
+            .descriptor_value = descriptor,
+        };
+    }
+
+    pub fn transientAllocationDiagnostics(
+        self: Device,
+        resources: []const core.TransientResourceDescriptor,
+    ) error{InvalidResourceBarrierRange}!core.TransientAllocationDiagnostics {
+        _ = self;
+        return try core.TransientAllocationDiagnostics.analyze(resources);
+    }
+
     pub fn queue(self: *Device) Queue {
         return .{
             .backend = self.backend,
@@ -4227,6 +4320,19 @@ pub const WindowContext = struct {
         return try device_view.makeQuerySet(descriptor);
     }
 
+    pub fn makeHeap(self: *WindowContext, descriptor: core.HeapDescriptor) !Heap {
+        var device_view = self.device();
+        return try device_view.makeHeap(descriptor);
+    }
+
+    pub fn transientAllocationDiagnostics(
+        self: *WindowContext,
+        resources: []const core.TransientResourceDescriptor,
+    ) error{InvalidResourceBarrierRange}!core.TransientAllocationDiagnostics {
+        const device_view = self.device();
+        return try device_view.transientAllocationDiagnostics(resources);
+    }
+
     pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {
         var device_view = self.device();
         return try device_view.makeBuffer(descriptor);
@@ -4788,6 +4894,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .fence => "fence",
         .event => "event",
         .query_set => "query_set",
+        .heap => "heap",
     };
 }
 
@@ -5846,6 +5953,72 @@ test "runtime query sets support encoder writes and readback" {
         .count = 1,
         .pipeline_statistics = .{ .vertex_invocations = true },
     }));
+}
+
+test "runtime heaps track aligned reservations and diagnostics" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = report,
+    };
+
+    try std.testing.expectError(core.HeapError.UnsupportedHeaps, device.makeHeap(.{
+        .size = 4096,
+    }));
+    report.features.heaps = true;
+    device.capability_report = report;
+    var heap = try device.makeHeap(.{
+        .label = "upload heap",
+        .size = 4096,
+        .storage_mode = .cpu_visible,
+    });
+    defer heap.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.heaps);
+    try std.testing.expectEqualStrings("upload heap", heap.label().?);
+
+    const first = try heap.reserve(.{
+        .size = 128,
+        .alignment = 64,
+    });
+    try std.testing.expectEqual(@as(u64, 0), first.offset);
+    const second = try heap.reserve(.{
+        .size = 128,
+        .alignment = 256,
+    });
+    try std.testing.expectEqual(@as(u64, 256), second.offset);
+    try std.testing.expectEqual(@as(u64, 384), heap.reservedBytes());
+    try std.testing.expectError(core.HeapError.HeapOutOfMemory, heap.reserve(.{
+        .size = 4096,
+    }));
+
+    const resources = [_]core.TransientResourceDescriptor{
+        .{
+            .kind = .buffer,
+            .size = 1024,
+            .alignment = 256,
+            .first_use = 0,
+            .last_use = 1,
+        },
+        .{
+            .kind = .buffer,
+            .size = 512,
+            .alignment = 128,
+            .first_use = 2,
+            .last_use = 3,
+        },
+    };
+    const diagnostics = try device.transientAllocationDiagnostics(resources[0..]);
+    try std.testing.expectEqual(@as(usize, 2), diagnostics.resource_count);
+    try std.testing.expectEqual(@as(usize, 1), diagnostics.aliasable_pairs);
 }
 
 test "runtime bind group materialization validates resources against layout" {

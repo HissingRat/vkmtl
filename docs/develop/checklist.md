@@ -1440,12 +1440,12 @@ obvious render and binding blockers.
 
 ## Period 24 Phase 5 Checklist
 
-- [ ] Define heap-backed resource creation ownership and lifetime.
-- [ ] Add runtime heap objects and heap-backed resource descriptors where supported.
-- [ ] Add transient allocation diagnostics and reuse metadata.
-- [ ] Keep default resource creation internally managed.
-- [ ] Add descriptor/runtime tests for heap compatibility.
-- [ ] Document deferred native heap allocation details.
+- [x] Define heap-backed resource creation ownership and lifetime.
+- [x] Add runtime heap objects and heap-backed resource descriptors where supported.
+- [x] Add transient allocation diagnostics and reuse metadata.
+- [x] Keep default resource creation internally managed.
+- [x] Add descriptor/runtime tests for heap compatibility.
+- [x] Document deferred native heap allocation details.
 
 ## Period 24 Phase 6 Checklist
 

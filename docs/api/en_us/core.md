@@ -128,9 +128,11 @@ to Vulkan/Metal sampler creation. Fixed border colors also lower to Vulkan and
 Metal sampler creation when address modes use `clamp_to_border`; custom border
 colors remain out of scope.
 
-`HeapDescriptor` defines the future advanced memory/heap shape. Default
-resource creation still owns memory internally, and `DeviceFeatures.heaps` is
-false until explicit Vulkan/Metal heap allocation is implemented.
+`HeapDescriptor` defines explicit heap planning. `Device.makeHeap(...)` is
+feature-gated by `DeviceFeatures.heaps` and returns a runtime `Heap` that tracks
+aligned reservations through `reserve(...)`. Default resource creation still
+owns memory internally; native Vulkan `VkDeviceMemory` suballocation and Metal
+`MTLHeap`-backed buffer/texture creation are future backend work.
 
 Sparse and tiled resource shapes are represented by
 `SparseBufferMappingDescriptor`, `SparseTextureMappingDescriptor`, and

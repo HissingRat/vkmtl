@@ -375,6 +375,37 @@ pub const TransientResourceDescriptor = struct {
     }
 };
 
+pub const TransientAllocationDiagnostics = struct {
+    resource_count: usize = 0,
+    aliasable_pairs: usize = 0,
+    requested_units: u64 = 0,
+
+    pub fn analyze(resources: []const TransientResourceDescriptor) error{InvalidResourceBarrierRange}!TransientAllocationDiagnostics {
+        var result = TransientAllocationDiagnostics{
+            .resource_count = resources.len,
+        };
+        for (resources, 0..) |resource, i| {
+            try resource.validate();
+            result.requested_units = std.math.add(u64, result.requested_units, transientResourceUnits(resource)) catch {
+                return error.InvalidResourceBarrierRange;
+            };
+            for (resources[i + 1 ..]) |other| {
+                if (TransientResourceDescriptor.canAlias(resource, other)) {
+                    result.aliasable_pairs += 1;
+                }
+            }
+        }
+        return result;
+    }
+};
+
+fn transientResourceUnits(resource: TransientResourceDescriptor) u64 {
+    return switch (resource.kind) {
+        .buffer => resource.size,
+        .texture => @as(u64, resource.texture_extent.width) * @as(u64, resource.texture_extent.height),
+    };
+}
+
 fn lifetimesOverlap(a: TransientResourceDescriptor, b: TransientResourceDescriptor) bool {
     return a.first_use <= b.last_use and b.first_use <= a.last_use;
 }
@@ -4712,9 +4743,28 @@ pub const HeapDescriptor = struct {
     }
 };
 
+pub const HeapAllocationDescriptor = struct {
+    size: u64 = 0,
+    alignment: u64 = 1,
+
+    pub fn validate(self: HeapAllocationDescriptor, heap: HeapDescriptor) HeapError!void {
+        if (self.size == 0) return HeapError.InvalidHeapSize;
+        if (self.alignment == 0) return HeapError.InvalidHeapAlignment;
+        if (self.size > heap.size) return HeapError.HeapOutOfMemory;
+    }
+};
+
+pub const HeapAllocationInfo = struct {
+    offset: u64,
+    size: u64,
+    alignment: u64,
+};
+
 pub const HeapError = error{
     InvalidHeapSize,
+    InvalidHeapAlignment,
     UnsupportedHeaps,
+    HeapOutOfMemory,
 };
 
 pub const ShaderVisibility = struct {
@@ -6237,6 +6287,10 @@ test "resource usage state records portable hazards" {
     try existing.validate();
     try requested.validate();
     try std.testing.expect(TransientResourceDescriptor.canAlias(existing, requested));
+    const transient_diagnostics = try TransientAllocationDiagnostics.analyze(&.{ existing, requested });
+    try std.testing.expectEqual(@as(usize, 2), transient_diagnostics.resource_count);
+    try std.testing.expectEqual(@as(usize, 1), transient_diagnostics.aliasable_pairs);
+    try std.testing.expectEqual(@as(u64, 5120), transient_diagnostics.requested_units);
     try std.testing.expect(!TransientResourceDescriptor.canAlias(existing, .{
         .kind = .buffer,
         .size = 1024,
@@ -9058,10 +9112,22 @@ test "heap descriptor is gated by device features" {
         .size = 1024,
     }).validate(defaultDeviceFeatures(.vulkan)));
     try std.testing.expectError(HeapError.InvalidHeapSize, (HeapDescriptor{}).validate(.{ .heaps = true }));
-    try (HeapDescriptor{
+    const heap = HeapDescriptor{
         .size = 4096,
         .storage_mode = .device_local,
-    }).validate(.{ .heaps = true });
+    };
+    try heap.validate(.{ .heaps = true });
+    try (HeapAllocationDescriptor{
+        .size = 1024,
+        .alignment = 256,
+    }).validate(heap);
+    try std.testing.expectError(HeapError.InvalidHeapAlignment, (HeapAllocationDescriptor{
+        .size = 1024,
+        .alignment = 0,
+    }).validate(heap));
+    try std.testing.expectError(HeapError.HeapOutOfMemory, (HeapAllocationDescriptor{
+        .size = 8192,
+    }).validate(heap));
 }
 
 test "bind group layout descriptor validates resource bindings" {
