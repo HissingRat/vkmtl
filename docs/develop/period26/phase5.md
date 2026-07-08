@@ -7,6 +7,8 @@ Phase 5 stress-tests completed backend paths.
 - Add resize/recreate loops.
 - Add shader cache warm/cold loops.
 - Add resource churn and upload/readback loops.
+- Add staging-buffer reuse or pooling checks for unaligned Vulkan
+  `fillBuffer(...)` fallback paths.
 - Track leak reports and destruction-order issues.
 
 ## Validation

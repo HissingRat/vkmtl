@@ -1,3 +1,4 @@
+const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
 const VulkanAdvancedBinding = @import("advanced_binding.zig");
@@ -59,6 +60,7 @@ pub const CommandBuffer = struct {
     uses_current_drawable: bool = false,
     temporary_render_pass: vk.RenderPass = .null_handle,
     temporary_framebuffer: vk.Framebuffer = .null_handle,
+    temporary_blit_buffers: std.ArrayList(VulkanBuffer) = .empty,
 
     pub fn init(
         gc: *const GraphicsContext,
@@ -91,6 +93,8 @@ pub const CommandBuffer = struct {
     pub fn deinit(self: *CommandBuffer) void {
         if (self.cmdbuf == .null_handle) return;
         self.destroyTemporaryRenderPassResources();
+        self.destroyTemporaryBlitResources();
+        self.temporary_blit_buffers.deinit(self.gc.allocator);
         self.gc.dev.freeCommandBuffers(self.pool, &.{self.cmdbuf});
         self.cmdbuf = .null_handle;
     }
@@ -201,6 +205,7 @@ pub const CommandBuffer = struct {
         return .{
             .gc = self.gc,
             .cmdbuf = self.cmdbuf,
+            .temporary_buffers = &self.temporary_blit_buffers,
         };
     }
 
@@ -222,6 +227,7 @@ pub const CommandBuffer = struct {
 
     pub fn commit(self: *CommandBuffer) !void {
         defer self.destroyTemporaryRenderPassResources();
+        defer self.destroyTemporaryBlitResources();
         if (self.present_requested) {
             _ = try self.swapchain.present(self.cmdbuf);
         } else {
@@ -401,6 +407,13 @@ pub const CommandBuffer = struct {
             self.gc.dev.destroyRenderPass(self.temporary_render_pass, null);
             self.temporary_render_pass = .null_handle;
         }
+    }
+
+    fn destroyTemporaryBlitResources(self: *CommandBuffer) void {
+        for (self.temporary_blit_buffers.items) |*buffer| {
+            buffer.deinit();
+        }
+        self.temporary_blit_buffers.clearRetainingCapacity();
     }
 };
 
@@ -762,6 +775,7 @@ pub const RenderCommandEncoder = struct {
 pub const BlitCommandEncoder = struct {
     gc: *const GraphicsContext,
     cmdbuf: vk.CommandBuffer,
+    temporary_buffers: *std.ArrayList(VulkanBuffer),
 
     pub fn setLabel(self: *BlitCommandEncoder, label_value: ?[]const u8) void {
         _ = self;
@@ -860,8 +874,8 @@ pub const BlitCommandEncoder = struct {
         buffer: *const VulkanBuffer,
         descriptor: core.FillBufferDescriptor,
     ) !void {
-        if (descriptor.offset % 4 != 0 or descriptor.size % 4 != 0) {
-            return core.CommandEncodingError.UnsupportedFillBuffer;
+        if (fillBufferUsesStagingFallback(descriptor)) {
+            return try self.fillBufferWithStaging(buffer, descriptor);
         }
         const repeated = @as(u32, descriptor.value) * 0x01010101;
         self.gc.dev.cmdFillBuffer(
@@ -870,6 +884,38 @@ pub const BlitCommandEncoder = struct {
             descriptor.offset,
             descriptor.size,
             repeated,
+        );
+    }
+
+    fn fillBufferWithStaging(
+        self: *BlitCommandEncoder,
+        buffer: *const VulkanBuffer,
+        descriptor: core.FillBufferDescriptor,
+    ) !void {
+        const byte_count = std.math.cast(usize, descriptor.size) orelse return core.CommandEncodingError.InvalidFillBufferRange;
+        const bytes = try self.gc.allocator.alloc(u8, byte_count);
+        defer self.gc.allocator.free(bytes);
+        @memset(bytes, descriptor.value);
+
+        var staging = try VulkanBuffer.init(self.gc, .{
+            .length = byte_count,
+            .bytes = bytes,
+            .usage = .{ .copy_source = true },
+            .storage_mode = .shared,
+        });
+        errdefer staging.deinit();
+        try self.temporary_buffers.append(self.gc.allocator, staging);
+
+        const copy = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = descriptor.offset,
+            .size = descriptor.size,
+        };
+        self.gc.dev.cmdCopyBuffer(
+            self.cmdbuf,
+            self.temporary_buffers.items[self.temporary_buffers.items.len - 1].handle,
+            buffer.handle,
+            &.{copy},
         );
     }
 
@@ -971,6 +1017,10 @@ pub const BlitCommandEncoder = struct {
         try self.gc.dev.endCommandBuffer(self.cmdbuf);
     }
 };
+
+pub fn fillBufferUsesStagingFallback(descriptor: core.FillBufferDescriptor) bool {
+    return descriptor.offset % 4 != 0 or descriptor.size % 4 != 0;
+}
 
 pub const ComputeCommandEncoder = struct {
     gc: *const GraphicsContext,
@@ -1411,4 +1461,19 @@ fn imageAspectMask(format: core.TextureFormat) vk.ImageAspectFlags {
         .depth_bit = core.isDepthFormat(format),
         .stencil_bit = core.isStencilFormat(format),
     };
+}
+
+test "Vulkan fill buffer fallback selection covers unaligned ranges" {
+    try std.testing.expect(!fillBufferUsesStagingFallback(.{
+        .offset = 4,
+        .size = 8,
+    }));
+    try std.testing.expect(fillBufferUsesStagingFallback(.{
+        .offset = 1,
+        .size = 8,
+    }));
+    try std.testing.expect(fillBufferUsesStagingFallback(.{
+        .offset = 4,
+        .size = 7,
+    }));
 }

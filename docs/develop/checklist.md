@@ -1413,12 +1413,12 @@ obvious render and binding blockers.
 
 ## Period 24 Phase 2 Checklist
 
-- [ ] Define fill fallback selection and public behavior.
-- [ ] Keep aligned Vulkan fills on native `vkCmdFillBuffer`.
-- [ ] Add Vulkan fallback behavior for unaligned fill ranges.
-- [ ] Preserve Metal direct fill behavior.
-- [ ] Add aligned and unaligned validation tests.
-- [ ] Document fallback performance and deferred native optimization work.
+- [x] Define fill fallback selection and public behavior.
+- [x] Keep aligned Vulkan fills on native `vkCmdFillBuffer`.
+- [x] Add Vulkan fallback behavior for unaligned fill ranges.
+- [x] Preserve Metal direct fill behavior.
+- [x] Add aligned and unaligned validation tests.
+- [x] Document fallback performance and deferred native optimization work.
 
 ## Period 24 Phase 3 Checklist
 

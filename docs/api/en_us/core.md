@@ -510,9 +510,8 @@ try command_buffer.commit();
 The lowered blit slice supports buffer-to-buffer, buffer-to-texture,
 texture-to-buffer, and texture-to-texture copies.
 `BlitCommandEncoder.fillBuffer(...)` also lowers to the native backend. Metal
-supports arbitrary byte ranges; Vulkan uses `vkCmdFillBuffer`, so Vulkan
-requires offset and size to be 4-byte aligned and returns
-`UnsupportedFillBuffer` otherwise.
+supports arbitrary byte ranges. Vulkan keeps native `vkCmdFillBuffer` for
+4-byte-aligned ranges and uses a staging-copy fallback for unaligned ranges.
 `BlitCommandEncoder.generateMipmaps(...)` validates format support, copy usage,
 sample count, and mip count through `GenerateMipmapsDescriptor`. Vulkan lowers
 full-texture generation through image blits, and Metal lowers full-texture

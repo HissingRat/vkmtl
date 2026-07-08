@@ -422,8 +422,8 @@ try command_buffer.commit();
 
 当前 lowered blit slice 支持 buffer-to-buffer、buffer-to-texture、texture-to-buffer 和
 texture-to-texture。`BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
-Metal 支持任意 byte range，Vulkan 使用 `vkCmdFillBuffer`，因此 Vulkan 路径要求 offset 和
-size 都按 4 字节对齐，否则返回 `UnsupportedFillBuffer`。
+Metal 支持任意 byte range。Vulkan 对 4-byte aligned range 继续使用 native
+`vkCmdFillBuffer`，对 unaligned range 使用 staging-copy fallback。
 `BlitCommandEncoder.generateMipmaps(...)` 会通过 `GenerateMipmapsDescriptor` 校验
 format support、copy usage、sample count 和 mip count。Vulkan 会用 image blit 下沉
 full-texture generation，Metal 会用 `generateMipmapsForTexture` 下沉 full-texture

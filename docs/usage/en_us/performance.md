@@ -41,3 +41,5 @@ Keep command recording predictable. vkmtl validates command encoder ordering and
 tracks resource usage transitions. Explicit `bufferBarrier(...)` and
 `textureBarrier(...)` calls validate against the same state; Vulkan lowers them
 to native barriers and Metal treats them as validation/no-op markers.
+`fillBuffer(...)` is cheapest on Vulkan when offset and size are 4-byte aligned;
+unaligned ranges use a staging-copy fallback.

@@ -36,3 +36,5 @@ creation attempts；native object reuse 仍是后续 backend work。
 保持 command recording 可预测。vkmtl 会校验 command encoder 顺序并追踪 resource usage transition；
 显式 `bufferBarrier(...)` 和 `textureBarrier(...)` 会用同一份状态做校验。Vulkan 会下沉到
 native barrier；Metal 会把它们当作 validation/no-op marker。
+Vulkan 上 `fillBuffer(...)` 在 offset 和 size 都 4-byte aligned 时最便宜；unaligned range 会走
+staging-copy fallback。
