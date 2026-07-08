@@ -1281,6 +1281,65 @@ pub const NativeCommandInsertionDescriptor = struct {
     }
 };
 
+pub const NativeAdvancedClosureFeature = enum {
+    native_object_handle_pooling,
+    native_driver_pipeline_cache,
+    runtime_cache_manifest_io,
+    persistent_staging_pools,
+    native_heap_backed_resources,
+    native_sparse_page_binding,
+    native_multi_surface_presentation,
+    native_external_memory_import,
+    native_external_texture_import,
+    native_external_sync_wait_signal,
+    native_command_handle_view,
+    native_tessellation_pipeline,
+    native_mesh_task_pipeline,
+};
+
+pub const native_advanced_closure_features = [_]NativeAdvancedClosureFeature{
+    .native_object_handle_pooling,
+    .native_driver_pipeline_cache,
+    .runtime_cache_manifest_io,
+    .persistent_staging_pools,
+    .native_heap_backed_resources,
+    .native_sparse_page_binding,
+    .native_multi_surface_presentation,
+    .native_external_memory_import,
+    .native_external_texture_import,
+    .native_external_sync_wait_signal,
+    .native_command_handle_view,
+    .native_tessellation_pipeline,
+    .native_mesh_task_pipeline,
+};
+
+pub fn nativeAdvancedClosureTarget(feature: NativeAdvancedClosureFeature) []const u8 {
+    _ = feature;
+    return "Period 29 Phase 5";
+}
+
+pub const NativeAdvancedClosureDescriptor = struct {
+    features: []const NativeAdvancedClosureFeature = native_advanced_closure_features[0..],
+};
+
+pub const NativeAdvancedClosurePlan = struct {
+    requested_features: usize,
+    deferred_native_features: usize,
+    period29_phase5_features: usize,
+
+    pub fn fromDescriptor(descriptor: NativeAdvancedClosureDescriptor) NativeAdvancedClosurePlan {
+        return .{
+            .requested_features = descriptor.features.len,
+            .deferred_native_features = descriptor.features.len,
+            .period29_phase5_features = descriptor.features.len,
+        };
+    }
+
+    pub fn hasDeferredNativeWork(self: NativeAdvancedClosurePlan) bool {
+        return self.deferred_native_features != 0;
+    }
+};
+
 pub fn classifyError(err: anyerror) ErrorCategory {
     return switch (err) {
         error.DeviceLost => .device_lost,
@@ -9557,6 +9616,22 @@ test "native command insertion descriptors are explicit and gated" {
         .encoder = .render,
         .callback = callback,
     }).validateForEncoder(.compute, .{ .native_command_insertion = true }));
+}
+
+test "native advanced closure plan tracks deferred feature count" {
+    const plan = NativeAdvancedClosurePlan.fromDescriptor(.{});
+    try std.testing.expectEqual(native_advanced_closure_features.len, plan.requested_features);
+    try std.testing.expectEqual(native_advanced_closure_features.len, plan.deferred_native_features);
+    try std.testing.expect(plan.hasDeferredNativeWork());
+    try std.testing.expectEqualStrings("Period 29 Phase 5", nativeAdvancedClosureTarget(.native_sparse_page_binding));
+
+    const focused = NativeAdvancedClosurePlan.fromDescriptor(.{
+        .features = &.{
+            .native_external_memory_import,
+            .native_command_handle_view,
+        },
+    });
+    try std.testing.expectEqual(@as(usize, 2), focused.period29_phase5_features);
 }
 
 test "sparse resource descriptors validate feature gates and alignment" {

@@ -628,3 +628,7 @@ Native command insertion 也必须显式调用。Render、compute、blit encoder
 `insertNativeCommands(...)`，参数是 `NativeCommandInsertionDescriptor`。Descriptor 会先验证
 feature gate、callback 和 encoder kind，再调用用户代码。真实 command-buffer /
 command-encoder native handle view 接好之前，backend 会保持这个 feature 关闭。
+
+`NativeAdvancedClosureDescriptor`、`NativeAdvancedClosurePlan` 和
+`Device.planNativeAdvancedClosure(...)` 会把当前 native-advanced implementation backlog
+作为数据暴露出来，主要供工具和 roadmap check 使用。

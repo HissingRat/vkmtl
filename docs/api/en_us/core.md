@@ -755,3 +755,7 @@ encoders expose `insertNativeCommands(...)` with
 callback, and encoder kind before invoking user code. Backends keep the feature
 disabled until real command-buffer / command-encoder native handle views are
 available.
+
+`NativeAdvancedClosureDescriptor`, `NativeAdvancedClosurePlan`, and
+`Device.planNativeAdvancedClosure(...)` expose the current native-advanced
+implementation backlog as data for tooling and roadmap checks.

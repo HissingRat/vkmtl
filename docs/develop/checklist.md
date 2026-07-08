@@ -1680,6 +1680,16 @@ obvious render and binding blockers.
 - [x] Document executable Metal acceleration/intersection resource lowering as
   deferred to Period 29 Phase 4.
 
+## Period 28 Phase 5 Checklist
+
+- [x] Add a native advanced closure feature inventory.
+- [x] Add a closure plan that counts deferred native backend work.
+- [x] Expose native advanced closure planning through `Device`.
+- [x] Keep native escape-hatch planning separate from portable resource and
+  command APIs.
+- [x] Document native advanced backend implementation as deferred to Period 29
+  Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

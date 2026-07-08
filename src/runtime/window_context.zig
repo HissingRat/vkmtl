@@ -3895,6 +3895,11 @@ pub const Device = struct {
         try descriptor.validate(self.features());
     }
 
+    pub fn planNativeAdvancedClosure(self: Device, descriptor: core.NativeAdvancedClosureDescriptor) core.NativeAdvancedClosurePlan {
+        _ = self;
+        return core.NativeAdvancedClosurePlan.fromDescriptor(descriptor);
+    }
+
     pub fn validateTessellationDescriptor(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -6205,6 +6210,33 @@ test "runtime device exposes diagnostics and capture names" {
         .frame_index = 3,
     }, buffer[0..]);
     try std.testing.expectEqualStrings("frame:encoder backend=metal frame=3", name);
+}
+
+test "runtime device plans native advanced closure inventory" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test native closure adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+
+    const plan = device.planNativeAdvancedClosure(.{
+        .features = &.{
+            .native_object_handle_pooling,
+            .native_driver_pipeline_cache,
+            .native_sparse_page_binding,
+        },
+    });
+    try std.testing.expectEqual(@as(usize, 3), plan.requested_features);
+    try std.testing.expectEqual(@as(usize, 3), plan.deferred_native_features);
+    try std.testing.expect(plan.hasDeferredNativeWork());
 }
 
 test "runtime plans persistent cache manifests through device" {
