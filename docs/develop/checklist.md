@@ -1660,6 +1660,16 @@ obvious render and binding blockers.
 - [x] Document executable native ray tracing pipeline creation as deferred to
   Period 29 Phase 2.
 
+## Period 28 Phase 3 Checklist
+
+- [x] Add ray dispatch descriptor and dispatch planning.
+- [x] Combine shader binding table layout and dispatch dimensions in one plan.
+- [x] Expose ray dispatch planning through `Device` using native feature
+  reports.
+- [x] Keep public shader binding table validation gated by usable features.
+- [x] Document native ray dispatch command encoding as deferred to Period 29
+  Phase 3.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

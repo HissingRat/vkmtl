@@ -280,6 +280,8 @@ native acceleration-structure object 可执行前检查 geometry count、build/u
 result size、scratch size 和 compaction intent。`RayTracingPipelineLowering` 和
 `Device.planRayTracingPipelineLowering(...)` 会通过 native feature report 暴露 Vulkan shader
 group count 或 Metal function-table metadata，先于 executable ray tracing pipeline 接入。
+`RayDispatchDescriptor`、`RayDispatchPlan` 和 `Device.planRayDispatch(...)` 会把 shader binding
+table layout、dispatch dimensions 和 total ray count 合成可检查的 dispatch plan。
 
 ## Binding
 

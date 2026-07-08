@@ -2742,6 +2742,50 @@ pub const ShaderBindingTableLayout = struct {
     }
 };
 
+pub const RayDispatchDescriptor = struct {
+    width: u32,
+    height: u32 = 1,
+    depth: u32 = 1,
+
+    pub fn validate(self: RayDispatchDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (self.width == 0 or self.height == 0 or self.depth == 0) {
+            return AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+    }
+
+    pub fn totalRays(self: RayDispatchDescriptor) u64 {
+        return @as(u64, self.width) *| @as(u64, self.height) *| @as(u64, self.depth);
+    }
+};
+
+pub const RayDispatchPlan = struct {
+    layout: ShaderBindingTableLayout,
+    width: u32,
+    height: u32,
+    depth: u32,
+    total_rays: u64,
+    sbt_size: u64,
+
+    pub fn fromDescriptors(
+        sbt: ShaderBindingTableDescriptor,
+        dispatch: RayDispatchDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!RayDispatchPlan {
+        const layout = try ShaderBindingTableLayout.fromDescriptor(sbt, features, limits);
+        try dispatch.validate(features);
+        return .{
+            .layout = layout,
+            .width = dispatch.width,
+            .height = dispatch.height,
+            .depth = dispatch.depth,
+            .total_rays = dispatch.totalRays(),
+            .sbt_size = layout.total_size,
+        };
+    }
+};
+
 pub const DepthBiasDescriptor = struct {
     enabled: bool = false,
     constant: f32 = 0,
@@ -9901,6 +9945,24 @@ test "shader binding table layout computes group offsets" {
     try std.testing.expectEqual(@as(u64, 192), layout.hit_offset);
     try std.testing.expectEqual(@as(u64, 384), layout.callable_offset);
     try std.testing.expectEqual(@as(u64, 448), layout.total_size);
+}
+
+test "ray dispatch plan combines sbt layout and dimensions" {
+    const plan = try RayDispatchPlan.fromDescriptors(.{
+        .stride = 64,
+        .ray_generation_count = 1,
+        .miss_count = 1,
+        .hit_count = 1,
+    }, .{
+        .width = 32,
+        .height = 16,
+    }, .{ .ray_tracing = true }, .{ .shader_binding_table_alignment = 64 });
+    try std.testing.expectEqual(@as(u64, 512), plan.total_rays);
+    try std.testing.expectEqual(@as(u64, 192), plan.sbt_size);
+    try std.testing.expectEqual(@as(u64, 128), plan.layout.hit_offset);
+    try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, (RayDispatchDescriptor{
+        .width = 0,
+    }).validate(.{ .ray_tracing = true }));
 }
 
 test "ray tracing descriptors reject missing groups and invalid limits" {

@@ -3952,6 +3952,19 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planRayDispatch(
+        self: Device,
+        sbt: core.ShaderBindingTableDescriptor,
+        dispatch: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!core.RayDispatchPlan {
+        return try core.RayDispatchPlan.fromDescriptors(
+            sbt,
+            dispatch,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -6032,6 +6045,42 @@ test "runtime device plans ray tracing pipeline lowering from native capabilitie
     try std.testing.expectEqual(@as(u32, 1), lowering.rayGenerationGroupCount());
     try std.testing.expectEqual(@as(u32, 1), lowering.hitGroupCount());
     try std.testing.expectEqual(@as(u32, 3), lowering.functionTableEntryCount());
+}
+
+test "runtime device plans ray dispatch from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.limits.shader_binding_table_alignment = 64;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test ray dispatch adapter",
+        },
+        .capability_report = report,
+    };
+
+    const sbt = core.ShaderBindingTableDescriptor{
+        .stride = 64,
+        .ray_generation_count = 1,
+        .miss_count = 1,
+        .hit_count = 1,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, device.validateShaderBindingTableDescriptor(sbt));
+
+    const plan = try device.planRayDispatch(sbt, .{
+        .width = 8,
+        .height = 4,
+    });
+    try std.testing.expectEqual(@as(u64, 32), plan.total_rays);
+    try std.testing.expectEqual(@as(u64, 192), plan.sbt_size);
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {
