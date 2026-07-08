@@ -3703,6 +3703,10 @@ pub const Device = struct {
         return queue_view;
     }
 
+    pub fn makeSurfaceCollection(self: Device) core.SurfaceCollection {
+        return core.SurfaceCollection.init(self.allocator, self.backend);
+    }
+
     pub fn compileRenderShader(
         self: *Device,
         name: []const u8,
@@ -4260,6 +4264,11 @@ pub const WindowContext = struct {
             .presentation = &self.presentation_descriptor,
             .impl = &self.impl,
         };
+    }
+
+    pub fn makeSurfaceCollection(self: *WindowContext) core.SurfaceCollection {
+        const device_view = self.device();
+        return device_view.makeSurfaceCollection();
     }
 
     pub fn compileRenderShader(
@@ -5541,6 +5550,50 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
     try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
     try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
+}
+
+test "runtime device creates multi surface collections" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+
+    var collection = device.makeSurfaceCollection();
+    defer collection.deinit();
+
+    const first = try collection.add(.{
+        .label = "primary",
+        .source = .{
+            .provider = .external,
+            .window = @ptrFromInt(1),
+        },
+    }, .{
+        .extent = .{ .width = 640, .height = 480 },
+    });
+    const second = try collection.add(.{
+        .label = "secondary",
+        .source = .{
+            .provider = .external,
+            .window = @ptrFromInt(2),
+        },
+    }, .{
+        .extent = .{ .width = 320, .height = 240 },
+    });
+
+    try std.testing.expectEqual(@as(usize, 2), collection.liveCount());
+    try collection.resize(second, .{ .width = 800, .height = 600 });
+    try std.testing.expectEqual(@as(u32, 640), (try collection.info(first)).presentation_state.extent.width);
+    try std.testing.expectEqual(@as(u32, 800), (try collection.info(second)).presentation_state.extent.width);
+    try std.testing.expectEqual(core.Backend.metal, (try collection.info(first)).backend);
 }
 
 test "runtime queue descriptor selects logical queue view when multi queue is supported" {

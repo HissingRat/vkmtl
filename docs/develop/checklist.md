@@ -1455,6 +1455,14 @@ obvious render and binding blockers.
 - [x] Mark all new deferred work in a later period and phase.
 - [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
+## Period 25 Phase 1 Checklist
+
+- [x] Define the device-owned surface registry API.
+- [x] Keep ordinary `WindowContext.surface()` / `swapchain()` behavior stable.
+- [x] Expose registry construction through `Device` and `WindowContext`.
+- [x] Add independent resize/handle validation tests.
+- [x] Document native multi-swapchain lowering as deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
