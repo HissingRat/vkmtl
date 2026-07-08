@@ -83,6 +83,7 @@ pub const NativeCommandInsertionDescriptor = core.NativeCommandInsertionDescript
 pub const NativeAdvancedClosureFeature = core.NativeAdvancedClosureFeature;
 pub const native_advanced_closure_features = core.native_advanced_closure_features;
 pub const nativeAdvancedClosureTarget = core.nativeAdvancedClosureTarget;
+pub const nativeAdvancedClosureHasPublicRuntimeContract = core.nativeAdvancedClosureHasPublicRuntimeContract;
 pub const NativeAdvancedClosureDescriptor = core.NativeAdvancedClosureDescriptor;
 pub const NativeAdvancedClosurePlan = core.NativeAdvancedClosurePlan;
 pub const ContextOptions = core.ContextOptions;

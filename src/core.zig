@@ -1324,7 +1324,28 @@ pub const native_advanced_closure_features = [_]NativeAdvancedClosureFeature{
 
 pub fn nativeAdvancedClosureTarget(feature: NativeAdvancedClosureFeature) []const u8 {
     _ = feature;
-    return "Period 29 Phase 5";
+    return "Period 30 Phase 5";
+}
+
+pub fn nativeAdvancedClosureHasPublicRuntimeContract(feature: NativeAdvancedClosureFeature) bool {
+    return switch (feature) {
+        .native_driver_pipeline_cache,
+        .runtime_cache_manifest_io,
+        .native_heap_backed_resources,
+        .native_sparse_page_binding,
+        .native_external_memory_import,
+        .native_external_texture_import,
+        .native_external_sync_wait_signal,
+        .native_command_handle_view,
+        .native_tessellation_pipeline,
+        .native_mesh_task_pipeline,
+        => true,
+
+        .native_object_handle_pooling,
+        .persistent_staging_pools,
+        .native_multi_surface_presentation,
+        => false,
+    };
 }
 
 pub const NativeAdvancedClosureDescriptor = struct {
@@ -1333,15 +1354,27 @@ pub const NativeAdvancedClosureDescriptor = struct {
 
 pub const NativeAdvancedClosurePlan = struct {
     requested_features: usize,
+    public_runtime_contract_features: usize,
     deferred_native_features: usize,
     period29_phase5_features: usize,
+    period30_phase5_features: usize,
 
     pub fn fromDescriptor(descriptor: NativeAdvancedClosureDescriptor) NativeAdvancedClosurePlan {
+        var public_contracts: usize = 0;
+        for (descriptor.features) |feature| {
+            if (nativeAdvancedClosureHasPublicRuntimeContract(feature)) public_contracts += 1;
+        }
         return .{
             .requested_features = descriptor.features.len,
+            .public_runtime_contract_features = public_contracts,
             .deferred_native_features = descriptor.features.len,
-            .period29_phase5_features = descriptor.features.len,
+            .period29_phase5_features = 0,
+            .period30_phase5_features = descriptor.features.len,
         };
+    }
+
+    pub fn hasPublicRuntimeContracts(self: NativeAdvancedClosurePlan) bool {
+        return self.public_runtime_contract_features != 0;
     }
 
     pub fn hasDeferredNativeWork(self: NativeAdvancedClosurePlan) bool {
@@ -9649,9 +9682,13 @@ test "native command insertion descriptors are explicit and gated" {
 test "native advanced closure plan tracks deferred feature count" {
     const plan = NativeAdvancedClosurePlan.fromDescriptor(.{});
     try std.testing.expectEqual(native_advanced_closure_features.len, plan.requested_features);
+    try std.testing.expect(plan.hasPublicRuntimeContracts());
     try std.testing.expectEqual(native_advanced_closure_features.len, plan.deferred_native_features);
+    try std.testing.expectEqual(native_advanced_closure_features.len, plan.period30_phase5_features);
     try std.testing.expect(plan.hasDeferredNativeWork());
-    try std.testing.expectEqualStrings("Period 29 Phase 5", nativeAdvancedClosureTarget(.native_sparse_page_binding));
+    try std.testing.expectEqualStrings("Period 30 Phase 5", nativeAdvancedClosureTarget(.native_sparse_page_binding));
+    try std.testing.expect(nativeAdvancedClosureHasPublicRuntimeContract(.native_sparse_page_binding));
+    try std.testing.expect(!nativeAdvancedClosureHasPublicRuntimeContract(.persistent_staging_pools));
 
     const focused = NativeAdvancedClosurePlan.fromDescriptor(.{
         .features = &.{
@@ -9659,7 +9696,9 @@ test "native advanced closure plan tracks deferred feature count" {
             .native_command_handle_view,
         },
     });
-    try std.testing.expectEqual(@as(usize, 2), focused.period29_phase5_features);
+    try std.testing.expectEqual(@as(usize, 0), focused.period29_phase5_features);
+    try std.testing.expectEqual(@as(usize, 2), focused.period30_phase5_features);
+    try std.testing.expectEqual(@as(usize, 2), focused.public_runtime_contract_features);
 }
 
 test "sparse resource descriptors validate feature gates and alignment" {

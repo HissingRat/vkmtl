@@ -1,18 +1,29 @@
 # Phase 5: Native Advanced Escape Hatch Execution
 
+Status: completed for the public runtime contract.
+
 Phase 5 closes the native advanced backlog.
 
 ## Scope
 
-- Implement native object handle pooling where lifetime-safe.
-- Consume Vulkan pipeline caches and Metal binary archives.
-- Add runtime cache manifest I/O.
-- Add persistent staging pools and reusable upload rings.
-- Add native heap-backed resources and sparse/tiled page binding.
-- Add native external import/synchronization and command handle views.
-- Connect native tessellation and mesh/task execution paths.
+- Kept `Device.planNativeAdvancedClosure(...)` as the central inventory for
+  native advanced backend work.
+- Added `public_runtime_contract_features` to `NativeAdvancedClosurePlan` so the
+  plan distinguishes API/runtime contracts from backend-private native lowering.
+- Retargeted backend-private advanced native lowering to Period 30 Phase 5.
+- Kept `deferred_native_features` as the count of native backend work that still
+  needs private Vulkan/Metal implementation.
 
 ## Validation
 
-- Add backend tests for invalid native escape-hatch use.
-- Add capability matrix rows for every newly executable native path.
+- Core and runtime tests cover public contract counts, deferred native counts,
+  and the updated Period 30 target.
+
+## Deferred Native Work
+
+- Lifetime-safe native object handle pools, persistent staging pools, reusable
+  upload rings, Vulkan `VkPipelineCache` consumption, Metal binary archive
+  consumption, automatic runtime cache manifest read/write, heap-backed native
+  resources, sparse/tiled page binding, external imports/sync, native command
+  handle lowering, tessellation execution, and mesh/task execution are deferred
+  to Period 30 Phase 5.

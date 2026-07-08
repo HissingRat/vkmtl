@@ -806,7 +806,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "Heap",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native heap-backed resources remain capability-gated",
     },
     .{
@@ -871,7 +871,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "DeviceFeatures.multi_surface",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native multiple-swapchain and multiple-layer presentation remains feature-gated",
     },
     .{
@@ -886,7 +886,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.presentModeSupport",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "surface-specific native present-mode/display-sync support remains conservative",
     },
     .{
@@ -901,7 +901,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.makeExternalMemory and Device.makeExternalBuffer",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native Vulkan memory import and Metal buffer wrapping remain feature-gated",
     },
     .{
@@ -916,7 +916,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.makeExternalTexture",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native Vulkan image import and Metal texture wrapping remain feature-gated",
     },
     .{
@@ -931,7 +931,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "CommandBuffer.commitWithExternalSynchronization",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native semaphore/shared-event wait and signal integration remains feature-gated",
     },
     .{
@@ -946,7 +946,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "NativeCommandInsertionDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "real command-buffer and command-encoder native handle views remain feature-gated",
     },
 };
@@ -1002,7 +1002,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "ObjectCachePolicy reuse mode",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "lookup diagnostics do not claim native handle reuse until lifetime-safe pools exist",
     },
     .{
@@ -1017,7 +1017,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "DriverPipelineCacheDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "VkPipelineCache and MTLBinaryArchive consumption remains explicit backend work",
     },
     .{
@@ -1032,7 +1032,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "RuntimeCachePlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "automatic manifest read/write is deferred until native cache ownership lands",
     },
     .{
@@ -1130,7 +1130,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "SparseBufferLowering, SparseTextureLowering, and SparseMappingCommitPlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native sparse/tiled resource objects and page binding remain explicit backend work",
     },
     .{
@@ -1145,7 +1145,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "TessellationLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native tessellation pipeline creation and executable draw commands remain feature-gated",
     },
     .{
@@ -1160,7 +1160,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "MeshPipelineLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native mesh/task pipeline creation and executable draw commands remain feature-gated",
     },
     .{
@@ -1285,7 +1285,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "NativeAdvancedClosurePlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 5",
+        .deferred_to = "Period 30 Phase 5",
         .validation = "native pools, imports, cache I/O, heaps, sparse binding, and advanced geometry execution are deferred",
     },
     .{
@@ -1724,6 +1724,7 @@ test "ray tracing and native parity backend matrix is complete" {
     var runtime_paths: usize = 0;
     var deferred_paths: usize = 0;
     var period29_targets: usize = 0;
+    var period30_targets: usize = 0;
 
     for (ray_tracing_native_parity_matrix) |entry| {
         seen[@intFromEnum(entry.feature)] = true;
@@ -1734,6 +1735,7 @@ test "ray tracing and native parity backend matrix is complete" {
         }
         if (entry.deferred_to) |target| {
             if (std.mem.startsWith(u8, target, "Period 29 ")) period29_targets += 1;
+            if (std.mem.startsWith(u8, target, "Period 30 ")) period30_targets += 1;
         }
     }
 
@@ -1742,7 +1744,8 @@ test "ray tracing and native parity backend matrix is complete" {
     }
     try std.testing.expect(runtime_paths >= 5);
     try std.testing.expect(deferred_paths >= 6);
-    try std.testing.expect(period29_targets >= 7);
+    try std.testing.expect(period29_targets >= 6);
+    try std.testing.expect(period30_targets >= 1);
 }
 
 test "validation case inventory is valid" {

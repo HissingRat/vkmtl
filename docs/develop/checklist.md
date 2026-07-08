@@ -1753,6 +1753,17 @@ obvious render and binding blockers.
 - [x] Document backend-private Metal acceleration/function-table execution as
   deferred to Period 30 Phase 4.
 
+## Period 29 Phase 5 Checklist
+
+- [x] Keep native advanced closure inventory queryable through
+  `Device.planNativeAdvancedClosure(...)`.
+- [x] Add public-runtime-contract counts to `NativeAdvancedClosurePlan`.
+- [x] Retarget backend-private native advanced lowering to Period 30 Phase 5.
+- [x] Add focused tests for public contract counts and deferred native counts.
+- [x] Document that native pools, persistent staging pools, sparse page binding,
+  external imports/sync, command handle lowering, tessellation, and mesh/task
+  execution remain backend-private Period 30 Phase 5 work.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
