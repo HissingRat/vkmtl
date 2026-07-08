@@ -1738,6 +1738,28 @@ pub const AccelerationStructureBuildResources = struct {
     }
 };
 
+const BackendPrivateRayTracingPipelineHandle = struct {
+    backend: core.Backend,
+    shader_group_count: u32,
+    function_table_entries: u32,
+    max_recursion_depth: u32,
+    driver_bound: bool = false,
+
+    fn fromLowering(
+        backend: core.Backend,
+        descriptor: core.RayTracingPipelineDescriptor,
+        lowering: core.RayTracingPipelineLowering,
+    ) BackendPrivateRayTracingPipelineHandle {
+        return .{
+            .backend = backend,
+            .shader_group_count = @intCast(descriptor.shader_groups.len),
+            .function_table_entries = lowering.functionTableEntryCount(),
+            .max_recursion_depth = lowering.maxRecursionDepth(),
+        };
+    }
+
+};
+
 pub const RayTracingPipelineState = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
@@ -1745,6 +1767,7 @@ pub const RayTracingPipelineState = struct {
     label_value: ?[]const u8 = null,
     descriptor_value: core.RayTracingPipelineDescriptor,
     lowering_value: core.RayTracingPipelineLowering,
+    native_handle: BackendPrivateRayTracingPipelineHandle,
     alive: bool = true,
 
     pub fn deinit(self: *RayTracingPipelineState) void {
@@ -1783,6 +1806,24 @@ pub const RayTracingPipelineState = struct {
 
     pub fn functionTableEntryCount(self: RayTracingPipelineState) u32 {
         return self.lowering().functionTableEntryCount();
+    }
+
+    pub fn hasBackendPrivatePipelineHandle(self: RayTracingPipelineState) bool {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        return self.native_handle.backend == self.backend and
+            self.native_handle.shader_group_count == self.descriptor_value.shader_groups.len and
+            self.native_handle.function_table_entries == self.functionTableEntryCount() and
+            self.native_handle.max_recursion_depth == self.maxRecursionDepth();
+    }
+
+    pub fn backendPrivateShaderGroupCount(self: RayTracingPipelineState) u32 {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        return self.native_handle.shader_group_count;
+    }
+
+    pub fn backendPrivatePipelineBoundToDriver(self: RayTracingPipelineState) bool {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        return self.native_handle.driver_bound;
     }
 };
 
@@ -4422,6 +4463,11 @@ pub const Device = struct {
                 .max_recursion_depth = descriptor.max_recursion_depth,
             },
             .lowering_value = lowering,
+            .native_handle = BackendPrivateRayTracingPipelineHandle.fromLowering(
+                self.backend,
+                descriptor,
+                lowering,
+            ),
         };
     }
 
@@ -6710,6 +6756,9 @@ test "runtime creates ray tracing pipeline states from native capabilities" {
     try std.testing.expectEqualStrings("rt pipeline", pipeline.label().?);
     try std.testing.expectEqual(@as(u32, 2), pipeline.maxRecursionDepth());
     try std.testing.expectEqual(@as(u32, 3), pipeline.functionTableEntryCount());
+    try std.testing.expect(pipeline.hasBackendPrivatePipelineHandle());
+    try std.testing.expectEqual(@as(u32, 3), pipeline.backendPrivateShaderGroupCount());
+    try std.testing.expect(!pipeline.backendPrivatePipelineBoundToDriver());
     try std.testing.expectEqual(@as(usize, 3), pipeline.descriptor().shader_groups.len);
 }
 

@@ -1239,10 +1239,10 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
     .{
         .feature = .native_ray_tracing_pipelines,
         .public_api = "RayTracingPipelineLowering",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 2",
-        .validation = "executable native ray tracing pipelines remain feature-gated",
+        .vulkan_status = .backend_private_runtime,
+        .metal_status = .backend_private_runtime,
+        .deferred_to = "Period 31+ driver parity plan",
+        .validation = "runtime ray tracing pipeline states own backend-private shader-group and function-table metadata",
     },
     .{
         .feature = .shader_binding_table_dispatch_planning,
@@ -1746,10 +1746,10 @@ test "ray tracing and native parity backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 5);
-    try std.testing.expect(deferred_paths >= 5);
+    try std.testing.expect(deferred_paths >= 4);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
-    try std.testing.expect(period30_targets >= 6);
-    try std.testing.expect(period31_plus_targets >= 1);
+    try std.testing.expect(period30_targets >= 5);
+    try std.testing.expect(period31_plus_targets >= 2);
 }
 
 test "validation case inventory is valid" {

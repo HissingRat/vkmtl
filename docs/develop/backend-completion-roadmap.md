@@ -229,7 +229,8 @@ Tracked in `docs/develop/period30/`.
 
 - [x] Backend-private acceleration structure handle state and build command
   records. Direct driver AS handles are Period 31+ parity work.
-- [ ] Native ray tracing pipeline handles.
+- [x] Backend-private ray tracing pipeline handle metadata. Direct driver
+  pipeline handles are Period 31+ parity work.
 - [ ] Native SBT records and dispatch commands.
 - [ ] Native Metal ray tracing dispatch integration.
 - [ ] Native advanced escape-hatch lowering.

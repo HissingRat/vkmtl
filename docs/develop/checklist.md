@@ -1797,6 +1797,17 @@ obvious render and binding blockers.
   `MTLAccelerationStructure` driver calls remain Period 31+ parity work after
   the backend-private runtime boundary is stable.
 
+## Period 30 Phase 2 Checklist
+
+- [x] Add backend-private ray tracing pipeline handle metadata to
+  `RayTracingPipelineState`.
+- [x] Preserve shader-group counts, function-table entries, and recursion
+  limits in the backend-private runtime state.
+- [x] Keep ray tracing pipeline creation gated by native feature reports.
+- [x] Add focused tests for backend-private pipeline metadata.
+- [x] Document that direct Vulkan ray tracing pipeline and Metal executable
+  pipeline/function-table driver creation remains Period 31+ parity work.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
