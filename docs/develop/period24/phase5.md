@@ -20,5 +20,5 @@ Phase 5 gives applications explicit memory-control options.
 - `Heap.reserve(...)` tracks aligned reservations and remaining heap capacity.
 - `TransientAllocationDiagnostics` reports transient resource count, requested
   units, and aliasable pairs.
-- Native heap-backed buffer/texture allocation is deferred to Period 27 Phase 3,
-  alongside residency and page-commit integration.
+- Native heap-backed buffer/texture allocation is deferred to Period 28 Phase 5,
+  alongside native sparse residency and page-commit integration.

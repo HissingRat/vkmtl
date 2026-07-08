@@ -166,14 +166,19 @@ for real applications instead of only examples.
 
 Tracked in `docs/develop/period27/`.
 
-- [ ] Sparse / tiled buffer lowering.
-- [ ] Sparse / tiled texture residency backend lowering.
-- [ ] Residency and page commit API.
-- [ ] Tessellation lowering where supported.
-- [ ] Mesh / task shader lowering where supported.
+- [x] Sparse / tiled buffer lowering plans.
+- [x] Sparse / tiled texture lowering plans and page-grid metadata.
+- [x] Residency and page commit planning API.
+- [x] Tessellation lowering plans where supported.
+- [x] Mesh / task shader lowering plans where supported.
+- [ ] Native sparse/tiled runtime resources and page binding. Deferred to
+  Period 28 Phase 5.
+- [ ] Native tessellation and mesh/task executable pipeline creation. Deferred
+  to Period 28 Phase 5.
 
 Expected result: advanced backend-specific power is exposed through explicit
-capability-gated APIs while the portable core remains clean.
+capability-gated planning APIs while the portable core remains clean. Period 28
+owns the native executable backend closure.
 
 ## Wave 9: Ray Tracing And Native Advanced Parity
 

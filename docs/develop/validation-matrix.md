@@ -31,6 +31,8 @@ Current cases:
 - `production_hardening`: cache planning, runtime diagnostics, capture names,
   stability planning, and Vulkan fallback diagnostics keep deterministic
   validation.
+- `advanced_resource_geometry`: sparse/tiled resource planning, residency
+  plans, tessellation lowering, and mesh/task lowering stay capability-gated.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

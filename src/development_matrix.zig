@@ -520,6 +520,22 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .command = "zig build test && zig build run-stability-plan -- --iterations 120",
         .expectation = "object-cache diagnostics, runtime cache planning, runtime diagnostics, and stability planning stay deterministic",
     },
+    .{
+        .name = "advanced_resource_geometry_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test",
+        .expectation = "sparse/tiled planning, residency plans, tessellation lowering, and mesh/task lowering regressions pass",
+    },
+    .{
+        .name = "advanced_geometry_feature_gates",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build run-tessellation && zig build run-mesh-shader",
+        .expectation = "windowed advanced geometry examples keep feature-gated public behavior",
+    },
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
@@ -782,7 +798,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "Heap",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 27 Phase 3",
+        .deferred_to = "Period 28 Phase 5",
         .validation = "native heap-backed resources remain capability-gated",
     },
     .{
@@ -1051,6 +1067,112 @@ pub fn validateProductionHardeningMatrix(entries: []const ProductionHardeningMat
     }
 }
 
+pub const AdvancedResourceGeometryFeature = enum {
+    sparse_buffer_planning,
+    sparse_texture_planning,
+    sparse_mapping_commit_planning,
+    native_sparse_page_binding,
+    tessellation_lowering_planning,
+    native_tessellation_pipeline,
+    mesh_task_lowering_planning,
+    native_mesh_task_pipeline,
+    advanced_geometry_examples,
+};
+
+pub const AdvancedResourceGeometryMatrixEntry = struct {
+    feature: AdvancedResourceGeometryFeature,
+    public_api: []const u8,
+    vulkan_status: BackendFeatureStatus,
+    metal_status: BackendFeatureStatus,
+    deferred_to: ?[]const u8 = null,
+    validation: []const u8,
+
+    pub fn validate(self: AdvancedResourceGeometryMatrixEntry) DevelopmentMatrixError!void {
+        if (self.public_api.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        const deferred = self.vulkan_status == .deferred_native_lowering or self.metal_status == .deferred_native_lowering;
+        if (deferred and self.deferred_to == null) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixEntry{
+    .{
+        .feature = .sparse_buffer_planning,
+        .public_api = "SparseBufferDescriptor and Device.planSparseBufferLowering",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "sparse buffer page size and page count are planned from native feature reports",
+    },
+    .{
+        .feature = .sparse_texture_planning,
+        .public_api = "SparseTextureDescriptor and Device.planSparseTextureLowering",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "sparse/tiled texture page grids and lowering modes are planned from native feature reports",
+    },
+    .{
+        .feature = .sparse_mapping_commit_planning,
+        .public_api = "SparseMappingCommitDescriptor and Device.planSparseMappingCommit",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "commit plans summarize commit/evict counts, buffer bytes, and texture pages",
+    },
+    .{
+        .feature = .native_sparse_page_binding,
+        .public_api = "SparseBufferLowering, SparseTextureLowering, and SparseMappingCommitPlan",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native sparse/tiled resource objects and page binding remain explicit backend work",
+    },
+    .{
+        .feature = .tessellation_lowering_planning,
+        .public_api = "TessellationDescriptor and Device.planTessellationLowering",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "tessellation lowering plans expose patch metadata and Metal factor-buffer requirements",
+    },
+    .{
+        .feature = .native_tessellation_pipeline,
+        .public_api = "TessellationLowering",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native tessellation pipeline creation and executable draw commands remain feature-gated",
+    },
+    .{
+        .feature = .mesh_task_lowering_planning,
+        .public_api = "MeshPipelineDescriptor and Device.planMeshPipelineLowering",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "mesh/task lowering plans expose Vulkan task/mesh and Metal object/mesh metadata",
+    },
+    .{
+        .feature = .native_mesh_task_pipeline,
+        .public_api = "MeshPipelineLowering",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "native mesh/task pipeline creation and executable draw commands remain feature-gated",
+    },
+    .{
+        .feature = .advanced_geometry_examples,
+        .public_api = "examples/tessellation and examples/mesh_shader",
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "windowed examples exercise public feature gates without importing backend-private modules",
+    },
+};
+
+pub fn validateAdvancedResourceGeometryMatrix(entries: []const AdvancedResourceGeometryMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (entry.feature == other.feature) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 pub const ValidationCaseKind = enum {
     invalid_bind_group,
     invalid_texture_format,
@@ -1064,6 +1186,7 @@ pub const ValidationCaseKind = enum {
     resource_utilities,
     platform_interop,
     production_hardening,
+    advanced_resource_geometry,
 };
 
 pub const ValidationCase = struct {
@@ -1153,6 +1276,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .production_hardening,
         .test_location = "src/core.zig, src/runtime/window_context.zig, src/backend/vulkan/command.zig, and tools/stability_plan/main.zig Period 26 tests",
         .expectation = "cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics stay deterministic",
+    },
+    .{
+        .name = "advanced_resource_geometry",
+        .kind = .advanced_resource_geometry,
+        .test_location = "src/core.zig and src/runtime/window_context.zig Period 27 tests",
+        .expectation = "sparse/tiled resource planning, residency plans, tessellation lowering, and mesh/task lowering stay capability-gated",
     },
 };
 
@@ -1289,18 +1418,24 @@ test "backend test matrix metadata is valid" {
     var has_resource_utility_regression = false;
     var has_platform_interop_regression = false;
     var has_production_hardening_regression = false;
+    var has_advanced_resource_geometry_regression = false;
+    var has_advanced_geometry_feature_gates = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
         if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
         if (std.mem.eql(u8, entry.name, "resource_utility_regression")) has_resource_utility_regression = true;
         if (std.mem.eql(u8, entry.name, "platform_interop_regression")) has_platform_interop_regression = true;
         if (std.mem.eql(u8, entry.name, "production_hardening_regression")) has_production_hardening_regression = true;
+        if (std.mem.eql(u8, entry.name, "advanced_resource_geometry_regression")) has_advanced_resource_geometry_regression = true;
+        if (std.mem.eql(u8, entry.name, "advanced_geometry_feature_gates")) has_advanced_geometry_feature_gates = true;
     }
     try std.testing.expect(configured_optional >= 1);
     try std.testing.expect(has_sync_query_regression);
     try std.testing.expect(has_resource_utility_regression);
     try std.testing.expect(has_platform_interop_regression);
     try std.testing.expect(has_production_hardening_regression);
+    try std.testing.expect(has_advanced_resource_geometry_regression);
+    try std.testing.expect(has_advanced_geometry_feature_gates);
 }
 
 test "sync and query backend matrix is complete" {
@@ -1402,6 +1537,32 @@ test "production hardening backend matrix is complete" {
     }
     try std.testing.expect(runtime_paths >= 6);
     try std.testing.expect(deferred_paths >= 4);
+}
+
+test "advanced resource and geometry backend matrix is complete" {
+    try validateAdvancedResourceGeometryMatrix(advanced_resource_geometry_matrix[0..]);
+
+    var seen = [_]bool{false} ** @typeInfo(AdvancedResourceGeometryFeature).@"enum".fields.len;
+    var runtime_paths: usize = 0;
+    var capability_gated: usize = 0;
+    var deferred_paths: usize = 0;
+
+    for (advanced_resource_geometry_matrix) |entry| {
+        seen[@intFromEnum(entry.feature)] = true;
+        if (entry.vulkan_status == .portable_runtime or entry.metal_status == .portable_runtime) runtime_paths += 1;
+        if (entry.vulkan_status == .capability_gated or entry.metal_status == .capability_gated) capability_gated += 1;
+        if (entry.vulkan_status == .deferred_native_lowering or entry.metal_status == .deferred_native_lowering) {
+            deferred_paths += 1;
+            try std.testing.expect(entry.deferred_to != null);
+        }
+    }
+
+    for (seen) |was_seen| {
+        try std.testing.expect(was_seen);
+    }
+    try std.testing.expect(runtime_paths >= 5);
+    try std.testing.expect(capability_gated >= 1);
+    try std.testing.expect(deferred_paths >= 3);
 }
 
 test "validation case inventory is valid" {

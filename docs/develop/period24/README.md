@@ -35,7 +35,7 @@ See `phase4.md`.
 ## Phase 5: Heaps And Transient Allocation
 
 - Add heap planning/reservation and transient allocation diagnostics. Native
-  heap-backed resource creation is deferred to Period 27 Phase 3.
+  heap-backed resource creation is deferred to Period 28 Phase 5.
 
 See `phase5.md`.
 

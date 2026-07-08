@@ -1630,6 +1630,15 @@ obvious render and binding blockers.
 - [x] Document native mesh/task pipeline creation and dispatch/draw commands as
   deferred to Period 28 Phase 5.
 
+## Period 27 Phase 6 Checklist
+
+- [x] Add an advanced resource/geometry regression row to the backend matrix.
+- [x] Add a dedicated advanced resource/geometry feature matrix.
+- [x] Add a validation inventory case for Period 27 coverage.
+- [x] Mark Period 27 as completed as a planning and validation slice.
+- [x] Document native sparse/tiled, tessellation, and mesh/task execution as
+  deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

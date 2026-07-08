@@ -14,6 +14,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
+- `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit plans, tessellation lowering plans, and mesh/task lowering plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
 
@@ -81,7 +82,7 @@ conservative until the relevant backend period lands.
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
 | Custom sampler border colors | Deferred | Deferred | Period 28 Phase 6 parity decision |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
-| Native heap-backed resources | Deferred | Deferred | Period 27 Phase 3 native integration |
+| Native heap-backed resources | Deferred | Deferred | Period 28 Phase 5 native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
 
 ## Period 25 Platform And Interop Expectations
@@ -115,3 +116,17 @@ conservative until the relevant backend period lands.
 | Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
 | Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
 | GPU-backed soak loops | Deferred | Deferred | Period 28 Phase 6 native long-run validation |
+
+## Period 27 Advanced Resource And Geometry Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Sparse buffer planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseBufferLowering(...)` |
+| Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseTextureLowering(...)` |
+| Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `Device.planSparseMappingCommit(...)` |
+| Native sparse/tiled page binding | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Tessellation lowering planning | Runtime patch metadata plan | Runtime factor-buffer requirement plan | `Device.planTessellationLowering(...)` |
+| Native tessellation pipeline | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Mesh/task lowering planning | Runtime task/mesh metadata plan | Runtime object/mesh metadata plan | `Device.planMeshPipelineLowering(...)` |
+| Native mesh/task pipeline | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Advanced geometry examples | Feature-gated examples | Feature-gated examples | `examples/tessellation` and `examples/mesh_shader` |
