@@ -578,10 +578,24 @@ objects, command encoders, and long-run validation paths.
 
 See `docs/develop/period30/`.
 
+## Period 31+: Full Parity And Production Coverage
+
+Status: target only. Concrete periods and phases should be planned after Period
+30 native execution results are known.
+
+Goal: complete the long-tail parity, platform, diagnostics, validation,
+interop, and pressure-test work required before vkmtl can reasonably claim broad
+Vulkan / Metal workload coverage.
+
+See `docs/develop/period31+/target.md`.
+
 ## Priority Notes
 
-- Period 22 is the current priority after Period 21. It closes the deferred
-  binding and shader backend work before command/sync expansion resumes.
+- Period 30 is the current backend-completion priority. It connects Period 29
+  runtime contracts to real native backend execution.
+- Period 31+ is target-only until Period 30 results are known. Split it into
+  concrete periods and phases only after checking which advanced paths really
+  execute and which remain typed unsupported.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced
