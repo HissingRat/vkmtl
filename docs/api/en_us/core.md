@@ -455,6 +455,13 @@ returns a logical compute or transfer queue view. Current backends still record
 commands through the existing native command queue until dedicated native queue
 families are enabled.
 
+`QueueOwnershipTransferDescriptor` is executable from blit and compute encoders
+through `bufferOwnershipTransfer(...)` and `textureOwnershipTransfer(...)`.
+Resources track their current owner queue with `ownerQueue()`. Access from the
+wrong logical queue returns `InvalidQueueOwnershipState`; Metal currently maps
+ownership transfers to validation/no-op behavior, while Vulkan queue-family
+lowering remains tied to future native dedicated queue support.
+
 Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also

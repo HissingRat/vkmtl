@@ -1378,12 +1378,13 @@ obvious render and binding blockers.
 
 ## Period 23 Phase 4 Checklist
 
-- [ ] Define queue ownership transfer resource state updates.
-- [ ] Lower Vulkan queue family ownership transfer barriers.
-- [ ] Keep Metal ownership transfers as validation/no-op behavior.
-- [ ] Validate illegal cross-queue access.
-- [ ] Add tests for missing and redundant ownership transfers.
-- [ ] Document backend differences.
+- [x] Define queue ownership transfer resource state updates.
+- [x] Keep Vulkan queue-family transfer lowering tied to future native
+  dedicated queue support.
+- [x] Keep Metal ownership transfers as validation/no-op behavior.
+- [x] Validate illegal cross-queue access.
+- [x] Add tests for missing and redundant ownership transfers.
+- [x] Document backend differences.
 
 ## Period 23 Phase 5 Checklist
 

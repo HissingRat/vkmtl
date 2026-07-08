@@ -516,6 +516,7 @@ pub const Buffer = struct {
     usage_value: core.BufferUsage = .{},
     storage_mode_value: core.ResourceStorageMode = .automatic,
     usage_state: core.ResourceUsageState = .{},
+    owner_queue_value: core.QueueKind = .graphics,
     alive: bool = true,
     impl: Impl,
 
@@ -574,6 +575,10 @@ pub const Buffer = struct {
 
     pub fn usageBarrierCount(self: Buffer) usize {
         return self.usage_state.barrier_count;
+    }
+
+    pub fn ownerQueue(self: Buffer) core.QueueKind {
+        return self.owner_queue_value;
     }
 
     fn recordUsage(self: *Buffer, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
@@ -669,6 +674,7 @@ pub const Texture = struct {
     usage_value: core.TextureUsage,
     sample_count_value: u32,
     usage_state: core.ResourceUsageState = .{},
+    owner_queue_value: core.QueueKind = .graphics,
     alive: bool = true,
     impl: Impl,
 
@@ -719,6 +725,10 @@ pub const Texture = struct {
 
     pub fn usageBarrierCount(self: Texture) usize {
         return self.usage_state.barrier_count;
+    }
+
+    pub fn ownerQueue(self: Texture) core.QueueKind {
+        return self.owner_queue_value;
     }
 
     fn recordUsage(self: *Texture, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
@@ -801,6 +811,7 @@ pub const Texture = struct {
                 .mip_level_count_value = resolved.mip_level_count,
                 .base_array_layer_value = resolved.base_array_layer,
                 .array_layer_count_value = resolved.array_layer_count,
+                .owner_queue_value = self.owner_queue_value,
                 .impl = impl,
             },
             .metal => TextureView{
@@ -818,6 +829,7 @@ pub const Texture = struct {
                 .mip_level_count_value = resolved.mip_level_count,
                 .base_array_layer_value = resolved.base_array_layer,
                 .array_layer_count_value = resolved.array_layer_count,
+                .owner_queue_value = self.owner_queue_value,
                 .impl = impl,
             },
         };
@@ -894,6 +906,7 @@ pub const TextureView = struct {
     mip_level_count_value: u32 = 1,
     base_array_layer_value: u32 = 0,
     array_layer_count_value: u32 = 1,
+    owner_queue_value: core.QueueKind = .graphics,
     usage_state: core.ResourceUsageState = .{},
     alive: bool = true,
     impl: Impl,
@@ -977,6 +990,10 @@ pub const TextureView = struct {
 
     pub fn usageBarrierCount(self: TextureView) usize {
         return self.usage_state.barrier_count;
+    }
+
+    pub fn ownerQueue(self: TextureView) core.QueueKind {
+        return self.owner_queue_value;
     }
 
     fn recordUsage(self: *TextureView, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
@@ -2084,7 +2101,9 @@ pub const CommandBuffer = struct {
         descriptor: RenderPassDescriptor,
     ) !RenderCommandEncoder {
         assertObjectAlive(self.alive, "command_buffer");
+        if (self.queue_kind_value != .graphics) return core.CommandEncodingError.InvalidQueueCapability;
         try descriptor.validateRuntime(self.backend);
+        validateRenderPassOwnership(self.queue_kind_value, descriptor) catch |err| return err;
         recordRenderPassUsage(descriptor);
 
         const core_color_attachments = [_]core.RenderPassColorAttachmentDescriptor{
@@ -2140,6 +2159,7 @@ pub const CommandBuffer = struct {
 
     pub fn makeComputeCommandEncoder(self: *CommandBuffer) !ComputeCommandEncoder {
         assertObjectAlive(self.alive, "command_buffer");
+        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
 
         const debug_encoder = try self.debug.makeComputeCommandEncoder();
         errdefer self.debug.state = .ready;
@@ -2271,6 +2291,8 @@ pub const BlitCommandEncoder = struct {
         try expectSameBackend(self.backend, destination.backend);
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, source);
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
         try self.debug.copyBufferToBuffer(descriptor, source.length(), destination.length());
         _ = source.recordUsage(.copy_source);
         _ = destination.recordUsage(.copy_destination);
@@ -2293,6 +2315,8 @@ pub const BlitCommandEncoder = struct {
         try expectSameBackend(self.backend, destination.backend);
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, source);
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
         const resolved = try self.debug.copyBufferToTexture(descriptor, source.length(), destination.textureDescriptor());
         _ = source.recordUsage(.copy_source);
         _ = destination.recordUsage(.copy_destination);
@@ -2315,6 +2339,8 @@ pub const BlitCommandEncoder = struct {
         try expectSameBackend(self.backend, destination.backend);
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
         const resolved = try self.debug.copyTextureToBuffer(descriptor, source.textureDescriptor(), destination.length());
         _ = source.recordUsage(.copy_source);
         _ = destination.recordUsage(.copy_destination);
@@ -2337,6 +2363,8 @@ pub const BlitCommandEncoder = struct {
         try expectSameBackend(self.backend, destination.backend);
         if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
         const resolved = try self.debug.copyTextureToTexture(
             descriptor,
             source.textureDescriptor(),
@@ -2359,6 +2387,7 @@ pub const BlitCommandEncoder = struct {
         assertAlive(buffer.alive, .buffer);
         try expectSameBackend(self.backend, buffer.backend);
         if (!buffer.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
         try self.debug.fillBuffer(descriptor, buffer.length());
         _ = buffer.recordUsage(.copy_destination);
         if (self.impl) |*impl| switch (impl.*) {
@@ -2373,6 +2402,7 @@ pub const BlitCommandEncoder = struct {
         descriptor: core.BufferBarrierDescriptor,
     ) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
         try recordBufferBarrier(self.backend, self.command_buffer.features_value, buffer, descriptor);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.impl.vulkan, descriptor),
@@ -2386,11 +2416,32 @@ pub const BlitCommandEncoder = struct {
         descriptor: core.TextureBarrierDescriptor,
     ) !void {
         assertObjectAlive(self.alive, "blit_command_encoder");
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, texture);
         try recordTextureBarrier(self.backend, self.command_buffer.features_value, texture, descriptor);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.impl.vulkan, descriptor),
             .metal => |*metal| try metal.textureBarrier(&texture.impl.metal, descriptor),
         };
+    }
+
+    pub fn bufferOwnershipTransfer(
+        self: *BlitCommandEncoder,
+        buffer: *Buffer,
+        descriptor: core.QueueOwnershipTransferDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordBufferOwnershipTransfer(self.command_buffer.features_value, buffer, descriptor);
+    }
+
+    pub fn textureOwnershipTransfer(
+        self: *BlitCommandEncoder,
+        texture: *Texture,
+        descriptor: core.QueueOwnershipTransferDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordTextureOwnershipTransfer(self.command_buffer.features_value, texture, descriptor);
     }
 
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
@@ -2571,6 +2622,7 @@ pub const ComputeCommandEncoder = struct {
         assertAlive(indirect_buffer.alive, .buffer);
         try expectSameBackend(self.backend, indirect_buffer.backend);
         if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, indirect_buffer);
         try self.debug.dispatchThreadgroupsIndirect(
             descriptor,
             indirect_buffer.length(),
@@ -2590,6 +2642,7 @@ pub const ComputeCommandEncoder = struct {
         descriptor: core.BufferBarrierDescriptor,
     ) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
         try recordBufferBarrier(self.backend, self.command_buffer.features_value, buffer, descriptor);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.impl.vulkan, descriptor),
@@ -2603,11 +2656,32 @@ pub const ComputeCommandEncoder = struct {
         descriptor: core.TextureBarrierDescriptor,
     ) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, texture);
         try recordTextureBarrier(self.backend, self.command_buffer.features_value, texture, descriptor);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.impl.vulkan, descriptor),
             .metal => |*metal| try metal.textureBarrier(&texture.impl.metal, descriptor),
         };
+    }
+
+    pub fn bufferOwnershipTransfer(
+        self: *ComputeCommandEncoder,
+        buffer: *Buffer,
+        descriptor: core.QueueOwnershipTransferDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordBufferOwnershipTransfer(self.command_buffer.features_value, buffer, descriptor);
+    }
+
+    pub fn textureOwnershipTransfer(
+        self: *ComputeCommandEncoder,
+        texture: *Texture,
+        descriptor: core.QueueOwnershipTransferDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordTextureOwnershipTransfer(self.command_buffer.features_value, texture, descriptor);
     }
 
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
@@ -2707,6 +2781,7 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.alive, "render_command_encoder");
         assertAlive(buffer.alive, .buffer);
         try expectSameBackend(self.backend, buffer.backend);
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
         try self.debug.setVertexBuffer(binding);
         _ = buffer.recordUsage(.vertex_buffer);
         if (self.impl) |*impl| switch (impl.*) {
@@ -2719,6 +2794,7 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.alive, "render_command_encoder");
         assertAlive(buffer.alive, .buffer);
         try expectSameBackend(self.backend, buffer.backend);
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
         try self.debug.setIndexBuffer();
         _ = buffer.recordUsage(.index_buffer);
         if (self.impl) |*impl| switch (impl.*) {
@@ -2862,6 +2938,7 @@ pub const RenderCommandEncoder = struct {
         assertAlive(indirect_buffer.alive, .buffer);
         try expectSameBackend(self.backend, indirect_buffer.backend);
         if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, indirect_buffer);
         try self.debug.drawPrimitivesIndirect(descriptor);
         try validateIndirectDrawRange(descriptor.buffer_offset, descriptor.draw_count, descriptor.stride, indirect_buffer.length(), 16);
         _ = indirect_buffer.recordUsage(.indirect_buffer);
@@ -2896,6 +2973,7 @@ pub const RenderCommandEncoder = struct {
         assertAlive(indirect_buffer.alive, .buffer);
         try expectSameBackend(self.backend, indirect_buffer.backend);
         if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, indirect_buffer);
         try self.debug.drawIndexedPrimitivesIndirect(descriptor);
         try validateIndirectDrawRange(descriptor.buffer_offset, descriptor.draw_count, descriptor.stride, indirect_buffer.length(), 20);
         _ = indirect_buffer.recordUsage(.indirect_buffer);
@@ -4043,6 +4121,66 @@ fn recordTextureBarrier(
     _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
 }
 
+fn recordBufferOwnershipTransfer(
+    features: core.DeviceFeatures,
+    buffer: *Buffer,
+    descriptor: core.QueueOwnershipTransferDescriptor,
+) !void {
+    assertAlive(buffer.alive, .buffer);
+    try descriptor.validate(features);
+    if (buffer.owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    _ = try buffer.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    buffer.owner_queue_value = descriptor.destination;
+}
+
+fn recordTextureOwnershipTransfer(
+    features: core.DeviceFeatures,
+    texture: *Texture,
+    descriptor: core.QueueOwnershipTransferDescriptor,
+) !void {
+    assertAlive(texture.alive, .texture);
+    try descriptor.validate(features);
+    if (texture.owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    texture.owner_queue_value = descriptor.destination;
+}
+
+fn ensureBufferOwnedByQueue(queue: core.QueueKind, buffer: *const Buffer) core.CommandEncodingError!void {
+    if (buffer.owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+}
+
+fn ensureTextureOwnedByQueue(queue: core.QueueKind, texture: *const Texture) core.CommandEncodingError!void {
+    if (texture.owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+}
+
+fn ensureTextureViewOwnedByQueue(queue: core.QueueKind, texture_view: *const TextureView) core.CommandEncodingError!void {
+    if (texture_view.ownerQueue() != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+}
+
+fn validateRenderPassOwnership(queue: core.QueueKind, descriptor: RenderPassDescriptor) core.CommandEncodingError!void {
+    for (descriptor.color_attachments) |attachment| {
+        switch (attachment.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| try ensureTextureViewOwnedByQueue(queue, texture_view),
+        }
+        if (attachment.resolve_target) |resolve_target| {
+            try ensureTextureViewOwnedByQueue(queue, resolve_target);
+        }
+    }
+    if (descriptor.depth_attachment) |depth_attachment| {
+        switch (depth_attachment.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| try ensureTextureViewOwnedByQueue(queue, texture_view),
+        }
+    }
+    if (descriptor.stencil_attachment) |stencil_attachment| {
+        switch (stencil_attachment.target) {
+            .current_drawable => {},
+            .texture_view => |texture_view| try ensureTextureViewOwnedByQueue(queue, texture_view),
+        }
+    }
+}
+
 fn validateDynamicOffsetsForBindGroup(
     bind_group: BindGroup,
     binding: core.BindGroupBinding,
@@ -5103,6 +5241,90 @@ test "runtime queue descriptor selects logical queue view when multi queue is su
         .require_dedicated = true,
     });
     try std.testing.expectEqual(core.QueueKind.transfer, transfer_queue.kind());
+}
+
+test "runtime queue ownership transfers gate cross queue resource use" {
+    var tracker = ResourceTracker{};
+    var graphics_command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .queue_kind_value = .graphics,
+        .features_value = .{
+            .explicit_resource_barriers = true,
+            .queue_ownership_transfer = true,
+        },
+        .impl = null,
+    };
+    var graphics_blit = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &graphics_command_buffer,
+        .impl = null,
+    };
+    var compute_command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+        .features_value = .{
+            .explicit_resource_barriers = true,
+            .queue_ownership_transfer = true,
+        },
+        .impl = null,
+    };
+    var compute_encoder = ComputeCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &compute_command_buffer,
+        .impl = null,
+    };
+
+    var buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 64,
+        .usage_value = .{ .copy_destination = true, .copy_source = true, .storage = true },
+        .storage_mode_value = .shared,
+        .usage_state = .{ .current = .copy_destination },
+        .impl = undefined,
+    };
+
+    try graphics_blit.bufferOwnershipTransfer(&buffer, .{
+        .source = .graphics,
+        .destination = .compute,
+        .before = .copy_destination,
+        .after = .storage_buffer_read,
+    });
+    try std.testing.expectEqual(core.QueueKind.compute, buffer.ownerQueue());
+    try std.testing.expectEqual(core.ResourceUsageKind.storage_buffer_read, buffer.currentUsage().?);
+    try std.testing.expectError(core.CommandEncodingError.InvalidQueueOwnershipState, graphics_blit.fillBuffer(&buffer, .{
+        .size = 4,
+    }));
+    try compute_encoder.bufferBarrier(&buffer, .{
+        .before = .storage_buffer_read,
+        .after = .copy_source,
+        .size = 64,
+    });
+    try std.testing.expectEqual(core.ResourceUsageKind.copy_source, buffer.currentUsage().?);
+
+    var gated_command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .queue_kind_value = .graphics,
+        .features_value = .{},
+        .impl = null,
+    };
+    var gated_blit = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &gated_command_buffer,
+        .impl = null,
+    };
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedQueueOwnershipTransfer, gated_blit.bufferOwnershipTransfer(&buffer, .{
+        .source = .graphics,
+        .destination = .transfer,
+        .before = .copy_source,
+        .after = .copy_destination,
+    }));
+    try std.testing.expectError(core.CommandEncodingError.InvalidQueueOwnershipState, gated_blit.bufferOwnershipTransfer(&buffer, .{
+        .source = .compute,
+        .destination = .graphics,
+        .before = .copy_source,
+        .after = .copy_destination,
+    }));
 }
 
 test "runtime explicit barriers update resource usage state" {

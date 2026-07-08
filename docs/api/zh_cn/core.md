@@ -376,6 +376,12 @@ descriptor 会回落到 graphics queue。启用 `DeviceFeatures.multi_queue` 以
 gate 后，`queueWithDescriptor(...)` 会返回 logical compute 或 transfer queue view。当前 backend
 仍通过已有 native command queue 记录命令；dedicated native queue family 后续再接。
 
+`QueueOwnershipTransferDescriptor` 已经可以通过 blit / compute encoder 的
+`bufferOwnershipTransfer(...)` 和 `textureOwnershipTransfer(...)` 执行。Resource 会用
+`ownerQueue()` 暴露当前 logical owner queue；从错误 queue 访问会返回
+`InvalidQueueOwnershipState`。Metal 当前映射为 validation/no-op 行为；Vulkan queue-family lowering
+会跟随后续 dedicated native queue support 一起完成。
+
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
