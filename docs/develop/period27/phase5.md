@@ -26,4 +26,4 @@ Phase 5 lowers mesh/task shader pipeline descriptors.
 ## Deferred
 
 - Native mesh/task pipeline creation, shader stage attachment, and executable
-  mesh draw/dispatch commands remain deferred to Period 28 Phase 5.
+  mesh draw/dispatch commands remain deferred to Period 29 Phase 5.

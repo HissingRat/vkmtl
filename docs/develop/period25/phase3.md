@@ -27,6 +27,6 @@ Phase 3 imports resources owned by other systems.
 - `examples/external_texture` continues to exercise the explicit feature-gated
   texture path.
 - Native Vulkan external memory/image import and Metal external
-  buffer/texture wrapping are deferred to Period 28 Phase 5. Until that lands,
+  buffer/texture wrapping are deferred to Period 29 Phase 5. Until that lands,
   these wrappers are explicit interop descriptors and lifetime guards, not
   proof that a backend-native import occurred.

@@ -25,5 +25,5 @@ Phase 3 persists selected runtime artifacts across runs.
   toolchain mismatch.
 - The existing inspectable Slang artifact layout remains unchanged.
 - Automatic manifest file read/write in the shader compiler is deferred to
-  Period 28 Phase 5 so it can land with the native cache and escape-hatch
+  Period 29 Phase 5 so it can land with the native cache and escape-hatch
   closure.

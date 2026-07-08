@@ -28,9 +28,9 @@ Phase 6 closes Period 26 with release-oriented checks.
 
 ## Deferred
 
-- Native object handle pooling: Period 28 Phase 5.
-- Native `VkPipelineCache` / `MTLBinaryArchive` consumption: Period 28 Phase 5.
-- Automatic runtime cache manifest read/write: Period 28 Phase 5.
+- Native object handle pooling: Period 29 Phase 5.
+- Native `VkPipelineCache` / `MTLBinaryArchive` consumption: Period 29 Phase 5.
+- Automatic runtime cache manifest read/write: Period 29 Phase 5.
 - Persistent native staging-buffer pools and reusable upload rings: Period 28
   Phase 5.
 - Native capture/profiler enrichment and GPU-backed soak loops: Period 28 Phase

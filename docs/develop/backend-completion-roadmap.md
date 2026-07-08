@@ -138,7 +138,7 @@ Tracked in `docs/develop/period25/`.
 Expected result: vkmtl can sit inside larger native apps and tooling without
 owning every resource itself. Current Period 25 coverage provides public API,
 typed validation, wrappers, and examples; native interop lowering is routed to
-Period 28 Phase 5.
+Period 29 Phase 5.
 
 ## Wave 7: Object Cache And Production Hardening
 
@@ -147,17 +147,17 @@ Tracked in `docs/develop/period26/`.
 - [x] Object-cache lookup diagnostics for shader modules, layouts, pipelines,
   and samplers.
 - [ ] Native object handle pooling for shader modules, layouts, pipelines, and
-  samplers. Deferred to Period 28 Phase 5.
+  samplers. Deferred to Period 29 Phase 5.
 - [x] Driver pipeline cache / binary archive planning descriptors.
 - [ ] Vulkan `VkPipelineCache` and Metal `MTLBinaryArchive` consumption.
-  Deferred to Period 28 Phase 5.
+  Deferred to Period 29 Phase 5.
 - [x] Persistent runtime cache manifest versioning and compatibility planning.
-- [ ] Automatic runtime cache manifest read/write. Deferred to Period 28 Phase
+- [ ] Automatic runtime cache manifest read/write. Deferred to Period 29 Phase
   5.
 - [x] Diagnostics for cache misses, creation cost, resource churn, capture
   names, and runtime live-resource snapshots.
 - [x] Long-run stability planning command.
-- [ ] GPU-backed long-run soak loops. Deferred to Period 28 Phase 6.
+- [ ] GPU-backed long-run soak loops. Deferred to Period 29 Phase 6.
 
 Expected result: completed backend paths are fast enough and observable enough
 for real applications instead of only examples.
@@ -172,28 +172,50 @@ Tracked in `docs/develop/period27/`.
 - [x] Tessellation lowering plans where supported.
 - [x] Mesh / task shader lowering plans where supported.
 - [ ] Native sparse/tiled runtime resources and page binding. Deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 - [ ] Native tessellation and mesh/task executable pipeline creation. Deferred
-  to Period 28 Phase 5.
+  to Period 29 Phase 5.
 
 Expected result: advanced backend-specific power is exposed through explicit
-capability-gated planning APIs while the portable core remains clean. Period 28
+capability-gated planning APIs while the portable core remains clean. Period 29
 owns the native executable backend closure.
 
 ## Wave 9: Ray Tracing And Native Advanced Parity
 
 Tracked in `docs/develop/period28/`.
 
-- [ ] Acceleration structure backend lowering.
-- [ ] Ray tracing pipeline lowering.
-- [ ] Shader binding table and ray dispatch commands.
-- [ ] Metal ray tracing mapping.
-- [ ] Native advanced escape hatches.
-- [ ] True backend-native multi-draw optimization.
-- [ ] Maintained parity matrix.
+- [x] Acceleration structure build planning.
+- [x] Ray tracing pipeline lowering plans.
+- [x] Shader binding table and ray dispatch plans.
+- [x] Metal ray tracing mapping plans.
+- [x] Native advanced escape-hatch closure inventory.
+- [x] Maintained parity matrix and Period 29 routing.
+- [ ] Native acceleration-structure execution. Deferred to Period 29 Phase 1.
+- [ ] Native ray tracing pipeline execution. Deferred to Period 29 Phase 2.
+- [ ] Native SBT and ray dispatch commands. Deferred to Period 29 Phase 3.
+- [ ] Native Metal ray tracing execution mapping. Deferred to Period 29 Phase 4.
+- [ ] Native advanced escape-hatch execution. Deferred to Period 29 Phase 5.
+- [ ] True backend-native multi-draw optimization, parity semantics, and native
+  soak validation. Deferred to Period 29 Phase 6.
 
 Expected result: high-end backend-specific features become explicit, testable,
-and documented instead of implicit holes in the abstraction.
+and documented as planning APIs. Period 29 owns executable native backend
+closure.
+
+## Wave 10: Native Advanced Execution
+
+Tracked in `docs/develop/period29/`.
+
+- [ ] Native acceleration structure builds.
+- [ ] Native ray tracing pipelines.
+- [ ] Native SBT and ray dispatch commands.
+- [ ] Native Metal ray tracing execution mapping.
+- [ ] Native advanced escape-hatch execution.
+- [ ] Parity semantics and stress validation.
+- [ ] Native advanced examples.
+
+Expected result: supported Vulkan and Metal adapters execute the high-end paths
+that Period 28 made inspectable.
 
 ## Slice Checklist
 

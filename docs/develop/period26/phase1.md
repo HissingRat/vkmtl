@@ -27,5 +27,5 @@ Phase 1 turns cache-key descriptors into real reuse.
 - Shader modules, bind group layouts, render pipelines, compute pipelines, and
   samplers all feed this lookup path.
 - Period 26 Phase 1 intentionally does not share backend-native handles yet.
-  Lifetime-safe native object pools are deferred to Period 28 Phase 5, where
+  Lifetime-safe native object pools are deferred to Period 29 Phase 5, where
   native handle ownership and advanced escape hatches are closed together.

@@ -31,4 +31,4 @@ Phase 4 makes backend work visible to developers.
 ## Deferred
 
 - Native capture/profiler enrichment beyond labels and marker lowering remains
-  deferred to Period 28 Phase 6.
+  deferred to Period 29 Phase 6.

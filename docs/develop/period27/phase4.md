@@ -26,5 +26,5 @@ Phase 4 lowers tessellation pipeline descriptors.
 ## Deferred
 
 - Native tessellation pipeline creation, Slang tessellation stage attachment,
-  and executable tessellation draw commands remain deferred to Period 28 Phase
+  and executable tessellation draw commands remain deferred to Period 29 Phase
   5.

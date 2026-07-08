@@ -22,6 +22,6 @@ Phase 3 expands texture copy coverage.
 - Metal lowers multi-layer copies by looping native per-slice blit calls.
 - Color copies now allow compatible unorm/sRGB pairs within the same channel
   order copy class.
-- Depth/stencil and MSAA copy semantics remain deferred to Period 28 Phase 6,
+- Depth/stencil and MSAA copy semantics remain deferred to Period 29 Phase 6,
   where the parity matrix will decide which cases become portable and which
   remain backend-specific.

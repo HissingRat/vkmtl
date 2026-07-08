@@ -26,4 +26,4 @@ Phase 4 adds cross-system synchronization.
 - `CommandBuffer.commitWithExternalSynchronization(...)` validates wrapper
   lifetime and backend ownership before committing portable work.
 - Native Vulkan external semaphore wait/signal and Metal shared-event command
-  integration are deferred to Period 28 Phase 5.
+  integration are deferred to Period 29 Phase 5.

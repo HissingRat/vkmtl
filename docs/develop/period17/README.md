@@ -2,7 +2,7 @@
 
 Status: completed ray-tracing descriptor and lowering-metadata scaffold. Native
 acceleration structure, pipeline, SBT, and dispatch lowering are tracked in
-Period 28+.
+Period 29 after Period 28 planning.
 
 Goal: define acceleration structure, ray tracing pipeline, and shader binding
 table descriptors with backend-aware validation metadata.
@@ -10,8 +10,9 @@ table descriptors with backend-aware validation metadata.
 Ray tracing remains an optional module. The portable render and compute paths
 must not depend on ray tracing support.
 
-Historical note: Period 28+ owns executable Vulkan and Metal ray-tracing
-backend closure and the maintained advanced parity matrix.
+Historical note: Period 28 owns ray-tracing planning and the maintained
+advanced parity matrix. Period 29 owns executable Vulkan and Metal ray-tracing
+backend closure.
 
 ## Phase 1: Acceleration Structure Backend API
 

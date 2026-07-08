@@ -1,7 +1,7 @@
 # Period 27: Advanced Resource And Geometry Backend Completion
 
 Status: completed as a planning and validation slice. Native executable backend
-closure is deferred to Period 28 Phase 5.
+closure is deferred to Period 29 Phase 5.
 
 Goal: lower advanced resource residency and geometry pipeline features where
 Vulkan and Metal expose compatible or explicitly capability-gated paths.

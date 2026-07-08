@@ -27,5 +27,5 @@ Phase 2 exposes presentation behavior explicitly.
 - `SurfaceCollection.framePacingDiagnostics(...)` reports diagnostics per
   surface handle, keeping multi-surface counters independent.
 - Native Vulkan present-mode enumeration per surface and Metal display-sync
-  mapping remain deferred to Period 28 Phase 5, where platform-specific native
+  mapping remain deferred to Period 29 Phase 5, where platform-specific native
   escape hatches and surface ownership are finalized.

@@ -21,5 +21,5 @@ Phase 2 removes the Vulkan alignment footgun for public `fillBuffer(...)`.
   fallback so the public API no longer exposes the alignment footgun.
 - Metal keeps its direct byte-range fill path.
 - Period 26 Phase 5 added long-run planning and fallback diagnostics for this
-  path. Persistent native staging-buffer pooling remains deferred to Period 28
+path. Persistent native staging-buffer pooling remains deferred to Period 29
   Phase 5.

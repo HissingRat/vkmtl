@@ -344,7 +344,7 @@ Status: completed ray-tracing descriptor and lowering-metadata scaffold.
 
 Goal: define acceleration structure, ray tracing pipeline, and shader binding
 table descriptors with backend-aware validation metadata. Executable ray
-tracing is tracked in Period 28+.
+tracing is tracked in Period 29 after Period 28 planning.
 
 - Phase 1: acceleration structure backend API
 - Phase 2: Vulkan ray tracing pipeline lowering
@@ -491,7 +491,7 @@ See `docs/develop/period25/`.
 ## Period 26: Object Cache And Production Backend Hardening
 
 Status: completed production-hardening planning and diagnostics slice, with
-native cache/object reuse and GPU soak execution deferred to Period 28.
+native cache/object reuse and GPU soak execution deferred to Period 29.
 
 Goal: make native backend paths cacheable, diagnosable, persistent where useful,
 and stable under long-running workloads. Period 26 closed the portable planning,
@@ -510,7 +510,7 @@ See `docs/develop/period26/`.
 ## Period 27: Advanced Resource And Geometry Backend Completion
 
 Status: completed as a planning and validation slice. Native executable backend
-closure is deferred to Period 28 Phase 5.
+closure is deferred to Period 29 Phase 5.
 
 Goal: lower sparse/tiled resources, residency updates, tessellation, and
 mesh/task shader paths where the backend supports them.
@@ -524,9 +524,10 @@ mesh/task shader paths where the backend supports them.
 
 See `docs/develop/period27/`.
 
-## Period 28+: Ray Tracing And Native Advanced Parity
+## Period 28: Ray Tracing And Native Advanced Parity
 
-Status: long-term planned.
+Status: completed as a planning, validation, and parity-routing slice. Native
+execution is deferred to Period 29.
 
 Goal: expose ray tracing and other high-end backend-specific capabilities
 through explicit capability-gated APIs and a maintained parity matrix.
@@ -541,6 +542,23 @@ through explicit capability-gated APIs and a maintained parity matrix.
 
 See `docs/develop/period28/`.
 
+## Period 29: Native Ray Tracing And Advanced Backend Execution
+
+Status: planned after Period 28.
+
+Goal: turn Period 28 planning APIs into executable Vulkan and Metal backend
+paths.
+
+- Phase 1: native acceleration structure builds
+- Phase 2: native ray tracing pipelines
+- Phase 3: native SBT and ray dispatch commands
+- Phase 4: native Metal ray tracing execution mapping
+- Phase 5: native advanced escape hatch execution
+- Phase 6: parity semantics and stress validation
+- Phase 7: native advanced examples
+
+See `docs/develop/period29/`.
+
 ## Priority Notes
 
 - Period 22 is the current priority after Period 21. It closes the deferred
@@ -549,7 +567,7 @@ See `docs/develop/period28/`.
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced
   backend work.
-- Periods 20 through 28+ are backend completion and parity periods, not a
+- Periods 20 through 29 are backend completion and parity periods, not a
   request to reshape already-completed historical API-shape periods.
 - Periods 12 through 18 are historical API, validation, and capability-scaffold
   periods. When they describe advanced lowering, treat Period 20+ as the

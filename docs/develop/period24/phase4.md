@@ -20,5 +20,5 @@ Phase 4 lowers sampler border-color descriptors.
 - Fixed `SamplerBorderColor` values lower to Metal sampler border colors.
 - `DeviceFeatures.sampler_border_color` is enabled in the portable default
   feature set for fixed border colors.
-- Custom border colors remain deferred to Period 28 Phase 6 because Vulkan and
+- Custom border colors remain deferred to Period 29 Phase 6 because Vulkan and
   Metal expose that space differently.

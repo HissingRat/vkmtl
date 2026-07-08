@@ -25,4 +25,4 @@ Phase 2 connects backend-native pipeline caches.
 - Usable feature gates remain conservative; native feature reports can plan a
   cache without claiming vkmtl has already wired it into pipeline creation.
 - Actual Vulkan `VkPipelineCache` creation/serialization and Metal
-  `MTLBinaryArchive` integration are deferred to Period 28 Phase 5.
+  `MTLBinaryArchive` integration are deferred to Period 29 Phase 5.

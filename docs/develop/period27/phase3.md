@@ -32,4 +32,4 @@ Phase 3 makes sparse/tiled updates explicit.
 ## Deferred
 
 - Native sparse page binding and native Vulkan `VkDeviceMemory` / Metal
-  `MTLHeap` resource integration remain deferred to Period 28 Phase 5.
+  `MTLHeap` resource integration remain deferred to Period 29 Phase 5.

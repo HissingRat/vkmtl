@@ -49,4 +49,4 @@ Deferred native lowering:
 
 - Native multi-surface presentation, native present-mode queries, native
   external memory/texture import, external sync wait/signal, and command
-  encoder native handle views are deferred to Period 28 Phase 5.
+  encoder native handle views are deferred to Period 29 Phase 5.

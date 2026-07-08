@@ -28,4 +28,4 @@ Phase 2 lowers virtualized texture residency.
 ## Deferred
 
 - Creating sparse/tiled texture runtime objects and binding native texture
-  pages remains deferred to Period 28 Phase 5.
+  pages remains deferred to Period 29 Phase 5.

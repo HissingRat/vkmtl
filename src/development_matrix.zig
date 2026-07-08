@@ -536,6 +536,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .command = "zig build run-tessellation && zig build run-mesh-shader",
         .expectation = "windowed advanced geometry examples keep feature-gated public behavior",
     },
+    .{
+        .name = "ray_tracing_native_parity_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test",
+        .expectation = "ray tracing planning, Metal mapping, native advanced closure, and Period 29 routing regressions pass",
+    },
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
@@ -739,7 +747,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "GenerateMipmapsDescriptor partial mip/layer ranges",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 6",
+        .deferred_to = "Period 29 Phase 6",
         .validation = "partial ranges remain typed unsupported at runtime",
     },
     .{
@@ -768,7 +776,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "CopyTextureToTextureDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 6",
+        .deferred_to = "Period 29 Phase 6",
         .validation = "depth/stencil and MSAA texture copies remain typed unsupported",
     },
     .{
@@ -783,7 +791,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "SamplerBorderColor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 6",
+        .deferred_to = "Period 29 Phase 6",
         .validation = "custom border colors are intentionally absent from the portable enum",
     },
     .{
@@ -798,7 +806,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "Heap",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native heap-backed resources remain capability-gated",
     },
     .{
@@ -863,7 +871,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "DeviceFeatures.multi_surface",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native multiple-swapchain and multiple-layer presentation remains feature-gated",
     },
     .{
@@ -878,7 +886,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.presentModeSupport",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "surface-specific native present-mode/display-sync support remains conservative",
     },
     .{
@@ -893,7 +901,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.makeExternalMemory and Device.makeExternalBuffer",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native Vulkan memory import and Metal buffer wrapping remain feature-gated",
     },
     .{
@@ -908,7 +916,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.makeExternalTexture",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native Vulkan image import and Metal texture wrapping remain feature-gated",
     },
     .{
@@ -923,7 +931,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "CommandBuffer.commitWithExternalSynchronization",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native semaphore/shared-event wait and signal integration remains feature-gated",
     },
     .{
@@ -938,7 +946,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "NativeCommandInsertionDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "real command-buffer and command-encoder native handle views remain feature-gated",
     },
 };
@@ -994,7 +1002,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "ObjectCachePolicy reuse mode",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "lookup diagnostics do not claim native handle reuse until lifetime-safe pools exist",
     },
     .{
@@ -1009,7 +1017,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "DriverPipelineCacheDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "VkPipelineCache and MTLBinaryArchive consumption remains explicit backend work",
     },
     .{
@@ -1024,7 +1032,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "RuntimeCachePlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "automatic manifest read/write is deferred until native cache ownership lands",
     },
     .{
@@ -1053,7 +1061,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "run-stability-plan contract",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 6",
+        .deferred_to = "Period 29 Phase 6",
         .validation = "current opt-in command is deterministic planning; windowed GPU soak loops remain future backend validation",
     },
 };
@@ -1122,7 +1130,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "SparseBufferLowering, SparseTextureLowering, and SparseMappingCommitPlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native sparse/tiled resource objects and page binding remain explicit backend work",
     },
     .{
@@ -1137,7 +1145,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "TessellationLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native tessellation pipeline creation and executable draw commands remain feature-gated",
     },
     .{
@@ -1152,7 +1160,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "MeshPipelineLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 28 Phase 5",
+        .deferred_to = "Period 29 Phase 5",
         .validation = "native mesh/task pipeline creation and executable draw commands remain feature-gated",
     },
     .{
@@ -1165,6 +1173,140 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
 };
 
 pub fn validateAdvancedResourceGeometryMatrix(entries: []const AdvancedResourceGeometryMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (entry.feature == other.feature) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
+pub const RayTracingNativeParityFeature = enum {
+    acceleration_structure_build_planning,
+    native_acceleration_structure_builds,
+    ray_tracing_pipeline_planning,
+    native_ray_tracing_pipelines,
+    shader_binding_table_dispatch_planning,
+    native_ray_dispatch_commands,
+    metal_ray_tracing_mapping_planning,
+    native_metal_ray_tracing_execution,
+    native_advanced_closure_inventory,
+    native_advanced_backend_execution,
+    parity_semantics_and_soak,
+    advanced_native_examples,
+};
+
+pub const RayTracingNativeParityMatrixEntry = struct {
+    feature: RayTracingNativeParityFeature,
+    public_api: []const u8,
+    vulkan_status: BackendFeatureStatus,
+    metal_status: BackendFeatureStatus,
+    deferred_to: ?[]const u8 = null,
+    validation: []const u8,
+
+    pub fn validate(self: RayTracingNativeParityMatrixEntry) DevelopmentMatrixError!void {
+        if (self.public_api.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        const deferred = self.vulkan_status == .deferred_native_lowering or self.metal_status == .deferred_native_lowering;
+        if (deferred and self.deferred_to == null) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntry{
+    .{
+        .feature = .acceleration_structure_build_planning,
+        .public_api = "AccelerationStructureBuildDescriptor and Device.planAccelerationStructureBuild",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "build/update plans expose geometry count, result size, scratch size, and compaction intent",
+    },
+    .{
+        .feature = .native_acceleration_structure_builds,
+        .public_api = "AccelerationStructureBuildPlan",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 29 Phase 1",
+        .validation = "native acceleration-structure objects and build commands remain explicit backend work",
+    },
+    .{
+        .feature = .ray_tracing_pipeline_planning,
+        .public_api = "RayTracingPipelineLowering and Device.planRayTracingPipelineLowering",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "pipeline plans expose shader-group counts and Metal function-table metadata",
+    },
+    .{
+        .feature = .native_ray_tracing_pipelines,
+        .public_api = "RayTracingPipelineLowering",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 29 Phase 2",
+        .validation = "executable native ray tracing pipelines remain feature-gated",
+    },
+    .{
+        .feature = .shader_binding_table_dispatch_planning,
+        .public_api = "RayDispatchPlan and Device.planRayDispatch",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "dispatch plans combine SBT layout, dimensions, and total ray counts",
+    },
+    .{
+        .feature = .native_ray_dispatch_commands,
+        .public_api = "RayDispatchPlan",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 29 Phase 3",
+        .validation = "native ray dispatch command encoding remains future backend work",
+    },
+    .{
+        .feature = .metal_ray_tracing_mapping_planning,
+        .public_api = "MetalRayTracingMappingPlan and Device.planMetalRayTracingMapping",
+        .vulkan_status = .validation_noop,
+        .metal_status = .portable_runtime,
+        .validation = "Metal mapping plans expose function-table and intersection-function requirements",
+    },
+    .{
+        .feature = .native_metal_ray_tracing_execution,
+        .public_api = "MetalRayTracingMappingPlan",
+        .vulkan_status = .validation_noop,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 29 Phase 4",
+        .validation = "Metal acceleration/intersection resources and dispatch integration remain feature-gated",
+    },
+    .{
+        .feature = .native_advanced_closure_inventory,
+        .public_api = "NativeAdvancedClosurePlan and Device.planNativeAdvancedClosure",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "native advanced backlog is queryable as data",
+    },
+    .{
+        .feature = .native_advanced_backend_execution,
+        .public_api = "NativeAdvancedClosurePlan",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 29 Phase 5",
+        .validation = "native pools, imports, cache I/O, heaps, sparse binding, and advanced geometry execution are deferred",
+    },
+    .{
+        .feature = .parity_semantics_and_soak,
+        .public_api = "backend parity matrix",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 29 Phase 6",
+        .validation = "partial mip ranges, depth/stencil/MSAA copies, custom borders, and GPU soak loops need native decisions",
+    },
+    .{
+        .feature = .advanced_native_examples,
+        .public_api = "examples/ray_traced_triangle and future native advanced examples",
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .deferred_to = "Period 29 Phase 7",
+        .validation = "current advanced examples stay feature-gated until native execution lands",
+    },
+};
+
+pub fn validateRayTracingNativeParityMatrix(entries: []const RayTracingNativeParityMatrixEntry) DevelopmentMatrixError!void {
     for (entries, 0..) |entry, i| {
         try entry.validate();
         for (entries[i + 1 ..]) |other| {
@@ -1187,6 +1329,7 @@ pub const ValidationCaseKind = enum {
     platform_interop,
     production_hardening,
     advanced_resource_geometry,
+    ray_tracing_native_parity,
 };
 
 pub const ValidationCase = struct {
@@ -1282,6 +1425,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .advanced_resource_geometry,
         .test_location = "src/core.zig and src/runtime/window_context.zig Period 27 tests",
         .expectation = "sparse/tiled resource planning, residency plans, tessellation lowering, and mesh/task lowering stay capability-gated",
+    },
+    .{
+        .name = "ray_tracing_native_parity",
+        .kind = .ray_tracing_native_parity,
+        .test_location = "src/core.zig and src/runtime/window_context.zig Period 28 tests",
+        .expectation = "ray tracing planning, Metal mapping, native advanced closure, and future Period 29 assignments stay explicit",
     },
 };
 
@@ -1420,6 +1569,7 @@ test "backend test matrix metadata is valid" {
     var has_production_hardening_regression = false;
     var has_advanced_resource_geometry_regression = false;
     var has_advanced_geometry_feature_gates = false;
+    var has_ray_tracing_native_parity_regression = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
         if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
@@ -1428,6 +1578,7 @@ test "backend test matrix metadata is valid" {
         if (std.mem.eql(u8, entry.name, "production_hardening_regression")) has_production_hardening_regression = true;
         if (std.mem.eql(u8, entry.name, "advanced_resource_geometry_regression")) has_advanced_resource_geometry_regression = true;
         if (std.mem.eql(u8, entry.name, "advanced_geometry_feature_gates")) has_advanced_geometry_feature_gates = true;
+        if (std.mem.eql(u8, entry.name, "ray_tracing_native_parity_regression")) has_ray_tracing_native_parity_regression = true;
     }
     try std.testing.expect(configured_optional >= 1);
     try std.testing.expect(has_sync_query_regression);
@@ -1436,6 +1587,7 @@ test "backend test matrix metadata is valid" {
     try std.testing.expect(has_production_hardening_regression);
     try std.testing.expect(has_advanced_resource_geometry_regression);
     try std.testing.expect(has_advanced_geometry_feature_gates);
+    try std.testing.expect(has_ray_tracing_native_parity_regression);
 }
 
 test "sync and query backend matrix is complete" {
@@ -1563,6 +1715,34 @@ test "advanced resource and geometry backend matrix is complete" {
     try std.testing.expect(runtime_paths >= 5);
     try std.testing.expect(capability_gated >= 1);
     try std.testing.expect(deferred_paths >= 3);
+}
+
+test "ray tracing and native parity backend matrix is complete" {
+    try validateRayTracingNativeParityMatrix(ray_tracing_native_parity_matrix[0..]);
+
+    var seen = [_]bool{false} ** @typeInfo(RayTracingNativeParityFeature).@"enum".fields.len;
+    var runtime_paths: usize = 0;
+    var deferred_paths: usize = 0;
+    var period29_targets: usize = 0;
+
+    for (ray_tracing_native_parity_matrix) |entry| {
+        seen[@intFromEnum(entry.feature)] = true;
+        if (entry.vulkan_status == .portable_runtime or entry.metal_status == .portable_runtime) runtime_paths += 1;
+        if (entry.vulkan_status == .deferred_native_lowering or entry.metal_status == .deferred_native_lowering) {
+            deferred_paths += 1;
+            try std.testing.expect(entry.deferred_to != null);
+        }
+        if (entry.deferred_to) |target| {
+            if (std.mem.startsWith(u8, target, "Period 29 ")) period29_targets += 1;
+        }
+    }
+
+    for (seen) |was_seen| {
+        try std.testing.expect(was_seen);
+    }
+    try std.testing.expect(runtime_paths >= 5);
+    try std.testing.expect(deferred_paths >= 6);
+    try std.testing.expect(period29_targets >= 7);
 }
 
 test "validation case inventory is valid" {

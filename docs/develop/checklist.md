@@ -1461,7 +1461,7 @@ obvious render and binding blockers.
 - [x] Keep ordinary `WindowContext.surface()` / `swapchain()` behavior stable.
 - [x] Expose registry construction through `Device` and `WindowContext`.
 - [x] Add independent resize/handle validation tests.
-- [x] Document native multi-swapchain lowering as deferred to Period 28 Phase 5.
+- [x] Document native multi-swapchain lowering as deferred to Period 29 Phase 5.
 
 ## Period 25 Phase 2 Checklist
 
@@ -1470,7 +1470,7 @@ obvious render and binding blockers.
 - [x] Add frame pacing diagnostics for submitted/completed frame state.
 - [x] Keep backend support conservative until native per-surface queries land.
 - [x] Document native present-mode query/display-sync mapping as deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 
 ## Period 25 Phase 3 Checklist
 
@@ -1479,7 +1479,7 @@ obvious render and binding blockers.
 - [x] Keep existing external texture wrapper behavior stable.
 - [x] Track external wrapper lifetime independently.
 - [x] Document native external memory/image/texture import as deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 
 ## Period 25 Phase 4 Checklist
 
@@ -1488,7 +1488,7 @@ obvious render and binding blockers.
 - [x] Add command-buffer external synchronization validation before commit.
 - [x] Keep native wait/signal lowering feature-gated.
 - [x] Document native external semaphore/shared-event lowering as deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 
 ## Period 25 Phase 5 Checklist
 
@@ -1498,7 +1498,7 @@ obvious render and binding blockers.
 - [x] Keep ordinary portable encoders free of backend-native types.
 - [x] Add runtime tests for callback invocation and invalid insertion points.
 - [x] Document native command-buffer/encoder handle lowering as deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 
 ## Period 25 Phase 6 Checklist
 
@@ -1516,7 +1516,7 @@ obvious render and binding blockers.
   diagnostics through one runtime tracker path.
 - [x] Wire shader modules, bind group layouts, render/compute pipelines, and
   samplers to object-cache lookup diagnostics.
-- [x] Document lifetime-safe native handle pooling as deferred to Period 28
+- [x] Document lifetime-safe native handle pooling as deferred to Period 29
   Phase 5.
 
 ## Period 26 Phase 2 Checklist
@@ -1528,7 +1528,7 @@ obvious render and binding blockers.
 - [x] Keep usable feature gates conservative until native pipeline creation
   consumes the cache objects.
 - [x] Document native `VkPipelineCache` / `MTLBinaryArchive` lowering as
-  deferred to Period 28 Phase 5.
+  deferred to Period 29 Phase 5.
 
 ## Period 26 Phase 3 Checklist
 
@@ -1538,7 +1538,7 @@ obvious render and binding blockers.
 - [x] Add runtime cache planning API for artifact directory and manifest path.
 - [x] Keep existing inspectable Slang artifact layout stable.
 - [x] Document automatic manifest file read/write integration as deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 
 ## Period 26 Phase 4 Checklist
 
@@ -1548,7 +1548,7 @@ obvious render and binding blockers.
 - [x] Add capture-friendly naming helpers that fill the selected backend when
   applications do not specify one.
 - [x] Add focused tests for capture names and runtime diagnostics counters.
-- [x] Document native capture/profiler enrichment as deferred to Period 28
+- [x] Document native capture/profiler enrichment as deferred to Period 29
   Phase 6.
 
 ## Period 26 Phase 5 Checklist
@@ -1586,7 +1586,7 @@ obvious render and binding blockers.
 - [x] Expose the planning API through `Device` without enabling ordinary sparse
   buffer creation.
 - [x] Document native sparse buffer object creation/bind integration as
-  deferred to Period 28 Phase 5.
+  deferred to Period 29 Phase 5.
 
 ## Period 27 Phase 2 Checklist
 
@@ -1599,7 +1599,7 @@ obvious render and binding blockers.
 - [x] Expose the planning API through `Device` without enabling ordinary sparse
   texture creation.
 - [x] Document native sparse/tiled texture object creation and residency
-  binding as deferred to Period 28 Phase 5.
+  binding as deferred to Period 29 Phase 5.
 
 ## Period 27 Phase 3 Checklist
 
@@ -1609,7 +1609,7 @@ obvious render and binding blockers.
 - [x] Extend residency-map diagnostics with resident bytes/pages.
 - [x] Expose commit planning through `Device` using native feature reports.
 - [x] Document native page binding and native heap-backed resource integration
-  as deferred to Period 28 Phase 5.
+  as deferred to Period 29 Phase 5.
 
 ## Period 27 Phase 4 Checklist
 
@@ -1619,7 +1619,7 @@ obvious render and binding blockers.
 - [x] Keep public tessellation validation gated by usable features.
 - [x] Add focused runtime tests for native tessellation planning.
 - [x] Document native tessellation pipeline creation and shader stage attachment
-  as deferred to Period 28 Phase 5.
+  as deferred to Period 29 Phase 5.
 
 ## Period 27 Phase 5 Checklist
 
@@ -1628,7 +1628,7 @@ obvious render and binding blockers.
 - [x] Keep public mesh/task validation gated by usable features.
 - [x] Add focused runtime tests for native mesh/task planning.
 - [x] Document native mesh/task pipeline creation and dispatch/draw commands as
-  deferred to Period 28 Phase 5.
+  deferred to Period 29 Phase 5.
 
 ## Period 27 Phase 6 Checklist
 
@@ -1637,7 +1637,7 @@ obvious render and binding blockers.
 - [x] Add a validation inventory case for Period 27 coverage.
 - [x] Mark Period 27 as completed as a planning and validation slice.
 - [x] Document native sparse/tiled, tessellation, and mesh/task execution as
-  deferred to Period 28 Phase 5.
+  deferred to Period 29 Phase 5.
 
 ## Period 28 Phase 1 Checklist
 
@@ -1689,6 +1689,14 @@ obvious render and binding blockers.
   command APIs.
 - [x] Document native advanced backend implementation as deferred to Period 29
   Phase 5.
+
+## Period 28 Phase 6 Checklist
+
+- [x] Add a ray tracing/native parity matrix.
+- [x] Add validation inventory coverage for Period 28 planning APIs.
+- [x] Create Period 29 as the native execution follow-up.
+- [x] Migrate older Period 28 deferred items to concrete Period 29 phases.
+- [x] Update backend completion and backend test matrix docs.
 
 ## First Backend-Independent Triangle Checklist
 

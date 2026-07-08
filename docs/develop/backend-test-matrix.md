@@ -16,6 +16,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit plans, tessellation lowering plans, and mesh/task lowering plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
+- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, Metal mapping, native advanced closure, and Period 29 routing.
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
 
 ## Optional Rows
@@ -74,15 +75,15 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Full-texture mipmap generation | Native image blits | Native `generateMipmapsForTexture` | Available through blit encoder |
-| Partial mip/layer mipmap generation | Deferred | Deferred | Period 28 Phase 6 parity decision |
+| Partial mip/layer mipmap generation | Deferred | Deferred | Period 29 Phase 6 parity decision |
 | Unaligned `fillBuffer` | Staging-copy fallback | Native byte-range fill | Public API accepts unaligned ranges |
 | Texture copy array layers | Native `layer_count` | Per-slice fallback loop | `slice_count` is public |
 | Compatible color-format copies | Native compatible copy class | Native compatible copy class | unorm/sRGB pairs in same channel order |
-| Depth/stencil and MSAA copies | Deferred | Deferred | Period 28 Phase 6 semantic decision |
+| Depth/stencil and MSAA copies | Deferred | Deferred | Period 29 Phase 6 semantic decision |
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
-| Custom sampler border colors | Deferred | Deferred | Period 28 Phase 6 parity decision |
+| Custom sampler border colors | Deferred | Deferred | Period 29 Phase 6 parity decision |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
-| Native heap-backed resources | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Native heap-backed resources | Deferred | Deferred | Period 29 Phase 5 native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
 
 ## Period 25 Platform And Interop Expectations
@@ -90,32 +91,32 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Surface registry | Portable runtime state | Portable runtime state | `Device.makeSurfaceCollection(...)` |
-| Native multi-surface presentation | Deferred | Deferred | Period 28 Phase 5 native escape hatch |
+| Native multi-surface presentation | Deferred | Deferred | Period 29 Phase 5 native escape hatch |
 | Present-mode resolution | Portable runtime fallback | Portable runtime fallback | `PresentModeSupport` and `FramePacingDiagnostics` |
-| Native present-mode query | Deferred | Deferred | Period 28 Phase 5 platform query |
+| Native present-mode query | Deferred | Deferred | Period 29 Phase 5 platform query |
 | External memory / buffer wrappers | Portable runtime wrappers | Portable runtime wrappers | Feature-gated descriptors and lifetime tracking |
-| Native external memory import | Deferred | Deferred | Period 28 Phase 5 native import |
+| Native external memory import | Deferred | Deferred | Period 29 Phase 5 native import |
 | External texture wrapper | Portable runtime wrapper | Portable runtime wrapper | `ExternalTexture` wrapper |
-| Native external texture import | Deferred | Deferred | Period 28 Phase 5 native import |
+| Native external texture import | Deferred | Deferred | Period 29 Phase 5 native import |
 | External sync wrappers | Portable runtime wrappers | Portable runtime wrappers | `ExternalSynchronizationDescriptor` validation |
-| Native external sync wait/signal | Deferred | Deferred | Period 28 Phase 5 native lowering |
+| Native external sync wait/signal | Deferred | Deferred | Period 29 Phase 5 native lowering |
 | Native command insertion API | Capability-gated | Capability-gated | Encoder methods validate explicit callbacks |
-| Native command handle lowering | Deferred | Deferred | Period 28 Phase 5 native handle view |
+| Native command handle lowering | Deferred | Deferred | Period 29 Phase 5 native handle view |
 
 ## Period 26 Production Hardening Expectations
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Object-cache lookup diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | `cache_policy` and `objectCacheDiagnostics()` |
-| Native object handle pooling | Deferred | Deferred | Period 28 Phase 5 native pools |
+| Native object handle pooling | Deferred | Deferred | Period 29 Phase 5 native pools |
 | Driver cache planning | Portable runtime planning | Portable runtime planning | `Device.planDriverPipelineCache(...)` |
-| Native driver cache lowering | Deferred | Deferred | Period 28 Phase 5 `VkPipelineCache` / `MTLBinaryArchive` consumption |
+| Native driver cache lowering | Deferred | Deferred | Period 29 Phase 5 `VkPipelineCache` / `MTLBinaryArchive` consumption |
 | Runtime cache manifest planning | Portable runtime planning | Portable runtime planning | `Device.planRuntimeCache(...)` |
-| Runtime cache manifest I/O | Deferred | Deferred | Period 28 Phase 5 automatic manifest read/write |
+| Runtime cache manifest I/O | Deferred | Deferred | Period 29 Phase 5 automatic manifest read/write |
 | Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `runtimeDiagnostics()` |
 | Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
 | Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
-| GPU-backed soak loops | Deferred | Deferred | Period 28 Phase 6 native long-run validation |
+| GPU-backed soak loops | Deferred | Deferred | Period 29 Phase 6 native long-run validation |
 
 ## Period 27 Advanced Resource And Geometry Expectations
 
@@ -124,9 +125,26 @@ conservative until the relevant backend period lands.
 | Sparse buffer planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseBufferLowering(...)` |
 | Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseTextureLowering(...)` |
 | Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `Device.planSparseMappingCommit(...)` |
-| Native sparse/tiled page binding | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Native sparse/tiled page binding | Deferred | Deferred | Period 29 Phase 5 native integration |
 | Tessellation lowering planning | Runtime patch metadata plan | Runtime factor-buffer requirement plan | `Device.planTessellationLowering(...)` |
-| Native tessellation pipeline | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Native tessellation pipeline | Deferred | Deferred | Period 29 Phase 5 native integration |
 | Mesh/task lowering planning | Runtime task/mesh metadata plan | Runtime object/mesh metadata plan | `Device.planMeshPipelineLowering(...)` |
-| Native mesh/task pipeline | Deferred | Deferred | Period 28 Phase 5 native integration |
+| Native mesh/task pipeline | Deferred | Deferred | Period 29 Phase 5 native integration |
 | Advanced geometry examples | Feature-gated examples | Feature-gated examples | `examples/tessellation` and `examples/mesh_shader` |
+
+## Period 28 Ray Tracing And Native Parity Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
+| Native acceleration-structure builds | Deferred | Deferred | Period 29 Phase 1 native execution |
+| Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
+| Native ray tracing pipelines | Deferred | Deferred | Period 29 Phase 2 native execution |
+| SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
+| Native ray dispatch commands | Deferred | Deferred | Period 29 Phase 3 native execution |
+| Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
+| Native Metal ray tracing execution | Validation no-op | Deferred | Period 29 Phase 4 native execution |
+| Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
+| Native advanced backend execution | Deferred | Deferred | Period 29 Phase 5 native execution |
+| Parity semantics and soak loops | Deferred | Deferred | Period 29 Phase 6 parity/stability |
+| Native advanced examples | Feature-gated | Feature-gated | Period 29 Phase 7 examples |

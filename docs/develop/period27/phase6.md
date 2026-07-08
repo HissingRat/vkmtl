@@ -28,6 +28,6 @@ Phase 6 closes Period 27 with examples and matrix coverage.
 ## Deferred
 
 - Native sparse/tiled resource objects and page binding remain deferred to
-  Period 28 Phase 5.
+  Period 29 Phase 5.
 - Native tessellation and mesh/task executable pipeline creation remain
-  deferred to Period 28 Phase 5.
+  deferred to Period 29 Phase 5.

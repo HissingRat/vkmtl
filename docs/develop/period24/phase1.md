@@ -20,6 +20,6 @@ Phase 1 lowers automatic mipmap generation.
   mipmap generation.
 - Vulkan lowers full-texture generation through per-mip image blits.
 - Metal lowers full-texture generation through `generateMipmapsForTexture`.
-- Partial mip/layer generation is deferred to Period 28 Phase 6, where the
+- Partial mip/layer generation is deferred to Period 29 Phase 6, where the
   parity matrix will decide whether it becomes a portable fallback or an
   explicit backend-specific escape hatch.

@@ -22,7 +22,7 @@ Phase 6 closes Period 25 with examples and documentation.
   capability-gated, and deferred native interop paths.
 - `docs/develop/validation-matrix.md` includes the `platform_interop`
   validation case.
-- Deferred native interop work is assigned to Period 28 Phase 5:
+- Deferred native interop work is assigned to Period 29 Phase 5:
   native multi-surface presentation, native present-mode queries, native
   external memory/texture import, native external semaphore/shared-event
   wait/signal, and command encoder native handle views.

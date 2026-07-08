@@ -26,4 +26,4 @@ Phase 5 exposes an explicit advanced escape hatch.
   feature-gated rejection, and encoder-kind mismatch.
 - Ordinary portable command APIs still expose no Vulkan or Metal types.
 - Real backend command-buffer / command-encoder handle views and native command
-  insertion lowering remain deferred to Period 28 Phase 5.
+  insertion lowering remain deferred to Period 29 Phase 5.

@@ -21,3 +21,24 @@ Phase 6 turns parity into a maintained product artifact.
 
 - Add matrix consistency checks where possible.
 - Update docs whenever feature gates change.
+
+## Result
+
+- Added an authoritative ray tracing/native parity matrix in
+  `src/development_matrix.zig`.
+- Added Period 29 as the executable native backend follow-up period.
+- Routed native acceleration-structure builds, native ray tracing pipelines,
+  native SBT/dispatch commands, Metal ray tracing execution, native advanced
+  escape-hatch execution, parity semantics, stress validation, and native
+  examples to specific Period 29 phases.
+- Migrated older Period 28 deferred references to concrete Period 29 targets.
+
+## Deferred
+
+- Native acceleration-structure execution: Period 29 Phase 1.
+- Native ray tracing pipelines: Period 29 Phase 2.
+- Native SBT and ray dispatch commands: Period 29 Phase 3.
+- Native Metal ray tracing execution mapping: Period 29 Phase 4.
+- Native advanced escape-hatch execution: Period 29 Phase 5.
+- Remaining parity semantics and GPU-backed soak loops: Period 29 Phase 6.
+- Native advanced examples: Period 29 Phase 7.

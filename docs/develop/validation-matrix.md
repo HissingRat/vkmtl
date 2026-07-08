@@ -33,6 +33,8 @@ Current cases:
   validation.
 - `advanced_resource_geometry`: sparse/tiled resource planning, residency
   plans, tessellation lowering, and mesh/task lowering stay capability-gated.
+- `ray_tracing_native_parity`: ray tracing planning, Metal mapping, native
+  advanced closure, and future Period 29 assignments stay explicit.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

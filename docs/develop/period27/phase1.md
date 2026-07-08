@@ -28,4 +28,4 @@ Phase 1 starts advanced residency with buffers.
 ## Deferred
 
 - Creating sparse buffer runtime objects and binding native memory pages remains
-  deferred to Period 28 Phase 5.
+  deferred to Period 29 Phase 5.
