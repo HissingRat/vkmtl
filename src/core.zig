@@ -2760,6 +2760,20 @@ pub const RayTracingPipelineLowering = union(Backend) {
         };
     }
 
+    pub fn missGroupCount(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.miss_groups,
+            .metal => |lowering| lowering.miss_groups,
+        };
+    }
+
+    pub fn callableGroupCount(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.callable_groups,
+            .metal => |lowering| lowering.callable_groups,
+        };
+    }
+
     pub fn functionTableEntryCount(self: RayTracingPipelineLowering) u32 {
         return switch (self) {
             .vulkan => |lowering| lowering.ray_generation_groups + lowering.miss_groups + lowering.hit_groups + lowering.callable_groups,

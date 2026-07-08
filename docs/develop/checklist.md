@@ -1729,6 +1729,18 @@ obvious render and binding blockers.
 - [x] Document executable backend-private RT pipeline handles as deferred to
   Period 30 Phase 2.
 
+## Period 29 Phase 3 Checklist
+
+- [x] Add runtime shader binding table objects owned by `Device`.
+- [x] Keep SBT creation gated by native ray tracing feature reports.
+- [x] Validate SBT group counts against `RayTracingPipelineState`.
+- [x] Add `CommandBuffer.dispatchRays(...)` as the public ray dispatch command
+  contract.
+- [x] Add focused runtime tests for invalid SBT ranges and successful dispatch
+  planning.
+- [x] Document backend-private SBT record materialization and native dispatch
+  commands as deferred to Period 30 Phase 3.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

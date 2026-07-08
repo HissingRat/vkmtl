@@ -163,6 +163,7 @@ pub const MetalRayTracingMappingDescriptor = core.MetalRayTracingMappingDescript
 pub const MetalRayTracingMappingPlan = core.MetalRayTracingMappingPlan;
 pub const ShaderBindingTableDescriptor = core.ShaderBindingTableDescriptor;
 pub const ShaderBindingTableLayout = core.ShaderBindingTableLayout;
+pub const ShaderBindingTable = runtime.ShaderBindingTable;
 pub const RayDispatchDescriptor = core.RayDispatchDescriptor;
 pub const RayDispatchPlan = core.RayDispatchPlan;
 pub const DepthBiasDescriptor = core.DepthBiasDescriptor;

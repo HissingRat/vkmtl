@@ -51,6 +51,7 @@ pub const ResourceKind = enum {
     heap,
     acceleration_structure,
     ray_tracing_pipeline_state,
+    shader_binding_table,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -85,6 +86,7 @@ pub const ResourceTracker = struct {
     heaps: usize = 0,
     acceleration_structures: usize = 0,
     ray_tracing_pipeline_states: usize = 0,
+    shader_binding_tables: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -149,7 +151,8 @@ pub const ResourceTracker = struct {
             self.query_sets +
             self.heaps +
             self.acceleration_structures +
-            self.ray_tracing_pipeline_states;
+            self.ray_tracing_pipeline_states +
+            self.shader_binding_tables;
     }
 
     pub fn diagnosticsSnapshot(self: ResourceTracker) core.RuntimeDiagnosticsSnapshot {
@@ -241,13 +244,14 @@ pub const ResourceTracker = struct {
             self.query_sets != 0 or
             self.heaps != 0 or
             self.acceleration_structures != 0 or
-            self.ray_tracing_pipeline_states != 0;
+            self.ray_tracing_pipeline_states != 0 or
+            self.shader_binding_tables != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}, shader_binding_tables={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -270,6 +274,7 @@ pub const ResourceTracker = struct {
                     self.heaps,
                     self.acceleration_structures,
                     self.ray_tracing_pipeline_states,
+                    self.shader_binding_tables,
                 },
             );
         }
@@ -304,6 +309,7 @@ pub const ResourceTracker = struct {
             .heap => &self.heaps,
             .acceleration_structure => &self.acceleration_structures,
             .ray_tracing_pipeline_state => &self.ray_tracing_pipeline_states,
+            .shader_binding_table => &self.shader_binding_tables,
         };
     }
 
@@ -1685,6 +1691,88 @@ pub const RayTracingPipelineState = struct {
     }
 };
 
+pub const ShaderBindingTable = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.ShaderBindingTableDescriptor,
+    layout_value: core.ShaderBindingTableLayout,
+    limits_value: core.DeviceLimits,
+    dispatch_count: u64 = 0,
+    alive: bool = true,
+
+    pub fn deinit(self: *ShaderBindingTable) void {
+        assertAlive(self.alive, .shader_binding_table);
+        self.alive = false;
+        self.tracker.release(.shader_binding_table);
+    }
+
+    pub fn selectedBackend(self: ShaderBindingTable) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: ShaderBindingTable) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *ShaderBindingTable, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .shader_binding_table);
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: ShaderBindingTable) core.ShaderBindingTableDescriptor {
+        assertAlive(self.alive, .shader_binding_table);
+        return self.descriptor_value;
+    }
+
+    pub fn layout(self: ShaderBindingTable) core.ShaderBindingTableLayout {
+        assertAlive(self.alive, .shader_binding_table);
+        return self.layout_value;
+    }
+
+    pub fn size(self: ShaderBindingTable) u64 {
+        return self.layout().total_size;
+    }
+
+    pub fn dispatchCount(self: ShaderBindingTable) u64 {
+        assertAlive(self.alive, .shader_binding_table);
+        return self.dispatch_count;
+    }
+
+    fn validateForPipeline(
+        self: ShaderBindingTable,
+        pipeline: RayTracingPipelineState,
+    ) core.AdvancedFeatureError!void {
+        const lowering = pipeline.lowering();
+        const sbt_descriptor = self.descriptor_value;
+        if (sbt_descriptor.ray_generation_count < lowering.rayGenerationGroupCount() or
+            sbt_descriptor.miss_count < lowering.missGroupCount() or
+            sbt_descriptor.hit_count < lowering.hitGroupCount() or
+            sbt_descriptor.callable_count < lowering.callableGroupCount())
+        {
+            return core.AdvancedFeatureError.InvalidShaderBindingTable;
+        }
+    }
+
+    fn dispatchPlan(
+        self: ShaderBindingTable,
+        pipeline: RayTracingPipelineState,
+        dispatch_descriptor: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!core.RayDispatchPlan {
+        try self.validateForPipeline(pipeline);
+        return try core.RayDispatchPlan.fromDescriptors(
+            self.descriptor_value,
+            dispatch_descriptor,
+            .{ .ray_tracing = true },
+            self.limits_value,
+        );
+    }
+
+    fn recordDispatch(self: *ShaderBindingTable) void {
+        self.dispatch_count += 1;
+    }
+};
+
 fn alignForwardU64(value: u64, alignment: u64) !u64 {
     if (alignment == 0) return error.InvalidAlignment;
     const remainder = value % alignment;
@@ -2818,6 +2906,24 @@ pub const CommandBuffer = struct {
         try resources.validate(self.backend, plan);
         _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
         resources.result.markBuilt();
+    }
+
+    pub fn dispatchRays(
+        self: *CommandBuffer,
+        pipeline: *RayTracingPipelineState,
+        shader_binding_table: *ShaderBindingTable,
+        descriptor: core.RayDispatchDescriptor,
+    ) !core.RayDispatchPlan {
+        assertObjectAlive(self.alive, "command_buffer");
+        assertAlive(pipeline.alive, .ray_tracing_pipeline_state);
+        assertAlive(shader_binding_table.alive, .shader_binding_table);
+        if (self.debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try expectSameBackend(self.backend, pipeline.backend);
+        try expectSameBackend(self.backend, shader_binding_table.backend);
+        const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
+        shader_binding_table.recordDispatch();
+        return plan;
     }
 
     pub fn label(self: CommandBuffer) ?[]const u8 {
@@ -4181,6 +4287,22 @@ pub const Device = struct {
 
     pub fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn makeShaderBindingTable(self: *Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!ShaderBindingTable {
+        const layout = try core.ShaderBindingTableLayout.fromDescriptor(
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+        self.tracker.retain(.shader_binding_table);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .descriptor_value = descriptor,
+            .layout_value = layout,
+            .limits_value = self.limits(),
+        };
     }
 
     pub fn planRayDispatch(
@@ -5653,6 +5775,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .heap => "heap",
         .acceleration_structure => "acceleration_structure",
         .ray_tracing_pipeline_state => "ray_tracing_pipeline_state",
+        .shader_binding_table => "shader_binding_table",
     };
 }
 
@@ -6422,6 +6545,76 @@ test "runtime device plans ray dispatch from native capabilities" {
     });
     try std.testing.expectEqual(@as(u64, 32), plan.total_rays);
     try std.testing.expectEqual(@as(u64, 192), plan.sbt_size);
+}
+
+test "runtime creates shader binding tables and dispatches rays" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.limits.max_ray_tracing_recursion_depth = 2;
+    report.limits.shader_binding_table_alignment = 64;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test ray dispatch adapter",
+        },
+        .capability_report = report,
+    };
+
+    const groups = [_]core.RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+        .{ .kind = .hit, .entry_point = "closest_hit" },
+    };
+    var pipeline = try device.makeRayTracingPipelineState(.{
+        .shader_groups = groups[0..],
+        .max_recursion_depth = 1,
+    });
+    defer pipeline.deinit();
+
+    var too_small_table = try device.makeShaderBindingTable(.{
+        .stride = 64,
+        .ray_generation_count = 1,
+        .miss_count = 1,
+        .hit_count = 0,
+    });
+    defer too_small_table.deinit();
+
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    };
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidShaderBindingTable,
+        command_buffer.dispatchRays(&pipeline, &too_small_table, .{
+            .width = 8,
+            .height = 4,
+        }),
+    );
+
+    var shader_binding_table = try device.makeShaderBindingTable(.{
+        .stride = 64,
+        .ray_generation_count = 1,
+        .miss_count = 1,
+        .hit_count = 1,
+    });
+    defer shader_binding_table.deinit();
+    try std.testing.expectEqual(@as(usize, 2), tracker.shader_binding_tables);
+    try std.testing.expectEqual(@as(u64, 192), shader_binding_table.size());
+
+    const plan = try command_buffer.dispatchRays(&pipeline, &shader_binding_table, .{
+        .width = 8,
+        .height = 4,
+    });
+    try std.testing.expectEqual(@as(u64, 32), plan.total_rays);
+    try std.testing.expectEqual(@as(u64, 1), shader_binding_table.dispatchCount());
 }
 
 test "runtime device plans Metal ray tracing mapping from native capabilities" {
