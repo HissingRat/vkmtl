@@ -1820,6 +1820,17 @@ obvious render and binding blockers.
 - [x] Document that direct `cmdTraceRaysKHR` and equivalent Metal dispatch
   driver calls remain Period 31+ parity work.
 
+## Period 30 Phase 4 Checklist
+
+- [x] Add backend-private Metal function-table and intersection-table state to
+  `MetalRayTracingExecutionMapping`.
+- [x] Track acceleration-structure slot requirements in the Metal-specific
+  mapping object.
+- [x] Keep Vulkan behavior as a validation no-op for Metal-only mapping APIs.
+- [x] Add focused runtime tests for Metal table metadata.
+- [x] Document that direct Metal table population and ray dispatch binding
+  remain Period 31+ parity work.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

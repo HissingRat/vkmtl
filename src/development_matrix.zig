@@ -1270,9 +1270,9 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .feature = .native_metal_ray_tracing_execution,
         .public_api = "MetalRayTracingMappingPlan",
         .vulkan_status = .validation_noop,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 4",
-        .validation = "Metal acceleration/intersection resources and dispatch integration remain feature-gated",
+        .metal_status = .backend_private_runtime,
+        .deferred_to = "Period 31+ driver parity plan",
+        .validation = "Metal execution mappings own backend-private function-table and acceleration-slot metadata",
     },
     .{
         .feature = .native_advanced_closure_inventory,
@@ -1746,10 +1746,10 @@ test "ray tracing and native parity backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 5);
-    try std.testing.expect(deferred_paths >= 3);
+    try std.testing.expect(deferred_paths >= 2);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
-    try std.testing.expect(period30_targets >= 4);
-    try std.testing.expect(period31_plus_targets >= 3);
+    try std.testing.expect(period30_targets >= 3);
+    try std.testing.expect(period31_plus_targets >= 4);
 }
 
 test "validation case inventory is valid" {

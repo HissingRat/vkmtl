@@ -143,7 +143,7 @@ conservative until the relevant backend period lands.
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
 | Native ray dispatch commands | Backend-private dispatch records | Backend-private dispatch records | Period 30 Phase 3 runtime native boundary; direct driver dispatch deferred to Period 31+ |
 | Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
-| Native Metal ray tracing execution | Validation no-op | Deferred | Period 30 Phase 4 native execution |
+| Native Metal ray tracing execution | Validation no-op | Backend-private table metadata | Period 30 Phase 4 runtime native boundary; direct Metal dispatch binding deferred to Period 31+ |
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
 | Native advanced backend execution | Deferred | Deferred | Period 30 Phase 5 native execution |
 | Parity semantics and soak loops | Deferred | Deferred | Period 30 Phase 6 parity/stability |

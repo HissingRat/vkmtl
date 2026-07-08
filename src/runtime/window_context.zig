@@ -1988,6 +1988,25 @@ pub const ShaderBindingTable = struct {
     }
 };
 
+const BackendPrivateMetalRayTracingTables = struct {
+    function_table_entries: u32,
+    intersection_function_count: u32,
+    acceleration_structure_slots: u32,
+    function_table_populated: bool,
+    intersection_table_populated: bool,
+    driver_bound: bool = false,
+
+    fn fromPlan(plan: core.MetalRayTracingMappingPlan) BackendPrivateMetalRayTracingTables {
+        return .{
+            .function_table_entries = plan.function_table_entries,
+            .intersection_function_count = plan.intersection_function_count,
+            .acceleration_structure_slots = if (plan.requires_acceleration_structure_resources) 1 else 0,
+            .function_table_populated = plan.requires_function_table,
+            .intersection_table_populated = plan.requires_intersection_function_table,
+        };
+    }
+};
+
 pub const MetalRayTracingExecutionMapping = struct {
     backend: core.Backend = .metal,
     tracker: *ResourceTracker,
@@ -1995,6 +2014,7 @@ pub const MetalRayTracingExecutionMapping = struct {
     label_value: ?[]const u8 = null,
     descriptor_value: core.MetalRayTracingMappingDescriptor,
     plan_value: core.MetalRayTracingMappingPlan,
+    native_tables: BackendPrivateMetalRayTracingTables,
     alive: bool = true,
 
     pub fn deinit(self: *MetalRayTracingExecutionMapping) void {
@@ -2033,6 +2053,22 @@ pub const MetalRayTracingExecutionMapping = struct {
 
     pub fn requiresIntersectionFunctionTable(self: MetalRayTracingExecutionMapping) bool {
         return self.plan().requires_intersection_function_table;
+    }
+
+    pub fn hasBackendPrivateFunctionTables(self: MetalRayTracingExecutionMapping) bool {
+        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
+        return self.native_tables.function_table_entries == self.functionTableEntryCount() and
+            self.native_tables.intersection_function_count == self.intersectionFunctionCount();
+    }
+
+    pub fn backendPrivateAccelerationStructureSlots(self: MetalRayTracingExecutionMapping) u32 {
+        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
+        return self.native_tables.acceleration_structure_slots;
+    }
+
+    pub fn backendPrivateMetalTablesBoundToDriver(self: MetalRayTracingExecutionMapping) bool {
+        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
+        return self.native_tables.driver_bound;
     }
 };
 
@@ -4586,6 +4622,7 @@ pub const Device = struct {
                 .function_table_label = descriptor.function_table_label,
             },
             .plan_value = plan,
+            .native_tables = BackendPrivateMetalRayTracingTables.fromPlan(plan),
         };
     }
 
@@ -7036,6 +7073,9 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
     try std.testing.expectEqual(@as(u32, 3), mapping.functionTableEntryCount());
     try std.testing.expectEqual(@as(u32, 1), mapping.intersectionFunctionCount());
     try std.testing.expect(mapping.requiresIntersectionFunctionTable());
+    try std.testing.expect(mapping.hasBackendPrivateFunctionTables());
+    try std.testing.expectEqual(@as(u32, 1), mapping.backendPrivateAccelerationStructureSlots());
+    try std.testing.expect(!mapping.backendPrivateMetalTablesBoundToDriver());
 
     var vulkan_report = core.defaultDeviceCapabilityReport(.vulkan);
     vulkan_report.native_features.ray_tracing = true;

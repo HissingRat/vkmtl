@@ -233,7 +233,8 @@ Tracked in `docs/develop/period30/`.
   pipeline handles are Period 31+ parity work.
 - [x] Backend-private SBT record metadata and ray dispatch command records.
   Direct driver dispatch calls are Period 31+ parity work.
-- [ ] Native Metal ray tracing dispatch integration.
+- [x] Backend-private Metal ray tracing table and acceleration-slot metadata.
+  Direct Metal dispatch binding is Period 31+ parity work.
 - [ ] Native advanced escape-hatch lowering.
 - [ ] Native parity and soak validation.
 - [ ] Pixel-producing native advanced examples.
