@@ -1226,8 +1226,11 @@ pub const BackendParitySemanticsPlan = struct {
     msaa_texture_copies: ParitySemanticStatus = .typed_unsupported,
     custom_sampler_border_colors: ParitySemanticStatus = .native_extension_only,
     gpu_soak_validation: ParitySemanticStatus = .deferred_native_validation,
-    deferred_to: []const u8 = "Period 30 Phase 6",
+    deferred_to: []const u8 = "Period 31+ validation matrix",
+    backend_private_validation_ready: bool = true,
+    period31_plus_driver_validation: bool = true,
     stability_plan: ?StabilityRunPlan = null,
+    stability_diagnostics: ?StabilityRunDiagnostics = null,
 
     pub fn fromDescriptor(descriptor: BackendParitySemanticsDescriptor) StabilityRunError!BackendParitySemanticsPlan {
         const stability_plan = if (descriptor.gpu_soak_iterations == 0)
@@ -1240,6 +1243,7 @@ pub const BackendParitySemanticsPlan = struct {
         return .{
             .backend = descriptor.backend,
             .stability_plan = stability_plan,
+            .stability_diagnostics = if (stability_plan) |plan| StabilityRunDiagnostics.fromPlan(plan) else null,
         };
     }
 
@@ -1256,8 +1260,20 @@ pub const BackendParitySemanticsPlan = struct {
         return self.gpu_soak_validation == .deferred_native_validation;
     }
 
+    pub fn hasBackendPrivateValidationPlan(self: BackendParitySemanticsPlan) bool {
+        return self.backend_private_validation_ready;
+    }
+
+    pub fn requiresPeriod31PlusDriverValidation(self: BackendParitySemanticsPlan) bool {
+        return self.period31_plus_driver_validation;
+    }
+
     pub fn hasStabilityPlan(self: BackendParitySemanticsPlan) bool {
         return self.stability_plan != null;
+    }
+
+    pub fn hasStabilityDiagnostics(self: BackendParitySemanticsPlan) bool {
+        return self.stability_diagnostics != null;
     }
 };
 
@@ -8176,8 +8192,11 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     try std.testing.expect(parity_plan.hasTypedUnsupportedCopies());
     try std.testing.expect(parity_plan.hasNativeExtensionOnlySemantics());
     try std.testing.expect(parity_plan.hasDeferredStressWork());
+    try std.testing.expect(parity_plan.hasBackendPrivateValidationPlan());
+    try std.testing.expect(parity_plan.requiresPeriod31PlusDriverValidation());
     try std.testing.expect(parity_plan.hasStabilityPlan());
-    try std.testing.expectEqualStrings("Period 30 Phase 6", parity_plan.deferred_to);
+    try std.testing.expect(parity_plan.hasStabilityDiagnostics());
+    try std.testing.expectEqualStrings("Period 31+ validation matrix", parity_plan.deferred_to);
     try std.testing.expectEqual(@as(u64, 120 * 1024), parity_plan.stability_plan.?.upload_bytes);
 
     try std.testing.expectError(StabilityRunError.InvalidCopySize, BackendParitySemanticsPlan.fromDescriptor(.{

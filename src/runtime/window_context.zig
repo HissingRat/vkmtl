@@ -7231,7 +7231,10 @@ test "runtime device plans backend parity semantics for selected backend" {
     });
     try std.testing.expectEqual(core.Backend.metal, plan.backend);
     try std.testing.expect(plan.hasTypedUnsupportedCopies());
+    try std.testing.expect(plan.hasBackendPrivateValidationPlan());
+    try std.testing.expect(plan.requiresPeriod31PlusDriverValidation());
     try std.testing.expect(plan.hasStabilityPlan());
+    try std.testing.expect(plan.hasStabilityDiagnostics());
 }
 
 test "runtime plans persistent cache manifests through device" {

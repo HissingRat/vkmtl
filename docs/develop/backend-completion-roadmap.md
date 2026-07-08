@@ -157,7 +157,7 @@ Tracked in `docs/develop/period26/`.
 - [x] Diagnostics for cache misses, creation cost, resource churn, capture
   names, and runtime live-resource snapshots.
 - [x] Long-run stability planning command.
-- [ ] GPU-backed long-run soak loops. Deferred to Period 30 Phase 6.
+- [ ] GPU-backed long-run soak loops. Deferred to Period 31+ validation matrix.
 
 Expected result: completed backend paths are fast enough and observable enough
 for real applications instead of only examples.
@@ -201,7 +201,7 @@ Tracked in `docs/develop/period28/`.
 - [x] Native advanced escape-hatch runtime contract. Backend-private lowering is
   deferred to Period 31+ driver parity plan.
 - [x] Parity semantic decisions and stress planning. Native soak validation is
-  deferred to Period 30 Phase 6.
+  deferred to Period 31+ validation matrix.
 
 Expected result: high-end backend-specific features become explicit, testable,
 and documented as planning/runtime-contract APIs. Period 30 owns executable
@@ -236,7 +236,8 @@ Tracked in `docs/develop/period30/`.
 - [x] Backend-private Metal ray tracing table and acceleration-slot metadata.
   Direct Metal dispatch binding is Period 31+ parity work.
 - [x] Backend-private native advanced inventory and Period31+ driver routing.
-- [ ] Native parity and soak validation.
+- [x] Backend-private parity validation plans and stability diagnostics.
+  GPU-backed soak loops are Period31+ validation matrix work.
 - [ ] Pixel-producing native advanced examples.
 
 Expected result: supported Vulkan and Metal adapters execute the high-end paths

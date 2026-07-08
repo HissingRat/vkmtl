@@ -1771,7 +1771,7 @@ obvious render and binding blockers.
 - [x] Decide depth/stencil and MSAA texture copies as typed unsupported
   behavior for now.
 - [x] Decide custom sampler border colors as native-extension-only semantics.
-- [x] Route GPU-backed soak validation to Period 30 Phase 6 while preserving
+- [x] Route GPU-backed soak validation to Period 31+ validation matrix while preserving
   opt-in `StabilityRunPlan` planning.
 - [x] Add focused core and runtime tests for parity plans.
 
@@ -1842,6 +1842,16 @@ obvious render and binding blockers.
 - [x] Add focused tests for Phase5 inventory and Period31+ driver routing.
 - [x] Update backend and development matrices for native advanced deferred
   targets.
+
+## Period 30 Phase 6 Checklist
+
+- [x] Add backend-private validation-plan status to
+  `BackendParitySemanticsPlan`.
+- [x] Generate `StabilityRunDiagnostics` from opt-in soak descriptors.
+- [x] Route GPU-backed soak loops and unresolved parity edge cases to the
+  Period31+ validation matrix.
+- [x] Add focused core and runtime tests for parity diagnostics.
+- [x] Update backend and development matrices for parity/soak routing.
 
 ## First Backend-Independent Triangle Checklist
 

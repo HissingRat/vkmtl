@@ -748,7 +748,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "GenerateMipmapsDescriptor partial mip/layer ranges",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 6",
+        .deferred_to = "Period 31+ validation matrix",
         .validation = "partial ranges remain typed unsupported at runtime",
     },
     .{
@@ -777,7 +777,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "CopyTextureToTextureDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 6",
+        .deferred_to = "Period 31+ validation matrix",
         .validation = "depth/stencil and MSAA texture copies remain typed unsupported",
     },
     .{
@@ -792,7 +792,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "SamplerBorderColor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 6",
+        .deferred_to = "Period 31+ validation matrix",
         .validation = "custom border colors are intentionally absent from the portable enum",
     },
     .{
@@ -1062,7 +1062,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "run-stability-plan contract",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 6",
+        .deferred_to = "Period 31+ validation matrix",
         .validation = "current opt-in command is deterministic planning; windowed GPU soak loops remain future backend validation",
     },
 };
@@ -1292,10 +1292,10 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
     .{
         .feature = .parity_semantics_and_soak,
         .public_api = "backend parity matrix",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 6",
-        .validation = "partial mip ranges, depth/stencil/MSAA copies, custom borders, and GPU soak loops need native decisions",
+        .vulkan_status = .backend_private_runtime,
+        .metal_status = .backend_private_runtime,
+        .deferred_to = "Period 31+ validation matrix",
+        .validation = "backend parity plans include runtime diagnostics while GPU soak loops remain device-matrix work",
     },
     .{
         .feature = .advanced_native_examples,
@@ -1746,10 +1746,10 @@ test "ray tracing and native parity backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 5);
-    try std.testing.expect(deferred_paths >= 1);
+    try std.testing.expectEqual(@as(usize, 0), deferred_paths);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
-    try std.testing.expect(period30_targets >= 2);
-    try std.testing.expect(period31_plus_targets >= 5);
+    try std.testing.expect(period30_targets >= 1);
+    try std.testing.expect(period31_plus_targets >= 6);
 }
 
 test "validation case inventory is valid" {
