@@ -19,6 +19,17 @@ Use `device.features()`, `device.limits()`, and `device.getFormatCaps(...)`
 instead of platform assumptions. Unsupported optional behavior should fail with
 typed errors rather than silently changing semantics.
 
+## Sync And Query Defaults
+
+vkmtl keeps the ordinary command path portable: resource usage tracking, binary
+fences, events, timestamp queries, and occlusion queries are available through
+backend-neutral runtime objects. Explicit barriers and queue ownership transfers
+are advanced escape hatches; Vulkan lowers the barrier path natively, while
+Metal uses validation/no-op markers where encoder boundaries already define
+ordering. Timeline fences, shared events, native dedicated queues, native
+queue-family ownership transfers, and pipeline statistics queries remain
+capability-gated until their backend lowering is complete.
+
 ## Advanced Features
 
 Advanced features stay behind feature gates. Some Period 22 binding paths now

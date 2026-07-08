@@ -16,6 +16,12 @@ Current cases:
 - `unsupported_feature`: feature-gated APIs return typed unsupported errors.
 - `shader_reflection_mismatch`: reflection layout, kind, visibility, and stage
   mismatches are reported before pipeline creation.
+- `runtime_sync_objects`: fences and events expose deterministic signal, wait,
+  reset, timeout, and unsupported-gate behavior.
+- `logical_queue_ownership`: queue views and ownership transfers reject
+  cross-queue use until an explicit ownership transfer is recorded.
+- `query_readback`: timestamp and occlusion query sets validate availability,
+  type, range, readback, and resolve paths before native work.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

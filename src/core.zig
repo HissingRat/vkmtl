@@ -9775,6 +9775,27 @@ test "default device features expose completed period 2 gates" {
     try std.testing.expect(!features.multi_surface);
 }
 
+test "default device features separate period23 defaults from escape hatches" {
+    const backends = [_]Backend{ .vulkan, .metal };
+    for (backends) |backend| {
+        const features = defaultDeviceFeatures(backend);
+
+        try std.testing.expect(features.explicit_resource_barriers);
+        try std.testing.expect(features.fences);
+        try std.testing.expect(features.events);
+        try std.testing.expect(features.occlusion_queries);
+        try std.testing.expect(features.timestamp_queries);
+
+        try std.testing.expect(!features.timeline_fences);
+        try std.testing.expect(!features.shared_events);
+        try std.testing.expect(!features.multi_queue);
+        try std.testing.expect(!features.dedicated_compute_queue);
+        try std.testing.expect(!features.dedicated_transfer_queue);
+        try std.testing.expect(!features.queue_ownership_transfer);
+        try std.testing.expect(!features.pipeline_statistics_queries);
+    }
+}
+
 test "default capability reports keep advanced backend gates closed" {
     const report = defaultDeviceCapabilityReport(.vulkan);
 

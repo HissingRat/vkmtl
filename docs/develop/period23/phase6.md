@@ -13,3 +13,12 @@ Phase 6 closes Period 23 with matrix and examples.
 - `zig build test`
 - `zig build`
 - Backend matrix updated for Vulkan and Metal.
+
+## Result
+
+- `src/development_matrix.zig` records the sync/query backend matrix and keeps
+  the regression row tied to `zig build test`.
+- `docs/develop/backend-test-matrix.md` separates portable runtime behavior
+  from explicit escape hatches and deferred native lowering.
+- `docs/develop/validation-matrix.md` lists fence/event, queue ownership, and
+  query readback/resolve coverage.

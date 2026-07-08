@@ -442,7 +442,7 @@ See `docs/develop/period22/`.
 
 ## Period 23: Command, Sync, And Query Backend Completion
 
-Status: planned after Period 22.
+Status: completed portable sync/query validation slice.
 
 Goal: lower explicit barriers, synchronization objects, dedicated queues, queue
 ownership transfers, and query commands.

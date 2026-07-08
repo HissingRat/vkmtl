@@ -96,14 +96,13 @@ supported cases are executable.
 
 Tracked in `docs/develop/period23/`.
 
-- [ ] Explicit resource barrier command lowering.
-- [ ] Fence and timeline fence runtime objects.
-- [ ] Event / shared event runtime objects.
-- [ ] Dedicated compute and transfer queues.
-- [ ] Queue ownership transfer rules for Vulkan and no-op/validation mapping for
-  Metal.
-- [ ] Occlusion, timestamp, and pipeline statistics query pools and encoder
-  commands.
+- [x] Explicit resource barrier command lowering.
+- [x] Fence and event runtime objects.
+- [x] Logical compute and transfer queue views with portable fallback.
+- [x] Queue ownership transfer rules and Metal no-op/validation mapping.
+- [x] Occlusion and timestamp query sets with encoder commands.
+- [ ] Timeline fence, shared-event, native dedicated-queue, Vulkan queue-family
+  transfer, and pipeline-statistics native lowering.
 
 Expected result: vkmtl can support profiling, readback-heavy tools, async
 compute/transfer experiments, and explicit synchronization escape hatches.

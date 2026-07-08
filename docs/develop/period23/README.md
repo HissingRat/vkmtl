@@ -1,6 +1,6 @@
 # Period 23: Command, Sync, And Query Backend Completion
 
-Status: planned after Period 22.
+Status: completed portable sync/query validation slice.
 
 Goal: expose portable defaults and explicit escape hatches for synchronization,
 multi-queue work, and query/profiling operations.
@@ -17,13 +17,15 @@ See `phase1.md`.
 
 ## Phase 2: Fences And Events
 
-- Add runtime fence, timeline fence, event, and shared-event objects.
+- Add runtime fence and event objects. Timeline fences and shared events remain
+  capability-gated until native submit/shared-object integration lands.
 
 See `phase2.md`.
 
 ## Phase 3: Dedicated Queues
 
-- Lower dedicated compute and transfer queue selection.
+- Add logical compute and transfer queue views with portable fallback. Native
+  dedicated queue families remain a later backend step.
 
 See `phase3.md`.
 
@@ -35,12 +37,13 @@ See `phase4.md`.
 
 ## Phase 5: Query Pools And Encoder Commands
 
-- Lower occlusion, timestamp, and pipeline statistics queries.
+- Add runtime occlusion and timestamp query sets with encoder commands and
+  readback/resolve validation. Pipeline statistics remains capability-gated.
 
 See `phase5.md`.
 
 ## Phase 6: Sync And Query Validation
 
-- Add tests and examples for sync/query backend paths.
+- Add tests and backend-matrix entries for sync/query backend paths.
 
 See `phase6.md`.

@@ -488,6 +488,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .command = "zig build test",
         .expectation = "dynamic buffer array offsets, resource tables, root constants, and shader specialization regressions pass",
     },
+    .{
+        .name = "sync_query_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test",
+        .expectation = "explicit barriers, fences/events, logical queues, ownership transfers, and query validation regressions pass",
+    },
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
@@ -499,6 +507,155 @@ pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) Developmen
     }
 }
 
+pub const BackendFeatureStatus = enum {
+    native_lowering,
+    portable_runtime,
+    portable_fallback,
+    validation_noop,
+    capability_gated,
+    deferred_native_lowering,
+};
+
+pub const SyncQueryFeature = enum {
+    explicit_resource_barriers,
+    binary_fences,
+    timeline_fences,
+    events,
+    shared_events,
+    logical_compute_queue,
+    logical_transfer_queue,
+    queue_ownership_transfer,
+    timestamp_queries,
+    occlusion_queries,
+    pipeline_statistics_queries,
+};
+
+pub const SyncQueryMatrixEntry = struct {
+    feature: SyncQueryFeature,
+    public_api: []const u8,
+    portable_default: bool,
+    escape_hatch: bool,
+    vulkan_status: BackendFeatureStatus,
+    metal_status: BackendFeatureStatus,
+    validation: []const u8,
+
+    pub fn validate(self: SyncQueryMatrixEntry) DevelopmentMatrixError!void {
+        if (self.public_api.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+    }
+};
+
+pub const sync_query_matrix = [_]SyncQueryMatrixEntry{
+    .{
+        .feature = .explicit_resource_barriers,
+        .public_api = "BlitCommandEncoder.bufferBarrier/textureBarrier and ComputeCommandEncoder buffer/texture barriers",
+        .portable_default = false,
+        .escape_hatch = true,
+        .vulkan_status = .native_lowering,
+        .metal_status = .validation_noop,
+        .validation = "runtime explicit barriers update resource usage state and Vulkan lowers to backend barriers",
+    },
+    .{
+        .feature = .binary_fences,
+        .public_api = "Device.makeFence with FenceKind.binary",
+        .portable_default = true,
+        .escape_hatch = true,
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "runtime fences signal, wait, reset, and report timeout errors deterministically",
+    },
+    .{
+        .feature = .timeline_fences,
+        .public_api = "Device.makeFence with FenceKind.timeline",
+        .portable_default = false,
+        .escape_hatch = true,
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "timeline fences reject creation until the feature gate is enabled",
+    },
+    .{
+        .feature = .events,
+        .public_api = "Device.makeEvent",
+        .portable_default = true,
+        .escape_hatch = true,
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "runtime events signal, wait, reset, and report timeout errors deterministically",
+    },
+    .{
+        .feature = .shared_events,
+        .public_api = "Device.makeEvent with shared=true",
+        .portable_default = false,
+        .escape_hatch = true,
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "shared events reject creation until the feature gate is enabled",
+    },
+    .{
+        .feature = .logical_compute_queue,
+        .public_api = "Device.queueWithDescriptor(.{ .kind = .compute })",
+        .portable_default = true,
+        .escape_hatch = false,
+        .vulkan_status = .portable_fallback,
+        .metal_status = .portable_fallback,
+        .validation = "compute queue descriptors fall back to graphics when native multi-queue support is unavailable",
+    },
+    .{
+        .feature = .logical_transfer_queue,
+        .public_api = "Device.queueWithDescriptor(.{ .kind = .transfer })",
+        .portable_default = true,
+        .escape_hatch = false,
+        .vulkan_status = .portable_fallback,
+        .metal_status = .portable_fallback,
+        .validation = "transfer queue descriptors fall back to graphics when native multi-queue support is unavailable",
+    },
+    .{
+        .feature = .queue_ownership_transfer,
+        .public_api = "bufferOwnershipTransfer and textureOwnershipTransfer",
+        .portable_default = false,
+        .escape_hatch = true,
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .validation_noop,
+        .validation = "resource owner state rejects access from the wrong logical queue",
+    },
+    .{
+        .feature = .timestamp_queries,
+        .public_api = "QuerySet timestamp writes and readback/resolve",
+        .portable_default = true,
+        .escape_hatch = false,
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "timestamp query writes become deterministic values for readback and resolve validation",
+    },
+    .{
+        .feature = .occlusion_queries,
+        .public_api = "QuerySet occlusion begin/end and readback/resolve",
+        .portable_default = true,
+        .escape_hatch = false,
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "occlusion query begin/end marks results available and rejects premature readback",
+    },
+    .{
+        .feature = .pipeline_statistics_queries,
+        .public_api = "QuerySet pipeline_statistics",
+        .portable_default = false,
+        .escape_hatch = true,
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "pipeline statistics queries remain typed unsupported until backend lowering is complete",
+    },
+};
+
+pub fn validateSyncQueryMatrix(entries: []const SyncQueryMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (entry.feature == other.feature) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 pub const ValidationCaseKind = enum {
     invalid_bind_group,
     invalid_texture_format,
@@ -506,6 +663,9 @@ pub const ValidationCaseKind = enum {
     resource_destroyed_while_in_use,
     unsupported_feature,
     shader_reflection_mismatch,
+    runtime_sync_objects,
+    logical_queue_ownership,
+    query_readback,
 };
 
 pub const ValidationCase = struct {
@@ -559,6 +719,24 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .shader_reflection_mismatch,
         .test_location = "src/shader/reflection.zig reflection artifact validates bind group layout",
         .expectation = "shader reflection layout, kind, visibility, and stage mismatch are reported before pipeline creation",
+    },
+    .{
+        .name = "runtime_sync_objects",
+        .kind = .runtime_sync_objects,
+        .test_location = "src/runtime/window_context.zig runtime fences and events track lifecycle state",
+        .expectation = "fences and events expose deterministic signal, wait, reset, and unsupported-gate behavior",
+    },
+    .{
+        .name = "logical_queue_ownership",
+        .kind = .logical_queue_ownership,
+        .test_location = "src/runtime/window_context.zig runtime queue ownership transfers gate cross queue resource use",
+        .expectation = "queue views and ownership transfers reject cross-queue use without explicit transfer",
+    },
+    .{
+        .name = "query_readback",
+        .kind = .query_readback,
+        .test_location = "src/runtime/window_context.zig runtime query sets support encoder writes and readback",
+        .expectation = "timestamp and occlusion query sets validate availability, type, range, and feature gates",
     },
 };
 
@@ -691,10 +869,39 @@ test "native interop gallery keeps explicit feature gates" {
 test "backend test matrix metadata is valid" {
     try validateBackendTestMatrix(backend_test_matrix[0..]);
     var configured_optional: usize = 0;
+    var has_sync_query_regression = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
+        if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
     }
     try std.testing.expect(configured_optional >= 1);
+    try std.testing.expect(has_sync_query_regression);
+}
+
+test "sync and query backend matrix is complete" {
+    try validateSyncQueryMatrix(sync_query_matrix[0..]);
+
+    var seen = [_]bool{false} ** @typeInfo(SyncQueryFeature).@"enum".fields.len;
+    var portable_defaults: usize = 0;
+    var escape_hatches: usize = 0;
+    var capability_gated: usize = 0;
+    var deferred_native: usize = 0;
+
+    for (sync_query_matrix) |entry| {
+        seen[@intFromEnum(entry.feature)] = true;
+        if (entry.portable_default) portable_defaults += 1;
+        if (entry.escape_hatch) escape_hatches += 1;
+        if (entry.vulkan_status == .capability_gated or entry.metal_status == .capability_gated) capability_gated += 1;
+        if (entry.vulkan_status == .deferred_native_lowering or entry.metal_status == .deferred_native_lowering) deferred_native += 1;
+    }
+
+    for (seen) |was_seen| {
+        try std.testing.expect(was_seen);
+    }
+    try std.testing.expect(portable_defaults >= 4);
+    try std.testing.expect(escape_hatches >= 4);
+    try std.testing.expect(capability_gated >= 3);
+    try std.testing.expect(deferred_native >= 1);
 }
 
 test "validation case inventory is valid" {

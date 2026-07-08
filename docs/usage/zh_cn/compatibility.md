@@ -17,6 +17,15 @@ vkmtl 优先覆盖 portable Vulkan 和 Metal workflow；高级能力放在显式
 使用 `device.features()`、`device.limits()` 和 `device.getFormatCaps(...)`，不要靠平台假设。
 不支持的 optional behavior 应该返回 typed error，而不是静默改变语义。
 
+## Sync And Query Defaults
+
+vkmtl 会保持普通 command path portable：resource usage tracking、binary fence、event、
+timestamp query 和 occlusion query 都通过 backend-neutral runtime object 暴露。显式 barrier
+和 queue ownership transfer 是高级 escape hatch；Vulkan 会把 barrier path 下沉到 native，
+Metal 会在 encoder boundary 已经定义 ordering 的地方使用 validation/no-op marker。Timeline
+fence、shared event、native dedicated queue、native queue-family ownership transfer 和
+pipeline statistics query 仍然保持 capability-gated，等 backend lowering 完成后再打开。
+
 ## Advanced Features
 
 Advanced features 会继续放在 feature gate 后面。Period 22 的一部分 binding 路径已经有

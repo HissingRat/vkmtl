@@ -1397,10 +1397,10 @@ obvious render and binding blockers.
 
 ## Period 23 Phase 6 Checklist
 
-- [ ] Update backend matrix entries for sync and query features.
-- [ ] Add final Period 23 validation tests.
-- [ ] Update docs that separate portable defaults from escape hatches.
-- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+- [x] Update backend matrix entries for sync and query features.
+- [x] Add final Period 23 validation tests.
+- [x] Update docs that separate portable defaults from escape hatches.
+- [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
 ## First Backend-Independent Triangle Checklist
 
