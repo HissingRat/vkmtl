@@ -1508,6 +1508,17 @@ obvious render and binding blockers.
 - [x] Mark all new deferred native interop work in a later period and phase.
 - [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
+## Period 26 Phase 1 Checklist
+
+- [x] Define object-cache lookup behavior before native handle pooling.
+- [x] Add cache policy fields to cacheable object descriptors.
+- [x] Record cache hits, equivalent recreations, opt-outs, and suppressed
+  diagnostics through one runtime tracker path.
+- [x] Wire shader modules, bind group layouts, render/compute pipelines, and
+  samplers to object-cache lookup diagnostics.
+- [x] Document lifetime-safe native handle pooling as deferred to Period 28
+  Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

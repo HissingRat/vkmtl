@@ -54,6 +54,13 @@ pub const ResourceKind = enum {
 const object_cache_fingerprint_capacity = 32;
 const object_cache_fingerprint_slots = core.object_cache_kind_count * object_cache_fingerprint_capacity;
 
+const ObjectCacheLookup = struct {
+    kind: core.ObjectCacheKind,
+    fingerprint: u64,
+    policy: core.ObjectCachePolicy,
+    cache_hit: bool,
+};
+
 pub const ResourceTracker = struct {
     buffers: usize = 0,
     textures: usize = 0,
@@ -126,9 +133,40 @@ pub const ResourceTracker = struct {
     ) void {
         const equivalent = self.hasObjectFingerprint(kind, fingerprint);
         self.object_cache_diagnostics.recordCreation(kind, equivalent, policy, creation_time_ns);
-        if (policy.recordsDiagnostics()) {
+        if (policy.allowsReuse()) {
             self.rememberObjectFingerprint(kind, fingerprint);
         }
+    }
+
+    pub fn beginObjectCacheLookup(
+        self: *ResourceTracker,
+        kind: core.ObjectCacheKind,
+        fingerprint: u64,
+        policy: core.ObjectCachePolicy,
+    ) ObjectCacheLookup {
+        const cache_hit = policy.allowsReuse() and self.hasObjectFingerprint(kind, fingerprint);
+        if (cache_hit and policy.recordsDiagnostics()) {
+            self.object_cache_diagnostics.recordHit(kind);
+        }
+        return .{
+            .kind = kind,
+            .fingerprint = fingerprint,
+            .policy = policy,
+            .cache_hit = cache_hit,
+        };
+    }
+
+    pub fn finishObjectCacheLookup(
+        self: *ResourceTracker,
+        lookup: ObjectCacheLookup,
+        creation_time_ns: u64,
+    ) void {
+        self.recordObjectCreation(
+            lookup.kind,
+            lookup.fingerprint,
+            lookup.policy,
+            creation_time_ns,
+        );
     }
 
     fn retire(self: *ResourceTracker, kind: ResourceKind) void {
@@ -3989,6 +4027,7 @@ pub const Device = struct {
     pub fn makeShaderModule(self: *Device, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
         var fingerprint = objectFingerprintStart(.shader_module, self.backend);
         hashShaderModuleDescriptor(&fingerprint, descriptor);
+        const lookup = self.tracker.beginObjectCacheLookup(.shader_module, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ShaderModule.Impl{ .vulkan = try vulkan.makeShaderModule(descriptor) },
@@ -3996,7 +4035,7 @@ pub const Device = struct {
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.shader_module);
-        self.tracker.recordObjectCreation(.shader_module, fingerprint, .{}, elapsed_ns);
+        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
         var shader_module = ShaderModule{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -4019,6 +4058,7 @@ pub const Device = struct {
         errdefer self.allocator.free(root_constant_ranges);
         var fingerprint = objectFingerprintStart(.render_pipeline, self.backend);
         hashRenderPipelineDescriptor(&fingerprint, descriptor);
+        const lookup = self.tracker.beginObjectCacheLookup(.render_pipeline, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| RenderPipelineState.Impl{ .vulkan = try vulkan.makeRenderPipelineState(descriptor) },
@@ -4026,7 +4066,7 @@ pub const Device = struct {
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.render_pipeline_state);
-        self.tracker.recordObjectCreation(.render_pipeline, fingerprint, .{}, elapsed_ns);
+        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
         var pipeline = RenderPipelineState{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -4049,6 +4089,7 @@ pub const Device = struct {
         errdefer self.allocator.free(root_constant_ranges);
         var fingerprint = objectFingerprintStart(.compute_pipeline, self.backend);
         hashComputePipelineDescriptor(&fingerprint, descriptor);
+        const lookup = self.tracker.beginObjectCacheLookup(.compute_pipeline, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| ComputePipelineState.Impl{ .vulkan = try vulkan.makeComputePipelineState(descriptor) },
@@ -4056,7 +4097,7 @@ pub const Device = struct {
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.compute_pipeline_state);
-        self.tracker.recordObjectCreation(.compute_pipeline, fingerprint, .{}, elapsed_ns);
+        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
         var pipeline = ComputePipelineState{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -4075,6 +4116,7 @@ pub const Device = struct {
         try validateFirstSliceBindGroupLayout(descriptor);
         var fingerprint = objectFingerprintStart(.bind_group_layout, self.backend);
         hashBindGroupLayoutDescriptor(&fingerprint, descriptor);
+        const lookup = self.tracker.beginObjectCacheLookup(.bind_group_layout, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
 
         const entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.entries);
@@ -4098,7 +4140,7 @@ pub const Device = struct {
 
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.bind_group_layout);
-        self.tracker.recordObjectCreation(.bind_group_layout, fingerprint, .{}, elapsed_ns);
+        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -4288,6 +4330,7 @@ pub const Device = struct {
         try descriptor.validateForDevice(self.features(), self.limits());
         var fingerprint = objectFingerprintStart(.sampler, self.backend);
         hashSamplerDescriptor(&fingerprint, descriptor);
+        const lookup = self.tracker.beginObjectCacheLookup(.sampler, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| SamplerState.Impl{ .vulkan = try vulkan.makeSamplerState(descriptor) },
@@ -4295,7 +4338,7 @@ pub const Device = struct {
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
         self.tracker.retain(.sampler_state);
-        self.tracker.recordObjectCreation(.sampler, fingerprint, .{}, elapsed_ns);
+        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
         var sampler = SamplerState{
             .backend = self.backend,
             .tracker = self.tracker,
@@ -5365,6 +5408,30 @@ test "resource tracker records equivalent object cache creations" {
     try std.testing.expectEqual(@as(u64, 1), sampler_stats.equivalent_recreations);
     try std.testing.expectEqual(@as(u64, 1), sampler_stats.diagnostics_suppressed);
     try std.testing.expectEqual(@as(u64, 17), sampler_stats.total_creation_time_ns);
+}
+
+test "resource tracker records cache lookups and opt out policy" {
+    var tracker = ResourceTracker{};
+
+    const first = tracker.beginObjectCacheLookup(.sampler, 99, .{});
+    try std.testing.expect(!first.cache_hit);
+    tracker.finishObjectCacheLookup(first, 11);
+
+    const second = tracker.beginObjectCacheLookup(.sampler, 99, .{});
+    try std.testing.expect(second.cache_hit);
+    tracker.finishObjectCacheLookup(second, 5);
+
+    const diagnostics_only = tracker.beginObjectCacheLookup(.sampler, 111, .{ .mode = .diagnostics_only });
+    try std.testing.expect(!diagnostics_only.cache_hit);
+    tracker.finishObjectCacheLookup(diagnostics_only, 7);
+    const diagnostics_only_again = tracker.beginObjectCacheLookup(.sampler, 111, .{ .mode = .diagnostics_only });
+    try std.testing.expect(!diagnostics_only_again.cache_hit);
+
+    const sampler_stats = tracker.objectCacheDiagnostics().stats(.sampler);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.hits);
+    try std.testing.expectEqual(@as(u64, 3), sampler_stats.creation_attempts);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.equivalent_recreations);
+    try std.testing.expectEqual(@as(u64, 1), sampler_stats.reuse_bypassed_creations);
 }
 
 test "runtime blit encoder records buffer usage transitions" {

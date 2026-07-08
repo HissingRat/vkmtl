@@ -602,15 +602,17 @@ Period 8 exposes cache-key and diagnostic shapes for expensive native objects:
 - `ComputePipelineCacheKeyDescriptor`
 - `SamplerCacheKeyDescriptor`
 
-`ObjectCachePolicy` controls whether a key requests reuse, disables
-diagnostics, or records diagnostics only. `ObjectCacheDiagnostics` reports
-hits, misses, creation attempts, equivalent recreation attempts, bypassed reuse,
+`ObjectCachePolicy` controls whether a descriptor requests reuse, disables
+diagnostics, or records diagnostics only. Cacheable object descriptors carry a
+defaulted `cache_policy` field. `ObjectCacheDiagnostics` reports lookup hits,
+misses, creation attempts, equivalent recreation attempts, bypassed reuse,
 suppressed diagnostics, and total creation time. Read snapshots with
 `device.objectCacheDiagnostics()` or `context.objectCacheDiagnostics()`.
 
-These diagnostics currently count repeated key-equivalent runtime object
-creation attempts. They do not yet prove that a backend-native handle was
-reused.
+These diagnostics now run through the runtime object-cache lookup path for
+shader modules, bind group layouts, render pipelines, compute pipelines, and
+samplers. They still do not prove that a backend-native handle was reused;
+lifetime-safe native handle pooling is future backend work.
 
 Driver-level cache identity is represented separately by
 `DriverCacheIdentityDescriptor` and `DriverPipelineCacheDescriptor`. Vulkan

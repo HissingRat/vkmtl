@@ -1620,6 +1620,7 @@ pub const ShaderSource = union(enum) {
 pub const ShaderModuleDescriptor = struct {
     label: ?[]const u8 = null,
     source: ShaderSource,
+    cache_policy: ObjectCachePolicy = .{},
 
     pub fn validate(self: ShaderModuleDescriptor) ShaderError!void {
         switch (self.source) {
@@ -2400,6 +2401,7 @@ pub const RenderPipelineDescriptor = struct {
     color_attachments: []const RenderPipelineColorAttachmentDescriptor = &.{},
     depth_stencil: ?DepthStencilDescriptor = null,
     root_constant_layout: ?RootConstantLayoutDescriptor = null,
+    cache_policy: ObjectCachePolicy = .{},
 
     pub fn validate(self: RenderPipelineDescriptor) (ShaderError || PipelineError || BindingError)!void {
         try self.vertex.validate(.vertex);
@@ -2454,6 +2456,7 @@ pub const ComputePipelineDescriptor = struct {
     compute: ProgrammableStageDescriptor,
     bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
     root_constant_layout: ?RootConstantLayoutDescriptor = null,
+    cache_policy: ObjectCachePolicy = .{},
 
     pub fn validate(self: ComputePipelineDescriptor) (ShaderError || BindingError)!void {
         try self.compute.validate(.compute);
@@ -4683,6 +4686,7 @@ pub const SamplerDescriptor = struct {
     compare_function: ?CompareFunction = null,
     max_anisotropy: f32 = 1,
     border_color: ?SamplerBorderColor = null,
+    cache_policy: ObjectCachePolicy = .{},
 
     pub fn validate(self: SamplerDescriptor) SamplerError!void {
         if (self.lod_min_clamp > self.lod_max_clamp) return SamplerError.InvalidLodRange;
@@ -4873,6 +4877,7 @@ pub const BindGroupLayoutEntry = struct {
 pub const BindGroupLayoutDescriptor = struct {
     label: ?[]const u8 = null,
     entries: []const BindGroupLayoutEntry = &.{},
+    cache_policy: ObjectCachePolicy = .{},
 
     pub fn validate(self: BindGroupLayoutDescriptor) BindingError!void {
         if (self.entries.len == 0) return BindingError.MissingBindGroupLayoutEntry;

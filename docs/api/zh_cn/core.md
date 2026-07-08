@@ -503,13 +503,15 @@ Period 8 暴露 expensive native object 的 cache-key 和 diagnostics 形状：
 - `ComputePipelineCacheKeyDescriptor`
 - `SamplerCacheKeyDescriptor`
 
-`ObjectCachePolicy` 控制一个 key 是否请求复用、关闭 diagnostics，或只记录 diagnostics。
-`ObjectCacheDiagnostics` 会报告 hit、miss、creation attempts、equivalent recreation attempts、
-bypassed reuse、suppressed diagnostics 和总创建耗时。可以通过
-`device.objectCacheDiagnostics()` 或 `context.objectCacheDiagnostics()` 读取快照。
+`ObjectCachePolicy` 控制一个 descriptor 是否请求复用、关闭 diagnostics，或只记录 diagnostics。
+可缓存 object descriptor 都有默认的 `cache_policy` 字段。`ObjectCacheDiagnostics` 会报告 lookup
+hit、miss、creation attempts、equivalent recreation attempts、bypassed reuse、
+suppressed diagnostics 和总创建耗时。可以通过 `device.objectCacheDiagnostics()` 或
+`context.objectCacheDiagnostics()` 读取快照。
 
-这些 diagnostics 目前统计 key-equivalent runtime object creation attempts；它还不能证明
-backend-native handle 已经被复用。
+这些 diagnostics 现在会经过 runtime object-cache lookup path，覆盖 shader module、bind group
+layout、render pipeline、compute pipeline 和 sampler。它仍不能证明 backend-native handle 已经被
+复用；lifetime-safe native handle pooling 是后续 backend work。
 
 Driver-level cache identity 由 `DriverCacheIdentityDescriptor` 和
 `DriverPipelineCacheDescriptor` 单独表示。Vulkan pipeline cache 和 Metal binary archive support 由
