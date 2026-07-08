@@ -1698,6 +1698,15 @@ obvious render and binding blockers.
 - [x] Migrate older Period 28 deferred items to concrete Period 29 phases.
 - [x] Update backend completion and backend test matrix docs.
 
+## Period 28 Phase 7 Checklist
+
+- [x] Update the ray tracing example to use Period 28 planning APIs.
+- [x] Keep the ray tracing example capability-gated on native feature reports.
+- [x] Document the ray tracing example as a planning example, not executable
+  native rendering.
+- [x] Document executable native advanced examples as deferred to Period 29
+  Phase 7.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
