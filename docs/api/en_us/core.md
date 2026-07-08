@@ -161,12 +161,15 @@ markers because ordinary Metal encoders already define most resource ordering.
 The path is gated by `DeviceFeatures.explicit_resource_barriers`; ordinary code
 should keep using the automatic usage-tracking path.
 
-Fence and event synchronization is descriptor-only in this period.
-`FenceDescriptor`, `FenceSignalDescriptor`, and `FenceWaitDescriptor` validate
-binary and timeline-style fence values behind `DeviceFeatures.fences` and
-`DeviceFeatures.timeline_fences`. `EventDescriptor` plus event wait/signal
-descriptor shapes are gated by `DeviceFeatures.events` and
-`DeviceFeatures.shared_events`. Runtime fence/event objects are future work.
+Fence and event synchronization has runtime objects.
+`Device.makeFence(...)` creates a `Fence` from `FenceDescriptor`; use
+`signal(...)`, `wait(...)`, `reset(...)`, and `currentValue()` for explicit
+CPU-visible state. Binary fences are available through `DeviceFeatures.fences`;
+timeline fences remain gated by `DeviceFeatures.timeline_fences`.
+`Device.makeEvent(...)` creates an `Event` with `signal(...)`, `wait(...)`,
+`reset()`, and `isSignaled()`. Shared events remain gated by
+`DeviceFeatures.shared_events`. Queue-submit integration is still a later
+backend step.
 
 ## Shaders And Pipelines
 

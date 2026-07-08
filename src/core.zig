@@ -1022,6 +1022,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnexpectedMetalStatus,
         error.MetalUnsupported,
         error.NoMetalDevice,
+        error.FenceWaitTimeout,
+        error.EventWaitTimeout,
         => .backend,
 
         error.NoSupportedBackend,
@@ -1157,6 +1159,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidResourceBarrierRange,
         error.InvalidQueueCapability,
         error.InvalidFenceValue,
+        error.InvalidEventState,
         error.InvalidDispatchIndirectOffset,
         error.InvalidIndirectBufferUsage,
         error.InvalidAtomicStorageResource,
@@ -1476,6 +1479,8 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .indirect_draw = true,
         .compute_dispatch_indirect = true,
         .explicit_resource_barriers = true,
+        .fences = true,
+        .events = true,
     };
 
     if (backend == .metal) {
@@ -3639,6 +3644,9 @@ pub const CommandEncodingError = error{
     InvalidResourceBarrierRange,
     InvalidQueueCapability,
     InvalidFenceValue,
+    InvalidEventState,
+    FenceWaitTimeout,
+    EventWaitTimeout,
     InvalidDispatchIndirectOffset,
     InvalidIndirectBufferUsage,
     InvalidAtomicStorageResource,

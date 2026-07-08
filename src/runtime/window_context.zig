@@ -41,6 +41,8 @@ pub const ResourceKind = enum {
     bind_group,
     advanced_bind_group_layout,
     resource_table,
+    fence,
+    event,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -58,6 +60,8 @@ pub const ResourceTracker = struct {
     bind_groups: usize = 0,
     advanced_bind_group_layouts: usize = 0,
     resource_tables: usize = 0,
+    fences: usize = 0,
+    events: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -139,13 +143,15 @@ pub const ResourceTracker = struct {
             self.bind_group_layouts != 0 or
             self.bind_groups != 0 or
             self.advanced_bind_group_layouts != 0 or
-            self.resource_tables != 0;
+            self.resource_tables != 0 or
+            self.fences != 0 or
+            self.events != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, fences={}, events={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -158,6 +164,8 @@ pub const ResourceTracker = struct {
                     self.bind_groups,
                     self.advanced_bind_group_layouts,
                     self.resource_tables,
+                    self.fences,
+                    self.events,
                 },
             );
         }
@@ -182,6 +190,8 @@ pub const ResourceTracker = struct {
             .bind_group => &self.bind_groups,
             .advanced_bind_group_layout => &self.advanced_bind_group_layouts,
             .resource_table => &self.resource_tables,
+            .fence => &self.fences,
+            .event => &self.events,
         };
     }
 
@@ -1025,6 +1035,132 @@ pub const SamplerState = struct {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
+    }
+};
+
+pub const Fence = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.FenceDescriptor,
+    current_value: u64,
+    alive: bool = true,
+
+    pub fn deinit(self: *Fence) void {
+        assertObjectAlive(self.alive, "fence");
+        self.alive = false;
+        self.tracker.release(.fence);
+    }
+
+    pub fn selectedBackend(self: Fence) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: Fence) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *Fence, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "fence");
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: Fence) core.FenceDescriptor {
+        assertObjectAlive(self.alive, "fence");
+        return self.descriptor_value;
+    }
+
+    pub fn currentValue(self: Fence) u64 {
+        assertObjectAlive(self.alive, "fence");
+        return self.current_value;
+    }
+
+    pub fn isSignaled(self: Fence, value: u64) bool {
+        assertObjectAlive(self.alive, "fence");
+        return switch (self.descriptor_value.kind) {
+            .binary => self.current_value != 0 and value <= 1,
+            .timeline => self.current_value >= value,
+        };
+    }
+
+    pub fn signal(self: *Fence, signal_descriptor: core.FenceSignalDescriptor) !void {
+        assertObjectAlive(self.alive, "fence");
+        try signal_descriptor.validate(self.descriptor_value);
+        switch (self.descriptor_value.kind) {
+            .binary => self.current_value = 1,
+            .timeline => {
+                if (signal_descriptor.value < self.current_value) return core.CommandEncodingError.InvalidFenceValue;
+                self.current_value = signal_descriptor.value;
+            },
+        }
+    }
+
+    pub fn wait(self: *Fence, wait_descriptor: core.FenceWaitDescriptor) !void {
+        assertObjectAlive(self.alive, "fence");
+        try wait_descriptor.validate(self.descriptor_value);
+        if (!self.isSignaled(wait_descriptor.value)) return core.CommandEncodingError.FenceWaitTimeout;
+    }
+
+    pub fn reset(self: *Fence) !void {
+        assertObjectAlive(self.alive, "fence");
+        switch (self.descriptor_value.kind) {
+            .binary => self.current_value = 0,
+            .timeline => return core.CommandEncodingError.InvalidFenceValue,
+        }
+    }
+};
+
+pub const Event = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.EventDescriptor,
+    signaled_value: bool = false,
+    alive: bool = true,
+
+    pub fn deinit(self: *Event) void {
+        assertObjectAlive(self.alive, "event");
+        self.alive = false;
+        self.tracker.release(.event);
+    }
+
+    pub fn selectedBackend(self: Event) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: Event) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *Event, label_value: ?[]const u8) void {
+        assertObjectAlive(self.alive, "event");
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: Event) core.EventDescriptor {
+        assertObjectAlive(self.alive, "event");
+        return self.descriptor_value;
+    }
+
+    pub fn isSignaled(self: Event) bool {
+        assertObjectAlive(self.alive, "event");
+        return self.signaled_value;
+    }
+
+    pub fn signal(self: *Event, signal_descriptor: core.EventSignalDescriptor) !void {
+        assertObjectAlive(self.alive, "event");
+        self.signaled_value = signal_descriptor.signaled;
+    }
+
+    pub fn wait(self: *Event, wait_descriptor: core.EventWaitDescriptor) !void {
+        assertObjectAlive(self.alive, "event");
+        _ = wait_descriptor;
+        if (!self.signaled_value) return core.CommandEncodingError.EventWaitTimeout;
+    }
+
+    pub fn reset(self: *Event) void {
+        assertObjectAlive(self.alive, "event");
+        self.signaled_value = false;
     }
 };
 
@@ -3110,6 +3246,29 @@ pub const Device = struct {
         return self.tracker.objectCacheDiagnostics();
     }
 
+    pub fn makeFence(self: *Device, descriptor: core.FenceDescriptor) !Fence {
+        try descriptor.validate(self.features());
+        self.tracker.retain(.fence);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .label_value = descriptor.label,
+            .descriptor_value = descriptor,
+            .current_value = descriptor.initial_value,
+        };
+    }
+
+    pub fn makeEvent(self: *Device, descriptor: core.EventDescriptor) !Event {
+        try descriptor.validate(self.features());
+        self.tracker.retain(.event);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .label_value = descriptor.label,
+            .descriptor_value = descriptor,
+        };
+    }
+
     pub fn queue(self: *Device) Queue {
         return .{
             .backend = self.backend,
@@ -3724,6 +3883,16 @@ pub const WindowContext = struct {
         return try queue_view.makeCommandBufferWithDescriptor(descriptor);
     }
 
+    pub fn makeFence(self: *WindowContext, descriptor: core.FenceDescriptor) !Fence {
+        var device_view = self.device();
+        return try device_view.makeFence(descriptor);
+    }
+
+    pub fn makeEvent(self: *WindowContext, descriptor: core.EventDescriptor) !Event {
+        var device_view = self.device();
+        return try device_view.makeEvent(descriptor);
+    }
+
     pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {
         var device_view = self.device();
         return try device_view.makeBuffer(descriptor);
@@ -4222,6 +4391,8 @@ fn kindName(kind: ResourceKind) []const u8 {
         .bind_group => "bind_group",
         .advanced_bind_group_layout => "advanced_bind_group_layout",
         .resource_table => "resource_table",
+        .fence => "fence",
+        .event => "event",
     };
 }
 
@@ -4946,6 +5117,68 @@ test "runtime explicit barriers update resource usage state" {
     try std.testing.expectError(core.CommandEncodingError.UnsupportedExplicitResourceBarrier, gated_compute.bufferBarrier(&buffer, .{
         .before = .vertex_buffer,
         .after = .copy_destination,
+    }));
+}
+
+test "runtime fences and events track lifecycle state" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = report,
+    };
+
+    var fence = try device.makeFence(.{ .label = "binary fence" });
+    defer fence.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.fences);
+    try std.testing.expectEqual(core.FenceKind.binary, fence.descriptor().kind);
+    try std.testing.expect(!fence.isSignaled(1));
+    try std.testing.expectError(core.CommandEncodingError.FenceWaitTimeout, fence.wait(.{}));
+    try fence.signal(.{});
+    try fence.wait(.{});
+    try std.testing.expect(fence.isSignaled(1));
+    try fence.reset();
+    try std.testing.expect(!fence.isSignaled(1));
+
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedTimelineFences, device.makeFence(.{
+        .kind = .timeline,
+        .initial_value = 2,
+    }));
+    report.features.timeline_fences = true;
+    device.capability_report = report;
+    var timeline = try device.makeFence(.{
+        .kind = .timeline,
+        .initial_value = 2,
+    });
+    defer timeline.deinit();
+    try std.testing.expect(timeline.isSignaled(2));
+    try timeline.signal(.{ .value = 5 });
+    try timeline.wait(.{ .value = 4 });
+    try std.testing.expectError(core.CommandEncodingError.InvalidFenceValue, timeline.signal(.{ .value = 3 }));
+    try std.testing.expectError(core.CommandEncodingError.InvalidFenceValue, timeline.reset());
+
+    var event = try device.makeEvent(.{ .label = "event" });
+    defer event.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.events);
+    try std.testing.expect(!event.isSignaled());
+    try std.testing.expectError(core.CommandEncodingError.EventWaitTimeout, event.wait(.{}));
+    try event.signal(.{});
+    try event.wait(.{});
+    try std.testing.expect(event.isSignaled());
+    event.reset();
+    try std.testing.expect(!event.isSignaled());
+    try event.signal(.{ .signaled = false });
+    try std.testing.expectError(core.CommandEncodingError.EventWaitTimeout, event.wait(.{}));
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedSharedEvents, device.makeEvent(.{
+        .shared = true,
     }));
 }
 

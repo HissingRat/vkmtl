@@ -1360,12 +1360,12 @@ obvious render and binding blockers.
 
 ## Period 23 Phase 2 Checklist
 
-- [ ] Define runtime fence/event object ownership.
-- [ ] Add binary fence lifecycle operations.
-- [ ] Add timeline fence validation and state tracking where supported.
-- [ ] Add event/shared-event lifecycle operations behind feature gates.
-- [ ] Map Vulkan and Metal native synchronization where available.
-- [ ] Add lifecycle tests for wait, signal, reset, and destroy ordering.
+- [x] Define runtime fence/event object ownership.
+- [x] Add binary fence lifecycle operations.
+- [x] Add timeline fence validation and state tracking where supported.
+- [x] Add event/shared-event lifecycle operations behind feature gates.
+- [x] Keep queue-submit/native synchronization integration as a later backend step.
+- [x] Add lifecycle tests for wait, signal, reset, and destroy ordering.
 
 ## Period 23 Phase 3 Checklist
 
