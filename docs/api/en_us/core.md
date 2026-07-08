@@ -667,3 +667,10 @@ Metal branch exposes device/command queue/layer/view opaque pointers.
 
 These handles are only valid while the vkmtl owner is alive. Code that uses
 them is no longer backend-neutral.
+
+Native command insertion is similarly explicit. Render, compute, and blit
+encoders expose `insertNativeCommands(...)` with
+`NativeCommandInsertionDescriptor`. The descriptor validates the feature gate,
+callback, and encoder kind before invoking user code. Backends keep the feature
+disabled until real command-buffer / command-encoder native handle views are
+available.

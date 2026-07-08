@@ -1490,6 +1490,16 @@ obvious render and binding blockers.
 - [x] Document native external semaphore/shared-event lowering as deferred to
   Period 28 Phase 5.
 
+## Period 25 Phase 5 Checklist
+
+- [x] Define explicit encoder-level native command insertion methods.
+- [x] Validate feature gate, callback presence, and encoder kind before
+  invoking callbacks.
+- [x] Keep ordinary portable encoders free of backend-native types.
+- [x] Add runtime tests for callback invocation and invalid insertion points.
+- [x] Document native command-buffer/encoder handle lowering as deferred to
+  Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

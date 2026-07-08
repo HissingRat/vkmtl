@@ -2441,6 +2441,16 @@ fn recordRenderPassUsage(descriptor: RenderPassDescriptor) void {
     }
 }
 
+fn insertNativeCommandsForEncoder(
+    command_buffer: *CommandBuffer,
+    expected_encoder: core.NativeCommandEncoderKind,
+    descriptor: core.NativeCommandInsertionDescriptor,
+) !void {
+    try descriptor.validateForEncoder(expected_encoder, command_buffer.features_value);
+    const view = command_buffer.native_handle_view orelse return core.AdvancedFeatureError.UnsupportedNativeCommandInsertion;
+    descriptor.callback.?(descriptor.context, view);
+}
+
 pub const CommandBuffer = struct {
     backend: core.Backend,
     tracker: ?*ResourceTracker = null,
@@ -2449,6 +2459,7 @@ pub const CommandBuffer = struct {
     uses_current_drawable_pass: bool = false,
     queue_kind_value: core.QueueKind = .graphics,
     features_value: core.DeviceFeatures = .{},
+    native_handle_view: ?core.NativeHandleView = null,
     debug: core.CommandBufferDebugState = .{},
     debug_groups: core.DebugGroupStack = .{},
     impl: ?Impl = null,
@@ -2843,6 +2854,11 @@ pub const BlitCommandEncoder = struct {
         try query_set.writeTimestamp(query_index);
     }
 
+    pub fn insertNativeCommands(self: *BlitCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        try insertNativeCommandsForEncoder(self.command_buffer, .blit, descriptor);
+    }
+
     pub fn resolveQuerySet(
         self: *BlitCommandEncoder,
         query_set: *QuerySet,
@@ -3130,6 +3146,11 @@ pub const ComputeCommandEncoder = struct {
         try query_set.writeTimestamp(query_index);
     }
 
+    pub fn insertNativeCommands(self: *ComputeCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
+        assertObjectAlive(self.alive, "compute_command_encoder");
+        try insertNativeCommandsForEncoder(self.command_buffer, .compute, descriptor);
+    }
+
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
         assertObjectAlive(self.alive, "compute_command_encoder");
         try self.debug_groups.requireEmpty();
@@ -3365,6 +3386,11 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(query_set.alive, "query_set");
         try expectSameBackend(self.backend, query_set.backend);
         try query_set.writeTimestamp(query_index);
+    }
+
+    pub fn insertNativeCommands(self: *RenderCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
+        assertObjectAlive(self.alive, "render_command_encoder");
+        try insertNativeCommandsForEncoder(self.command_buffer, .render, descriptor);
     }
 
     pub fn drawPrimitives(
@@ -5819,6 +5845,67 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(@as(usize, 1), tracker.external_semaphores);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_events);
     try std.testing.expectEqual(@as(usize, 1), tracker.textures);
+}
+
+test "runtime native command insertion validates encoder and invokes callback" {
+    const State = struct {
+        calls: usize = 0,
+        backend: ?core.Backend = null,
+    };
+    const callback = struct {
+        fn call(context: ?*anyopaque, handles: core.NativeHandleView) void {
+            const state: *State = @ptrCast(@alignCast(context.?));
+            state.calls += 1;
+            state.backend = handles.backend();
+        }
+    }.call;
+
+    var state = State{};
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .features_value = .{ .native_command_insertion = true },
+        .native_handle_view = core.nativeHandleView(.{
+            .vulkan = .{
+                .instance = 1,
+                .physical_device = 2,
+                .device = 3,
+                .surface = 4,
+                .graphics_queue = 5,
+                .present_queue = 6,
+            },
+        }),
+    };
+    var blit_encoder = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+    };
+
+    try blit_encoder.insertNativeCommands(.{
+        .encoder = .blit,
+        .callback = callback,
+        .context = &state,
+    });
+    try std.testing.expectEqual(@as(usize, 1), state.calls);
+    try std.testing.expectEqual(core.Backend.vulkan, state.backend.?);
+
+    try std.testing.expectError(core.AdvancedFeatureError.NativeCommandEncoderMismatch, blit_encoder.insertNativeCommands(.{
+        .encoder = .render,
+        .callback = callback,
+        .context = &state,
+    }));
+
+    var gated_command_buffer = CommandBuffer{
+        .backend = .vulkan,
+    };
+    var gated_encoder = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &gated_command_buffer,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedNativeCommandInsertion, gated_encoder.insertNativeCommands(.{
+        .encoder = .blit,
+        .callback = callback,
+        .context = &state,
+    }));
 }
 
 test "runtime adapter selection validates resolved adapter info" {

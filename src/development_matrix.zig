@@ -23,7 +23,7 @@ pub const FeatureGate = enum {
             .multi_surface => features.multi_surface,
             .native_handles => features.native_handles,
             .external_texture_interop => features.external_textures,
-            .native_command_insertion => false,
+            .native_command_insertion => features.native_command_insertion,
         };
     }
 };

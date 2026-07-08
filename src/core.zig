@@ -724,6 +724,7 @@ pub const AdvancedFeatureError = error{
     InvalidExternalHandle,
     ExternalHandleBackendMismatch,
     MissingNativeCommandCallback,
+    NativeCommandEncoderMismatch,
     UnsupportedTessellation,
     InvalidPatchControlPointCount,
     MissingTessellationStage,
@@ -1032,6 +1033,15 @@ pub const NativeCommandInsertionDescriptor = struct {
         if (!features.native_command_insertion) return AdvancedFeatureError.UnsupportedNativeCommandInsertion;
         if (self.callback == null) return AdvancedFeatureError.MissingNativeCommandCallback;
     }
+
+    pub fn validateForEncoder(
+        self: NativeCommandInsertionDescriptor,
+        encoder_kind: NativeCommandEncoderKind,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!void {
+        try self.validate(features);
+        if (self.encoder != encoder_kind) return AdvancedFeatureError.NativeCommandEncoderMismatch;
+    }
 };
 
 pub fn classifyError(err: anyerror) ErrorCategory {
@@ -1300,6 +1310,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidExternalHandle,
         error.ExternalHandleBackendMismatch,
         error.MissingNativeCommandCallback,
+        error.NativeCommandEncoderMismatch,
         error.InvalidPatchControlPointCount,
         error.MissingTessellationStage,
         error.MissingMeshStage,
@@ -8698,7 +8709,13 @@ test "native command insertion descriptors are explicit and gated" {
         .point = .after_portable_commands,
         .callback = callback,
         .inserts_resource_boundary = true,
-    }).validate(.{ .native_command_insertion = true });
+    }).validateForEncoder(.render, .{ .native_command_insertion = true });
+
+    try std.testing.expectError(AdvancedFeatureError.NativeCommandEncoderMismatch, (NativeCommandInsertionDescriptor{
+        .label = "native render hook",
+        .encoder = .render,
+        .callback = callback,
+    }).validateForEncoder(.compute, .{ .native_command_insertion = true }));
 }
 
 test "sparse resource descriptors validate feature gates and alignment" {

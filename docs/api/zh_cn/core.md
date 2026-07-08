@@ -556,3 +556,8 @@ resource lifetime、shader compilation 和 unknown。
 Metal 分支暴露 device/command queue/layer/view opaque pointer。
 
 这些 handle 只在 vkmtl owner 存活期间有效。使用它们的代码不再是 backend-neutral。
+
+Native command insertion 也必须显式调用。Render、compute、blit encoder 都暴露
+`insertNativeCommands(...)`，参数是 `NativeCommandInsertionDescriptor`。Descriptor 会先验证
+feature gate、callback 和 encoder kind，再调用用户代码。真实 command-buffer /
+command-encoder native handle view 接好之前，backend 会保持这个 feature 关闭。
