@@ -1206,6 +1206,61 @@ fn saturatingMulU64(a: u64, b: u64) u64 {
     return std.math.mul(u64, a, b) catch std.math.maxInt(u64);
 }
 
+pub const ParitySemanticStatus = enum {
+    portable_runtime,
+    typed_unsupported,
+    native_extension_only,
+    deferred_native_validation,
+};
+
+pub const BackendParitySemanticsDescriptor = struct {
+    backend: Backend,
+    gpu_soak_iterations: u32 = 0,
+    gpu_soak_upload_bytes_per_iteration: u64 = 4096,
+};
+
+pub const BackendParitySemanticsPlan = struct {
+    backend: Backend,
+    partial_mip_layer_ranges: ParitySemanticStatus = .portable_runtime,
+    depth_stencil_texture_copies: ParitySemanticStatus = .typed_unsupported,
+    msaa_texture_copies: ParitySemanticStatus = .typed_unsupported,
+    custom_sampler_border_colors: ParitySemanticStatus = .native_extension_only,
+    gpu_soak_validation: ParitySemanticStatus = .deferred_native_validation,
+    deferred_to: []const u8 = "Period 30 Phase 6",
+    stability_plan: ?StabilityRunPlan = null,
+
+    pub fn fromDescriptor(descriptor: BackendParitySemanticsDescriptor) StabilityRunError!BackendParitySemanticsPlan {
+        const stability_plan = if (descriptor.gpu_soak_iterations == 0)
+            null
+        else
+            try (StabilityRunDescriptor{
+                .iterations = descriptor.gpu_soak_iterations,
+                .upload_bytes_per_iteration = descriptor.gpu_soak_upload_bytes_per_iteration,
+            }).plan();
+        return .{
+            .backend = descriptor.backend,
+            .stability_plan = stability_plan,
+        };
+    }
+
+    pub fn hasTypedUnsupportedCopies(self: BackendParitySemanticsPlan) bool {
+        return self.depth_stencil_texture_copies == .typed_unsupported or
+            self.msaa_texture_copies == .typed_unsupported;
+    }
+
+    pub fn hasNativeExtensionOnlySemantics(self: BackendParitySemanticsPlan) bool {
+        return self.custom_sampler_border_colors == .native_extension_only;
+    }
+
+    pub fn hasDeferredStressWork(self: BackendParitySemanticsPlan) bool {
+        return self.gpu_soak_validation == .deferred_native_validation;
+    }
+
+    pub fn hasStabilityPlan(self: BackendParitySemanticsPlan) bool {
+        return self.stability_plan != null;
+    }
+};
+
 pub const VulkanNativeHandles = struct {
     instance: usize,
     physical_device: usize,
@@ -8102,6 +8157,26 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     });
     try std.testing.expectEqual(@as(usize, 256), stability.max_live_resources);
     try std.testing.expectEqual(@as(u64, 1), stability.pending_retirement_warnings);
+
+    const parity_plan = try BackendParitySemanticsPlan.fromDescriptor(.{
+        .backend = .metal,
+        .gpu_soak_iterations = 120,
+        .gpu_soak_upload_bytes_per_iteration = 1024,
+    });
+    try std.testing.expectEqual(Backend.metal, parity_plan.backend);
+    try std.testing.expectEqual(ParitySemanticStatus.portable_runtime, parity_plan.partial_mip_layer_ranges);
+    try std.testing.expect(parity_plan.hasTypedUnsupportedCopies());
+    try std.testing.expect(parity_plan.hasNativeExtensionOnlySemantics());
+    try std.testing.expect(parity_plan.hasDeferredStressWork());
+    try std.testing.expect(parity_plan.hasStabilityPlan());
+    try std.testing.expectEqualStrings("Period 30 Phase 6", parity_plan.deferred_to);
+    try std.testing.expectEqual(@as(u64, 120 * 1024), parity_plan.stability_plan.?.upload_bytes);
+
+    try std.testing.expectError(StabilityRunError.InvalidCopySize, BackendParitySemanticsPlan.fromDescriptor(.{
+        .backend = .vulkan,
+        .gpu_soak_iterations = 1,
+        .gpu_soak_upload_bytes_per_iteration = 0,
+    }));
 }
 
 test "runtime cache manifests plan compatibility and stale entries" {

@@ -75,13 +75,13 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Full-texture mipmap generation | Native image blits | Native `generateMipmapsForTexture` | Available through blit encoder |
-| Partial mip/layer mipmap generation | Deferred | Deferred | Period 29 Phase 6 parity decision |
+| Partial mip/layer mipmap generation | Deferred | Deferred | Period 30 Phase 6 parity decision |
 | Unaligned `fillBuffer` | Staging-copy fallback | Native byte-range fill | Public API accepts unaligned ranges |
 | Texture copy array layers | Native `layer_count` | Per-slice fallback loop | `slice_count` is public |
 | Compatible color-format copies | Native compatible copy class | Native compatible copy class | unorm/sRGB pairs in same channel order |
-| Depth/stencil and MSAA copies | Deferred | Deferred | Period 29 Phase 6 semantic decision |
+| Depth/stencil and MSAA copies | Deferred | Deferred | Period 30 Phase 6 semantic decision |
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
-| Custom sampler border colors | Deferred | Deferred | Period 29 Phase 6 parity decision |
+| Custom sampler border colors | Deferred | Deferred | Period 30 Phase 6 parity decision |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
 | Native heap-backed resources | Deferred | Deferred | Period 30 Phase 5 native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
@@ -116,7 +116,7 @@ conservative until the relevant backend period lands.
 | Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `runtimeDiagnostics()` |
 | Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
 | Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
-| GPU-backed soak loops | Deferred | Deferred | Period 29 Phase 6 native long-run validation |
+| GPU-backed soak loops | Deferred | Deferred | Period 30 Phase 6 native long-run validation |
 
 ## Period 27 Advanced Resource And Geometry Expectations
 
@@ -146,5 +146,5 @@ conservative until the relevant backend period lands.
 | Native Metal ray tracing execution | Validation no-op | Deferred | Period 29 Phase 4 native execution |
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
 | Native advanced backend execution | Deferred | Deferred | Period 30 Phase 5 native execution |
-| Parity semantics and soak loops | Deferred | Deferred | Period 29 Phase 6 parity/stability |
+| Parity semantics and soak loops | Deferred | Deferred | Period 30 Phase 6 parity/stability |
 | Native advanced examples | Feature-gated | Feature-gated | Period 29 Phase 7 examples |

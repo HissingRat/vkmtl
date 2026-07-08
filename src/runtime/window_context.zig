@@ -4425,6 +4425,15 @@ pub const Device = struct {
         return try core.RuntimeCachePlan.fromDescriptor(self.allocator, descriptor);
     }
 
+    pub fn planBackendParitySemantics(
+        self: Device,
+        descriptor: core.BackendParitySemanticsDescriptor,
+    ) core.StabilityRunError!core.BackendParitySemanticsPlan {
+        var resolved = descriptor;
+        resolved.backend = self.backend;
+        return try core.BackendParitySemanticsPlan.fromDescriptor(resolved);
+    }
+
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
         return switch (self.impl.*) {
             .vulkan => |*vulkan| vulkan.formatCapabilities(format),
@@ -6910,6 +6919,30 @@ test "runtime device plans native advanced closure inventory" {
     try std.testing.expectEqual(@as(usize, 2), plan.public_runtime_contract_features);
     try std.testing.expect(plan.hasDeferredNativeWork());
     try std.testing.expect(plan.hasPublicRuntimeContracts());
+}
+
+test "runtime device plans backend parity semantics for selected backend" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test parity adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+
+    const plan = try device.planBackendParitySemantics(.{
+        .backend = .vulkan,
+        .gpu_soak_iterations = 30,
+    });
+    try std.testing.expectEqual(core.Backend.metal, plan.backend);
+    try std.testing.expect(plan.hasTypedUnsupportedCopies());
+    try std.testing.expect(plan.hasStabilityPlan());
 }
 
 test "runtime plans persistent cache manifests through device" {

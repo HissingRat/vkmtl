@@ -1764,6 +1764,17 @@ obvious render and binding blockers.
   external imports/sync, command handle lowering, tessellation, and mesh/task
   execution remain backend-private Period 30 Phase 5 work.
 
+## Period 29 Phase 6 Checklist
+
+- [x] Add backend parity semantic status types and plan descriptors.
+- [x] Decide partial mip/layer-range semantics as portable runtime behavior.
+- [x] Decide depth/stencil and MSAA texture copies as typed unsupported
+  behavior for now.
+- [x] Decide custom sampler border colors as native-extension-only semantics.
+- [x] Route GPU-backed soak validation to Period 30 Phase 6 while preserving
+  opt-in `StabilityRunPlan` planning.
+- [x] Add focused core and runtime tests for parity plans.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

@@ -157,7 +157,7 @@ Tracked in `docs/develop/period26/`.
 - [x] Diagnostics for cache misses, creation cost, resource churn, capture
   names, and runtime live-resource snapshots.
 - [x] Long-run stability planning command.
-- [ ] GPU-backed long-run soak loops. Deferred to Period 29 Phase 6.
+- [ ] GPU-backed long-run soak loops. Deferred to Period 30 Phase 6.
 
 Expected result: completed backend paths are fast enough and observable enough
 for real applications instead of only examples.
@@ -196,7 +196,7 @@ Tracked in `docs/develop/period28/`.
 - [ ] Native Metal ray tracing execution mapping. Deferred to Period 29 Phase 4.
 - [ ] Native advanced escape-hatch execution. Deferred to Period 30 Phase 5.
 - [ ] True backend-native multi-draw optimization, parity semantics, and native
-  soak validation. Deferred to Period 29 Phase 6.
+  soak validation. Deferred to Period 30 Phase 6.
 
 Expected result: high-end backend-specific features become explicit, testable,
 and documented as planning APIs. Period 29 owns executable native backend
