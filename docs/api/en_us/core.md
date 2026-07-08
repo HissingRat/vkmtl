@@ -151,9 +151,12 @@ residency intent behind `DeviceFeatures.sparse_buffers`,
 residency management is future backend work.
 
 External interop shapes are represented by `ExternalHandleDescriptor`,
+`ExternalMemoryDescriptor`, `ExternalBufferDescriptor`,
 `ExternalTextureDescriptor`, and `ExternalSemaphoreDescriptor`. They validate
-handle kind, selected backend compatibility, and texture shape behind
-`DeviceFeatures.external_textures` and `DeviceFeatures.external_semaphores`.
+handle kind, selected backend compatibility, resource shape, ownership, and
+feature gates. Runtime wrappers include `ExternalMemory`, `ExternalBuffer`,
+and `ExternalTexture`, created with `Device.makeExternalMemory(...)`,
+`Device.makeExternalBuffer(...)`, and `Device.makeExternalTexture(...)`.
 Native handle import/export remains explicit future backend work.
 
 Starting in Period 2, runtime resources record portable usage state.

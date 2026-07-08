@@ -41,6 +41,8 @@ pub const ResourceKind = enum {
     bind_group,
     advanced_bind_group_layout,
     resource_table,
+    external_memory,
+    external_buffer,
     fence,
     event,
     query_set,
@@ -62,6 +64,8 @@ pub const ResourceTracker = struct {
     bind_groups: usize = 0,
     advanced_bind_group_layouts: usize = 0,
     resource_tables: usize = 0,
+    external_memories: usize = 0,
+    external_buffers: usize = 0,
     fences: usize = 0,
     events: usize = 0,
     query_sets: usize = 0,
@@ -148,6 +152,8 @@ pub const ResourceTracker = struct {
             self.bind_groups != 0 or
             self.advanced_bind_group_layouts != 0 or
             self.resource_tables != 0 or
+            self.external_memories != 0 or
+            self.external_buffers != 0 or
             self.fences != 0 or
             self.events != 0 or
             self.query_sets != 0 or
@@ -157,7 +163,7 @@ pub const ResourceTracker = struct {
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, fences={}, events={}, query_sets={}, heaps={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, fences={}, events={}, query_sets={}, heaps={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -170,6 +176,8 @@ pub const ResourceTracker = struct {
                     self.bind_groups,
                     self.advanced_bind_group_layouts,
                     self.resource_tables,
+                    self.external_memories,
+                    self.external_buffers,
                     self.fences,
                     self.events,
                     self.query_sets,
@@ -198,6 +206,8 @@ pub const ResourceTracker = struct {
             .bind_group => &self.bind_groups,
             .advanced_bind_group_layout => &self.advanced_bind_group_layouts,
             .resource_table => &self.resource_tables,
+            .external_memory => &self.external_memories,
+            .external_buffer => &self.external_buffers,
             .fence => &self.fences,
             .event => &self.events,
             .query_set => &self.query_sets,
@@ -866,6 +876,75 @@ pub const Texture = struct {
                 .height = mipDimension(self.height(), descriptor.mip_level),
             },
         }, descriptor.asReplaceRegionDescriptor());
+    }
+};
+
+pub const ExternalMemory = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    descriptor_value: core.ExternalMemoryDescriptor,
+    alive: bool = true,
+
+    pub fn deinit(self: *ExternalMemory) void {
+        assertAlive(self.alive, .external_memory);
+        self.alive = false;
+        self.tracker.release(.external_memory);
+    }
+
+    pub fn selectedBackend(self: ExternalMemory) core.Backend {
+        return self.backend;
+    }
+
+    pub fn descriptor(self: ExternalMemory) core.ExternalMemoryDescriptor {
+        assertAlive(self.alive, .external_memory);
+        return self.descriptor_value;
+    }
+
+    pub fn size(self: ExternalMemory) u64 {
+        assertAlive(self.alive, .external_memory);
+        return self.descriptor_value.size;
+    }
+
+    pub fn ownership(self: ExternalMemory) core.ExternalResourceOwnership {
+        assertAlive(self.alive, .external_memory);
+        return self.descriptor_value.ownership;
+    }
+};
+
+pub const ExternalBuffer = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    descriptor_value: core.ExternalBufferDescriptor,
+    alive: bool = true,
+
+    pub fn deinit(self: *ExternalBuffer) void {
+        assertAlive(self.alive, .external_buffer);
+        self.alive = false;
+        self.tracker.release(.external_buffer);
+    }
+
+    pub fn selectedBackend(self: ExternalBuffer) core.Backend {
+        return self.backend;
+    }
+
+    pub fn descriptor(self: ExternalBuffer) core.ExternalBufferDescriptor {
+        assertAlive(self.alive, .external_buffer);
+        return self.descriptor_value;
+    }
+
+    pub fn length(self: ExternalBuffer) u64 {
+        assertAlive(self.alive, .external_buffer);
+        return self.descriptor_value.length;
+    }
+
+    pub fn usage(self: ExternalBuffer) core.BufferUsage {
+        assertAlive(self.alive, .external_buffer);
+        return self.descriptor_value.usage;
+    }
+
+    pub fn ownership(self: ExternalBuffer) core.ExternalResourceOwnership {
+        assertAlive(self.alive, .external_buffer);
+        return self.descriptor_value.ownership;
     }
 };
 
@@ -4014,6 +4093,26 @@ pub const Device = struct {
         return texture;
     }
 
+    pub fn makeExternalMemory(self: *Device, descriptor: core.ExternalMemoryDescriptor) !ExternalMemory {
+        try self.validateExternalMemoryDescriptor(descriptor);
+        self.tracker.retain(.external_memory);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .descriptor_value = descriptor,
+        };
+    }
+
+    pub fn makeExternalBuffer(self: *Device, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
+        try self.validateExternalBufferDescriptor(descriptor);
+        self.tracker.retain(.external_buffer);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .descriptor_value = descriptor,
+        };
+    }
+
     pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
         try self.validateExternalTextureDescriptor(descriptor);
         self.tracker.retain(.texture);
@@ -4403,6 +4502,16 @@ pub const WindowContext = struct {
     pub fn makeTexture(self: *WindowContext, descriptor: core.TextureDescriptor) !Texture {
         var device_view = self.device();
         return try device_view.makeTexture(descriptor);
+    }
+
+    pub fn makeExternalMemory(self: *WindowContext, descriptor: core.ExternalMemoryDescriptor) !ExternalMemory {
+        var device_view = self.device();
+        return try device_view.makeExternalMemory(descriptor);
+    }
+
+    pub fn makeExternalBuffer(self: *WindowContext, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
+        var device_view = self.device();
+        return try device_view.makeExternalBuffer(descriptor);
     }
 
     pub fn makeExternalTexture(self: *WindowContext, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
@@ -4918,6 +5027,8 @@ fn kindName(kind: ResourceKind) []const u8 {
         .bind_group => "bind_group",
         .advanced_bind_group_layout => "advanced_bind_group_layout",
         .resource_table => "resource_table",
+        .external_memory => "external_memory",
+        .external_buffer => "external_buffer",
         .fence => "fence",
         .event => "event",
         .query_set => "query_set",
@@ -5469,6 +5580,7 @@ test "runtime external texture wrapper validates and tracks lifetime" {
         },
     };
     var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.external_memory = true;
     report.features.external_textures = true;
 
     var device = Device{
@@ -5482,6 +5594,28 @@ test "runtime external texture wrapper validates and tracks lifetime" {
         },
         .capability_report = report,
     };
+
+    var memory = try device.makeExternalMemory(.{
+        .label = "external memory",
+        .handle = .{
+            .kind = .metal_buffer,
+            .value = 2,
+        },
+        .size = 256,
+        .ownership = .transferred,
+    });
+    defer memory.deinit();
+
+    var buffer = try device.makeExternalBuffer(.{
+        .label = "external buffer",
+        .handle = .{
+            .kind = .metal_buffer,
+            .value = 3,
+        },
+        .length = 128,
+        .usage = .{ .storage = true },
+    });
+    defer buffer.deinit();
 
     var texture = try device.makeExternalTexture(.{
         .label = "external texture",
@@ -5498,6 +5632,13 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(core.Backend.metal, texture.selectedBackend());
     try std.testing.expectEqual(core.ExternalResourceOwnership.borrowed, texture.ownership());
     try std.testing.expectEqual(@as(u32, 64), texture.textureDescriptor().width);
+    try std.testing.expectEqual(core.Backend.metal, memory.selectedBackend());
+    try std.testing.expectEqual(@as(u64, 256), memory.size());
+    try std.testing.expectEqual(core.ExternalResourceOwnership.transferred, memory.ownership());
+    try std.testing.expectEqual(@as(u64, 128), buffer.length());
+    try std.testing.expect(buffer.usage().storage);
+    try std.testing.expectEqual(@as(usize, 1), tracker.external_memories);
+    try std.testing.expectEqual(@as(usize, 1), tracker.external_buffers);
     try std.testing.expectEqual(@as(usize, 1), tracker.textures);
 }
 

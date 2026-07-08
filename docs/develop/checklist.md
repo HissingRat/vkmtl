@@ -1472,6 +1472,15 @@ obvious render and binding blockers.
 - [x] Document native present-mode query/display-sync mapping as deferred to
   Period 28 Phase 5.
 
+## Period 25 Phase 3 Checklist
+
+- [x] Validate external memory, buffer, and texture descriptors by backend.
+- [x] Add runtime external memory and external buffer wrappers.
+- [x] Keep existing external texture wrapper behavior stable.
+- [x] Track external wrapper lifetime independently.
+- [x] Document native external memory/image/texture import as deferred to
+  Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
