@@ -873,6 +873,84 @@ pub const BlitCommandEncoder = struct {
         );
     }
 
+    pub fn generateMipmaps(
+        self: *BlitCommandEncoder,
+        texture: *VulkanTexture,
+        descriptor: core.ResolvedGenerateMipmapsDescriptor,
+    ) !void {
+        const old_layout = texture.layout;
+        texture.transitionLayout(self.cmdbuf, old_layout, .transfer_dst_optimal);
+
+        var layer_offset: u32 = 0;
+        while (layer_offset < descriptor.array_layer_count) : (layer_offset += 1) {
+            const layer = descriptor.base_array_layer + layer_offset;
+            var level_offset: u32 = 1;
+            while (level_offset < descriptor.mip_level_count) : (level_offset += 1) {
+                const source_level = descriptor.base_mip_level + level_offset - 1;
+                const destination_level = descriptor.base_mip_level + level_offset;
+
+                imageMipBarrier(
+                    self.gc,
+                    self.cmdbuf,
+                    texture,
+                    source_level,
+                    layer,
+                    .transfer_dst_optimal,
+                    .transfer_src_optimal,
+                    .{ .transfer_write_bit = true },
+                    .{ .transfer_read_bit = true },
+                    .{ .transfer_bit = true },
+                    .{ .transfer_bit = true },
+                );
+                self.gc.dev.cmdBlitImage(
+                    self.cmdbuf,
+                    texture.handle,
+                    .transfer_src_optimal,
+                    texture.handle,
+                    .transfer_dst_optimal,
+                    &.{imageBlit(texture.descriptor, source_level, destination_level, layer)},
+                    .linear,
+                );
+                imageMipBarrier(
+                    self.gc,
+                    self.cmdbuf,
+                    texture,
+                    source_level,
+                    layer,
+                    .transfer_src_optimal,
+                    .shader_read_only_optimal,
+                    .{ .transfer_read_bit = true },
+                    .{ .shader_read_bit = true },
+                    .{ .transfer_bit = true },
+                    .{
+                        .vertex_shader_bit = true,
+                        .fragment_shader_bit = true,
+                        .compute_shader_bit = true,
+                    },
+                );
+            }
+            imageMipBarrier(
+                self.gc,
+                self.cmdbuf,
+                texture,
+                descriptor.base_mip_level + descriptor.mip_level_count - 1,
+                layer,
+                .transfer_dst_optimal,
+                .shader_read_only_optimal,
+                .{ .transfer_write_bit = true },
+                .{ .shader_read_bit = true },
+                .{ .transfer_bit = true },
+                .{
+                    .vertex_shader_bit = true,
+                    .fragment_shader_bit = true,
+                    .compute_shader_bit = true,
+                },
+            );
+        }
+
+        texture.layout = .shader_read_only_optimal;
+    }
+
     pub fn bufferBarrier(
         self: *BlitCommandEncoder,
         buffer: *const VulkanBuffer,
@@ -1145,6 +1223,84 @@ fn imageCopyExtent(dimension: core.TextureDimension, size: core.Extent3D) vk.Ext
         .height = if (dimension == .one_d) 1 else size.height,
         .depth = if (dimension == .three_d) size.depth else 1,
     };
+}
+
+fn imageBlit(
+    descriptor: core.TextureDescriptor,
+    source_level: u32,
+    destination_level: u32,
+    layer: u32,
+) vk.ImageBlit {
+    return .{
+        .src_subresource = mipBlitSubresource(descriptor, source_level, layer),
+        .src_offsets = .{
+            .{ .x = 0, .y = 0, .z = 0 },
+            mipBlitExtent(descriptor, source_level),
+        },
+        .dst_subresource = mipBlitSubresource(descriptor, destination_level, layer),
+        .dst_offsets = .{
+            .{ .x = 0, .y = 0, .z = 0 },
+            mipBlitExtent(descriptor, destination_level),
+        },
+    };
+}
+
+fn mipBlitSubresource(descriptor: core.TextureDescriptor, mip_level: u32, layer: u32) vk.ImageSubresourceLayers {
+    return .{
+        .aspect_mask = imageAspectMask(descriptor.format),
+        .mip_level = mip_level,
+        .base_array_layer = if (descriptor.dimension == .three_d) 0 else layer,
+        .layer_count = 1,
+    };
+}
+
+fn mipBlitExtent(descriptor: core.TextureDescriptor, level: u32) vk.Offset3D {
+    return .{
+        .x = @intCast(core.mipDimension(descriptor.width, level)),
+        .y = if (descriptor.dimension == .one_d) 1 else @intCast(core.mipDimension(descriptor.height, level)),
+        .z = if (descriptor.dimension == .three_d) @intCast(core.mipDimension(descriptor.depth_or_array_layers, level)) else 1,
+    };
+}
+
+fn imageMipBarrier(
+    gc: *const GraphicsContext,
+    cmdbuf: vk.CommandBuffer,
+    texture: *const VulkanTexture,
+    mip_level: u32,
+    array_layer: u32,
+    old_layout: vk.ImageLayout,
+    new_layout: vk.ImageLayout,
+    src_access_mask: vk.AccessFlags,
+    dst_access_mask: vk.AccessFlags,
+    src_stage_mask: vk.PipelineStageFlags,
+    dst_stage_mask: vk.PipelineStageFlags,
+) void {
+    const barrier = vk.ImageMemoryBarrier{
+        .src_access_mask = src_access_mask,
+        .dst_access_mask = dst_access_mask,
+        .old_layout = old_layout,
+        .new_layout = new_layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = texture.handle,
+        .subresource_range = .{
+            .aspect_mask = imageAspectMask(texture.descriptor.format),
+            .base_mip_level = mip_level,
+            .level_count = 1,
+            .base_array_layer = if (texture.descriptor.dimension == .three_d) 0 else array_layer,
+            .layer_count = 1,
+        },
+    };
+
+    gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        src_stage_mask,
+        dst_stage_mask,
+        .{},
+        null,
+        null,
+        &.{barrier},
+    );
 }
 
 fn indirectStride(stride: u32, default_stride: u32) u32 {

@@ -424,6 +424,11 @@ try command_buffer.commit();
 texture-to-texture。`BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
 Metal 支持任意 byte range，Vulkan 使用 `vkCmdFillBuffer`，因此 Vulkan 路径要求 offset 和
 size 都按 4 字节对齐，否则返回 `UnsupportedFillBuffer`。
+`BlitCommandEncoder.generateMipmaps(...)` 会通过 `GenerateMipmapsDescriptor` 校验
+format support、copy usage、sample count 和 mip count。Vulkan 会用 image blit 下沉
+full-texture generation，Metal 会用 `generateMipmapsForTexture` 下沉 full-texture
+generation。Partial mip/layer range 仍保持 unsupported，等 backend parity matrix 决定如何暴露
+这种后端差异。
 
 高级用户可以在 blit encoder 上通过 `bufferBarrier(...)` 和 `textureBarrier(...)`
 插入显式 barrier。这些方法会先用 tracked resource state 校验 descriptor，再进入 backend。

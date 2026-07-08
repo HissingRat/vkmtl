@@ -295,6 +295,24 @@ pub const BlitCommandEncoder = struct {
         ));
     }
 
+    pub fn generateMipmaps(
+        self: *BlitCommandEncoder,
+        texture: *const MetalTexture,
+        descriptor: core.ResolvedGenerateMipmapsDescriptor,
+    ) !void {
+        if (descriptor.base_mip_level != 0 or
+            descriptor.mip_level_count != texture.mipLevelCount() or
+            descriptor.base_array_layer != 0 or
+            descriptor.array_layer_count != texture.depthOrArrayLayers())
+        {
+            return core.TextureError.UnsupportedMipmapGeneration;
+        }
+        try check(metal.vkmtl_metal_blit_command_encoder_generate_mipmaps(
+            self.handle,
+            texture.handle,
+        ));
+    }
+
     pub fn bufferBarrier(
         self: *BlitCommandEncoder,
         buffer: *const MetalBuffer,

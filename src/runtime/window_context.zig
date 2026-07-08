@@ -2498,6 +2498,28 @@ pub const BlitCommandEncoder = struct {
         };
     }
 
+    pub fn generateMipmaps(
+        self: *BlitCommandEncoder,
+        texture: *Texture,
+        descriptor: core.GenerateMipmapsDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        assertAlive(texture.alive, .texture);
+        try expectSameBackend(self.backend, texture.backend);
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, texture);
+        const resolved = try descriptor.resolveForTexture(texture.textureDescriptor());
+        if (!isFullGenerateMipmapsRange(texture.textureDescriptor(), resolved)) {
+            return core.TextureError.UnsupportedMipmapGeneration;
+        }
+        _ = texture.recordUsage(.copy_source);
+        _ = texture.recordUsage(.copy_destination);
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.generateMipmaps(&texture.impl.vulkan, resolved),
+            .metal => |*metal| try metal.generateMipmaps(&texture.impl.metal, resolved),
+        };
+        _ = texture.recordUsage(.sampled_texture);
+    }
+
     pub fn bufferBarrier(
         self: *BlitCommandEncoder,
         buffer: *Buffer,
@@ -2637,6 +2659,20 @@ pub const BlitCommandEncoder = struct {
         return self.backend;
     }
 };
+
+fn isFullGenerateMipmapsRange(
+    texture: core.TextureDescriptor,
+    descriptor: core.ResolvedGenerateMipmapsDescriptor,
+) bool {
+    const layer_count: u32 = switch (texture.dimension) {
+        .one_d, .two_d => texture.depth_or_array_layers,
+        .three_d => 1,
+    };
+    return descriptor.base_mip_level == 0 and
+        descriptor.mip_level_count == texture.mip_level_count and
+        descriptor.base_array_layer == 0 and
+        descriptor.array_layer_count == layer_count;
+}
 
 pub const ComputeCommandEncoder = struct {
     backend: core.Backend,
@@ -5601,6 +5637,56 @@ test "runtime explicit barriers update resource usage state" {
         .before = .vertex_buffer,
         .after = .copy_destination,
     }));
+}
+
+test "runtime generate mipmaps validates full texture range" {
+    var tracker = ResourceTracker{};
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .features_value = core.defaultDeviceFeatures(.vulkan),
+        .impl = null,
+    };
+    var blit = BlitCommandEncoder{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .impl = null,
+    };
+    const descriptor = core.TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .depth_or_array_layers = 2,
+        .mip_level_count = 4,
+        .usage = .{
+            .copy_source = true,
+            .copy_destination = true,
+            .shader_read = true,
+        },
+    };
+    var texture = Texture{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = descriptor.format,
+        .usage_value = descriptor.usage,
+        .sample_count_value = descriptor.sample_count,
+        .impl = .{ .vulkan = .{
+            .gc = undefined,
+            .handle = undefined,
+            .memory = undefined,
+            .descriptor = descriptor,
+            .layout = undefined,
+            .width_value = descriptor.width,
+            .height_value = descriptor.height,
+            .depth_or_array_layers_value = descriptor.depth_or_array_layers,
+            .mip_level_count_value = descriptor.mip_level_count,
+        } },
+    };
+
+    try std.testing.expectError(core.TextureError.UnsupportedMipmapGeneration, blit.generateMipmaps(&texture, .{
+        .base_mip_level = 1,
+    }));
+    try blit.generateMipmaps(&texture, .{});
+    try std.testing.expectEqual(core.ResourceUsageKind.sampled_texture, texture.currentUsage().?);
 }
 
 test "runtime fences and events track lifecycle state" {

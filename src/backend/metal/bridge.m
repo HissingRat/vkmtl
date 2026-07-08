@@ -3065,6 +3065,24 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_fill_buffer(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_generate_mipmaps(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *texture
+) {
+    if (encoder == NULL ||
+        encoder->encoder == nil ||
+        texture == NULL ||
+        texture->texture == nil ||
+        texture->mip_level_count < 2) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder generateMipmapsForTexture:texture->texture];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_end_encoding(
     vkmtl_metal_blit_command_encoder *encoder
 ) {

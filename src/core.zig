@@ -4454,6 +4454,7 @@ pub const GenerateMipmapsDescriptor = struct {
         const caps = defaultFormatCapabilities(texture.format);
         if (!caps.mipmap_generation) return TextureError.UnsupportedMipmapGeneration;
         if (texture.sample_count != 1) return TextureError.UnsupportedMipmapGeneration;
+        if (!texture.usage.copy_source or !texture.usage.copy_destination) return TextureError.UnsupportedMipmapGeneration;
         if (texture.mip_level_count < 2) return TextureError.InvalidMipLevelCount;
 
         if (self.base_mip_level >= texture.mip_level_count - 1) return TextureError.InvalidMipLevelCount;
@@ -9717,6 +9718,11 @@ test "generate mipmaps descriptor resolves mip and layer ranges" {
         .height = 8,
         .depth_or_array_layers = 2,
         .mip_level_count = 4,
+        .usage = .{
+            .copy_source = true,
+            .copy_destination = true,
+            .shader_read = true,
+        },
     };
 
     const resolved = try (GenerateMipmapsDescriptor{
@@ -9734,6 +9740,17 @@ test "generate mipmaps descriptor resolves mip and layer ranges" {
         .width = 8,
         .height = 8,
         .mip_level_count = 4,
+        .usage = .{
+            .copy_source = true,
+            .copy_destination = true,
+        },
+    }));
+    try std.testing.expectError(TextureError.UnsupportedMipmapGeneration, (GenerateMipmapsDescriptor{}).resolveForTexture(.{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .mip_level_count = 4,
+        .usage = .{ .shader_read = true },
     }));
 }
 

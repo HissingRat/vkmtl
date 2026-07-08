@@ -7,6 +7,8 @@ Phase 6 turns parity into a maintained product artifact.
 - List portable, Vulkan-only, Metal-only, fallback, and unsupported features.
 - Decide which unsupported items become future periods.
 - Keep feature reports aligned with backend reality.
+- Decide whether partial mip/layer-range mipmap generation becomes a portable
+  emulation path or an explicit backend-specific escape hatch.
 
 ## Validation
 

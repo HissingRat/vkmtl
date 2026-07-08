@@ -777,6 +777,10 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_fill_buffer(
     size_t size,
     unsigned int value
 );
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_generate_mipmaps(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *texture
+);
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_end_encoding(
     vkmtl_metal_blit_command_encoder *encoder
 );

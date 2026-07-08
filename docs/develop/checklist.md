@@ -1402,6 +1402,59 @@ obvious render and binding blockers.
 - [x] Update docs that separate portable defaults from escape hatches.
 - [x] Validate with `zig build test`, `zig build`, and `git diff --check`.
 
+## Period 24 Phase 1 Checklist
+
+- [x] Define automatic mipmap generation encoder method names and ownership boundaries.
+- [x] Validate format, usage, sample count, mip count, and layer ranges.
+- [x] Lower Vulkan mipmap generation through blit commands where supported.
+- [x] Lower Metal mipmap generation through blit commands.
+- [x] Add deterministic validation tests for mipmap generation.
+- [x] Document deferred native/format cases in a later period and phase.
+
+## Period 24 Phase 2 Checklist
+
+- [ ] Define fill fallback selection and public behavior.
+- [ ] Keep aligned Vulkan fills on native `vkCmdFillBuffer`.
+- [ ] Add Vulkan fallback behavior for unaligned fill ranges.
+- [ ] Preserve Metal direct fill behavior.
+- [ ] Add aligned and unaligned validation tests.
+- [ ] Document fallback performance and deferred native optimization work.
+
+## Period 24 Phase 3 Checklist
+
+- [ ] Expand texture copy descriptor validation for mips and array layers.
+- [ ] Broaden compatible color-format copy rules.
+- [ ] Keep MSAA and depth/stencil copies capability-gated or deferred.
+- [ ] Lower supported Vulkan and Metal texture copy metadata.
+- [ ] Add deterministic validation tests for broader copy coverage.
+- [ ] Document deferred depth/stencil and MSAA copy semantics.
+
+## Period 24 Phase 4 Checklist
+
+- [ ] Define sampler border color support and feature gates.
+- [ ] Map supported border colors to Vulkan sampler state.
+- [ ] Map supported border colors to Metal sampler state where available.
+- [ ] Add sampler validation tests for supported and unsupported cases.
+- [ ] Update feature reporting and compatibility docs.
+- [ ] Document deferred custom border-color cases.
+
+## Period 24 Phase 5 Checklist
+
+- [ ] Define heap-backed resource creation ownership and lifetime.
+- [ ] Add runtime heap objects and heap-backed resource descriptors where supported.
+- [ ] Add transient allocation diagnostics and reuse metadata.
+- [ ] Keep default resource creation internally managed.
+- [ ] Add descriptor/runtime tests for heap compatibility.
+- [ ] Document deferred native heap allocation details.
+
+## Period 24 Phase 6 Checklist
+
+- [ ] Update backend matrix entries for mipmaps, fills, copies, border colors, and heaps.
+- [ ] Add final resource utility validation tests.
+- [ ] Update usage/API docs for resource utility behavior.
+- [ ] Mark all new deferred work in a later period and phase.
+- [ ] Validate with `zig build test`, `zig build`, and `git diff --check`.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

@@ -513,6 +513,12 @@ texture-to-buffer, and texture-to-texture copies.
 supports arbitrary byte ranges; Vulkan uses `vkCmdFillBuffer`, so Vulkan
 requires offset and size to be 4-byte aligned and returns
 `UnsupportedFillBuffer` otherwise.
+`BlitCommandEncoder.generateMipmaps(...)` validates format support, copy usage,
+sample count, and mip count through `GenerateMipmapsDescriptor`. Vulkan lowers
+full-texture generation through image blits, and Metal lowers full-texture
+generation through `generateMipmapsForTexture`. Partial mip/layer ranges remain
+unsupported until the backend parity matrix decides how to expose those
+differences.
 
 Advanced users can insert explicit barriers from blit encoders with
 `bufferBarrier(...)` and `textureBarrier(...)`. These methods validate the
