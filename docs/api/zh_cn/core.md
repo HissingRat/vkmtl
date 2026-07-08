@@ -421,7 +421,10 @@ try command_buffer.commit();
 ```
 
 当前 lowered blit slice 支持 buffer-to-buffer、buffer-to-texture、texture-to-buffer 和
-texture-to-texture。`BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
+texture-to-texture。Texture-to-texture copy 可以指定 mip level，并用 `slice_count` 一次复制多个
+array layer。Color format 可以在同一 copy class 内复制，例如 `rgba8_unorm` 到
+`rgba8_unorm_srgb`；channel order 不同、depth/stencil format 和 MSAA texture 仍会拒绝。
+`BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
 Metal 支持任意 byte range。Vulkan 对 4-byte aligned range 继续使用 native
 `vkCmdFillBuffer`，对 unaligned range 使用 staging-copy fallback。
 `BlitCommandEncoder.generateMipmaps(...)` 会通过 `GenerateMipmapsDescriptor` 校验

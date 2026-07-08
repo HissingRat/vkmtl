@@ -9,6 +9,9 @@ Phase 6 turns parity into a maintained product artifact.
 - Keep feature reports aligned with backend reality.
 - Decide whether partial mip/layer-range mipmap generation becomes a portable
   emulation path or an explicit backend-specific escape hatch.
+- Decide depth/stencil and MSAA texture-copy semantics across Vulkan and Metal,
+  including which cases are portable, backend-specific, or intentionally
+  unsupported.
 
 ## Validation
 

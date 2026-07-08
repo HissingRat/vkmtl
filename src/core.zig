@@ -4549,6 +4549,7 @@ pub const CopyTextureToTextureDescriptor = struct {
     source_region: Region3D,
     source_mip_level: u32 = 0,
     source_slice: u32 = 0,
+    slice_count: u32 = 1,
     destination_origin: Origin3D = .{},
     destination_mip_level: u32 = 0,
     destination_slice: u32 = 0,
@@ -4577,6 +4578,7 @@ pub const ResolvedTextureTextureCopy = struct {
     source_region: Region3D,
     source_mip_level: u32,
     source_slice: u32,
+    slice_count: u32,
     destination_origin: Origin3D,
     destination_mip_level: u32,
     destination_slice: u32,
@@ -5411,6 +5413,33 @@ pub fn isSrgbFormat(format: TextureFormat) bool {
     };
 }
 
+pub fn textureFormatsCopyCompatible(source: TextureFormat, destination: TextureFormat) bool {
+    if (source == destination) return true;
+    return textureFormatCopyClass(source) != .none and
+        textureFormatCopyClass(source) == textureFormatCopyClass(destination);
+}
+
+const TextureCopyClass = enum {
+    none,
+    rgba8,
+    bgra8,
+};
+
+fn textureFormatCopyClass(format: TextureFormat) TextureCopyClass {
+    return switch (format) {
+        .rgba8_unorm,
+        .rgba8_unorm_srgb,
+        => .rgba8,
+        .bgra8_unorm,
+        .bgra8_unorm_srgb,
+        => .bgra8,
+        .automatic,
+        .depth32_float,
+        .depth32_float_stencil8,
+        => .none,
+    };
+}
+
 fn checkedMul(comptime T: type, a: anytype, b: anytype) error{Overflow}!T {
     return try std.math.mul(T, @as(T, @intCast(a)), @as(T, @intCast(b)));
 }
@@ -5488,12 +5517,13 @@ fn resolveTextureTextureCopy(
 ) CommandEncodingError!ResolvedTextureTextureCopy {
     source.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
     destination.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
-    if (source.format != destination.format) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    if (!textureFormatsCopyCompatible(source.format, destination.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
     if (!isColorFormat(source.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
     if (source.sample_count != 1 or destination.sample_count != 1) {
         return CommandEncodingError.UnsupportedTextureCopyFormat;
     }
     if (source.dimension != destination.dimension) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    if (descriptor.slice_count == 0) return CommandEncodingError.InvalidCopyTextureSlice;
 
     try validateTextureCopyRegion(
         source,
@@ -5512,15 +5542,31 @@ fn resolveTextureTextureCopy(
         descriptor.destination_mip_level,
         descriptor.destination_slice,
     );
+    try validateTextureCopySliceCount(source, descriptor.source_slice, descriptor.slice_count);
+    try validateTextureCopySliceCount(destination, descriptor.destination_slice, descriptor.slice_count);
 
     return .{
         .source_region = descriptor.source_region,
         .source_mip_level = descriptor.source_mip_level,
         .source_slice = descriptor.source_slice,
+        .slice_count = descriptor.slice_count,
         .destination_origin = descriptor.destination_origin,
         .destination_mip_level = descriptor.destination_mip_level,
         .destination_slice = descriptor.destination_slice,
     };
+}
+
+fn validateTextureCopySliceCount(
+    texture: TextureDescriptor,
+    first_slice: u32,
+    slice_count: u32,
+) CommandEncodingError!void {
+    if (texture.dimension == .three_d) {
+        if (first_slice != 0 or slice_count != 1) return CommandEncodingError.InvalidCopyTextureSlice;
+        return;
+    }
+    const end = std.math.add(u32, first_slice, slice_count) catch return CommandEncodingError.InvalidCopyTextureSlice;
+    if (end > texture.depth_or_array_layers) return CommandEncodingError.InvalidCopyTextureSlice;
 }
 
 fn resolveBufferTextureCopy(
@@ -7996,22 +8042,47 @@ test "copy descriptors validate ranges and texture layouts" {
         .format = .rgba8_unorm,
         .width = 4,
         .height = 4,
+        .depth_or_array_layers = 3,
+        .mip_level_count = 2,
         .usage = .{ .copy_source = true },
     };
     const destination_texture = TextureDescriptor{
         .format = .rgba8_unorm,
         .width = 4,
         .height = 4,
+        .depth_or_array_layers = 3,
+        .mip_level_count = 2,
         .usage = .{ .copy_destination = true },
     };
     const resolved_texture_copy = try (CopyTextureToTextureDescriptor{
-        .source_region = .{ .size = .{ .width = 2, .height = 2 } },
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+        .source_mip_level = 1,
+        .source_slice = 1,
+        .slice_count = 2,
         .destination_origin = .{ .x = 1, .y = 1 },
+        .destination_mip_level = 1,
+        .destination_slice = 1,
     }).resolve(source_texture, destination_texture);
     try std.testing.expectEqual(@as(u32, 1), resolved_texture_copy.destination_origin.x);
+    try std.testing.expectEqual(@as(u32, 2), resolved_texture_copy.slice_count);
     try std.testing.expectError(CommandEncodingError.InvalidCopyTextureRegion, (CopyTextureToTextureDescriptor{
         .source_region = .{ .origin = .{ .x = 3 }, .size = .{ .width = 2, .height = 1 } },
     }).resolve(source_texture, destination_texture));
+    try std.testing.expectError(CommandEncodingError.InvalidCopyTextureSlice, (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+        .source_slice = 2,
+        .slice_count = 2,
+    }).resolve(source_texture, destination_texture));
+    _ = try (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+    }).resolve(source_texture, .{
+        .format = .rgba8_unorm_srgb,
+        .width = 4,
+        .height = 4,
+        .depth_or_array_layers = 3,
+        .mip_level_count = 2,
+        .usage = .{ .copy_destination = true },
+    });
     try std.testing.expectError(CommandEncodingError.UnsupportedTextureCopyFormat, (CopyTextureToTextureDescriptor{
         .source_region = .{ .size = .{ .width = 1, .height = 1 } },
     }).resolve(source_texture, .{
@@ -9860,6 +9931,13 @@ test "default format capabilities describe current portable formats" {
         .height = 16,
         .usage = .{ .shader_read = true },
     }));
+}
+
+test "texture copy compatibility keeps channel order explicit" {
+    try std.testing.expect(textureFormatsCopyCompatible(.rgba8_unorm, .rgba8_unorm_srgb));
+    try std.testing.expect(textureFormatsCopyCompatible(.bgra8_unorm, .bgra8_unorm_srgb));
+    try std.testing.expect(!textureFormatsCopyCompatible(.rgba8_unorm, .bgra8_unorm));
+    try std.testing.expect(!textureFormatsCopyCompatible(.depth32_float, .depth32_float_stencil8));
 }
 
 test "texture format helpers classify current portable formats" {

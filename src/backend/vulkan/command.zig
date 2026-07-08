@@ -1242,20 +1242,20 @@ fn imageCopy(
     resolved: core.ResolvedTextureTextureCopy,
 ) vk.ImageCopy {
     return .{
-        .src_subresource = imageCopySubresource(source, resolved.source_mip_level, resolved.source_slice),
+        .src_subresource = imageCopySubresource(source, resolved.source_mip_level, resolved.source_slice, resolved.slice_count),
         .src_offset = imageCopyOffset(source.descriptor.dimension, resolved.source_region.origin),
-        .dst_subresource = imageCopySubresource(destination, resolved.destination_mip_level, resolved.destination_slice),
+        .dst_subresource = imageCopySubresource(destination, resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count),
         .dst_offset = imageCopyOffset(destination.descriptor.dimension, resolved.destination_origin),
         .extent = imageCopyExtent(source.descriptor.dimension, resolved.source_region.size),
     };
 }
 
-fn imageCopySubresource(texture: *const VulkanTexture, mip_level: u32, slice: u32) vk.ImageSubresourceLayers {
+fn imageCopySubresource(texture: *const VulkanTexture, mip_level: u32, slice: u32, slice_count: u32) vk.ImageSubresourceLayers {
     return .{
         .aspect_mask = .{ .color_bit = true },
         .mip_level = mip_level,
         .base_array_layer = if (texture.descriptor.dimension == .three_d) 0 else slice,
-        .layer_count = 1,
+        .layer_count = if (texture.descriptor.dimension == .three_d) 1 else slice_count,
     };
 }
 

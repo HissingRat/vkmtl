@@ -1422,12 +1422,12 @@ obvious render and binding blockers.
 
 ## Period 24 Phase 3 Checklist
 
-- [ ] Expand texture copy descriptor validation for mips and array layers.
-- [ ] Broaden compatible color-format copy rules.
-- [ ] Keep MSAA and depth/stencil copies capability-gated or deferred.
-- [ ] Lower supported Vulkan and Metal texture copy metadata.
-- [ ] Add deterministic validation tests for broader copy coverage.
-- [ ] Document deferred depth/stencil and MSAA copy semantics.
+- [x] Expand texture copy descriptor validation for mips and array layers.
+- [x] Broaden compatible color-format copy rules.
+- [x] Keep MSAA and depth/stencil copies capability-gated or deferred.
+- [x] Lower supported Vulkan and Metal texture copy metadata.
+- [x] Add deterministic validation tests for broader copy coverage.
+- [x] Document deferred depth/stencil and MSAA copy semantics.
 
 ## Period 24 Phase 4 Checklist
 

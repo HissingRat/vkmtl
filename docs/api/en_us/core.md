@@ -508,7 +508,11 @@ try command_buffer.commit();
 ```
 
 The lowered blit slice supports buffer-to-buffer, buffer-to-texture,
-texture-to-buffer, and texture-to-texture copies.
+texture-to-buffer, and texture-to-texture copies. Texture-to-texture copies can
+address mip levels and copy multiple array layers with `slice_count`. Color
+formats can copy across the same copy class, such as `rgba8_unorm` to
+`rgba8_unorm_srgb`; copies still reject channel-order changes, depth/stencil
+formats, and MSAA textures.
 `BlitCommandEncoder.fillBuffer(...)` also lowers to the native backend. Metal
 supports arbitrary byte ranges. Vulkan keeps native `vkCmdFillBuffer` for
 4-byte-aligned ranges and uses a staging-copy fallback for unaligned ranges.

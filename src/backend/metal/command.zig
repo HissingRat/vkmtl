@@ -261,24 +261,27 @@ pub const BlitCommandEncoder = struct {
         destination: *const MetalTexture,
         resolved: core.ResolvedTextureTextureCopy,
     ) !void {
-        try check(metal.vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
-            self.handle,
-            source.handle,
-            destination.handle,
-            resolved.source_region.origin.x,
-            resolved.source_region.origin.y,
-            resolved.source_region.origin.z,
-            resolved.source_region.size.width,
-            resolved.source_region.size.height,
-            resolved.source_region.size.depth,
-            resolved.source_mip_level,
-            resolved.source_slice,
-            resolved.destination_origin.x,
-            resolved.destination_origin.y,
-            resolved.destination_origin.z,
-            resolved.destination_mip_level,
-            resolved.destination_slice,
-        ));
+        var slice_offset: u32 = 0;
+        while (slice_offset < resolved.slice_count) : (slice_offset += 1) {
+            try check(metal.vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
+                self.handle,
+                source.handle,
+                destination.handle,
+                resolved.source_region.origin.x,
+                resolved.source_region.origin.y,
+                resolved.source_region.origin.z,
+                resolved.source_region.size.width,
+                resolved.source_region.size.height,
+                resolved.source_region.size.depth,
+                resolved.source_mip_level,
+                if (source.descriptor.dimension == .three_d) 0 else resolved.source_slice + slice_offset,
+                resolved.destination_origin.x,
+                resolved.destination_origin.y,
+                resolved.destination_origin.z,
+                resolved.destination_mip_level,
+                if (destination.descriptor.dimension == .three_d) 0 else resolved.destination_slice + slice_offset,
+            ));
+        }
     }
 
     pub fn fillBuffer(
