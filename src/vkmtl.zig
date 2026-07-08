@@ -154,6 +154,7 @@ pub const AccelerationStructureBuildResources = runtime.AccelerationStructureBui
 pub const RayTracingShaderGroupKind = core.RayTracingShaderGroupKind;
 pub const RayTracingShaderGroupDescriptor = core.RayTracingShaderGroupDescriptor;
 pub const RayTracingPipelineDescriptor = core.RayTracingPipelineDescriptor;
+pub const RayTracingPipelineState = runtime.RayTracingPipelineState;
 pub const VulkanRayTracingPipelineLowering = core.VulkanRayTracingPipelineLowering;
 pub const MetalIntersectionFunctionDescriptor = core.MetalIntersectionFunctionDescriptor;
 pub const MetalRayTracingLowering = core.MetalRayTracingLowering;

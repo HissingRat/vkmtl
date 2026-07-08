@@ -1718,6 +1718,17 @@ obvious render and binding blockers.
 - [x] Document that backend-private native AS handles are still deferred to
   Period 30 Phase 1.
 
+## Period 29 Phase 2 Checklist
+
+- [x] Add runtime ray tracing pipeline state objects owned by `Device`.
+- [x] Keep pipeline creation gated by native ray tracing feature reports.
+- [x] Preserve shader-group metadata and backend lowering metadata in the
+  runtime object.
+- [x] Add focused runtime tests for unsupported portable validation and native
+  pipeline-state creation.
+- [x] Document executable backend-private RT pipeline handles as deferred to
+  Period 30 Phase 2.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

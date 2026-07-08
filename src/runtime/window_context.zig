@@ -50,6 +50,7 @@ pub const ResourceKind = enum {
     query_set,
     heap,
     acceleration_structure,
+    ray_tracing_pipeline_state,
 };
 
 const object_cache_fingerprint_capacity = 32;
@@ -83,6 +84,7 @@ pub const ResourceTracker = struct {
     query_sets: usize = 0,
     heaps: usize = 0,
     acceleration_structures: usize = 0,
+    ray_tracing_pipeline_states: usize = 0,
     submitted_work_serial: u64 = 0,
     completed_work_serial: u64 = 0,
     pending_retirements: usize = 0,
@@ -146,7 +148,8 @@ pub const ResourceTracker = struct {
             self.events +
             self.query_sets +
             self.heaps +
-            self.acceleration_structures;
+            self.acceleration_structures +
+            self.ray_tracing_pipeline_states;
     }
 
     pub fn diagnosticsSnapshot(self: ResourceTracker) core.RuntimeDiagnosticsSnapshot {
@@ -237,13 +240,14 @@ pub const ResourceTracker = struct {
             self.events != 0 or
             self.query_sets != 0 or
             self.heaps != 0 or
-            self.acceleration_structures != 0;
+            self.acceleration_structures != 0 or
+            self.ray_tracing_pipeline_states != 0;
     }
 
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -265,6 +269,7 @@ pub const ResourceTracker = struct {
                     self.query_sets,
                     self.heaps,
                     self.acceleration_structures,
+                    self.ray_tracing_pipeline_states,
                 },
             );
         }
@@ -298,6 +303,7 @@ pub const ResourceTracker = struct {
             .query_set => &self.query_sets,
             .heap => &self.heaps,
             .acceleration_structure => &self.acceleration_structures,
+            .ray_tracing_pipeline_state => &self.ray_tracing_pipeline_states,
         };
     }
 
@@ -1628,6 +1634,54 @@ pub const AccelerationStructureBuildResources = struct {
                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
             }
         }
+    }
+};
+
+pub const RayTracingPipelineState = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    allocator: std.mem.Allocator,
+    label_value: ?[]const u8 = null,
+    descriptor_value: core.RayTracingPipelineDescriptor,
+    lowering_value: core.RayTracingPipelineLowering,
+    alive: bool = true,
+
+    pub fn deinit(self: *RayTracingPipelineState) void {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        self.alive = false;
+        self.allocator.free(self.descriptor_value.shader_groups);
+        self.tracker.release(.ray_tracing_pipeline_state);
+    }
+
+    pub fn selectedBackend(self: RayTracingPipelineState) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: RayTracingPipelineState) ?[]const u8 {
+        return self.label_value;
+    }
+
+    pub fn setLabel(self: *RayTracingPipelineState, label_value: ?[]const u8) void {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        self.label_value = label_value;
+    }
+
+    pub fn descriptor(self: RayTracingPipelineState) core.RayTracingPipelineDescriptor {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        return self.descriptor_value;
+    }
+
+    pub fn lowering(self: RayTracingPipelineState) core.RayTracingPipelineLowering {
+        assertAlive(self.alive, .ray_tracing_pipeline_state);
+        return self.lowering_value;
+    }
+
+    pub fn maxRecursionDepth(self: RayTracingPipelineState) u32 {
+        return self.lowering().maxRecursionDepth();
+    }
+
+    pub fn functionTableEntryCount(self: RayTracingPipelineState) u32 {
+        return self.lowering().functionTableEntryCount();
     }
 };
 
@@ -4090,6 +4144,32 @@ pub const Device = struct {
         );
     }
 
+    pub fn makeRayTracingPipelineState(self: *Device, descriptor: core.RayTracingPipelineDescriptor) !RayTracingPipelineState {
+        const metal_intersections: []const core.MetalIntersectionFunctionDescriptor = &.{};
+        const lowering = try core.RayTracingPipelineLowering.fromDescriptor(
+            self.backend,
+            descriptor,
+            metal_intersections,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+        const shader_groups = try self.allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.shader_groups);
+        errdefer self.allocator.free(shader_groups);
+        self.tracker.retain(.ray_tracing_pipeline_state);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .allocator = self.allocator,
+            .label_value = descriptor.label,
+            .descriptor_value = .{
+                .label = descriptor.label,
+                .shader_groups = shader_groups,
+                .max_recursion_depth = descriptor.max_recursion_depth,
+            },
+            .lowering_value = lowering,
+        };
+    }
+
     pub fn planMetalRayTracingMapping(self: Device, descriptor: core.MetalRayTracingMappingDescriptor) core.AdvancedFeatureError!core.MetalRayTracingMappingPlan {
         if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
         return try core.MetalRayTracingMappingPlan.fromDescriptor(
@@ -5572,6 +5652,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .query_set => "query_set",
         .heap => "heap",
         .acceleration_structure => "acceleration_structure",
+        .ray_tracing_pipeline_state => "ray_tracing_pipeline_state",
     };
 }
 
@@ -6264,6 +6345,47 @@ test "runtime device plans ray tracing pipeline lowering from native capabilitie
     try std.testing.expectEqual(@as(u32, 1), lowering.rayGenerationGroupCount());
     try std.testing.expectEqual(@as(u32, 1), lowering.hitGroupCount());
     try std.testing.expectEqual(@as(u32, 3), lowering.functionTableEntryCount());
+}
+
+test "runtime creates ray tracing pipeline states from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.limits.max_ray_tracing_recursion_depth = 2;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test ray tracing pipeline adapter",
+        },
+        .capability_report = report,
+    };
+
+    const groups = [_]core.RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+        .{ .kind = .hit, .entry_point = "closest_hit" },
+    };
+    const descriptor = core.RayTracingPipelineDescriptor{
+        .label = "rt pipeline",
+        .shader_groups = groups[0..],
+        .max_recursion_depth = 2,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, device.validateRayTracingPipelineDescriptor(descriptor));
+
+    var pipeline = try device.makeRayTracingPipelineState(descriptor);
+    defer pipeline.deinit();
+    try std.testing.expectEqual(@as(usize, 1), tracker.ray_tracing_pipeline_states);
+    try std.testing.expectEqualStrings("rt pipeline", pipeline.label().?);
+    try std.testing.expectEqual(@as(u32, 2), pipeline.maxRecursionDepth());
+    try std.testing.expectEqual(@as(u32, 3), pipeline.functionTableEntryCount());
+    try std.testing.expectEqual(@as(usize, 3), pipeline.descriptor().shader_groups.len);
 }
 
 test "runtime device plans ray dispatch from native capabilities" {
