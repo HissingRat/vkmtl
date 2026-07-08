@@ -1827,6 +1827,43 @@ pub const RayTracingPipelineState = struct {
     }
 };
 
+const BackendPrivateShaderBindingTableRecords = struct {
+    backend: core.Backend,
+    stride: u64,
+    total_size: u64,
+    record_count: u32,
+    device_address_required: bool,
+    driver_bound: bool = false,
+
+    fn fromLayout(
+        backend: core.Backend,
+        descriptor: core.ShaderBindingTableDescriptor,
+        layout: core.ShaderBindingTableLayout,
+    ) BackendPrivateShaderBindingTableRecords {
+        return .{
+            .backend = backend,
+            .stride = descriptor.stride,
+            .total_size = layout.total_size,
+            .record_count = descriptor.ray_generation_count +
+                descriptor.miss_count +
+                descriptor.hit_count +
+                descriptor.callable_count,
+            .device_address_required = backend == .vulkan,
+        };
+    }
+};
+
+const BackendPrivateRayDispatchRecord = struct {
+    backend: core.Backend,
+    width: u32,
+    height: u32,
+    depth: u32,
+    total_rays: u64,
+    sbt_size: u64,
+    command_recorded: bool,
+    driver_submitted: bool = false,
+};
+
 pub const ShaderBindingTable = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
@@ -1834,6 +1871,8 @@ pub const ShaderBindingTable = struct {
     descriptor_value: core.ShaderBindingTableDescriptor,
     layout_value: core.ShaderBindingTableLayout,
     limits_value: core.DeviceLimits,
+    native_records: BackendPrivateShaderBindingTableRecords,
+    last_dispatch_record: ?BackendPrivateRayDispatchRecord = null,
     dispatch_count: u64 = 0,
     alive: bool = true,
 
@@ -1875,6 +1914,33 @@ pub const ShaderBindingTable = struct {
         return self.dispatch_count;
     }
 
+    pub fn hasBackendPrivateRecords(self: ShaderBindingTable) bool {
+        assertAlive(self.alive, .shader_binding_table);
+        return self.native_records.backend == self.backend and
+            self.native_records.stride == self.descriptor_value.stride and
+            self.native_records.total_size == self.layout_value.total_size;
+    }
+
+    pub fn backendPrivateRecordCount(self: ShaderBindingTable) u32 {
+        assertAlive(self.alive, .shader_binding_table);
+        return self.native_records.record_count;
+    }
+
+    pub fn backendPrivateRecordsBoundToDriver(self: ShaderBindingTable) bool {
+        assertAlive(self.alive, .shader_binding_table);
+        return self.native_records.driver_bound;
+    }
+
+    pub fn lastDispatchRecordedBackendCommand(self: ShaderBindingTable) bool {
+        assertAlive(self.alive, .shader_binding_table);
+        return if (self.last_dispatch_record) |record| record.command_recorded else false;
+    }
+
+    pub fn lastDispatchSubmittedToDriver(self: ShaderBindingTable) bool {
+        assertAlive(self.alive, .shader_binding_table);
+        return if (self.last_dispatch_record) |record| record.driver_submitted else false;
+    }
+
     fn validateForPipeline(
         self: ShaderBindingTable,
         pipeline: RayTracingPipelineState,
@@ -1904,8 +1970,21 @@ pub const ShaderBindingTable = struct {
         );
     }
 
-    fn recordDispatch(self: *ShaderBindingTable) void {
+    fn recordDispatch(
+        self: *ShaderBindingTable,
+        plan: core.RayDispatchPlan,
+        command_recorded: bool,
+    ) void {
         self.dispatch_count += 1;
+        self.last_dispatch_record = .{
+            .backend = self.backend,
+            .width = plan.width,
+            .height = plan.height,
+            .depth = plan.depth,
+            .total_rays = plan.total_rays,
+            .sbt_size = plan.sbt_size,
+            .command_recorded = command_recorded,
+        };
     }
 };
 
@@ -3106,7 +3185,7 @@ pub const CommandBuffer = struct {
         try expectSameBackend(self.backend, pipeline.backend);
         try expectSameBackend(self.backend, shader_binding_table.backend);
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
-        shader_binding_table.recordDispatch();
+        shader_binding_table.recordDispatch(plan, self.impl != null);
         return plan;
     }
 
@@ -4527,6 +4606,11 @@ pub const Device = struct {
             .descriptor_value = descriptor,
             .layout_value = layout,
             .limits_value = self.limits(),
+            .native_records = BackendPrivateShaderBindingTableRecords.fromLayout(
+                self.backend,
+                descriptor,
+                layout,
+            ),
         };
     }
 
@@ -6859,6 +6943,9 @@ test "runtime creates shader binding tables and dispatches rays" {
     defer shader_binding_table.deinit();
     try std.testing.expectEqual(@as(usize, 2), tracker.shader_binding_tables);
     try std.testing.expectEqual(@as(u64, 192), shader_binding_table.size());
+    try std.testing.expect(shader_binding_table.hasBackendPrivateRecords());
+    try std.testing.expectEqual(@as(u32, 3), shader_binding_table.backendPrivateRecordCount());
+    try std.testing.expect(!shader_binding_table.backendPrivateRecordsBoundToDriver());
 
     const plan = try command_buffer.dispatchRays(&pipeline, &shader_binding_table, .{
         .width = 8,
@@ -6866,6 +6953,8 @@ test "runtime creates shader binding tables and dispatches rays" {
     });
     try std.testing.expectEqual(@as(u64, 32), plan.total_rays);
     try std.testing.expectEqual(@as(u64, 1), shader_binding_table.dispatchCount());
+    try std.testing.expect(!shader_binding_table.lastDispatchRecordedBackendCommand());
+    try std.testing.expect(!shader_binding_table.lastDispatchSubmittedToDriver());
 }
 
 test "runtime device plans Metal ray tracing mapping from native capabilities" {

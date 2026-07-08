@@ -1808,6 +1808,18 @@ obvious render and binding blockers.
 - [x] Document that direct Vulkan ray tracing pipeline and Metal executable
   pipeline/function-table driver creation remains Period 31+ parity work.
 
+## Period 30 Phase 3 Checklist
+
+- [x] Add backend-private shader binding table record metadata to
+  `ShaderBindingTable`.
+- [x] Track record count, stride, total size, and Vulkan device-address
+  requirement in backend-private runtime state.
+- [x] Record backend-private ray dispatch command metadata from
+  `CommandBuffer.dispatchRays(...)`.
+- [x] Keep SBT range and stride validation deterministic.
+- [x] Document that direct `cmdTraceRaysKHR` and equivalent Metal dispatch
+  driver calls remain Period 31+ parity work.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

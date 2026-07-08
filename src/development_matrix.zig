@@ -1254,10 +1254,10 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
     .{
         .feature = .native_ray_dispatch_commands,
         .public_api = "RayDispatchPlan",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 30 Phase 3",
-        .validation = "native ray dispatch command encoding remains future backend work",
+        .vulkan_status = .backend_private_runtime,
+        .metal_status = .backend_private_runtime,
+        .deferred_to = "Period 31+ driver parity plan",
+        .validation = "runtime SBT objects own backend-private records and dispatch command metadata",
     },
     .{
         .feature = .metal_ray_tracing_mapping_planning,
@@ -1746,10 +1746,10 @@ test "ray tracing and native parity backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 5);
-    try std.testing.expect(deferred_paths >= 4);
+    try std.testing.expect(deferred_paths >= 3);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
-    try std.testing.expect(period30_targets >= 5);
-    try std.testing.expect(period31_plus_targets >= 2);
+    try std.testing.expect(period30_targets >= 4);
+    try std.testing.expect(period31_plus_targets >= 3);
 }
 
 test "validation case inventory is valid" {
