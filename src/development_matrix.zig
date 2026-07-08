@@ -186,9 +186,9 @@ pub const examples = [_]ExampleEntry{
         .backend_expectation = "mesh shader descriptor validation and lowering feature gate",
     },
     .{
-        .name = "ray_traced_triangle",
-        .path = "examples/ray_traced_triangle",
-        .run_step = "run-ray-traced-triangle",
+        .name = "ray_traced_scene",
+        .path = "examples/ray_traced_scene",
+        .run_step = "run-ray-traced-scene",
         .kind = .render,
         .backend_expectation = "ray tracing descriptor, backend-private AS/pipeline/SBT records, and feature gate",
     },
@@ -1299,11 +1299,11 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
     },
     .{
         .feature = .advanced_native_examples,
-        .public_api = "examples/ray_traced_triangle and future native advanced examples",
+        .public_api = "examples/ray_traced_scene and future native advanced examples",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
         .deferred_to = "Period 31 Phase 5 and Period 32 Phase 5",
-        .validation = "ray_traced_triangle verifies backend-private runtime records until Period31 makes Metal pixel-producing and Period32 makes Vulkan pixel-producing",
+        .validation = "ray_traced_scene verifies backend-private runtime records until Period31 makes Metal pixel-producing and Period32 makes Vulkan pixel-producing",
     },
 };
 

@@ -17,7 +17,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit plans, tessellation lowering plans, and mesh/task lowering plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, Metal mapping, native advanced closure, and Period 29 routing.
-- `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
+- `ray_tracing_feature_gates`: `zig build run-ray-traced-scene`
 
 ## Optional Rows
 
@@ -147,4 +147,4 @@ conservative until the relevant backend period lands.
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
 | Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, broader driver execution in Period 32+ |
 | Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period32+ |
-| Native advanced examples | Period 32 target: Vulkan ray traced triangle window | Period 31 target: Metal ray traced triangle window | Period31/32 make the first ray traced triangles pixel-producing; broader parity remains Period32+ |
+| Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 target: Metal ray traced scene window | Period31/32 make the first ray traced scenes pixel-producing; broader parity remains Period32+ |

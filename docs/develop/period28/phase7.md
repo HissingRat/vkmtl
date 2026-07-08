@@ -16,7 +16,7 @@ Phase 7 adds examples for completed advanced paths.
 
 ## Result
 
-- Updated `examples/ray_traced_triangle` to use Period 28 planning APIs:
+- Updated `examples/ray_traced_scene` to use Period 28 planning APIs:
   `Device.planAccelerationStructureBuild(...)`,
   `Device.planRayTracingPipelineLowering(...)`, `Device.planRayDispatch(...)`,
   and Metal mapping planning when Metal is selected.

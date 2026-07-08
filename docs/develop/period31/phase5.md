@@ -13,7 +13,7 @@ Status: completed for the current visual acceptance slice.
 
 ## Acceptance
 
-- `zig build run-ray-traced-triangle` opens a window and shows the ray traced
+- `zig build run-ray-traced-scene` opens a window and shows the ray traced
   triangle on supported Metal devices.
 - The example output no longer reports `driver_pixels=deferred_period31_plus`
   on supported devices.

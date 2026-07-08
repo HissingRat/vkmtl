@@ -1,10 +1,10 @@
 # Phase 7: Documentation And Period32+ Routing
 
-Phase 7 closes the Vulkan ray traced triangle period.
+Phase 7 closes the Vulkan ray traced scene period.
 
 ## Scope
 
-- Update usage docs for the Vulkan ray traced triangle path.
+- Update usage docs for the Vulkan ray traced scene path.
 - Update API docs if public behavior changed.
 - Route remaining ray tracing completeness into Period32+ targets.
 - Keep Metal and Vulkan support status separately documented.

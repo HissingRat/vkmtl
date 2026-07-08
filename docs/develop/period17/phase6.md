@@ -15,4 +15,4 @@ Phase 6 hardens ray tracing support.
 
 - `zig build test` should cover descriptor validation.
 - Backend matrix notes should identify which devices were smoke-tested.
-- Example smoke target: `zig build run-ray-traced-triangle`.
+- Example smoke target: `zig build run-ray-traced-scene`.

@@ -1070,8 +1070,8 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 17 Phase 5 Checklist
 
-- [x] Define ray traced triangle example scope before implementation.
-- [x] Add `examples/ray_traced_triangle`.
+- [x] Define ray traced scene example scope before implementation.
+- [x] Add `examples/ray_traced_scene`.
 - [x] Validate one acceleration structure metadata path.
 - [x] Validate ray generation pipeline and SBT metadata.
 - [x] Provide clear unsupported-feature fallback output.
@@ -1778,7 +1778,7 @@ obvious render and binding blockers.
 
 ## Period 29 Phase 7 Checklist
 
-- [x] Update `examples/ray_traced_triangle` from planning-only to runtime
+- [x] Update `examples/ray_traced_scene` from planning-only to runtime
   contract APIs.
 - [x] Keep unsupported adapters reporting typed feature-gate messages.
 - [x] Document that the example does not render pixels until backend-private
@@ -1861,7 +1861,7 @@ obvious render and binding blockers.
 
 ## Period 30 Phase 7 Checklist
 
-- [x] Update `examples/ray_traced_triangle` to verify backend-private
+- [x] Update `examples/ray_traced_scene` to verify backend-private
   acceleration-structure, ray tracing pipeline, SBT, dispatch, and Metal table
   records.
 - [x] Keep unsupported adapters reporting clear feature-gate messages.
@@ -1874,7 +1874,7 @@ obvious render and binding blockers.
 ## Period 31 Phase 1 Checklist
 
 - [x] Define the supported-device visual contract for
-  `examples/ray_traced_triangle`.
+  `examples/ray_traced_scene`.
 - [x] Keep unsupported Metal devices on clear feature-gated exits.
 - [x] Keep the example using public vkmtl APIs only.
 - [x] Decide the exact success text printed after pixels are visible.
@@ -1888,8 +1888,8 @@ obvious render and binding blockers.
 
 ## Period 31 Phase 3 Checklist
 
-- [x] Add the ray traced triangle shader source.
-- [x] Verify the pinned Slang toolchain can lower the visible ray-intersection
+- [x] Add the ray traced scene shader source.
+- [x] Verify the pinned Slang toolchain can lower the visible ray-scene
   shader path, and document native Metal ray tracing constructs as remaining
   hardening.
 - [x] Keep any temporary fallback backend-private and explicitly documented.
@@ -1906,7 +1906,7 @@ obvious render and binding blockers.
 
 - [x] Present the ray tracing result to the window through the public render
   path.
-- [x] Make the triangle visibly distinct from the background.
+- [x] Make the Shadertoy-style scene visibly distinct from the background.
 - [x] Remove `driver_pixels=deferred_period31_plus` from successful supported
   Metal runs.
 
@@ -1914,14 +1914,14 @@ obvious render and binding blockers.
 
 - [x] Keep `zig build test` passing.
 - [x] Keep `zig build` passing.
-- [x] Run `zig build run-ray-traced-triangle` on supported local Metal hardware.
+- [x] Run `zig build run-ray-traced-scene` on supported local Metal hardware.
 - [x] Capture or document the visible result.
 
 ## Period 31 Phase 7 Checklist
 
-- [x] Update usage docs for the pixel-producing Metal ray traced triangle.
+- [x] Update usage docs for the pixel-producing Metal ray traced scene.
 - [x] Update API docs for any user-facing behavior changes.
-- [x] Route Vulkan ray traced triangle parity to Period32 and broader ray
+- [x] Route Vulkan ray traced scene parity to Period32 and broader ray
   tracing completeness to Period32+ docs.
 
 ## Period 32 Phase 1 Checklist
@@ -1930,7 +1930,7 @@ obvious render and binding blockers.
 - [ ] Update Vulkan capability reports for driver-level ray tracing.
 - [ ] Print actionable unsupported messages for missing loader, ICD,
   extension, or feature requirements.
-- [ ] Keep `examples/ray_traced_triangle` using public vkmtl APIs only.
+- [ ] Keep `examples/ray_traced_scene` using public vkmtl APIs only.
 
 ## Period 32 Phase 2 Checklist
 
@@ -1963,13 +1963,13 @@ obvious render and binding blockers.
 
 - [ ] Keep `zig build test` passing.
 - [ ] Keep `zig build` passing.
-- [ ] Run `zig build run-ray-traced-triangle -Dvulkan` on supported Vulkan ray
+- [ ] Run `zig build run-ray-traced-scene -Dvulkan` on supported Vulkan ray
   tracing hardware.
 - [ ] Document visible-result and unsupported-runtime behavior.
 
 ## Period 32 Phase 7 Checklist
 
-- [ ] Update usage docs for the pixel-producing Vulkan ray traced triangle.
+- [ ] Update usage docs for the pixel-producing Vulkan ray traced scene.
 - [ ] Update API docs if public behavior changed.
 - [ ] Route broader ray tracing completeness to concrete Period32+ docs.
 

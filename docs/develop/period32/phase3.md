@@ -1,6 +1,6 @@
 # Phase 3: Vulkan Ray Tracing Shader Path
 
-Phase 3 adds the Vulkan shader path for the ray traced triangle.
+Phase 3 adds the Vulkan shader path for the ray traced scene.
 
 ## Scope
 

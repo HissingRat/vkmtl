@@ -1,11 +1,11 @@
 # Period 32+ Target: Full Parity And Production Coverage
 
 Status: target document. Period 31 and Period 32 are split out as concrete
-driver-execution periods for the first Metal and Vulkan ray traced triangles.
+driver-execution periods for the first Metal and Vulkan ray traced scenes.
 Broader parity periods should be planned after both paths are visible or after a
 platform is explicitly documented as unsupported.
 
-Goal: move vkmtl from "first Metal and Vulkan ray traced triangle paths are
+Goal: move vkmtl from "first Metal and Vulkan ray traced scene paths are
 visible on supported devices" to "most Vulkan and Metal workloads have either a
 portable vkmtl path, a capability-gated vkmtl path, or an explicit documented
 reason why the native API escape hatch is required."
@@ -23,9 +23,9 @@ Period32+ assumes:
   presentation paths are usable through public vkmtl APIs
 - runtime Slang compilation, reflection, bind groups, pipeline creation, and
   shader caches are connected to real backend objects
-- Period31 has made the Metal ray traced triangle visible on supported Metal
+- Period31 has made the Metal ray traced scene visible on supported Metal
   devices
-- Period32 has made the Vulkan ray traced triangle visible on supported Vulkan
+- Period32 has made the Vulkan ray traced scene visible on supported Vulkan
   RT devices, or has documented a specific unsupported-runtime reason for a
   given platform
 - advanced native escape hatches have runtime inventory and driver-work routing

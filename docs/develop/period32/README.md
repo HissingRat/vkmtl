@@ -2,7 +2,7 @@
 
 Status: planned after Period 31.
 
-Goal: make `zig build run-ray-traced-triangle -Dvulkan` produce visible
+Goal: make `zig build run-ray-traced-scene -Dvulkan` produce visible
 ray-traced pixels in a window on supported Vulkan ray tracing devices.
 
 Period 31 proves the first pixel-producing path through Metal. Period 32 must
@@ -15,7 +15,7 @@ On a Vulkan device and runtime that expose the required KHR ray tracing
 extensions:
 
 ```sh
-zig build run-ray-traced-triangle -Dvulkan
+zig build run-ray-traced-scene -Dvulkan
 ```
 
 must:
@@ -55,7 +55,7 @@ is unavailable.
 
 In scope:
 
-- Vulkan-only driver path for `examples/ray_traced_triangle`
+- Vulkan-only driver path for `examples/ray_traced_scene`
 - real Vulkan acceleration structure creation and BLAS build
 - real Vulkan ray tracing pipeline creation
 - real Vulkan SBT buffer materialization
@@ -66,10 +66,10 @@ In scope:
 Out of scope:
 
 - Metal changes beyond preserving the Period31 path
-- TLAS/multiple instances beyond what is required for the first triangle
+- TLAS/multiple instances beyond what is required for the first scene
 - compaction, refit, update, ray query, procedural geometry, and callable shader
   completeness
-- full Vulkan/Metal ray tracing parity beyond the first visible triangle
+- full Vulkan/Metal ray tracing parity beyond the first visible scene
 
 These out-of-scope items remain Period32+ target work.
 
@@ -125,7 +125,7 @@ See `phase6.md`.
 
 ### Phase 7: Documentation And Period32+ Routing
 
-- Update docs to state the first Vulkan ray traced triangle support.
+- Update docs to state the first Vulkan ray traced scene support.
 - Route broader ray tracing completeness to Period32+.
 - Keep Metal and Vulkan support statements separate and precise.
 
@@ -139,9 +139,8 @@ See `phase7.md`.
 - procedural geometry/custom intersection examples
 - callable shader completeness
 - large SBT stress tests
-- cross-backend ray tracing abstraction polish beyond the first triangle
+- cross-backend ray tracing abstraction polish beyond the first scene
 - automated multi-device CI screenshots
 
 They should be planned as concrete Period32+ phases after both Metal and Vulkan
-ray traced triangles are visible.
-
+ray traced scenes are visible.

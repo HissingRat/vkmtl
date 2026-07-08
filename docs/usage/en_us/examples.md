@@ -433,19 +433,19 @@ zig build run-mesh-shader
 
 ## Ray Tracing
 
-`examples/ray_traced_triangle` validates the ray tracing runtime contract and
+`examples/ray_traced_scene` validates the ray tracing runtime contract and
 the Period 30 backend-private runtime records: acceleration-structure objects,
 scratch-buffer validation, ray tracing pipeline state, shader binding table
 creation, ray dispatch records, and Metal table metadata when Metal is
 selected. On supported Metal devices it now opens a window and presents a
-visible triangle whose pixels are produced by a Slang ray/triangle intersection
-shader through the public render path. It prints
-`driver_pixels=visible_metal_ray_intersection` after the first visible frame.
+Shadertoy-inspired sphere-room scene whose pixels are produced by a Slang ray
+tracer through the public render path. It prints
+`driver_pixels=visible_metal_ray_scene` after the first visible frame.
 Vulkan parity is tracked in Period32, and broader native ray tracing coverage is
 Period32+ work.
 
 Run it with:
 
 ```sh
-zig build run-ray-traced-triangle
+zig build run-ray-traced-scene
 ```

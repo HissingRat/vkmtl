@@ -17,7 +17,7 @@ real `MTLAccelerationStructure` yet.
 
 ## Acceptance
 
-- The ray traced triangle example can build a real Metal bottom-level
+- The ray traced scene example can build a real Metal bottom-level
   acceleration structure for one triangle.
 - Existing runtime validation still rejects invalid scratch/result resources.
 - Non-Metal or unsupported Metal devices keep typed unsupported behavior.

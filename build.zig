@@ -541,10 +541,10 @@ pub fn build(b: *std.Build) void {
     const mesh_shader_step = b.step("run-mesh-shader", "Run the vkmtl mesh shader feature-gate example");
     mesh_shader_step.dependOn(&mesh_shader_cmd.step);
 
-    const ray_traced_triangle = b.addExecutable(.{
-        .name = "vkmtl-ray-traced-triangle",
+    const ray_traced_scene = b.addExecutable(.{
+        .name = "vkmtl-ray-traced-scene",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/ray_traced_triangle/main.zig"),
+            .root_source_file = b.path("examples/ray_traced_scene/main.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,
@@ -555,16 +555,16 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    ray_traced_triangle.root_module.linkLibrary(glfw);
-    b.installArtifact(ray_traced_triangle);
+    ray_traced_scene.root_module.linkLibrary(glfw);
+    b.installArtifact(ray_traced_scene);
 
-    const ray_traced_triangle_cmd = b.addRunArtifact(ray_traced_triangle);
-    ray_traced_triangle_cmd.step.dependOn(b.getInstallStep());
-    configureVulkanRuntimeForRun(b, ray_traced_triangle_cmd, target.result.os.tag, vulkan_runtime);
-    forwardRunArgs(b, ray_traced_triangle_cmd);
+    const ray_traced_scene_cmd = b.addRunArtifact(ray_traced_scene);
+    ray_traced_scene_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, ray_traced_scene_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, ray_traced_scene_cmd);
 
-    const ray_traced_triangle_step = b.step("run-ray-traced-triangle", "Run the vkmtl ray tracing feature-gate example");
-    ray_traced_triangle_step.dependOn(&ray_traced_triangle_cmd.step);
+    const ray_traced_scene_step = b.step("run-ray-traced-scene", "Run the vkmtl ray tracing feature-gate example");
+    ray_traced_scene_step.dependOn(&ray_traced_scene_cmd.step);
 
     const stability_plan = b.addExecutable(.{
         .name = "vkmtl-stability-plan",

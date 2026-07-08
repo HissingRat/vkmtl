@@ -12,7 +12,7 @@ Phase 5 submits the first visible Vulkan ray tracing dispatch.
 
 ## Acceptance
 
-- `zig build run-ray-traced-triangle -Dvulkan` opens a window and shows the ray
+- `zig build run-ray-traced-scene -Dvulkan` opens a window and shows the ray
   traced triangle on supported Vulkan ray tracing devices.
 - The example no longer reports Vulkan driver pixels as deferred on supported
   Vulkan devices.

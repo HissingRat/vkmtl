@@ -1,6 +1,6 @@
 # Phase 1: Example Contract And Capability Gate
 
-Phase 1 turns `examples/ray_traced_triangle` into a hard visual contract instead
+Phase 1 turns `examples/ray_traced_scene` into a hard visual contract instead
 of a runtime-record smoke test.
 
 Status: completed for the current visual acceptance slice.
@@ -20,8 +20,7 @@ Status: completed for the current visual acceptance slice.
   the window.
 - The example still builds on machines without Metal ray tracing support.
 - Unsupported devices do not panic and do not claim success.
-- The first successful frame prints
-  `driver_pixels=visible_metal_ray_intersection`.
+- The first successful frame prints `driver_pixels=visible_metal_ray_scene`.
 
 ## Non-Goals
 

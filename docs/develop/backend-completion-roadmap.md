@@ -243,7 +243,7 @@ Tracked in `docs/develop/period30/`.
 - [x] Backend-private parity validation plans and stability diagnostics.
   GPU-backed soak loops are Period32+ validation matrix work.
 - [x] Backend-private native advanced example record checks. Pixel-producing
-  ray traced triangle examples are split across Period 31 and Period 32.
+  ray traced scene examples are split across Period 31 and Period 32.
 
 Expected result: supported Vulkan and Metal adapters can validate and record the
 high-end paths that Period 29 made expressible through public runtime
@@ -254,7 +254,7 @@ Period31, Period32, and Period32+ according to backend and scope.
 
 Tracked in `docs/develop/period31/`.
 
-- [ ] Metal ray traced triangle example contract and feature gate.
+- [ ] Metal ray traced scene example contract and feature gate.
 - [ ] Real Metal acceleration structure bridge and BLAS build.
 - [ ] Ray tracing shader path for the first triangle.
 - [ ] Metal ray dispatch to an output texture.
@@ -262,7 +262,7 @@ Tracked in `docs/develop/period31/`.
 - [ ] Local screenshot/manual validation on supported Metal hardware.
 - [ ] Documentation closeout and follow-up routing.
 
-Expected result: `zig build run-ray-traced-triangle` shows a visible ray traced
+Expected result: `zig build run-ray-traced-scene` shows a visible ray traced
 triangle on supported macOS Metal devices.
 
 ## Wave 13: Vulkan Ray Traced Triangle Driver Path
@@ -277,8 +277,8 @@ Tracked in `docs/develop/period32/`.
 - [ ] Present the Vulkan ray tracing output texture in the window.
 - [ ] Documentation closeout and Period32+ routing.
 
-Expected result: `zig build run-ray-traced-triangle -Dvulkan` shows a visible
-ray traced triangle on supported Vulkan ray tracing devices.
+Expected result: `zig build run-ray-traced-scene -Dvulkan` shows a visible
+ray traced scene on supported Vulkan ray tracing devices.
 
 ## Slice Checklist
 

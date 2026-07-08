@@ -9,7 +9,7 @@ Phase 1 makes Vulkan ray tracing availability explicit before driver work starts
   backend-private runtime record support.
 - Print actionable unsupported messages for missing loader, ICD, extension, or
   feature requirements.
-- Keep `examples/ray_traced_triangle` using public vkmtl APIs.
+- Keep `examples/ray_traced_scene` using public vkmtl APIs.
 
 ## Acceptance
 

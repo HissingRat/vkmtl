@@ -6,7 +6,7 @@ Phase 7 adds examples for executable advanced native paths.
 
 ## Scope
 
-- Updated `examples/ray_traced_triangle` from a planning-only sample to a public
+- Updated `examples/ray_traced_scene` from a planning-only sample to a public
   runtime-contract sample.
 - The example now creates an `AccelerationStructure`, scratch buffer,
   `RayTracingPipelineState`, `ShaderBindingTable`, optional

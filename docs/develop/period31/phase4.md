@@ -5,8 +5,8 @@ for the example.
 
 Status: partially complete for visible pixels. The example records
 `CommandBuffer.dispatchRays(...)` diagnostics, then presents pixels from a Slang
-ray-intersection render pass. Native Metal ray dispatch to an output texture is
-still remaining native hardening.
+ray-scene render pass. Native Metal ray dispatch to an output texture is still
+remaining native hardening.
 
 ## Scope
 

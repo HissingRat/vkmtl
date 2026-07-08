@@ -5,15 +5,17 @@ const common = @import("vkmtl_examples_common");
 
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
-const app_name = "vkmtl ray traced triangle";
-const shader_source = @embedFile("shaders/ray_traced_triangle.slang");
+const app_name = "vkmtl ray traced scene";
+const shader_source = @embedFile("shaders/ray_traced_scene.slang");
+const initial_width = 960;
+const initial_height = 540;
 
 const RayTraceUniforms = extern struct {
     params: [4]f32,
 };
 
 const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
+    .{ .format = .bgra8_unorm },
 };
 
 pub fn main(init: std.process.Init.Minimal) !void {
@@ -21,8 +23,8 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer glfw.terminate();
 
     const window = try glfw.createWindow(.{
-        .width = 512,
-        .height = 384,
+        .width = initial_width,
+        .height = initial_height,
         .title = app_name,
     });
     defer glfw.destroyWindow(window);
@@ -126,8 +128,8 @@ pub fn main(init: std.process.Init.Minimal) !void {
         .scratch = &scratch_buffer,
     });
     const dispatch_plan = try command_buffer.dispatchRays(&pipeline_state, &shader_binding_table, .{
-        .width = 512,
-        .height = 384,
+        .width = initial_width,
+        .height = initial_height,
     });
     try command_buffer.commit();
 
@@ -140,7 +142,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
         (device.selectedBackend() != .metal or metal_backend_tables);
 
     if (device.selectedBackend() != .metal) {
-        std.debug.print("ray traced triangle backend-private runtime ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, as_built={}, runtime_ready={}, driver_pixels=deferred_period32_vulkan\n", .{
+        std.debug.print("ray traced scene backend-private runtime ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, as_built={}, runtime_ready={}, driver_pixels=deferred_period32_vulkan\n", .{
             @tagName(device.selectedBackend()),
             as_plan.result_size,
             as_plan.scratch_size,
@@ -153,16 +155,16 @@ pub fn main(init: std.process.Init.Minimal) !void {
         return;
     }
 
-    var uniforms = makeUniforms(512, 384, 0);
+    var uniforms = makeUniforms(initial_width, initial_height, 0);
     var uniform_buffer = try device.makeBuffer(.{
-        .label = "ray traced triangle uniforms",
+        .label = "ray traced scene uniforms",
         .bytes = std.mem.asBytes(&uniforms),
         .usage = .{ .uniform = true },
         .storage_mode = .shared,
     });
     defer uniform_buffer.deinit();
 
-    var compiled_shader = try device.compileRenderShader("ray_traced_triangle", shader_source, .{
+    var compiled_shader = try device.compileRenderShader("ray_traced_scene", shader_source, .{
         .vertex_entry = "vs_main",
         .fragment_entry = "fs_main",
     });
@@ -243,7 +245,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
 
         if (!reported_visible_pixels) {
             reported_visible_pixels = true;
-            std.debug.print("ray traced triangle visible: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}, runtime_ready={}, driver_pixels=visible_metal_ray_intersection\n", .{
+            std.debug.print("ray traced scene visible: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}, runtime_ready={}, driver_pixels=visible_metal_ray_scene\n", .{
                 @tagName(device.selectedBackend()),
                 as_plan.result_size,
                 as_plan.scratch_size,

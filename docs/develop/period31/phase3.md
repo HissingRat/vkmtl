@@ -7,7 +7,7 @@ Status: completed for the current visual acceptance slice.
 
 ## Scope
 
-- Add embedded shader source for `examples/ray_traced_triangle`.
+- Add embedded shader source for `examples/ray_traced_scene`.
 - Prefer Slang as the source path, consistent with vkmtl shader direction.
 - Verify whether the pinned Slang toolchain can emit the required Metal ray
   tracing constructs.
@@ -17,12 +17,12 @@ Status: completed for the current visual acceptance slice.
 
 - The example has a concrete shader artifact path for the ray tracing workload.
 - Build/runtime errors name the shader entry point and backend.
-- The shader computes a ray/triangle intersection per pixel and returns the
-  visible triangle color through the public render path.
+- The shader computes a sphere-room ray traced scene per pixel and returns the
+  visible color through the public render path.
 
 ## Contingency
 
 The current shader does not use native Metal ray tracing constructs. It is a
-Slang fragment shader that performs the ray/triangle intersection directly so
-the example can prove visible ray traced pixels before the native driver bridge
-lands.
+Slang fragment shader that performs scene intersection, shadows, reflection, and
+refraction directly so the example can prove visible ray traced pixels before
+the native driver bridge lands.

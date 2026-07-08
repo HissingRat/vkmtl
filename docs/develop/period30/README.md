@@ -13,8 +13,8 @@ tables, Metal ray tracing tables, advanced native inventory, and parity
 diagnostics.
 
 Direct driver execution for these high-end paths is split after Period30:
-Period31 owns the first Metal ray traced triangle, Period32 owns the first
-Vulkan ray traced triangle, and Period32+ owns broader parity.
+Period31 owns the first Metal ray traced scene, Period32 owns the first
+Vulkan ray traced scene, and Period32+ owns broader parity.
 
 ## Phase 1: Native Acceleration Structure Handles
 
@@ -71,7 +71,7 @@ See `phase6.md`.
 
 ## Phase 7: Backend-Private Native Advanced Examples
 
-- Updated `examples/ray_traced_triangle` to verify backend-private runtime
+- Updated `examples/ray_traced_scene` to verify backend-private runtime
   records.
 - Kept pixel-producing ray tracing examples deferred to Period31 for Metal and
   Period32 for Vulkan.
