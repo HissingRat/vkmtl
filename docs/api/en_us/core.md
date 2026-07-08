@@ -157,6 +157,11 @@ handle kind, selected backend compatibility, resource shape, ownership, and
 feature gates. Runtime wrappers include `ExternalMemory`, `ExternalBuffer`,
 and `ExternalTexture`, created with `Device.makeExternalMemory(...)`,
 `Device.makeExternalBuffer(...)`, and `Device.makeExternalTexture(...)`.
+External synchronization wrappers include `ExternalSemaphore` and
+`ExternalEvent`, created with `Device.makeExternalSemaphore(...)` and
+`Device.makeExternalEvent(...)`. `ExternalSynchronizationDescriptor` can be
+passed to `CommandBuffer.commitWithExternalSynchronization(...)` for portable
+backend/lifetime validation before native wait/signal lowering exists.
 Native handle import/export remains explicit future backend work.
 
 Starting in Period 2, runtime resources record portable usage state.

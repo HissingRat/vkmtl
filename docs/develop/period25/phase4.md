@@ -13,3 +13,17 @@ Phase 4 adds cross-system synchronization.
 
 - Add lifecycle and invalid-handle tests where possible.
 - Document platform-specific setup requirements.
+
+## Result
+
+- `ExternalSemaphore` and `ExternalEvent` are runtime wrappers around explicit
+  backend/platform handles.
+- `Device.makeExternalSemaphore(...)`, `Device.makeExternalEvent(...)`,
+  `WindowContext.makeExternalSemaphore(...)`, and
+  `WindowContext.makeExternalEvent(...)` validate feature gates and selected
+  backend compatibility.
+- `ExternalSynchronizationDescriptor` groups wait/signal semaphores and events.
+- `CommandBuffer.commitWithExternalSynchronization(...)` validates wrapper
+  lifetime and backend ownership before committing portable work.
+- Native Vulkan external semaphore wait/signal and Metal shared-event command
+  integration are deferred to Period 28 Phase 5.

@@ -1481,6 +1481,15 @@ obvious render and binding blockers.
 - [x] Document native external memory/image/texture import as deferred to
   Period 28 Phase 5.
 
+## Period 25 Phase 4 Checklist
+
+- [x] Validate external semaphore and shared-event descriptors by backend.
+- [x] Add runtime external semaphore and external event wrappers.
+- [x] Add command-buffer external synchronization validation before commit.
+- [x] Keep native wait/signal lowering feature-gated.
+- [x] Document native external semaphore/shared-event lowering as deferred to
+  Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

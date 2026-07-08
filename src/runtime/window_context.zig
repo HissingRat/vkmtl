@@ -43,6 +43,8 @@ pub const ResourceKind = enum {
     resource_table,
     external_memory,
     external_buffer,
+    external_semaphore,
+    external_event,
     fence,
     event,
     query_set,
@@ -66,6 +68,8 @@ pub const ResourceTracker = struct {
     resource_tables: usize = 0,
     external_memories: usize = 0,
     external_buffers: usize = 0,
+    external_semaphores: usize = 0,
+    external_events: usize = 0,
     fences: usize = 0,
     events: usize = 0,
     query_sets: usize = 0,
@@ -154,6 +158,8 @@ pub const ResourceTracker = struct {
             self.resource_tables != 0 or
             self.external_memories != 0 or
             self.external_buffers != 0 or
+            self.external_semaphores != 0 or
+            self.external_events != 0 or
             self.fences != 0 or
             self.events != 0 or
             self.query_sets != 0 or
@@ -163,7 +169,7 @@ pub const ResourceTracker = struct {
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, fences={}, events={}, query_sets={}, heaps={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -178,6 +184,8 @@ pub const ResourceTracker = struct {
                     self.resource_tables,
                     self.external_memories,
                     self.external_buffers,
+                    self.external_semaphores,
+                    self.external_events,
                     self.fences,
                     self.events,
                     self.query_sets,
@@ -208,6 +216,8 @@ pub const ResourceTracker = struct {
             .resource_table => &self.resource_tables,
             .external_memory => &self.external_memories,
             .external_buffer => &self.external_buffers,
+            .external_semaphore => &self.external_semaphores,
+            .external_event => &self.external_events,
             .fence => &self.fences,
             .event => &self.events,
             .query_set => &self.query_sets,
@@ -945,6 +955,103 @@ pub const ExternalBuffer = struct {
     pub fn ownership(self: ExternalBuffer) core.ExternalResourceOwnership {
         assertAlive(self.alive, .external_buffer);
         return self.descriptor_value.ownership;
+    }
+};
+
+pub const ExternalSemaphore = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    descriptor_value: core.ExternalSemaphoreDescriptor,
+    alive: bool = true,
+
+    pub fn deinit(self: *ExternalSemaphore) void {
+        assertAlive(self.alive, .external_semaphore);
+        self.alive = false;
+        self.tracker.release(.external_semaphore);
+    }
+
+    pub fn selectedBackend(self: ExternalSemaphore) core.Backend {
+        return self.backend;
+    }
+
+    pub fn descriptor(self: ExternalSemaphore) core.ExternalSemaphoreDescriptor {
+        assertAlive(self.alive, .external_semaphore);
+        return self.descriptor_value;
+    }
+
+    pub fn isTimeline(self: ExternalSemaphore) bool {
+        assertAlive(self.alive, .external_semaphore);
+        return self.descriptor_value.timeline;
+    }
+
+    pub fn ownership(self: ExternalSemaphore) core.ExternalResourceOwnership {
+        assertAlive(self.alive, .external_semaphore);
+        return self.descriptor_value.ownership;
+    }
+};
+
+pub const ExternalEvent = struct {
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    descriptor_value: core.ExternalEventDescriptor,
+    alive: bool = true,
+
+    pub fn deinit(self: *ExternalEvent) void {
+        assertAlive(self.alive, .external_event);
+        self.alive = false;
+        self.tracker.release(.external_event);
+    }
+
+    pub fn selectedBackend(self: ExternalEvent) core.Backend {
+        return self.backend;
+    }
+
+    pub fn descriptor(self: ExternalEvent) core.ExternalEventDescriptor {
+        assertAlive(self.alive, .external_event);
+        return self.descriptor_value;
+    }
+
+    pub fn isShared(self: ExternalEvent) bool {
+        assertAlive(self.alive, .external_event);
+        return self.descriptor_value.shared;
+    }
+
+    pub fn ownership(self: ExternalEvent) core.ExternalResourceOwnership {
+        assertAlive(self.alive, .external_event);
+        return self.descriptor_value.ownership;
+    }
+};
+
+pub const ExternalSynchronizationDescriptor = struct {
+    wait_semaphores: []const *ExternalSemaphore = &.{},
+    signal_semaphores: []const *ExternalSemaphore = &.{},
+    wait_events: []const *ExternalEvent = &.{},
+    signal_events: []const *ExternalEvent = &.{},
+
+    pub fn isEmpty(self: ExternalSynchronizationDescriptor) bool {
+        return self.wait_semaphores.len == 0 and
+            self.signal_semaphores.len == 0 and
+            self.wait_events.len == 0 and
+            self.signal_events.len == 0;
+    }
+
+    pub fn validate(self: ExternalSynchronizationDescriptor, backend: core.Backend) RuntimeError!void {
+        for (self.wait_semaphores) |semaphore| {
+            assertAlive(semaphore.alive, .external_semaphore);
+            try expectSameBackend(backend, semaphore.backend);
+        }
+        for (self.signal_semaphores) |semaphore| {
+            assertAlive(semaphore.alive, .external_semaphore);
+            try expectSameBackend(backend, semaphore.backend);
+        }
+        for (self.wait_events) |event| {
+            assertAlive(event.alive, .external_event);
+            try expectSameBackend(backend, event.backend);
+        }
+        for (self.signal_events) |event| {
+            assertAlive(event.alive, .external_event);
+            try expectSameBackend(backend, event.backend);
+        }
     }
 };
 
@@ -2512,6 +2619,14 @@ pub const CommandBuffer = struct {
         }
         if (self.tracker) |tracker| tracker.completeWork(work_serial);
         self.alive = false;
+    }
+
+    pub fn commitWithExternalSynchronization(
+        self: *CommandBuffer,
+        descriptor: ExternalSynchronizationDescriptor,
+    ) !void {
+        try descriptor.validate(self.backend);
+        try self.commit();
     }
 
     pub fn selectedBackend(self: CommandBuffer) core.Backend {
@@ -4113,6 +4228,26 @@ pub const Device = struct {
         };
     }
 
+    pub fn makeExternalSemaphore(self: *Device, descriptor: core.ExternalSemaphoreDescriptor) !ExternalSemaphore {
+        try self.validateExternalSemaphoreDescriptor(descriptor);
+        self.tracker.retain(.external_semaphore);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .descriptor_value = descriptor,
+        };
+    }
+
+    pub fn makeExternalEvent(self: *Device, descriptor: core.ExternalEventDescriptor) !ExternalEvent {
+        try self.validateExternalEventDescriptor(descriptor);
+        self.tracker.retain(.external_event);
+        return .{
+            .backend = self.backend,
+            .tracker = self.tracker,
+            .descriptor_value = descriptor,
+        };
+    }
+
     pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
         try self.validateExternalTextureDescriptor(descriptor);
         self.tracker.retain(.texture);
@@ -4512,6 +4647,16 @@ pub const WindowContext = struct {
     pub fn makeExternalBuffer(self: *WindowContext, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
         var device_view = self.device();
         return try device_view.makeExternalBuffer(descriptor);
+    }
+
+    pub fn makeExternalSemaphore(self: *WindowContext, descriptor: core.ExternalSemaphoreDescriptor) !ExternalSemaphore {
+        var device_view = self.device();
+        return try device_view.makeExternalSemaphore(descriptor);
+    }
+
+    pub fn makeExternalEvent(self: *WindowContext, descriptor: core.ExternalEventDescriptor) !ExternalEvent {
+        var device_view = self.device();
+        return try device_view.makeExternalEvent(descriptor);
     }
 
     pub fn makeExternalTexture(self: *WindowContext, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
@@ -5029,6 +5174,8 @@ fn kindName(kind: ResourceKind) []const u8 {
         .resource_table => "resource_table",
         .external_memory => "external_memory",
         .external_buffer => "external_buffer",
+        .external_semaphore => "external_semaphore",
+        .external_event => "external_event",
         .fence => "fence",
         .event => "event",
         .query_set => "query_set",
@@ -5582,6 +5729,7 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     var report = core.defaultDeviceCapabilityReport(.metal);
     report.features.external_memory = true;
     report.features.external_textures = true;
+    report.features.external_semaphores = true;
 
     var device = Device{
         .allocator = std.testing.allocator,
@@ -5617,6 +5765,24 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     });
     defer buffer.deinit();
 
+    var semaphore = try device.makeExternalSemaphore(.{
+        .handle = .{
+            .kind = .metal_shared_event,
+            .value = 4,
+        },
+        .timeline = true,
+    });
+    defer semaphore.deinit();
+
+    var event = try device.makeExternalEvent(.{
+        .handle = .{
+            .kind = .metal_shared_event,
+            .value = 5,
+        },
+        .shared = true,
+    });
+    defer event.deinit();
+
     var texture = try device.makeExternalTexture(.{
         .label = "external texture",
         .handle = .{
@@ -5637,8 +5803,21 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(core.ExternalResourceOwnership.transferred, memory.ownership());
     try std.testing.expectEqual(@as(u64, 128), buffer.length());
     try std.testing.expect(buffer.usage().storage);
+    try std.testing.expect(semaphore.isTimeline());
+    try std.testing.expect(event.isShared());
+    var command_buffer = CommandBuffer{
+        .backend = .metal,
+        .tracker = &tracker,
+    };
+    try command_buffer.commitWithExternalSynchronization(.{
+        .wait_semaphores = &.{&semaphore},
+        .signal_events = &.{&event},
+    });
+    try std.testing.expect(!command_buffer.alive);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_memories);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_buffers);
+    try std.testing.expectEqual(@as(usize, 1), tracker.external_semaphores);
+    try std.testing.expectEqual(@as(usize, 1), tracker.external_events);
     try std.testing.expectEqual(@as(usize, 1), tracker.textures);
 }
 
