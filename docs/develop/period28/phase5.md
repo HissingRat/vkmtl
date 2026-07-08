@@ -11,6 +11,8 @@ Phase 5 finishes explicit backend-specific advanced access.
   backend paths that currently allocate temporary staging resources.
 - Implement sparse buffer runtime objects and native sparse-memory page binding
   for backends that expose compatible residency APIs.
+- Implement sparse/tiled texture runtime objects and native texture page
+  binding for Vulkan sparse images and Metal sparse/tiled texture paths.
 
 ## Validation
 

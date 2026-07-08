@@ -149,9 +149,11 @@ Sparse and tiled resource shapes are represented by
 residency intent behind `DeviceFeatures.sparse_buffers`,
 `DeviceFeatures.sparse_textures`, and `DeviceFeatures.tiled_textures`. Native
 residency management is future backend work. Period 27 adds
-`SparseBufferLowering` and `Device.planSparseBufferLowering(...)` so advanced
-applications can inspect native sparse-buffer page size, page count, and backend
-mapping before runtime sparse object creation is enabled.
+`SparseBufferLowering`, `SparseTextureLowering`,
+`Device.planSparseBufferLowering(...)`, and
+`Device.planSparseTextureLowering(...)` so advanced applications can inspect
+native page size, texture page grids, page counts, and backend mapping before
+runtime sparse object creation is enabled.
 
 External interop shapes are represented by `ExternalHandleDescriptor`,
 `ExternalMemoryDescriptor`, `ExternalBufferDescriptor`,

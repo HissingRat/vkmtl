@@ -4453,6 +4453,16 @@ pub const SparseTextureDescriptor = struct {
     texture: TextureDescriptor,
     page_extent: Size3D,
 
+    pub fn pageGrid(self: SparseTextureDescriptor) AdvancedFeatureError!Size3D {
+        if (self.page_extent.isZero()) return AdvancedFeatureError.InvalidSparsePageSize;
+        self.texture.validate() catch return AdvancedFeatureError.InvalidSparseRegion;
+        return .{
+            .width = sparseCeilDivU32(self.texture.width, self.page_extent.width),
+            .height = sparseCeilDivU32(self.texture.height, self.page_extent.height),
+            .depth = sparseCeilDivU32(self.texture.depth_or_array_layers, self.page_extent.depth),
+        };
+    }
+
     pub fn validate(self: SparseTextureDescriptor, features: DeviceFeatures, limits: DeviceLimits) (AdvancedFeatureError || TextureError)!void {
         switch (self.kind) {
             .sparse_texture => if (!features.sparse_textures) return AdvancedFeatureError.UnsupportedSparseTextures,
@@ -4469,6 +4479,53 @@ pub const SparseTextureDescriptor = struct {
         if (limits.sparse_texture_page_depth != 0 and self.page_extent.depth != limits.sparse_texture_page_depth) {
             return AdvancedFeatureError.InvalidSparsePageSize;
         }
+    }
+};
+
+pub const SparseTextureLoweringMode = enum {
+    vulkan_sparse_image,
+    metal_sparse_texture,
+    metal_tiled_texture,
+};
+
+pub const SparseTextureLowering = struct {
+    backend: Backend,
+    mode: SparseTextureLoweringMode,
+    kind: SparseTextureKind,
+    format: TextureFormat,
+    extent: Size3D,
+    page_extent: Size3D,
+    page_grid: Size3D,
+    mip_level_count: u32,
+    requires_residency_commit: bool = true,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: SparseTextureDescriptor,
+        native_features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (AdvancedFeatureError || TextureError)!SparseTextureLowering {
+        try descriptor.validate(native_features, limits);
+        return .{
+            .backend = backend,
+            .mode = switch (backend) {
+                .vulkan => .vulkan_sparse_image,
+                .metal => switch (descriptor.kind) {
+                    .sparse_texture => .metal_sparse_texture,
+                    .tiled_texture => .metal_tiled_texture,
+                },
+            },
+            .kind = descriptor.kind,
+            .format = descriptor.texture.format,
+            .extent = .{
+                .width = descriptor.texture.width,
+                .height = descriptor.texture.height,
+                .depth = descriptor.texture.depth_or_array_layers,
+            },
+            .page_extent = descriptor.page_extent,
+            .page_grid = try descriptor.pageGrid(),
+            .mip_level_count = descriptor.texture.mip_level_count,
+        };
     }
 };
 
@@ -5618,6 +5675,12 @@ pub const BindingError = error{
 
 fn isAlignedU32(value: u32, alignment: u32) bool {
     return alignment == 0 or value % alignment == 0;
+}
+
+fn sparseCeilDivU32(numerator: u32, denominator: u32) u32 {
+    if (denominator == 0) return 0;
+    if (numerator == 0) return 0;
+    return 1 + (numerator - 1) / denominator;
 }
 
 fn isAlignedU64(value: u64, alignment: u64) bool {
@@ -9138,8 +9201,8 @@ test "sparse resource descriptors validate feature gates and alignment" {
     try (SparseTextureDescriptor{
         .texture = .{
             .format = .rgba8_unorm,
-            .width = 128,
-            .height = 128,
+            .width = 130,
+            .height = 129,
             .usage = .{ .shader_read = true },
         },
         .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
@@ -9148,6 +9211,24 @@ test "sparse resource descriptors validate feature gates and alignment" {
         .sparse_texture_page_height = 64,
         .sparse_texture_page_depth = 1,
     });
+    const sparse_texture_lowering = try SparseTextureLowering.fromDescriptor(.vulkan, .{
+        .texture = .{
+            .format = .rgba8_unorm,
+            .width = 130,
+            .height = 129,
+            .usage = .{ .shader_read = true },
+        },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+    }, .{ .sparse_textures = true }, .{
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+    });
+    try std.testing.expectEqual(SparseTextureLoweringMode.vulkan_sparse_image, sparse_texture_lowering.mode);
+    try std.testing.expectEqual(@as(u32, 3), sparse_texture_lowering.page_grid.width);
+    try std.testing.expectEqual(@as(u32, 3), sparse_texture_lowering.page_grid.height);
+    try std.testing.expectEqual(@as(u32, 1), sparse_texture_lowering.page_grid.depth);
+    try std.testing.expect(sparse_texture_lowering.requires_residency_commit);
     try std.testing.expectError(AdvancedFeatureError.InvalidSparsePageSize, (SparseTextureDescriptor{
         .kind = .tiled_texture,
         .texture = .{

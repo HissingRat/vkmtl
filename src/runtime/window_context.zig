@@ -3858,6 +3858,15 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planSparseTextureLowering(self: Device, descriptor: core.SparseTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.SparseTextureLowering {
+        return try core.SparseTextureLowering.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateExternalTextureDescriptor(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
         try descriptor.validate(self.backend, self.features());
     }
@@ -5748,6 +5757,51 @@ test "runtime device plans sparse buffer lowering from native capabilities" {
     const lowering = try device.planSparseBufferLowering(descriptor);
     try std.testing.expectEqual(core.SparseBufferLoweringMode.vulkan_sparse_binding, lowering.mode);
     try std.testing.expectEqual(@as(u64, 2), lowering.page_count);
+}
+
+test "runtime device plans sparse texture lowering from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{
+        .metal = .{
+            .handle = undefined,
+            .extent = .{ .width = 1, .height = 1 },
+        },
+    };
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.tiled_textures = false;
+    report.native_features.tiled_textures = true;
+    report.limits.sparse_texture_page_width = 64;
+    report.limits.sparse_texture_page_height = 64;
+    report.limits.sparse_texture_page_depth = 1;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test tiled adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.SparseTextureDescriptor{
+        .kind = .tiled_texture,
+        .texture = .{
+            .format = .rgba8_unorm,
+            .width = 130,
+            .height = 129,
+            .usage = .{ .shader_read = true },
+        },
+        .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedTiledTextures, device.validateSparseTextureDescriptor(descriptor));
+
+    const lowering = try device.planSparseTextureLowering(descriptor);
+    try std.testing.expectEqual(core.SparseTextureLoweringMode.metal_tiled_texture, lowering.mode);
+    try std.testing.expectEqual(@as(u32, 3), lowering.page_grid.width);
+    try std.testing.expectEqual(@as(u32, 3), lowering.page_grid.height);
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

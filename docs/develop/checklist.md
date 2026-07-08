@@ -1588,6 +1588,19 @@ obvious render and binding blockers.
 - [x] Document native sparse buffer object creation/bind integration as
   deferred to Period 28 Phase 5.
 
+## Period 27 Phase 2 Checklist
+
+- [x] Add backend-aware sparse/tiled texture lowering plans based on native
+  feature reports.
+- [x] Track page extent, page grid, mip count, texture format, and backend
+  mapping in the lowering plan.
+- [x] Validate page extent and non-divisible texture extents with focused
+  tests.
+- [x] Expose the planning API through `Device` without enabling ordinary sparse
+  texture creation.
+- [x] Document native sparse/tiled texture object creation and residency
+  binding as deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
