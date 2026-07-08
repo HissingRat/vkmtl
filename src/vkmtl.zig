@@ -150,6 +150,7 @@ pub const RayTracingPipelineDescriptor = core.RayTracingPipelineDescriptor;
 pub const VulkanRayTracingPipelineLowering = core.VulkanRayTracingPipelineLowering;
 pub const MetalIntersectionFunctionDescriptor = core.MetalIntersectionFunctionDescriptor;
 pub const MetalRayTracingLowering = core.MetalRayTracingLowering;
+pub const RayTracingPipelineLowering = core.RayTracingPipelineLowering;
 pub const ShaderBindingTableDescriptor = core.ShaderBindingTableDescriptor;
 pub const ShaderBindingTableLayout = core.ShaderBindingTableLayout;
 pub const DepthBiasDescriptor = core.DepthBiasDescriptor;

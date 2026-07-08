@@ -3937,6 +3937,17 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planRayTracingPipelineLowering(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!core.RayTracingPipelineLowering {
+        const metal_intersections: []const core.MetalIntersectionFunctionDescriptor = &.{};
+        return try core.RayTracingPipelineLowering.fromDescriptor(
+            self.backend,
+            descriptor,
+            metal_intersections,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5983,6 +5994,44 @@ test "runtime device plans acceleration structure builds from native capabilitie
     try std.testing.expectEqual(core.AccelerationStructureBuildMode.update, plan.mode);
     try std.testing.expectEqual(@as(u32, 2), plan.primitive_count);
     try std.testing.expect(plan.update_scratch_size > 0);
+}
+
+test "runtime device plans ray tracing pipeline lowering from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.limits.max_ray_tracing_recursion_depth = 2;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test ray tracing adapter",
+        },
+        .capability_report = report,
+    };
+
+    const groups = [_]core.RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+        .{ .kind = .hit, .entry_point = "closest_hit" },
+    };
+    const descriptor = core.RayTracingPipelineDescriptor{
+        .shader_groups = groups[0..],
+        .max_recursion_depth = 2,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, device.validateRayTracingPipelineDescriptor(descriptor));
+
+    const lowering = try device.planRayTracingPipelineLowering(descriptor);
+    try std.testing.expectEqual(@as(u32, 2), lowering.maxRecursionDepth());
+    try std.testing.expectEqual(@as(u32, 1), lowering.rayGenerationGroupCount());
+    try std.testing.expectEqual(@as(u32, 1), lowering.hitGroupCount());
+    try std.testing.expectEqual(@as(u32, 3), lowering.functionTableEntryCount());
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

@@ -335,6 +335,9 @@ alignment behind `DeviceFeatures.acceleration_structures` and
 `Device.planAccelerationStructureBuild(...)` so applications can inspect
 geometry counts, build/update mode, result size, scratch size, and compaction
 intent before native acceleration-structure objects are executable.
+`RayTracingPipelineLowering` and `Device.planRayTracingPipelineLowering(...)`
+expose Vulkan shader-group counts or Metal function-table metadata from native
+feature reports before executable ray tracing pipelines are enabled.
 
 ## Bindings
 

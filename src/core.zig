@@ -2617,6 +2617,10 @@ pub const MetalIntersectionFunctionDescriptor = struct {
 pub const MetalRayTracingLowering = struct {
     max_recursion_depth: u32,
     function_table_entries: u32,
+    ray_generation_groups: u32 = 0,
+    miss_groups: u32 = 0,
+    hit_groups: u32 = 0,
+    callable_groups: u32 = 0,
     intersection_function_count: u32 = 0,
 
     pub fn fromDescriptor(
@@ -2627,10 +2631,70 @@ pub const MetalRayTracingLowering = struct {
     ) AdvancedFeatureError!MetalRayTracingLowering {
         try descriptor.validate(features, limits);
         for (intersections) |intersection| try intersection.validate(features);
+        var ray_generation_groups: u32 = 0;
+        var miss_groups: u32 = 0;
+        var hit_groups: u32 = 0;
+        var callable_groups: u32 = 0;
+        for (descriptor.shader_groups) |group| switch (group.kind) {
+            .ray_generation => ray_generation_groups += 1,
+            .miss => miss_groups += 1,
+            .hit => hit_groups += 1,
+            .callable => callable_groups += 1,
+        };
         return .{
             .max_recursion_depth = descriptor.max_recursion_depth,
             .function_table_entries = @intCast(descriptor.shader_groups.len + intersections.len),
+            .ray_generation_groups = ray_generation_groups,
+            .miss_groups = miss_groups,
+            .hit_groups = hit_groups,
+            .callable_groups = callable_groups,
             .intersection_function_count = @intCast(intersections.len),
+        };
+    }
+};
+
+pub const RayTracingPipelineLowering = union(Backend) {
+    vulkan: VulkanRayTracingPipelineLowering,
+    metal: MetalRayTracingLowering,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: RayTracingPipelineDescriptor,
+        metal_intersections: []const MetalIntersectionFunctionDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!RayTracingPipelineLowering {
+        return switch (backend) {
+            .vulkan => .{ .vulkan = try VulkanRayTracingPipelineLowering.fromDescriptor(descriptor, features, limits) },
+            .metal => .{ .metal = try MetalRayTracingLowering.fromDescriptor(descriptor, metal_intersections, features, limits) },
+        };
+    }
+
+    pub fn maxRecursionDepth(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.max_recursion_depth,
+            .metal => |lowering| lowering.max_recursion_depth,
+        };
+    }
+
+    pub fn rayGenerationGroupCount(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.ray_generation_groups,
+            .metal => |lowering| lowering.ray_generation_groups,
+        };
+    }
+
+    pub fn hitGroupCount(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.hit_groups,
+            .metal => |lowering| lowering.hit_groups,
+        };
+    }
+
+    pub fn functionTableEntryCount(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.ray_generation_groups + lowering.miss_groups + lowering.hit_groups + lowering.callable_groups,
+            .metal => |lowering| lowering.function_table_entries,
         };
     }
 };
@@ -9795,6 +9859,7 @@ test "Metal ray tracing lowering counts function table entries" {
     const groups = [_]RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
         .{ .kind = .miss, .entry_point = "miss" },
+        .{ .kind = .hit, .entry_point = "closest_hit" },
     };
     const intersections = [_]MetalIntersectionFunctionDescriptor{
         .{ .entry_point = "intersect_triangle" },
@@ -9803,8 +9868,24 @@ test "Metal ray tracing lowering counts function table entries" {
         .shader_groups = groups[0..],
         .max_recursion_depth = 1,
     }, intersections[0..], .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
-    try std.testing.expectEqual(@as(u32, 3), lowering.function_table_entries);
+    try std.testing.expectEqual(@as(u32, 4), lowering.function_table_entries);
+    try std.testing.expectEqual(@as(u32, 1), lowering.hit_groups);
     try std.testing.expectEqual(@as(u32, 1), lowering.intersection_function_count);
+}
+
+test "backend-tagged ray tracing lowering preserves group counts" {
+    const groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{ .kind = .miss, .entry_point = "miss" },
+        .{ .kind = .hit, .entry_point = "closest_hit" },
+    };
+    const lowering = try RayTracingPipelineLowering.fromDescriptor(.metal, .{
+        .shader_groups = groups[0..],
+        .max_recursion_depth = 1,
+    }, &.{}, .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
+    try std.testing.expectEqual(@as(u32, 1), lowering.rayGenerationGroupCount());
+    try std.testing.expectEqual(@as(u32, 1), lowering.hitGroupCount());
+    try std.testing.expectEqual(@as(u32, 3), lowering.functionTableEntryCount());
 }
 
 test "shader binding table layout computes group offsets" {

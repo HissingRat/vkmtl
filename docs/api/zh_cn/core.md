@@ -277,7 +277,9 @@ acceleration structure shape、ray-generation shader group、recursion depth 和
 table alignment。Period 28 新增 `AccelerationStructureBuildDescriptor`、
 `AccelerationStructureBuildPlan` 和 `Device.planAccelerationStructureBuild(...)`，让应用能在
 native acceleration-structure object 可执行前检查 geometry count、build/update mode、
-result size、scratch size 和 compaction intent。
+result size、scratch size 和 compaction intent。`RayTracingPipelineLowering` 和
+`Device.planRayTracingPipelineLowering(...)` 会通过 native feature report 暴露 Vulkan shader
+group count 或 Metal function-table metadata，先于 executable ray tracing pipeline 接入。
 
 ## Binding
 

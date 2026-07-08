@@ -1650,6 +1650,16 @@ obvious render and binding blockers.
 - [x] Document native acceleration-structure object creation and build command
   lowering as deferred to Period 29 Phase 1.
 
+## Period 28 Phase 2 Checklist
+
+- [x] Add a backend-tagged ray tracing pipeline lowering plan.
+- [x] Preserve Vulkan shader-group counts and Metal function-table metadata.
+- [x] Expose ray tracing pipeline planning through `Device` using native feature
+  reports.
+- [x] Keep public ray tracing pipeline validation gated by usable features.
+- [x] Document executable native ray tracing pipeline creation as deferred to
+  Period 29 Phase 2.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
