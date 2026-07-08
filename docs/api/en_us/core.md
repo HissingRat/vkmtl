@@ -344,6 +344,18 @@ counts before native ray dispatch commands are available. Metal-specific ray
 tracing differences are explicit through `MetalRayTracingMappingDescriptor`,
 `MetalRayTracingMappingPlan`, and `Device.planMetalRayTracingMapping(...)`.
 
+Period 29 adds public runtime contracts for those advanced paths:
+`AccelerationStructure` and `Device.makeAccelerationStructure(...)`,
+`CommandBuffer.encodeAccelerationStructureBuild(...)`,
+`RayTracingPipelineState` and `Device.makeRayTracingPipelineState(...)`,
+`ShaderBindingTable` and `Device.makeShaderBindingTable(...)`,
+`CommandBuffer.dispatchRays(...)`, and
+`MetalRayTracingExecutionMapping` /
+`Device.makeMetalRayTracingExecutionMapping(...)`. These APIs are gated by
+native feature reports and validate ownership, resource ranges, and command
+intent. Backend-private native handles and pixel-producing dispatch are tracked
+in Period 30.
+
 ## Bindings
 
 Shader resource binding starts with public descriptors:
@@ -758,4 +770,10 @@ available.
 
 `NativeAdvancedClosureDescriptor`, `NativeAdvancedClosurePlan`, and
 `Device.planNativeAdvancedClosure(...)` expose the current native-advanced
-implementation backlog as data for tooling and roadmap checks.
+implementation backlog as data for tooling and roadmap checks. The plan
+distinguishes public runtime contracts from backend-private native lowering.
+
+`BackendParitySemanticsDescriptor`, `BackendParitySemanticsPlan`, and
+`Device.planBackendParitySemantics(...)` expose current parity decisions for
+partial mip/layer ranges, depth/stencil and MSAA copies, custom sampler border
+colors, and opt-in GPU soak planning.

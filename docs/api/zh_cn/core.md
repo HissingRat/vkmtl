@@ -285,6 +285,16 @@ table layout、dispatch dimensions 和 total ray count 合成可检查的 dispat
 ray tracing 差异通过 `MetalRayTracingMappingDescriptor`、`MetalRayTracingMappingPlan` 和
 `Device.planMetalRayTracingMapping(...)` 显式表达。
 
+Period 29 新增这些 advanced path 的公开 runtime contract：
+`AccelerationStructure` / `Device.makeAccelerationStructure(...)`、
+`CommandBuffer.encodeAccelerationStructureBuild(...)`、`RayTracingPipelineState` /
+`Device.makeRayTracingPipelineState(...)`、`ShaderBindingTable` /
+`Device.makeShaderBindingTable(...)`、`CommandBuffer.dispatchRays(...)`，以及
+`MetalRayTracingExecutionMapping` /
+`Device.makeMetalRayTracingExecutionMapping(...)`。这些 API 由 native feature report gate，
+会验证 ownership、resource range 和 command intent。backend-private native handle 和真正输出像素的
+dispatch 继续在 Period 30 跟踪。
+
 ## Binding
 
 Shader 资源绑定从公开描述符开始：
@@ -631,4 +641,9 @@ command-encoder native handle view 接好之前，backend 会保持这个 featur
 
 `NativeAdvancedClosureDescriptor`、`NativeAdvancedClosurePlan` 和
 `Device.planNativeAdvancedClosure(...)` 会把当前 native-advanced implementation backlog
-作为数据暴露出来，主要供工具和 roadmap check 使用。
+作为数据暴露出来，主要供工具和 roadmap check 使用。Plan 会区分已经有公开 runtime contract 的
+部分，以及仍需 backend-private native lowering 的部分。
+
+`BackendParitySemanticsDescriptor`、`BackendParitySemanticsPlan` 和
+`Device.planBackendParitySemantics(...)` 会暴露当前 parity decision：partial mip/layer range、
+depth/stencil 与 MSAA copy、custom sampler border color，以及 opt-in GPU soak planning。

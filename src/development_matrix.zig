@@ -1225,7 +1225,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "AccelerationStructureBuildPlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 1",
+        .deferred_to = "Period 30 Phase 1",
         .validation = "native acceleration-structure objects and build commands remain explicit backend work",
     },
     .{
@@ -1240,7 +1240,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "RayTracingPipelineLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 2",
+        .deferred_to = "Period 30 Phase 2",
         .validation = "executable native ray tracing pipelines remain feature-gated",
     },
     .{
@@ -1255,7 +1255,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "RayDispatchPlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 3",
+        .deferred_to = "Period 30 Phase 3",
         .validation = "native ray dispatch command encoding remains future backend work",
     },
     .{
@@ -1270,7 +1270,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "MetalRayTracingMappingPlan",
         .vulkan_status = .validation_noop,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 29 Phase 4",
+        .deferred_to = "Period 30 Phase 4",
         .validation = "Metal acceleration/intersection resources and dispatch integration remain feature-gated",
     },
     .{
@@ -1301,7 +1301,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "examples/ray_traced_triangle and future native advanced examples",
         .vulkan_status = .capability_gated,
         .metal_status = .capability_gated,
-        .deferred_to = "Period 29 Phase 7",
+        .deferred_to = "Period 30 Phase 7",
         .validation = "current advanced examples stay feature-gated until native execution lands",
     },
 };
@@ -1744,8 +1744,8 @@ test "ray tracing and native parity backend matrix is complete" {
     }
     try std.testing.expect(runtime_paths >= 5);
     try std.testing.expect(deferred_paths >= 6);
-    try std.testing.expect(period29_targets >= 5);
-    try std.testing.expect(period30_targets >= 2);
+    try std.testing.expectEqual(@as(usize, 0), period29_targets);
+    try std.testing.expect(period30_targets >= 7);
 }
 
 test "validation case inventory is valid" {

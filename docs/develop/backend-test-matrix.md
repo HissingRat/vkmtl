@@ -137,14 +137,14 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
-| Native acceleration-structure builds | Deferred | Deferred | Period 29 Phase 1 native execution |
+| Native acceleration-structure builds | Deferred | Deferred | Period 30 Phase 1 native execution |
 | Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
-| Native ray tracing pipelines | Deferred | Deferred | Period 29 Phase 2 native execution |
+| Native ray tracing pipelines | Deferred | Deferred | Period 30 Phase 2 native execution |
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
-| Native ray dispatch commands | Deferred | Deferred | Period 29 Phase 3 native execution |
+| Native ray dispatch commands | Deferred | Deferred | Period 30 Phase 3 native execution |
 | Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
-| Native Metal ray tracing execution | Validation no-op | Deferred | Period 29 Phase 4 native execution |
+| Native Metal ray tracing execution | Validation no-op | Deferred | Period 30 Phase 4 native execution |
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
 | Native advanced backend execution | Deferred | Deferred | Period 30 Phase 5 native execution |
 | Parity semantics and soak loops | Deferred | Deferred | Period 30 Phase 6 parity/stability |
-| Native advanced examples | Feature-gated | Feature-gated | Period 29 Phase 7 examples |
+| Native advanced examples | Feature-gated | Feature-gated | Period 30 Phase 7 examples |

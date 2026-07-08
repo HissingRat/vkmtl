@@ -152,7 +152,7 @@ Tracked in `docs/develop/period26/`.
 - [ ] Vulkan `VkPipelineCache` and Metal `MTLBinaryArchive` consumption.
   Deferred to Period 30 Phase 5.
 - [x] Persistent runtime cache manifest versioning and compatibility planning.
-- [ ] Automatic runtime cache manifest read/write. Deferred to Period 29 Phase
+- [ ] Automatic runtime cache manifest read/write. Deferred to Period 30 Phase
   5.
 - [x] Diagnostics for cache misses, creation cost, resource churn, capture
   names, and runtime live-resource snapshots.
@@ -190,32 +190,53 @@ Tracked in `docs/develop/period28/`.
 - [x] Metal ray tracing mapping plans.
 - [x] Native advanced escape-hatch closure inventory.
 - [x] Maintained parity matrix and Period 29 routing.
-- [ ] Native acceleration-structure execution. Deferred to Period 29 Phase 1.
-- [ ] Native ray tracing pipeline execution. Deferred to Period 29 Phase 2.
-- [ ] Native SBT and ray dispatch commands. Deferred to Period 29 Phase 3.
-- [ ] Native Metal ray tracing execution mapping. Deferred to Period 29 Phase 4.
-- [ ] Native advanced escape-hatch execution. Deferred to Period 30 Phase 5.
-- [ ] True backend-native multi-draw optimization, parity semantics, and native
-  soak validation. Deferred to Period 30 Phase 6.
+- [x] Public acceleration-structure runtime contract. Backend-private native
+  handles are deferred to Period 30 Phase 1.
+- [x] Public ray tracing pipeline runtime contract. Backend-private pipeline
+  handles are deferred to Period 30 Phase 2.
+- [x] Public SBT and ray dispatch runtime contract. Backend-private SBT records
+  and dispatch are deferred to Period 30 Phase 3.
+- [x] Public Metal ray tracing mapping runtime contract. Backend-private Metal
+  dispatch integration is deferred to Period 30 Phase 4.
+- [x] Native advanced escape-hatch runtime contract. Backend-private lowering is
+  deferred to Period 30 Phase 5.
+- [x] Parity semantic decisions and stress planning. Native soak validation is
+  deferred to Period 30 Phase 6.
 
 Expected result: high-end backend-specific features become explicit, testable,
-and documented as planning APIs. Period 29 owns executable native backend
-closure.
+and documented as planning/runtime-contract APIs. Period 30 owns executable
+native backend closure.
 
-## Wave 10: Native Advanced Execution
+## Wave 10: Native Advanced Runtime Contracts
 
 Tracked in `docs/develop/period29/`.
 
-- [ ] Native acceleration structure builds.
-- [ ] Native ray tracing pipelines.
-- [ ] Native SBT and ray dispatch commands.
-- [ ] Native Metal ray tracing execution mapping.
-- [ ] Native advanced escape-hatch execution.
-- [ ] Parity semantics and stress validation.
-- [ ] Native advanced examples.
+- [x] Acceleration structure runtime contract.
+- [x] Ray tracing pipeline runtime contract.
+- [x] SBT and ray dispatch runtime contract.
+- [x] Metal ray tracing execution mapping runtime contract.
+- [x] Native advanced escape-hatch runtime contract.
+- [x] Parity semantics and stress validation planning.
+- [x] Native advanced runtime-contract examples.
+
+Expected result: supported Vulkan and Metal adapters can be targeted through
+stable public runtime contracts while backend-private native execution is
+tracked in Period 30.
+
+## Wave 11: Backend-Private Native Execution
+
+Tracked in `docs/develop/period30/`.
+
+- [ ] Native acceleration structure handles and build commands.
+- [ ] Native ray tracing pipeline handles.
+- [ ] Native SBT records and dispatch commands.
+- [ ] Native Metal ray tracing dispatch integration.
+- [ ] Native advanced escape-hatch lowering.
+- [ ] Native parity and soak validation.
+- [ ] Pixel-producing native advanced examples.
 
 Expected result: supported Vulkan and Metal adapters execute the high-end paths
-that Period 28 made inspectable.
+that Period 29 made expressible through public runtime contracts.
 
 ## Slice Checklist
 

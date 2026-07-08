@@ -491,7 +491,7 @@ See `docs/develop/period25/`.
 ## Period 26: Object Cache And Production Backend Hardening
 
 Status: completed production-hardening planning and diagnostics slice, with
-native cache/object reuse and GPU soak execution deferred to Period 29.
+native cache/object reuse and GPU soak execution deferred to Period 30.
 
 Goal: make native backend paths cacheable, diagnosable, persistent where useful,
 and stable under long-running workloads. Period 26 closed the portable planning,
@@ -527,7 +527,7 @@ See `docs/develop/period27/`.
 ## Period 28: Ray Tracing And Native Advanced Parity
 
 Status: completed as a planning, validation, and parity-routing slice. Native
-execution is deferred to Period 29.
+execution is deferred to Period 30.
 
 Goal: expose ray tracing and other high-end backend-specific capabilities
 through explicit capability-gated APIs and a maintained parity matrix.
@@ -544,10 +544,11 @@ See `docs/develop/period28/`.
 
 ## Period 29: Native Ray Tracing And Advanced Backend Execution
 
-Status: planned after Period 28.
+Status: completed for public runtime contracts.
 
-Goal: turn Period 28 planning APIs into executable Vulkan and Metal backend
-paths.
+Goal: turn Period 28 planning APIs into public runtime contracts that can own
+objects, validate resources, record command intent, and preserve backend
+metadata without exposing Vulkan or Metal private handles.
 
 - Phase 1: native acceleration structure builds
 - Phase 2: native ray tracing pipelines
@@ -559,6 +560,24 @@ paths.
 
 See `docs/develop/period29/`.
 
+## Period 30: Backend-Private Native Execution
+
+Status: planned after Period 29.
+
+Goal: attach the Period 29 runtime contracts to real Vulkan and Metal native
+objects, command encoders, and long-run validation paths.
+
+- Phase 1: Vulkan / Metal acceleration structure handles and build commands
+- Phase 2: Vulkan ray tracing pipelines and Metal executable RT pipeline
+  handles
+- Phase 3: native SBT record materialization and ray dispatch lowering
+- Phase 4: Metal acceleration/function-table dispatch integration
+- Phase 5: advanced native escape hatch lowering
+- Phase 6: native parity semantics and GPU soak validation
+- Phase 7: pixel-producing native advanced examples
+
+See `docs/develop/period30/`.
+
 ## Priority Notes
 
 - Period 22 is the current priority after Period 21. It closes the deferred
@@ -567,7 +586,7 @@ See `docs/develop/period29/`.
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced
   backend work.
-- Periods 20 through 29 are backend completion and parity periods, not a
+- Periods 20 through 30 are backend completion and parity periods, not a
   request to reshape already-completed historical API-shape periods.
 - Periods 12 through 18 are historical API, validation, and capability-scaffold
   periods. When they describe advanced lowering, treat Period 20+ as the
