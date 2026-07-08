@@ -260,7 +260,9 @@ index、重复 attribute location、非法 stride/offset，以及为 0 的 insta
 
 `TessellationDescriptor` 表示 future tessellation pipeline extension state。它由
 `DeviceFeatures.tessellation` gate，校验 patch control point count 和 required stage presence，
-并且在 backend lowering 设计完成前不会进入 base render pipeline path。
+并且在 backend lowering 完全可执行前不会进入 base render pipeline path。Period 27 新增
+`TessellationLowering` 和 `Device.planTessellationLowering(...)`，让高级应用能通过
+native feature report 检查 Vulkan patch metadata 或 Metal factor-buffer requirement。
 
 `MeshPipelineDescriptor` 表示 future mesh/task shader pipeline metadata。它由
 `DeviceFeatures.mesh_shaders` 和 `DeviceFeatures.task_shaders` gate，校验 mesh entry point、

@@ -15,6 +15,8 @@ Phase 5 finishes explicit backend-specific advanced access.
   binding for Vulkan sparse images and Metal sparse/tiled texture paths.
 - Connect runtime `Heap` reservations to native Vulkan memory suballocation and
   Metal `MTLHeap`-backed buffer/texture creation where supported.
+- Connect tessellation lowering plans to native Vulkan/Metal render pipeline
+  creation, shader stage attachment, and executable draw commands.
 
 ## Validation
 

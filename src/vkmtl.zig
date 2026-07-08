@@ -128,6 +128,7 @@ pub const TessellationPartitionMode = core.TessellationPartitionMode;
 pub const TessellationDescriptor = core.TessellationDescriptor;
 pub const VulkanTessellationLowering = core.VulkanTessellationLowering;
 pub const MetalTessellationLowering = core.MetalTessellationLowering;
+pub const TessellationLowering = core.TessellationLowering;
 pub const MeshPipelineDescriptor = core.MeshPipelineDescriptor;
 pub const VulkanMeshPipelineLowering = core.VulkanMeshPipelineLowering;
 pub const MetalMeshPipelineLowering = core.MetalMeshPipelineLowering;

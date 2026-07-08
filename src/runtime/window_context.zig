@@ -3899,6 +3899,15 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planTessellationLowering(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!core.TessellationLowering {
+        return try core.TessellationLowering.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5841,6 +5850,41 @@ test "runtime device plans sparse mapping commits from native capabilities" {
     try std.testing.expectEqual(@as(usize, 1), plan.total_regions);
     try std.testing.expectEqual(@as(usize, 1), plan.buffer_commits);
     try std.testing.expectEqual(@as(u64, 8192), plan.buffer_bytes);
+}
+
+test "runtime device plans tessellation lowering from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.tessellation = false;
+    report.native_features.tessellation = true;
+    report.limits.max_tessellation_control_points = 16;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test tessellation adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.TessellationDescriptor{
+        .control_point_count = 4,
+        .domain = .quad,
+        .partition_mode = .fractional_even,
+        .has_control_stage = true,
+        .has_evaluation_stage = true,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedTessellation, device.validateTessellationDescriptor(descriptor));
+
+    const lowering = try device.planTessellationLowering(descriptor);
+    try std.testing.expectEqual(@as(u32, 4), lowering.patchControlPoints());
+    try std.testing.expectEqual(core.TessellationDomain.quad, lowering.domain());
+    try std.testing.expect(lowering.requiresFactorBuffer());
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

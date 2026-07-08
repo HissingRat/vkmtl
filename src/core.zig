@@ -2248,6 +2248,51 @@ pub const MetalTessellationLowering = struct {
     }
 };
 
+pub const TessellationLowering = union(Backend) {
+    vulkan: VulkanTessellationLowering,
+    metal: MetalTessellationLowering,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: TessellationDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!TessellationLowering {
+        return switch (backend) {
+            .vulkan => .{ .vulkan = try VulkanTessellationLowering.fromDescriptor(descriptor, features, limits) },
+            .metal => .{ .metal = try MetalTessellationLowering.fromDescriptor(descriptor, features, limits) },
+        };
+    }
+
+    pub fn patchControlPoints(self: TessellationLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.patch_control_points,
+            .metal => |lowering| lowering.patch_control_points,
+        };
+    }
+
+    pub fn domain(self: TessellationLowering) TessellationDomain {
+        return switch (self) {
+            .vulkan => |lowering| lowering.domain,
+            .metal => |lowering| lowering.domain,
+        };
+    }
+
+    pub fn partitionMode(self: TessellationLowering) TessellationPartitionMode {
+        return switch (self) {
+            .vulkan => |lowering| lowering.partition_mode,
+            .metal => |lowering| lowering.partition_mode,
+        };
+    }
+
+    pub fn requiresFactorBuffer(self: TessellationLowering) bool {
+        return switch (self) {
+            .vulkan => false,
+            .metal => |lowering| lowering.requires_factor_buffer,
+        };
+    }
+};
+
 pub const MeshPipelineDescriptor = struct {
     label: ?[]const u8 = null,
     mesh_entry_point: []const u8,

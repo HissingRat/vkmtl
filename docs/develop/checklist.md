@@ -1611,6 +1611,16 @@ obvious render and binding blockers.
 - [x] Document native page binding and native heap-backed resource integration
   as deferred to Period 28 Phase 5.
 
+## Period 27 Phase 4 Checklist
+
+- [x] Add a backend-tagged tessellation lowering plan.
+- [x] Expose tessellation lowering through `Device` using native feature
+  reports.
+- [x] Keep public tessellation validation gated by usable features.
+- [x] Add focused runtime tests for native tessellation planning.
+- [x] Document native tessellation pipeline creation and shader stage attachment
+  as deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
