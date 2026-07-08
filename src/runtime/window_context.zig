@@ -3845,6 +3845,15 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planSparseBufferLowering(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!core.SparseBufferLowering {
+        return try core.SparseBufferLowering.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateSparseTextureDescriptor(self: Device, descriptor: core.SparseTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5709,6 +5718,36 @@ test "runtime device validates advanced descriptors against selected capabilitie
             .entry_point = "raygen",
         }},
     }));
+}
+
+test "runtime device plans sparse buffer lowering from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.sparse_buffers = false;
+    report.native_features.sparse_buffers = true;
+    report.limits.sparse_buffer_page_size = 4096;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test sparse adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.SparseBufferDescriptor{
+        .size = 8192,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedSparseBuffers, device.validateSparseBufferDescriptor(descriptor));
+
+    const lowering = try device.planSparseBufferLowering(descriptor);
+    try std.testing.expectEqual(core.SparseBufferLoweringMode.vulkan_sparse_binding, lowering.mode);
+    try std.testing.expectEqual(@as(u64, 2), lowering.page_count);
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

@@ -4372,11 +4372,56 @@ pub const SparseBufferDescriptor = struct {
     page_size: u64 = 0,
     usage: BufferUsage = .{ .storage = true },
 
-    pub fn validate(self: SparseBufferDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
-        if (!features.sparse_buffers) return AdvancedFeatureError.UnsupportedSparseBuffers;
-        const resolved_page_size = if (self.page_size != 0) self.page_size else limits.sparse_buffer_page_size;
+    pub fn resolvedPageSize(self: SparseBufferDescriptor, limits: DeviceLimits) u64 {
+        return if (self.page_size != 0) self.page_size else limits.sparse_buffer_page_size;
+    }
+
+    pub fn pageCount(self: SparseBufferDescriptor, limits: DeviceLimits) AdvancedFeatureError!u64 {
+        const resolved_page_size = self.resolvedPageSize(limits);
         if (resolved_page_size == 0) return AdvancedFeatureError.InvalidSparsePageSize;
         if (self.size == 0 or !isAlignedU64(self.size, resolved_page_size)) return AdvancedFeatureError.InvalidSparseRegion;
+        return self.size / resolved_page_size;
+    }
+
+    pub fn validate(self: SparseBufferDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.sparse_buffers) return AdvancedFeatureError.UnsupportedSparseBuffers;
+        _ = try self.pageCount(limits);
+    }
+};
+
+pub const SparseBufferLoweringMode = enum {
+    vulkan_sparse_binding,
+    metal_sparse_binding,
+};
+
+pub const SparseBufferLowering = struct {
+    backend: Backend,
+    mode: SparseBufferLoweringMode,
+    size: u64,
+    page_size: u64,
+    page_count: u64,
+    usage: BufferUsage,
+    requires_residency_commit: bool = true,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: SparseBufferDescriptor,
+        native_features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!SparseBufferLowering {
+        try descriptor.validate(native_features, limits);
+        const page_size = descriptor.resolvedPageSize(limits);
+        return .{
+            .backend = backend,
+            .mode = switch (backend) {
+                .vulkan => .vulkan_sparse_binding,
+                .metal => .metal_sparse_binding,
+            },
+            .size = descriptor.size,
+            .page_size = page_size,
+            .page_count = try descriptor.pageCount(limits),
+            .usage = descriptor.usage,
+        };
     }
 };
 
@@ -9054,6 +9099,14 @@ test "sparse resource descriptors validate feature gates and alignment" {
     try (SparseBufferDescriptor{
         .size = 8192,
     }).validate(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 });
+    const sparse_buffer_lowering = try SparseBufferLowering.fromDescriptor(.vulkan, .{
+        .size = 8192,
+    }, .{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 });
+    try std.testing.expectEqual(Backend.vulkan, sparse_buffer_lowering.backend);
+    try std.testing.expectEqual(SparseBufferLoweringMode.vulkan_sparse_binding, sparse_buffer_lowering.mode);
+    try std.testing.expectEqual(@as(u64, 4096), sparse_buffer_lowering.page_size);
+    try std.testing.expectEqual(@as(u64, 2), sparse_buffer_lowering.page_count);
+    try std.testing.expect(sparse_buffer_lowering.requires_residency_commit);
     try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, (SparseBufferDescriptor{
         .size = 1024,
     }).validate(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 }));

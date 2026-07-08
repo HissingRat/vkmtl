@@ -121,7 +121,9 @@ Sparse/tiled resource shape 由 `SparseBufferMappingDescriptor`、
 `SparseTextureMappingDescriptor` 和 `SparseMappingCommitDescriptor` 表示。它们会在
 `DeviceFeatures.sparse_buffers`、`DeviceFeatures.sparse_textures` 和
 `DeviceFeatures.tiled_textures` gate 后面校验 page size、region alignment 和 residency intent。
-Native residency management 仍是 future backend work。
+Native residency management 仍是 future backend work。Period 27 新增
+`SparseBufferLowering` 和 `Device.planSparseBufferLowering(...)`，让高级应用能在 runtime sparse
+object creation 启用之前检查 native sparse-buffer page size、page count 和 backend mapping。
 
 External interop shape 由 `ExternalHandleDescriptor`、`ExternalMemoryDescriptor`、
 `ExternalBufferDescriptor`、`ExternalTextureDescriptor` 和 `ExternalSemaphoreDescriptor`

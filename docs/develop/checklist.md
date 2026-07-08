@@ -1575,6 +1575,19 @@ obvious render and binding blockers.
 - [x] Assign native object pooling, native driver cache consumption, manifest
   I/O, persistent staging pools, and GPU-backed soak loops to Period 28 phases.
 
+## Period 27 Phase 1 Checklist
+
+- [x] Keep sparse buffer runtime creation behind feature gates until native
+  memory binding is complete.
+- [x] Add a backend-aware sparse buffer lowering plan based on native feature
+  reports.
+- [x] Validate page size, page count, alignment, and residency-commit
+  expectations in focused tests.
+- [x] Expose the planning API through `Device` without enabling ordinary sparse
+  buffer creation.
+- [x] Document native sparse buffer object creation/bind integration as
+  deferred to Period 28 Phase 5.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.
