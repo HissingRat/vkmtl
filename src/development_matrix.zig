@@ -748,7 +748,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "GenerateMipmapsDescriptor partial mip/layer ranges",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ validation matrix",
+        .deferred_to = "Period 32+ validation matrix",
         .validation = "partial ranges remain typed unsupported at runtime",
     },
     .{
@@ -777,7 +777,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "CopyTextureToTextureDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ validation matrix",
+        .deferred_to = "Period 32+ validation matrix",
         .validation = "depth/stencil and MSAA texture copies remain typed unsupported",
     },
     .{
@@ -792,7 +792,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "SamplerBorderColor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ validation matrix",
+        .deferred_to = "Period 32+ validation matrix",
         .validation = "custom border colors are intentionally absent from the portable enum",
     },
     .{
@@ -807,7 +807,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "Heap",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native heap-backed resources remain capability-gated",
     },
     .{
@@ -872,7 +872,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "DeviceFeatures.multi_surface",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native multiple-swapchain and multiple-layer presentation remains feature-gated",
     },
     .{
@@ -887,7 +887,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.presentModeSupport",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "surface-specific native present-mode/display-sync support remains conservative",
     },
     .{
@@ -902,7 +902,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.makeExternalMemory and Device.makeExternalBuffer",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native Vulkan memory import and Metal buffer wrapping remain feature-gated",
     },
     .{
@@ -917,7 +917,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "Device.makeExternalTexture",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native Vulkan image import and Metal texture wrapping remain feature-gated",
     },
     .{
@@ -932,7 +932,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "CommandBuffer.commitWithExternalSynchronization",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native semaphore/shared-event wait and signal integration remains feature-gated",
     },
     .{
@@ -947,7 +947,7 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .public_api = "NativeCommandInsertionDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "real command-buffer and command-encoder native handle views remain feature-gated",
     },
 };
@@ -1003,7 +1003,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "ObjectCachePolicy reuse mode",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "lookup diagnostics do not claim native handle reuse until lifetime-safe pools exist",
     },
     .{
@@ -1018,7 +1018,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "DriverPipelineCacheDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "VkPipelineCache and MTLBinaryArchive consumption remains explicit backend work",
     },
     .{
@@ -1033,7 +1033,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "RuntimeCachePlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "automatic manifest read/write is deferred until native cache ownership lands",
     },
     .{
@@ -1062,7 +1062,7 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .public_api = "run-stability-plan contract",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ validation matrix",
+        .deferred_to = "Period 32+ validation matrix",
         .validation = "current opt-in command is deterministic planning; windowed GPU soak loops remain future backend validation",
     },
 };
@@ -1131,7 +1131,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "SparseBufferLowering, SparseTextureLowering, and SparseMappingCommitPlan",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native sparse/tiled resource objects and page binding remain explicit backend work",
     },
     .{
@@ -1146,7 +1146,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "TessellationLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native tessellation pipeline creation and executable draw commands remain feature-gated",
     },
     .{
@@ -1161,7 +1161,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "MeshPipelineLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "native mesh/task pipeline creation and executable draw commands remain feature-gated",
     },
     .{
@@ -1226,7 +1226,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "AccelerationStructureBuildPlan",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "runtime acceleration structures own backend-private handle state and build command records",
     },
     .{
@@ -1241,7 +1241,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "RayTracingPipelineLowering",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "runtime ray tracing pipeline states own backend-private shader-group and function-table metadata",
     },
     .{
@@ -1256,7 +1256,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "RayDispatchPlan",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 32+ driver parity plan",
         .validation = "runtime SBT objects own backend-private records and dispatch command metadata",
     },
     .{
@@ -1271,7 +1271,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "MetalRayTracingMappingPlan",
         .vulkan_status = .validation_noop,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ driver parity plan",
+        .deferred_to = "Period 31 Phase 4 and Phase 5",
         .validation = "Metal execution mappings own backend-private function-table and acceleration-slot metadata",
     },
     .{
@@ -1286,15 +1286,15 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "NativeAdvancedClosurePlan",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ driver parity plan",
-        .validation = "native advanced closure plans expose backend-private runtime inventory while driver lowering remains explicit parity work",
+        .deferred_to = "Period 31 first-triangle Metal driver work, Period 32 first-triangle Vulkan driver work, and Period 32+ parity plan",
+        .validation = "native advanced closure plans expose backend-private runtime inventory while driver lowering remains split by backend and scope",
     },
     .{
         .feature = .parity_semantics_and_soak,
         .public_api = "backend parity matrix",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ validation matrix",
+        .deferred_to = "Period 32+ validation matrix",
         .validation = "backend parity plans include runtime diagnostics while GPU soak loops remain device-matrix work",
     },
     .{
@@ -1302,8 +1302,8 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "examples/ray_traced_triangle and future native advanced examples",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 31+ pixel-producing examples",
-        .validation = "ray_traced_triangle verifies backend-private runtime records while driver pixels remain future work",
+        .deferred_to = "Period 31 Phase 5 and Period 32 Phase 5",
+        .validation = "ray_traced_triangle verifies backend-private runtime records until Period31 makes Metal pixel-producing and Period32 makes Vulkan pixel-producing",
     },
 };
 
@@ -1726,7 +1726,9 @@ test "ray tracing and native parity backend matrix is complete" {
     var deferred_paths: usize = 0;
     var period29_targets: usize = 0;
     var period30_targets: usize = 0;
-    var period31_plus_targets: usize = 0;
+    var period31_targets: usize = 0;
+    var period32_targets: usize = 0;
+    var period32_plus_targets: usize = 0;
 
     for (ray_tracing_native_parity_matrix) |entry| {
         seen[@intFromEnum(entry.feature)] = true;
@@ -1738,7 +1740,9 @@ test "ray tracing and native parity backend matrix is complete" {
         if (entry.deferred_to) |target| {
             if (std.mem.startsWith(u8, target, "Period 29 ")) period29_targets += 1;
             if (std.mem.startsWith(u8, target, "Period 30 ")) period30_targets += 1;
-            if (std.mem.startsWith(u8, target, "Period 31+")) period31_plus_targets += 1;
+            if (std.mem.indexOf(u8, target, "Period 31") != null) period31_targets += 1;
+            if (std.mem.indexOf(u8, target, "Period 32 ") != null) period32_targets += 1;
+            if (std.mem.indexOf(u8, target, "Period 32+") != null) period32_plus_targets += 1;
         }
     }
 
@@ -1749,7 +1753,9 @@ test "ray tracing and native parity backend matrix is complete" {
     try std.testing.expectEqual(@as(usize, 0), deferred_paths);
     try std.testing.expectEqual(@as(usize, 0), period29_targets);
     try std.testing.expectEqual(@as(usize, 0), period30_targets);
-    try std.testing.expect(period31_plus_targets >= 7);
+    try std.testing.expect(period31_targets >= 2);
+    try std.testing.expect(period32_targets >= 2);
+    try std.testing.expect(period32_plus_targets >= 5);
 }
 
 test "validation case inventory is valid" {

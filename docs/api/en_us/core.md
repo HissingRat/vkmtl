@@ -359,7 +359,9 @@ Period 30 adds backend-private runtime records to those objects: acceleration
 structure handles/build records, ray tracing pipeline metadata, SBT records,
 dispatch records, Metal table metadata, advanced-inventory routing, and parity
 diagnostics. Driver-level ray tracing pixels and broader native parity are
-tracked in Period31+.
+split after Period30: Period31 owns the first Metal pixel-producing ray traced
+triangle, Period32 owns the first Vulkan pixel-producing ray traced triangle,
+and Period32+ owns broader native coverage.
 
 ## Bindings
 

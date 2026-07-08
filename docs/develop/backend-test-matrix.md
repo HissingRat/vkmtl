@@ -75,15 +75,15 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Full-texture mipmap generation | Native image blits | Native `generateMipmapsForTexture` | Available through blit encoder |
-| Partial mip/layer mipmap generation | Deferred | Deferred | Period 31+ validation matrix parity decision |
+| Partial mip/layer mipmap generation | Deferred | Deferred | Period 32+ validation matrix parity decision |
 | Unaligned `fillBuffer` | Staging-copy fallback | Native byte-range fill | Public API accepts unaligned ranges |
 | Texture copy array layers | Native `layer_count` | Per-slice fallback loop | `slice_count` is public |
 | Compatible color-format copies | Native compatible copy class | Native compatible copy class | unorm/sRGB pairs in same channel order |
-| Depth/stencil and MSAA copies | Deferred | Deferred | Period 31+ validation matrix semantic decision |
+| Depth/stencil and MSAA copies | Deferred | Deferred | Period 32+ validation matrix semantic decision |
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
-| Custom sampler border colors | Deferred | Deferred | Period 31+ validation matrix parity decision |
+| Custom sampler border colors | Deferred | Deferred | Period 32+ validation matrix parity decision |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
-| Native heap-backed resources | Deferred | Deferred | Period 31+ driver parity plan native integration |
+| Native heap-backed resources | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
 
 ## Period 25 Platform And Interop Expectations
@@ -91,32 +91,32 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Surface registry | Portable runtime state | Portable runtime state | `Device.makeSurfaceCollection(...)` |
-| Native multi-surface presentation | Deferred | Deferred | Period 31+ driver parity plan native escape hatch |
+| Native multi-surface presentation | Deferred | Deferred | Period 32+ driver parity plan native escape hatch |
 | Present-mode resolution | Portable runtime fallback | Portable runtime fallback | `PresentModeSupport` and `FramePacingDiagnostics` |
-| Native present-mode query | Deferred | Deferred | Period 31+ driver parity plan platform query |
+| Native present-mode query | Deferred | Deferred | Period 32+ driver parity plan platform query |
 | External memory / buffer wrappers | Portable runtime wrappers | Portable runtime wrappers | Feature-gated descriptors and lifetime tracking |
-| Native external memory import | Deferred | Deferred | Period 31+ driver parity plan native import |
+| Native external memory import | Deferred | Deferred | Period 32+ driver parity plan native import |
 | External texture wrapper | Portable runtime wrapper | Portable runtime wrapper | `ExternalTexture` wrapper |
-| Native external texture import | Deferred | Deferred | Period 31+ driver parity plan native import |
+| Native external texture import | Deferred | Deferred | Period 32+ driver parity plan native import |
 | External sync wrappers | Portable runtime wrappers | Portable runtime wrappers | `ExternalSynchronizationDescriptor` validation |
-| Native external sync wait/signal | Deferred | Deferred | Period 31+ driver parity plan native lowering |
+| Native external sync wait/signal | Deferred | Deferred | Period 32+ driver parity plan native lowering |
 | Native command insertion API | Capability-gated | Capability-gated | Encoder methods validate explicit callbacks |
-| Native command handle lowering | Deferred | Deferred | Period 31+ driver parity plan native handle view |
+| Native command handle lowering | Deferred | Deferred | Period 32+ driver parity plan native handle view |
 
 ## Period 26 Production Hardening Expectations
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Object-cache lookup diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | `cache_policy` and `objectCacheDiagnostics()` |
-| Native object handle pooling | Deferred | Deferred | Period 31+ driver parity plan native pools |
+| Native object handle pooling | Deferred | Deferred | Period 32+ driver parity plan native pools |
 | Driver cache planning | Portable runtime planning | Portable runtime planning | `Device.planDriverPipelineCache(...)` |
-| Native driver cache lowering | Deferred | Deferred | Period 31+ driver parity plan `VkPipelineCache` / `MTLBinaryArchive` consumption |
+| Native driver cache lowering | Deferred | Deferred | Period 32+ driver parity plan `VkPipelineCache` / `MTLBinaryArchive` consumption |
 | Runtime cache manifest planning | Portable runtime planning | Portable runtime planning | `Device.planRuntimeCache(...)` |
-| Runtime cache manifest I/O | Deferred | Deferred | Period 31+ driver parity plan automatic manifest read/write |
+| Runtime cache manifest I/O | Deferred | Deferred | Period 32+ driver parity plan automatic manifest read/write |
 | Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `runtimeDiagnostics()` |
 | Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
 | Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
-| GPU-backed soak loops | Deferred | Deferred | Period 31+ validation matrix native long-run validation |
+| GPU-backed soak loops | Deferred | Deferred | Period 32+ validation matrix native long-run validation |
 
 ## Period 27 Advanced Resource And Geometry Expectations
 
@@ -125,11 +125,11 @@ conservative until the relevant backend period lands.
 | Sparse buffer planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseBufferLowering(...)` |
 | Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseTextureLowering(...)` |
 | Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `Device.planSparseMappingCommit(...)` |
-| Native sparse/tiled page binding | Deferred | Deferred | Period 31+ driver parity plan native integration |
+| Native sparse/tiled page binding | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Tessellation lowering planning | Runtime patch metadata plan | Runtime factor-buffer requirement plan | `Device.planTessellationLowering(...)` |
-| Native tessellation pipeline | Deferred | Deferred | Period 31+ driver parity plan native integration |
+| Native tessellation pipeline | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Mesh/task lowering planning | Runtime task/mesh metadata plan | Runtime object/mesh metadata plan | `Device.planMeshPipelineLowering(...)` |
-| Native mesh/task pipeline | Deferred | Deferred | Period 31+ driver parity plan native integration |
+| Native mesh/task pipeline | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Advanced geometry examples | Feature-gated examples | Feature-gated examples | `examples/tessellation` and `examples/mesh_shader` |
 
 ## Period 28 Ray Tracing And Native Parity Expectations
@@ -137,14 +137,14 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
-| Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; direct driver handles deferred to Period 31+ |
+| Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; first-triangle Metal handles in Period 31, Vulkan handles in Period 32, broader parity in Period 32+ |
 | Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
-| Native ray tracing pipelines | Backend-private pipeline metadata | Backend-private pipeline metadata | Period 30 Phase 2 runtime native boundary; direct driver pipeline handles deferred to Period 31+ |
+| Native ray tracing pipelines | Backend-private pipeline metadata | Backend-private pipeline metadata | Period 30 Phase 2 runtime native boundary; first-triangle Metal pipeline in Period 31, Vulkan pipeline in Period 32, broader parity in Period 32+ |
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
-| Native ray dispatch commands | Backend-private dispatch records | Backend-private dispatch records | Period 30 Phase 3 runtime native boundary; direct driver dispatch deferred to Period 31+ |
+| Native ray dispatch commands | Backend-private dispatch records | Backend-private dispatch records | Period 30 Phase 3 runtime native boundary; first-triangle Metal dispatch in Period 31, Vulkan dispatch in Period 32, broader parity in Period 32+ |
 | Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
-| Native Metal ray tracing execution | Validation no-op | Backend-private table metadata | Period 30 Phase 4 runtime native boundary; direct Metal dispatch binding deferred to Period 31+ |
+| Native Metal ray tracing execution | Validation no-op | Backend-private table metadata | Period 30 Phase 4 runtime native boundary; first-triangle Metal dispatch binding in Period 31 |
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
-| Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; driver execution deferred to Period 31+ |
-| Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period31+ |
-| Native advanced examples | Backend-private runtime sample | Backend-private runtime sample | Period 30 Phase 7 example record checks; pixel examples deferred to Period31+ |
+| Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, broader driver execution in Period 32+ |
+| Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period32+ |
+| Native advanced examples | Period 32 target: Vulkan ray traced triangle window | Period 31 target: Metal ray traced triangle window | Period31/32 make the first ray traced triangles pixel-producing; broader parity remains Period32+ |

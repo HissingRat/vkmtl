@@ -277,7 +277,8 @@ backend-private runtime record：acceleration-structure 对象、scratch buffer 
 ray tracing pipeline state、shader binding table 创建、ray dispatch record，以及选择 Metal
 时的 Metal table metadata。在所选 backend 暴露 native ray tracing capability 之前，它会打印
 unsupported-feature 信息。它还不是实际输出像素的 ray tracing sample；driver-level ray tracing
-pixels 是 Period31+ 工作。
+pixels 的第一步会在 Period31 压实 Metal 路径。Period32 压实 Vulkan 的第一个出图三角形；
+更完整的 ray tracing 覆盖是 Period32+ 工作。
 
 运行：
 

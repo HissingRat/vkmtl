@@ -1,19 +1,19 @@
 # Phase 6: Native Parity And Soak Validation
 
 Phase 6 turns `BackendParitySemanticsPlan` into backend-private runtime
-validation diagnostics and routes true GPU-backed soak work to the Period31+
+validation diagnostics and routes true GPU-backed soak work to the Period32+
 validation matrix.
 
 Status: completed for runtime validation-plan and diagnostics output. Long-run
 GPU soak loops, device-matrix validation, and unresolved copy/format edge
-semantics remain Period31+ work.
+semantics remain Period32+ work.
 
 ## Scope
 
 - Add opt-in stability diagnostics derived from soak descriptors.
 - Keep partial mip/layer semantics documented as portable runtime behavior.
 - Keep depth/stencil/MSAA copy expansion and custom border-color expansion
-  routed to Period31+ validation until backend semantics are proven on real
+  routed to Period32+ validation until backend semantics are proven on real
   devices.
 
 ## Validation
@@ -26,4 +26,4 @@ semantics remain Period31+ work.
 ## Deferred
 
 - Long-running native validation on supported CI or local hosts is deferred to
-  Period31+ validation matrix work.
+  Period32+ validation matrix work.

@@ -3,10 +3,10 @@
 Phase 2 attaches `RayTracingPipelineState` to backend-private ray tracing
 pipeline handle metadata.
 
-Status: completed for vkmtl-owned backend-private pipeline state. Direct Vulkan
-ray tracing pipeline creation and Metal executable pipeline/function-table
-driver objects are deferred to the concrete Period 31+ backend-driver parity
-plan.
+Status: completed for vkmtl-owned backend-private pipeline state. First-triangle
+Metal executable pipeline/function-table driver objects are deferred to Period
+31, first-triangle Vulkan ray tracing pipeline creation is deferred to Period
+32, and broader pipeline parity remains Period 32+ work.
 
 ## Scope
 
@@ -22,7 +22,9 @@ plan.
 
 ## Deferred
 
-- Direct Vulkan ray tracing pipeline creation is deferred to Period 31+ driver
-  parity work.
-- Direct Metal executable pipeline and function-table object creation is
-  deferred to Period 31+ driver parity work.
+- Direct Metal executable pipeline and function-table object creation for the
+  first triangle is deferred to Period 31.
+- Direct Vulkan ray tracing pipeline creation for the first triangle is
+  deferred to Period 32.
+- Larger shader groups, callable shaders, and broader pipeline parity are
+  deferred to Period32+.

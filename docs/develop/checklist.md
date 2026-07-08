@@ -1758,11 +1758,12 @@ obvious render and binding blockers.
 - [x] Keep native advanced closure inventory queryable through
   `Device.planNativeAdvancedClosure(...)`.
 - [x] Add public-runtime-contract counts to `NativeAdvancedClosurePlan`.
-- [x] Retarget backend-private native advanced lowering to Period 31+ driver parity plan.
+- [x] Retarget backend-private native advanced lowering to Period 30
+  runtime-record work, with driver-level native execution left for Period32+.
 - [x] Add focused tests for public contract counts and deferred native counts.
 - [x] Document that native pools, persistent staging pools, sparse page binding,
   external imports/sync, command handle lowering, tessellation, and mesh/task
-  execution remain backend-private Period 31+ driver parity plan work.
+  execution remain backend-private Period 32+ driver parity plan work.
 
 ## Period 29 Phase 6 Checklist
 
@@ -1771,7 +1772,7 @@ obvious render and binding blockers.
 - [x] Decide depth/stencil and MSAA texture copies as typed unsupported
   behavior for now.
 - [x] Decide custom sampler border colors as native-extension-only semantics.
-- [x] Route GPU-backed soak validation to Period 31+ validation matrix while preserving
+- [x] Route GPU-backed soak validation to Period 32+ validation matrix while preserving
   opt-in `StabilityRunPlan` planning.
 - [x] Add focused core and runtime tests for parity plans.
 
@@ -1793,9 +1794,10 @@ obvious render and binding blockers.
 - [x] Preserve typed unsupported behavior through native feature gates.
 - [x] Add focused tests for scratch alignment, result resources, handle state,
   and build command recording.
-- [x] Document that direct `VkAccelerationStructureKHR` /
-  `MTLAccelerationStructure` driver calls remain Period 31+ parity work after
-  the backend-private runtime boundary is stable.
+- [x] Document that first-triangle Metal driver AS work moves to Period 31,
+  first-triangle Vulkan driver AS work moves to Period 32, and broader AS
+  parity remains Period 32+ after the backend-private runtime boundary is
+  stable.
 
 ## Period 30 Phase 2 Checklist
 
@@ -1805,8 +1807,10 @@ obvious render and binding blockers.
   limits in the backend-private runtime state.
 - [x] Keep ray tracing pipeline creation gated by native feature reports.
 - [x] Add focused tests for backend-private pipeline metadata.
-- [x] Document that direct Vulkan ray tracing pipeline and Metal executable
-  pipeline/function-table driver creation remains Period 31+ parity work.
+- [x] Document that first-triangle Metal executable pipeline/function-table
+  driver creation moves to Period 31, first-triangle Vulkan ray tracing
+  pipeline creation moves to Period 32, and broader pipeline parity remains
+  Period 32+.
 
 ## Period 30 Phase 3 Checklist
 
@@ -1817,8 +1821,9 @@ obvious render and binding blockers.
 - [x] Record backend-private ray dispatch command metadata from
   `CommandBuffer.dispatchRays(...)`.
 - [x] Keep SBT range and stride validation deterministic.
-- [x] Document that direct `cmdTraceRaysKHR` and equivalent Metal dispatch
-  driver calls remain Period 31+ parity work.
+- [x] Document that first-triangle Metal dispatch moves to Period 31,
+  first-triangle Vulkan `cmdTraceRaysKHR` moves to Period 32, and broader
+  dispatch parity remains Period 32+.
 
 ## Period 30 Phase 4 Checklist
 
@@ -1828,18 +1833,19 @@ obvious render and binding blockers.
   mapping object.
 - [x] Keep Vulkan behavior as a validation no-op for Metal-only mapping APIs.
 - [x] Add focused runtime tests for Metal table metadata.
-- [x] Document that direct Metal table population and ray dispatch binding
-  remain Period 31+ parity work.
+- [x] Document that direct Metal table population and first-triangle ray
+  dispatch binding move to Period 31.
 
 ## Period 30 Phase 5 Checklist
 
 - [x] Add backend-private runtime inventory counts to
   `NativeAdvancedClosurePlan`.
-- [x] Retarget driver-level native advanced implementation from Period 30
-  Phase 5 to the Period 31+ parity plan.
+- [x] Retarget first-triangle driver-level native implementation to Period 31
+  and Period 32, with broader driver parity left for Period32+.
 - [x] Keep public runtime-contract counts separate from backend-private
   inventory counts.
-- [x] Add focused tests for Phase5 inventory and Period31+ driver routing.
+- [x] Add focused tests for Phase5 inventory and Period31/32/32+ driver
+  routing.
 - [x] Update backend and development matrices for native advanced deferred
   targets.
 
@@ -1849,7 +1855,7 @@ obvious render and binding blockers.
   `BackendParitySemanticsPlan`.
 - [x] Generate `StabilityRunDiagnostics` from opt-in soak descriptors.
 - [x] Route GPU-backed soak loops and unresolved parity edge cases to the
-  Period31+ validation matrix.
+  Period32+ validation matrix.
 - [x] Add focused core and runtime tests for parity diagnostics.
 - [x] Update backend and development matrices for parity/soak routing.
 
@@ -1860,9 +1866,110 @@ obvious render and binding blockers.
   records.
 - [x] Keep unsupported adapters reporting clear feature-gate messages.
 - [x] Keep the example on public vkmtl APIs only.
-- [x] Document that true pixel-producing ray tracing examples are Period31+
-  driver/example work.
+- [x] Document that true pixel-producing ray tracing examples are split across
+  Period31 for Metal and Period32 for Vulkan, with broader examples left for
+  Period32+.
 - [x] Verify examples build by default.
+
+## Period 31 Phase 1 Checklist
+
+- [ ] Define the supported-device visual contract for
+  `examples/ray_traced_triangle`.
+- [ ] Keep unsupported Metal devices on clear feature-gated exits.
+- [ ] Keep the example using public vkmtl APIs only.
+- [ ] Decide the exact success text printed after pixels are visible.
+
+## Period 31 Phase 2 Checklist
+
+- [ ] Add backend-private Metal acceleration-structure bridge types.
+- [ ] Allocate a real `MTLAccelerationStructure` for the triangle.
+- [ ] Encode the Metal BLAS build.
+- [ ] Keep `MTLAccelerationStructure` hidden behind backend-private state.
+
+## Period 31 Phase 3 Checklist
+
+- [ ] Add the ray traced triangle shader source.
+- [ ] Verify the pinned Slang toolchain can lower the needed Metal ray tracing
+  shader path, or document the exact blocker.
+- [ ] Keep any temporary fallback backend-private and explicitly documented.
+
+## Period 31 Phase 4 Checklist
+
+- [ ] Create and bind the ray tracing output texture.
+- [ ] Encode the Metal ray dispatch path.
+- [ ] Preserve runtime dispatch diagnostics.
+- [ ] Keep the first Vulkan ray dispatch path deferred to Period32 and broader
+  Vulkan ray tracing parity deferred to Period32+.
+
+## Period 31 Phase 5 Checklist
+
+- [ ] Present the ray tracing output texture to the window.
+- [ ] Make the triangle visibly distinct from the background.
+- [ ] Remove `driver_pixels=deferred_period31_plus` from successful supported
+  Metal runs.
+
+## Period 31 Phase 6 Checklist
+
+- [ ] Keep `zig build test` passing.
+- [ ] Keep `zig build` passing.
+- [ ] Run `zig build run-ray-traced-triangle` on supported local Metal hardware.
+- [ ] Capture or document the visible result.
+
+## Period 31 Phase 7 Checklist
+
+- [ ] Update usage docs for the pixel-producing Metal ray traced triangle.
+- [ ] Update API docs for any user-facing behavior changes.
+- [ ] Route Vulkan ray traced triangle parity to Period32 and broader ray
+  tracing completeness to Period32+ docs.
+
+## Period 32 Phase 1 Checklist
+
+- [ ] Confirm required Vulkan KHR ray tracing extensions and feature structs.
+- [ ] Update Vulkan capability reports for driver-level ray tracing.
+- [ ] Print actionable unsupported messages for missing loader, ICD,
+  extension, or feature requirements.
+- [ ] Keep `examples/ray_traced_triangle` using public vkmtl APIs only.
+
+## Period 32 Phase 2 Checklist
+
+- [ ] Allocate triangle geometry buffers with device-address support.
+- [ ] Allocate acceleration-structure storage buffers.
+- [ ] Create a real `VkAccelerationStructureKHR`.
+- [ ] Encode and submit the Vulkan BLAS build.
+
+## Period 32 Phase 3 Checklist
+
+- [ ] Add or reuse embedded Slang shader source for Vulkan ray tracing stages.
+- [ ] Compile Vulkan ray tracing shaders to SPIR-V.
+- [ ] Validate ray generation, miss, and hit entry-point mapping.
+
+## Period 32 Phase 4 Checklist
+
+- [ ] Create `VkRayTracingPipelineKHR` with the example shader groups.
+- [ ] Query Vulkan shader group handles.
+- [ ] Materialize an aligned SBT buffer with valid device-address regions.
+
+## Period 32 Phase 5 Checklist
+
+- [ ] Create and bind the Vulkan ray tracing output image.
+- [ ] Submit `vkCmdTraceRaysKHR`.
+- [ ] Present the output image to the window.
+- [ ] Remove Vulkan driver-pixels-deferred messaging on supported Vulkan RT
+  devices.
+
+## Period 32 Phase 6 Checklist
+
+- [ ] Keep `zig build test` passing.
+- [ ] Keep `zig build` passing.
+- [ ] Run `zig build run-ray-traced-triangle -Dvulkan` on supported Vulkan ray
+  tracing hardware.
+- [ ] Document visible-result and unsupported-runtime behavior.
+
+## Period 32 Phase 7 Checklist
+
+- [ ] Update usage docs for the pixel-producing Vulkan ray traced triangle.
+- [ ] Update API docs if public behavior changed.
+- [ ] Route broader ray tracing completeness to concrete Period32+ docs.
 
 ## First Backend-Independent Triangle Checklist
 

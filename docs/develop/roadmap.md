@@ -510,7 +510,7 @@ See `docs/develop/period26/`.
 ## Period 27: Advanced Resource And Geometry Backend Completion
 
 Status: completed as a planning and validation slice. Native executable backend
-closure is deferred to Period 31+ driver parity plan.
+closure is deferred to Period 32+ driver parity plan.
 
 Goal: lower sparse/tiled resources, residency updates, tessellation, and
 mesh/task shader paths where the backend supports them.
@@ -571,29 +571,67 @@ record state while preserving public/backend boundaries.
 - Phase 2: backend-private ray tracing pipeline metadata
 - Phase 3: backend-private SBT records and ray dispatch records
 - Phase 4: backend-private Metal ray tracing table metadata
-- Phase 5: advanced native inventory and Period31+ driver routing
-- Phase 6: parity validation diagnostics and Period31+ soak routing
+- Phase 5: advanced native inventory and Period31/32/32+ driver routing
+- Phase 6: parity validation diagnostics and Period32+ soak routing
 - Phase 7: backend-private advanced example record checks
 
 See `docs/develop/period30/`.
 
-## Period 31+: Full Parity And Production Coverage
+## Period 31: Metal Ray Traced Triangle Driver Path
 
-Status: target only. Concrete periods and phases should be planned after Period
-30 native execution results are known.
+Status: planned.
+
+Goal: make `zig build run-ray-traced-triangle` produce visible ray-traced
+pixels in a window on supported macOS Metal devices.
+
+- Phase 1: example contract and capability gate
+- Phase 2: Metal acceleration structure driver bridge
+- Phase 3: Metal ray tracing shader path
+- Phase 4: ray dispatch to output texture
+- Phase 5: present ray tracing output
+- Phase 6: validation and screenshot gate
+- Phase 7: documentation and follow-up routing
+
+See `docs/develop/period31/`.
+
+## Period 32: Vulkan Ray Traced Triangle Driver Path
+
+Status: planned after Period 31.
+
+Goal: make `zig build run-ray-traced-triangle -Dvulkan` produce visible
+ray-traced pixels in a window on supported Vulkan ray tracing devices.
+
+- Phase 1: Vulkan capability gate and loader contract
+- Phase 2: Vulkan acceleration structure build
+- Phase 3: Vulkan ray tracing shader path
+- Phase 4: Vulkan ray tracing pipeline and SBT
+- Phase 5: Vulkan trace rays and present
+- Phase 6: validation on supported Vulkan hardware
+- Phase 7: documentation and Period32+ routing
+
+See `docs/develop/period32/`.
+
+## Period 32+: Full Parity And Production Coverage
+
+Status: target only after the Period32 Vulkan ray traced triangle is visible or
+explicitly documented as unsupported on a given Vulkan runtime.
 
 Goal: complete the long-tail parity, platform, diagnostics, validation,
 interop, and pressure-test work required before vkmtl can reasonably claim broad
 Vulkan / Metal workload coverage.
 
-See `docs/develop/period31+/target.md`.
+See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
 - Period 30 is complete as backend-private runtime record work. It does not
   claim driver-level ray tracing pixels or full native parity.
-- Period 31+ is target-only until Period 30 results are known. Split it into
-  concrete periods and phases when driver-level native execution work resumes.
+- Period 31 is the current priority. It must make the Metal ray traced triangle
+  visibly render in the window before Vulkan parity work resumes.
+- Period 32 follows Period31 and must make the Vulkan ray traced triangle
+  visibly render on supported Vulkan ray tracing devices.
+- Period 32+ remains target-only for broad parity until the Period31 Metal
+  triangle and Period32 Vulkan triangle are handled.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced

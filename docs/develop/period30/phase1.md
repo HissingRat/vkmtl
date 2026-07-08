@@ -4,11 +4,12 @@ Phase 1 attaches `AccelerationStructure` runtime objects to backend-private
 native acceleration-structure handle state and records build command metadata
 through the command buffer path.
 
-Status: completed for vkmtl-owned backend-private handle state. Direct driver
-object creation with `VkAccelerationStructureKHR` and `MTLAccelerationStructure`
-is still tracked as Period 31+ parity work because the public/runtime boundary
-now exists but the low-level driver calls need backend-specific extension
-enablement and hardware validation.
+Status: completed for vkmtl-owned backend-private handle state. First-triangle
+driver object creation is split into Period 31 for Metal
+`MTLAccelerationStructure` and Period 32 for Vulkan `VkAccelerationStructureKHR`.
+Broader acceleration-structure parity remains Period 32+ work because the
+public/runtime boundary now exists but the low-level driver calls need
+backend-specific extension enablement and hardware validation.
 
 ## Scope
 
@@ -27,8 +28,10 @@ enablement and hardware validation.
 
 ## Deferred
 
+- Direct Metal `MTLAccelerationStructure` allocation and encoder submission for
+  the first triangle are deferred to Period 31.
 - Direct Vulkan `VkAccelerationStructureKHR` allocation and
-  `vkCmdBuildAccelerationStructuresKHR` submission are deferred to the concrete
-  Period 31+ backend-driver parity plan.
-- Direct Metal `MTLAccelerationStructure` allocation and encoder submission are
-  deferred to the concrete Period 31+ backend-driver parity plan.
+  `vkCmdBuildAccelerationStructuresKHR` submission for the first triangle are
+  deferred to Period 32.
+- Compaction, update/refit, larger scenes, and broader AS semantics are
+  deferred to concrete Period32+ phases.

@@ -4,8 +4,8 @@ Phase 4 connects `MetalRayTracingExecutionMapping` to backend-private Metal
 function-table, intersection-table, and acceleration-structure slot metadata.
 
 Status: completed for vkmtl-owned Metal-specific mapping state. Direct Metal
-table population and dispatch binding remain deferred to the concrete Period
-31+ backend-driver parity plan.
+table population and first-triangle dispatch binding are deferred to Period 31.
+Broader Metal ray tracing parity remains Period32+ work.
 
 ## Scope
 
@@ -21,5 +21,7 @@ table population and dispatch binding remain deferred to the concrete Period
 ## Deferred
 
 - Direct `MTLAccelerationStructure` binding, function-table population, and
-  Metal ray dispatch resource binding are deferred to Period 31+ driver parity
-  work.
+  Metal ray dispatch resource binding for the first triangle are deferred to
+  Period 31.
+- Larger Metal ray tracing table layouts and completeness items are deferred to
+  Period32+.

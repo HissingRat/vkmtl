@@ -439,7 +439,9 @@ scratch-buffer validation, ray tracing pipeline state, shader binding table
 creation, ray dispatch records, and Metal table metadata when Metal is
 selected. It prints unsupported-feature messages until the selected backend
 exposes native ray tracing capabilities. It is not a pixel-rendering sample yet;
-driver-level ray tracing pixels are Period31+ work.
+the first Metal pixel-rendering path is tracked in Period31. Vulkan parity and
+broader ray tracing coverage are split after that: Period32 owns the first
+Vulkan pixel-rendering triangle, and Period32+ owns broader coverage.
 
 Run it with:
 

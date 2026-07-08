@@ -4,8 +4,9 @@ Phase 7 updates examples so they prove the backend-private runtime records added
 through Period 30.
 
 Status: completed for backend-private runtime verification in
-`examples/ray_traced_triangle`. Pixel-producing ray tracing examples are
-deferred to Period31+ driver/example work.
+`examples/ray_traced_triangle`. Pixel-producing first-triangle work is split:
+Metal is deferred to Period31, Vulkan is deferred to Period32, and broader
+examples remain Period32+ driver/example work.
 
 ## Scope
 
@@ -23,5 +24,6 @@ deferred to Period31+ driver/example work.
 
 ## Deferred
 
-- Pixel-producing ray tracing and other driver-executed native advanced
-  examples are deferred to Period31+.
+- Pixel-producing Metal ray traced triangle execution is deferred to Period31.
+- Pixel-producing Vulkan ray traced triangle execution is deferred to Period32.
+- Broader driver-executed native advanced examples are deferred to Period32+.

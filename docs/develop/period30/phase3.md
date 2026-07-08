@@ -4,8 +4,9 @@ Phase 3 lowers `ShaderBindingTable` and `CommandBuffer.dispatchRays(...)` to
 backend-private SBT record metadata and ray dispatch command records.
 
 Status: completed for vkmtl-owned SBT record state and dispatch command
-metadata. Direct Vulkan `cmdTraceRaysKHR` and equivalent Metal dispatch driver
-calls are deferred to the concrete Period 31+ backend-driver parity plan.
+metadata. First-triangle Metal dispatch is deferred to Period 31,
+first-triangle Vulkan `cmdTraceRaysKHR` is deferred to Period 32, and broader
+dispatch parity remains Period 32+ work.
 
 ## Scope
 
@@ -20,7 +21,9 @@ calls are deferred to the concrete Period 31+ backend-driver parity plan.
 
 ## Deferred
 
-- Copying Vulkan shader group handles into driver SBT buffers is deferred to
-  Period 31+ driver parity work.
-- Submitting Vulkan `cmdTraceRaysKHR` and Metal ray dispatch commands is
-  deferred to Period 31+ driver parity work.
+- Copying Vulkan shader group handles into driver SBT buffers for the first
+  triangle is deferred to Period 32.
+- Submitting the first Metal ray dispatch command is deferred to Period 31.
+- Submitting the first Vulkan `cmdTraceRaysKHR` command is deferred to Period
+  32.
+- Larger SBT layouts and broader dispatch semantics are deferred to Period32+.

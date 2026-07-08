@@ -12,14 +12,16 @@ intent for acceleration structures, ray tracing pipelines, shader binding
 tables, Metal ray tracing tables, advanced native inventory, and parity
 diagnostics.
 
-Direct driver execution for these high-end paths remains Period31+ work.
+Direct driver execution for these high-end paths is split after Period30:
+Period31 owns the first Metal ray traced triangle, Period32 owns the first
+Vulkan ray traced triangle, and Period32+ owns broader parity.
 
 ## Phase 1: Native Acceleration Structure Handles
 
 - Added backend-private acceleration-structure handle state.
 - Recorded backend-private build command metadata.
-- Kept direct `VkAccelerationStructureKHR` / `MTLAccelerationStructure` driver
-  calls deferred to Period31+.
+- Routed first-triangle Metal AS driver calls to Period31, first-triangle
+  Vulkan AS driver calls to Period32, and broader AS parity to Period32+.
 
 See `phase1.md`.
 
@@ -27,7 +29,8 @@ See `phase1.md`.
 
 - Added backend-private ray tracing pipeline metadata.
 - Preserved shader-group counts, function-table entries, and recursion limits.
-- Kept direct Vulkan / Metal driver pipeline handles deferred to Period31+.
+- Routed first-triangle Metal pipeline work to Period31, first-triangle Vulkan
+  pipeline work to Period32, and broader pipeline parity to Period32+.
 
 See `phase2.md`.
 
@@ -35,7 +38,8 @@ See `phase2.md`.
 
 - Added backend-private SBT record metadata.
 - Recorded backend-private ray dispatch command metadata.
-- Kept direct driver ray dispatch calls deferred to Period31+.
+- Routed first-triangle Metal dispatch to Period31, first-triangle Vulkan
+  dispatch to Period32, and broader dispatch parity to Period32+.
 
 See `phase3.md`.
 
@@ -43,8 +47,8 @@ See `phase3.md`.
 
 - Added backend-private Metal function-table and intersection-table metadata.
 - Tracked acceleration-structure slot requirements.
-- Kept direct Metal table population and dispatch binding deferred to
-  Period31+.
+- Routed direct Metal table population and first-triangle dispatch binding to
+  Period31.
 
 See `phase4.md`.
 
@@ -52,7 +56,8 @@ See `phase4.md`.
 
 - Added backend-private runtime inventory counts to
   `NativeAdvancedClosurePlan`.
-- Routed driver-level native advanced work to Period31+.
+- Routed first-triangle driver work to Period31 and Period32, with broader
+  native advanced work left for Period32+.
 
 See `phase5.md`.
 
@@ -60,7 +65,7 @@ See `phase5.md`.
 
 - Added backend-private parity validation-plan status.
 - Generated stability diagnostics from opt-in soak descriptors.
-- Routed GPU-backed soak loops to the Period31+ validation matrix.
+- Routed GPU-backed soak loops to the Period32+ validation matrix.
 
 See `phase6.md`.
 
@@ -68,6 +73,7 @@ See `phase6.md`.
 
 - Updated `examples/ray_traced_triangle` to verify backend-private runtime
   records.
-- Kept pixel-producing ray tracing examples deferred to Period31+.
+- Kept pixel-producing ray tracing examples deferred to Period31 for Metal and
+  Period32 for Vulkan.
 
 See `phase7.md`.
