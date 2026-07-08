@@ -241,8 +241,10 @@ Tracked in `docs/develop/period30/`.
 - [x] Backend-private native advanced example record checks. Pixel-producing
   native advanced examples are Period31+ work.
 
-Expected result: supported Vulkan and Metal adapters execute the high-end paths
-that Period 29 made expressible through public runtime contracts.
+Expected result: supported Vulkan and Metal adapters can validate and record the
+high-end paths that Period 29 made expressible through public runtime
+contracts. Direct driver execution for those high-end paths is routed to
+Period31+.
 
 ## Slice Checklist
 

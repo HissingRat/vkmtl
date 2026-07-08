@@ -560,21 +560,20 @@ metadata without exposing Vulkan or Metal private handles.
 
 See `docs/develop/period29/`.
 
-## Period 30: Backend-Private Native Execution
+## Period 30: Backend-Private Runtime Records
 
-Status: planned after Period 29.
+Status: completed.
 
-Goal: attach the Period 29 runtime contracts to real Vulkan and Metal native
-objects, command encoders, and long-run validation paths.
+Goal: attach the Period 29 runtime contracts to vkmtl-owned backend-private
+record state while preserving public/backend boundaries.
 
-- Phase 1: Vulkan / Metal acceleration structure handles and build commands
-- Phase 2: Vulkan ray tracing pipelines and Metal executable RT pipeline
-  handles
-- Phase 3: native SBT record materialization and ray dispatch lowering
-- Phase 4: Metal acceleration/function-table dispatch integration
-- Phase 5: advanced native escape hatch lowering
-- Phase 6: native parity semantics and GPU soak validation
-- Phase 7: pixel-producing native advanced examples
+- Phase 1: backend-private acceleration structure handle/build records
+- Phase 2: backend-private ray tracing pipeline metadata
+- Phase 3: backend-private SBT records and ray dispatch records
+- Phase 4: backend-private Metal ray tracing table metadata
+- Phase 5: advanced native inventory and Period31+ driver routing
+- Phase 6: parity validation diagnostics and Period31+ soak routing
+- Phase 7: backend-private advanced example record checks
 
 See `docs/develop/period30/`.
 
@@ -591,11 +590,10 @@ See `docs/develop/period31+/target.md`.
 
 ## Priority Notes
 
-- Period 30 is the current backend-completion priority. It connects Period 29
-  runtime contracts to real native backend execution.
+- Period 30 is complete as backend-private runtime record work. It does not
+  claim driver-level ray tracing pixels or full native parity.
 - Period 31+ is target-only until Period 30 results are known. Split it into
-  concrete periods and phases only after checking which advanced paths really
-  execute and which remain typed unsupported.
+  concrete periods and phases when driver-level native execution work resumes.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced

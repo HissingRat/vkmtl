@@ -3,32 +3,32 @@
 Status: target document. Concrete periods and phases should be planned after
 Period 30 is complete and its native execution results are known.
 
-Goal: move vkmtl from "advanced engine core paths can execute natively" to
-"most Vulkan and Metal workloads have either a portable vkmtl path, a
+Goal: move vkmtl from "advanced engine core paths have backend-private runtime
+records" to "most Vulkan and Metal workloads have either a portable vkmtl path, a
 capability-gated vkmtl path, or an explicit documented reason why the native API
 escape hatch is required."
 
-Period 30 is the backend-native execution pivot. Period 31+ is the long tail:
-semantic parity, platform coverage, pressure testing, and production behavior.
+Period 30 closed the backend-private runtime-record pivot. Period 31+ owns the
+long tail: driver execution, semantic parity, platform coverage, pressure
+testing, and production behavior.
 
 ## Expected Baseline After Period 30
 
-Period 31+ assumes Period 30 has closed the first native advanced execution
+Period 31+ assumes Period 30 has closed the first backend-private runtime record
 slice:
 
 - common buffer, texture, sampler, pipeline, render, compute, transfer, and
   presentation paths are usable through public vkmtl APIs
 - runtime Slang compilation, reflection, bind groups, pipeline creation, and
   shader caches are connected to real backend objects
-- acceleration structures, ray tracing pipelines, shader binding tables, and
-  ray dispatch have real native lowering on supported adapters
-- advanced native escape hatches have first executable backend paths
-- at least one advanced example can produce pixels on hardware that supports
-  the required backend features
+- acceleration structures, ray tracing pipelines, shader binding tables, Metal
+  ray tracing tables, and ray dispatch have backend-private runtime records
+- advanced native escape hatches have runtime inventory and driver-work routing
+- at least one advanced example verifies backend-private runtime records through
+  public vkmtl APIs
 
-If Period 30 does not finish one of these assumptions, move that missing item
-into the first concrete Period 31+ plan instead of treating this target as
-already satisfied.
+Driver-level native execution, GPU-backed soak loops, and pixel-producing ray
+tracing examples are the first concrete Period31+ planning targets.
 
 ## Coverage Target
 
@@ -157,4 +157,3 @@ Each concrete period should:
 - Do not claim near-total Vulkan/Metal parity from Period 30 alone.
 - Do not make the voxel world example the next blocker for backend completion.
 - Do not expose raw Vulkan or Metal details through ordinary portable APIs.
-
