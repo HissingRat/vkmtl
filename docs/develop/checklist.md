@@ -1758,11 +1758,11 @@ obvious render and binding blockers.
 - [x] Keep native advanced closure inventory queryable through
   `Device.planNativeAdvancedClosure(...)`.
 - [x] Add public-runtime-contract counts to `NativeAdvancedClosurePlan`.
-- [x] Retarget backend-private native advanced lowering to Period 30 Phase 5.
+- [x] Retarget backend-private native advanced lowering to Period 31+ driver parity plan.
 - [x] Add focused tests for public contract counts and deferred native counts.
 - [x] Document that native pools, persistent staging pools, sparse page binding,
   external imports/sync, command handle lowering, tessellation, and mesh/task
-  execution remain backend-private Period 30 Phase 5 work.
+  execution remain backend-private Period 31+ driver parity plan work.
 
 ## Period 29 Phase 6 Checklist
 
@@ -1830,6 +1830,18 @@ obvious render and binding blockers.
 - [x] Add focused runtime tests for Metal table metadata.
 - [x] Document that direct Metal table population and ray dispatch binding
   remain Period 31+ parity work.
+
+## Period 30 Phase 5 Checklist
+
+- [x] Add backend-private runtime inventory counts to
+  `NativeAdvancedClosurePlan`.
+- [x] Retarget driver-level native advanced implementation from Period 30
+  Phase 5 to the Period 31+ parity plan.
+- [x] Keep public runtime-contract counts separate from backend-private
+  inventory counts.
+- [x] Add focused tests for Phase5 inventory and Period31+ driver routing.
+- [x] Update backend and development matrices for native advanced deferred
+  targets.
 
 ## First Backend-Independent Triangle Checklist
 

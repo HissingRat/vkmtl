@@ -7201,9 +7201,12 @@ test "runtime device plans native advanced closure inventory" {
     });
     try std.testing.expectEqual(@as(usize, 3), plan.requested_features);
     try std.testing.expectEqual(@as(usize, 3), plan.deferred_native_features);
-    try std.testing.expectEqual(@as(usize, 3), plan.period30_phase5_features);
+    try std.testing.expectEqual(@as(usize, 3), plan.backend_private_runtime_features);
+    try std.testing.expectEqual(@as(usize, 0), plan.period30_phase5_features);
+    try std.testing.expectEqual(@as(usize, 3), plan.period31_plus_driver_features);
     try std.testing.expectEqual(@as(usize, 2), plan.public_runtime_contract_features);
     try std.testing.expect(plan.hasDeferredNativeWork());
+    try std.testing.expect(plan.hasBackendPrivateRuntimeInventory());
     try std.testing.expect(plan.hasPublicRuntimeContracts());
 }
 

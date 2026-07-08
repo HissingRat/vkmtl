@@ -510,7 +510,7 @@ See `docs/develop/period26/`.
 ## Period 27: Advanced Resource And Geometry Backend Completion
 
 Status: completed as a planning and validation slice. Native executable backend
-closure is deferred to Period 30 Phase 5.
+closure is deferred to Period 31+ driver parity plan.
 
 Goal: lower sparse/tiled resources, residency updates, tessellation, and
 mesh/task shader paths where the backend supports them.

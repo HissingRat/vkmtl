@@ -1379,7 +1379,7 @@ pub const native_advanced_closure_features = [_]NativeAdvancedClosureFeature{
 
 pub fn nativeAdvancedClosureTarget(feature: NativeAdvancedClosureFeature) []const u8 {
     _ = feature;
-    return "Period 30 Phase 5";
+    return "Period 31+ driver parity plan";
 }
 
 pub fn nativeAdvancedClosureHasPublicRuntimeContract(feature: NativeAdvancedClosureFeature) bool {
@@ -1410,9 +1410,11 @@ pub const NativeAdvancedClosureDescriptor = struct {
 pub const NativeAdvancedClosurePlan = struct {
     requested_features: usize,
     public_runtime_contract_features: usize,
+    backend_private_runtime_features: usize,
     deferred_native_features: usize,
     period29_phase5_features: usize,
     period30_phase5_features: usize,
+    period31_plus_driver_features: usize,
 
     pub fn fromDescriptor(descriptor: NativeAdvancedClosureDescriptor) NativeAdvancedClosurePlan {
         var public_contracts: usize = 0;
@@ -1422,14 +1424,20 @@ pub const NativeAdvancedClosurePlan = struct {
         return .{
             .requested_features = descriptor.features.len,
             .public_runtime_contract_features = public_contracts,
+            .backend_private_runtime_features = descriptor.features.len,
             .deferred_native_features = descriptor.features.len,
             .period29_phase5_features = 0,
-            .period30_phase5_features = descriptor.features.len,
+            .period30_phase5_features = 0,
+            .period31_plus_driver_features = descriptor.features.len,
         };
     }
 
     pub fn hasPublicRuntimeContracts(self: NativeAdvancedClosurePlan) bool {
         return self.public_runtime_contract_features != 0;
+    }
+
+    pub fn hasBackendPrivateRuntimeInventory(self: NativeAdvancedClosurePlan) bool {
+        return self.backend_private_runtime_features != 0;
     }
 
     pub fn hasDeferredNativeWork(self: NativeAdvancedClosurePlan) bool {
@@ -9758,10 +9766,13 @@ test "native advanced closure plan tracks deferred feature count" {
     const plan = NativeAdvancedClosurePlan.fromDescriptor(.{});
     try std.testing.expectEqual(native_advanced_closure_features.len, plan.requested_features);
     try std.testing.expect(plan.hasPublicRuntimeContracts());
+    try std.testing.expect(plan.hasBackendPrivateRuntimeInventory());
+    try std.testing.expectEqual(native_advanced_closure_features.len, plan.backend_private_runtime_features);
     try std.testing.expectEqual(native_advanced_closure_features.len, plan.deferred_native_features);
-    try std.testing.expectEqual(native_advanced_closure_features.len, plan.period30_phase5_features);
+    try std.testing.expectEqual(@as(usize, 0), plan.period30_phase5_features);
+    try std.testing.expectEqual(native_advanced_closure_features.len, plan.period31_plus_driver_features);
     try std.testing.expect(plan.hasDeferredNativeWork());
-    try std.testing.expectEqualStrings("Period 30 Phase 5", nativeAdvancedClosureTarget(.native_sparse_page_binding));
+    try std.testing.expectEqualStrings("Period 31+ driver parity plan", nativeAdvancedClosureTarget(.native_sparse_page_binding));
     try std.testing.expect(nativeAdvancedClosureHasPublicRuntimeContract(.native_sparse_page_binding));
     try std.testing.expect(!nativeAdvancedClosureHasPublicRuntimeContract(.persistent_staging_pools));
 
@@ -9772,7 +9783,9 @@ test "native advanced closure plan tracks deferred feature count" {
         },
     });
     try std.testing.expectEqual(@as(usize, 0), focused.period29_phase5_features);
-    try std.testing.expectEqual(@as(usize, 2), focused.period30_phase5_features);
+    try std.testing.expectEqual(@as(usize, 2), focused.backend_private_runtime_features);
+    try std.testing.expectEqual(@as(usize, 0), focused.period30_phase5_features);
+    try std.testing.expectEqual(@as(usize, 2), focused.period31_plus_driver_features);
     try std.testing.expectEqual(@as(usize, 2), focused.public_runtime_contract_features);
 }
 

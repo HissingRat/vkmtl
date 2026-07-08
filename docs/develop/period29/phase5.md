@@ -10,7 +10,7 @@ Phase 5 closes the native advanced backlog.
   native advanced backend work.
 - Added `public_runtime_contract_features` to `NativeAdvancedClosurePlan` so the
   plan distinguishes API/runtime contracts from backend-private native lowering.
-- Retargeted backend-private advanced native lowering to Period 30 Phase 5.
+- Retargeted backend-private advanced native lowering to Period 31+ driver parity plan.
 - Kept `deferred_native_features` as the count of native backend work that still
   needs private Vulkan/Metal implementation.
 
@@ -26,4 +26,4 @@ Phase 5 closes the native advanced backlog.
   consumption, automatic runtime cache manifest read/write, heap-backed native
   resources, sparse/tiled page binding, external imports/sync, native command
   handle lowering, tessellation execution, and mesh/task execution are deferred
-  to Period 30 Phase 5.
+  to Period 31+ driver parity plan.
