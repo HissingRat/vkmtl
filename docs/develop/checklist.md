@@ -1369,12 +1369,12 @@ obvious render and binding blockers.
 
 ## Period 23 Phase 3 Checklist
 
-- [ ] Query queue capabilities from backend runtimes.
-- [ ] Route queue descriptors through runtime queue views.
-- [ ] Preserve graphics queue as the default fallback path.
-- [ ] Lower dedicated compute/transfer queue selection where supported.
-- [ ] Add queue-selection tests.
-- [ ] Document backend queue limitations.
+- [x] Expose runtime queue capabilities for descriptor validation.
+- [x] Route queue descriptors through runtime queue views.
+- [x] Preserve graphics queue as the default fallback path.
+- [x] Return logical compute/transfer queue views where feature gates allow them.
+- [x] Add queue-selection tests.
+- [x] Document backend queue limitations.
 
 ## Period 23 Phase 4 Checklist
 

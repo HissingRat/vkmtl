@@ -2068,6 +2068,7 @@ pub const CommandBuffer = struct {
     label_value: ?[]const u8 = null,
     alive: bool = true,
     uses_current_drawable_pass: bool = false,
+    queue_kind_value: core.QueueKind = .graphics,
     features_value: core.DeviceFeatures = .{},
     debug: core.CommandBufferDebugState = .{},
     debug_groups: core.DebugGroupStack = .{},
@@ -2173,6 +2174,10 @@ pub const CommandBuffer = struct {
 
     pub fn state(self: CommandBuffer) core.CommandBufferState {
         return self.debug.status();
+    }
+
+    pub fn queueKind(self: CommandBuffer) core.QueueKind {
+        return self.queue_kind_value;
     }
 
     pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
@@ -3097,6 +3102,7 @@ pub const Queue = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     impl: *BackendRuntime,
+    label_value: ?[]const u8 = null,
     features_value: core.DeviceFeatures,
     kind_value: core.QueueKind = .graphics,
 
@@ -3106,6 +3112,10 @@ pub const Queue = struct {
 
     pub fn kind(self: Queue) core.QueueKind {
         return self.kind_value;
+    }
+
+    pub fn label(self: Queue) ?[]const u8 {
+        return self.label_value;
     }
 
     pub fn makeCommandBuffer(self: *Queue) !CommandBuffer {
@@ -3128,6 +3138,7 @@ pub const Queue = struct {
             .backend = self.backend,
             .tracker = self.tracker,
             .label_value = descriptor.label,
+            .queue_kind_value = self.kind_value,
             .features_value = self.features_value,
             .debug = debug,
             .impl = impl,
@@ -3278,11 +3289,25 @@ pub const Device = struct {
         };
     }
 
+    pub fn queueCapabilities(self: Device) core.QueueCapabilities {
+        _ = self;
+        return .{
+            .graphics = true,
+            .compute = true,
+            .transfer = true,
+            .present = true,
+        };
+    }
+
     pub fn queueWithDescriptor(self: *Device, descriptor: core.QueueDescriptor) !Queue {
-        try descriptor.validate(self.features(), .{});
-        if (descriptor.kind != .graphics) return core.CommandEncodingError.UnsupportedMultiQueue;
+        const device_features = self.features();
+        try descriptor.validate(device_features, self.queueCapabilities());
         var queue_view = self.queue();
-        queue_view.kind_value = .graphics;
+        queue_view.label_value = descriptor.label;
+        queue_view.kind_value = if (descriptor.kind == .graphics or !device_features.multi_queue)
+            .graphics
+        else
+            descriptor.kind;
         return queue_view;
     }
 
@@ -3821,6 +3846,11 @@ pub const WindowContext = struct {
     pub fn queueWithDescriptor(self: *WindowContext, descriptor: core.QueueDescriptor) !Queue {
         var device_view = self.device();
         return try device_view.queueWithDescriptor(descriptor);
+    }
+
+    pub fn queueCapabilities(self: *WindowContext) core.QueueCapabilities {
+        var device_view = self.device();
+        return device_view.queueCapabilities();
     }
 
     pub fn surface(self: *WindowContext) Surface {
@@ -5013,6 +5043,10 @@ test "window context exposes device and queue views" {
     var device = context.device();
     const queue_view = context.queue();
     const descriptor_queue = try device.queueWithDescriptor(.{});
+    const fallback_compute_queue = try device.queueWithDescriptor(.{
+        .kind = .compute,
+        .allow_fallback = true,
+    });
     var surface_view = context.surface();
     const swapchain_view = context.swapchain();
     const surface_swapchain_view = surface_view.swapchain();
@@ -5021,6 +5055,8 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.Backend.vulkan, queue_view.selectedBackend());
     try std.testing.expectEqual(core.QueueKind.graphics, queue_view.kind());
     try std.testing.expectEqual(core.QueueKind.graphics, descriptor_queue.kind());
+    try std.testing.expectEqual(core.QueueKind.graphics, fallback_compute_queue.kind());
+    try std.testing.expect(context.queueCapabilities().compute);
     try std.testing.expectError(core.CommandEncodingError.UnsupportedMultiQueue, device.queueWithDescriptor(.{
         .kind = .compute,
         .allow_fallback = false,
@@ -5033,6 +5069,40 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
     try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
     try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
+}
+
+test "runtime queue descriptor selects logical queue view when multi queue is supported" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.multi_queue = true;
+    report.features.dedicated_compute_queue = true;
+    report.features.dedicated_transfer_queue = true;
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = report,
+    };
+
+    const compute_queue = try device.queueWithDescriptor(.{
+        .label = "compute queue",
+        .kind = .compute,
+        .require_dedicated = true,
+    });
+    try std.testing.expectEqual(core.QueueKind.compute, compute_queue.kind());
+    try std.testing.expectEqualStrings("compute queue", compute_queue.label().?);
+
+    const transfer_queue = try device.queueWithDescriptor(.{
+        .kind = .transfer,
+        .require_dedicated = true,
+    });
+    try std.testing.expectEqual(core.QueueKind.transfer, transfer_queue.kind());
 }
 
 test "runtime explicit barriers update resource usage state" {

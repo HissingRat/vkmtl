@@ -448,9 +448,12 @@ native reset/pooling is implemented.
 `QueueKind`, `QueueCapabilities`, and `QueueDescriptor` define the multi-queue
 selection vocabulary. `Device.queue()` still returns the default graphics queue,
 and `Device.queueWithDescriptor(.{})` is the explicit form of that default.
-Dedicated compute/transfer queues and queue ownership transfers are represented
-by descriptors and feature gates, but runtime selection currently returns typed
-unsupported errors for non-graphics queues.
+A non-graphics descriptor falls back to the graphics queue when `multi_queue`
+is not supported and fallback is allowed. When `DeviceFeatures.multi_queue` and
+the relevant dedicated queue gate are enabled, `queueWithDescriptor(...)`
+returns a logical compute or transfer queue view. Current backends still record
+commands through the existing native command queue until dedicated native queue
+families are enabled.
 
 Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
