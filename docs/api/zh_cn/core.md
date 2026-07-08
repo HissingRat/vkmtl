@@ -274,7 +274,10 @@ Ray tracing 被隔离在高级 descriptor 里：`AccelerationStructureDescriptor
 `RayTracingPipelineDescriptor` 和 `ShaderBindingTableDescriptor`。它们会在
 `DeviceFeatures.acceleration_structures` 和 `DeviceFeatures.ray_tracing` gate 后面校验
 acceleration structure shape、ray-generation shader group、recursion depth 和 shader binding
-table alignment。
+table alignment。Period 28 新增 `AccelerationStructureBuildDescriptor`、
+`AccelerationStructureBuildPlan` 和 `Device.planAccelerationStructureBuild(...)`，让应用能在
+native acceleration-structure object 可执行前检查 geometry count、build/update mode、
+result size、scratch size 和 compaction intent。
 
 ## Binding
 

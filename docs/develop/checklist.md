@@ -1639,6 +1639,17 @@ obvious render and binding blockers.
 - [x] Document native sparse/tiled, tessellation, and mesh/task execution as
   deferred to Period 28 Phase 5.
 
+## Period 28 Phase 1 Checklist
+
+- [x] Add acceleration-structure geometry and build descriptors.
+- [x] Add acceleration-structure build planning that records result and scratch
+  sizes.
+- [x] Expose acceleration-structure build planning through `Device` using native
+  feature reports.
+- [x] Keep public acceleration-structure validation gated by usable features.
+- [x] Document native acceleration-structure object creation and build command
+  lowering as deferred to Period 29 Phase 1.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

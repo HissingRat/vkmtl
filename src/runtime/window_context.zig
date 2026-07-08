@@ -3925,6 +3925,14 @@ pub const Device = struct {
         try descriptor.validate(self.features());
     }
 
+    pub fn planAccelerationStructureBuild(self: Device, descriptor: core.AccelerationStructureBuildDescriptor) core.AdvancedFeatureError!core.AccelerationStructureBuildPlan {
+        return try core.AccelerationStructureBuildPlan.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+        );
+    }
+
     pub fn validateRayTracingPipelineDescriptor(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5933,6 +5941,48 @@ test "runtime device plans mesh lowering from native capabilities" {
     try std.testing.expectEqual(@as(u32, 64), lowering.meshThreadsPerThreadgroup());
     try std.testing.expectEqual(@as(u32, 32), lowering.taskThreadsPerThreadgroup());
     try std.testing.expect(lowering.hasTaskStage());
+}
+
+test "runtime device plans acceleration structure builds from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.acceleration_structures = false;
+    report.native_features.acceleration_structures = true;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test acceleration adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.AccelerationStructureBuildDescriptor{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 2,
+            .allow_update = true,
+        },
+        .geometries = &.{.{
+            .kind = .triangles,
+            .primitive_count = 2,
+            .vertex_stride = 24,
+        }},
+        .mode = .update,
+        .scratch_alignment = 512,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedAccelerationStructures, device.validateAccelerationStructureDescriptor(descriptor.acceleration_structure));
+
+    const plan = try device.planAccelerationStructureBuild(descriptor);
+    try std.testing.expectEqual(core.Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(core.AccelerationStructureBuildMode.update, plan.mode);
+    try std.testing.expectEqual(@as(u32, 2), plan.primitive_count);
+    try std.testing.expect(plan.update_scratch_size > 0);
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

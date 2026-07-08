@@ -330,7 +330,11 @@ Ray tracing is isolated in advanced descriptors:
 `ShaderBindingTableDescriptor`. They validate acceleration structure shape,
 ray-generation shader group presence, recursion depth, and shader binding table
 alignment behind `DeviceFeatures.acceleration_structures` and
-`DeviceFeatures.ray_tracing`.
+`DeviceFeatures.ray_tracing`. Period 28 adds
+`AccelerationStructureBuildDescriptor`, `AccelerationStructureBuildPlan`, and
+`Device.planAccelerationStructureBuild(...)` so applications can inspect
+geometry counts, build/update mode, result size, scratch size, and compaction
+intent before native acceleration-structure objects are executable.
 
 ## Bindings
 

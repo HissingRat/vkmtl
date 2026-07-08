@@ -2434,6 +2434,62 @@ pub const AccelerationStructureInstanceDescriptor = struct {
     }
 };
 
+pub const AccelerationStructureGeometryKind = enum {
+    triangles,
+    aabbs,
+    instances,
+};
+
+pub const AccelerationStructureGeometryDescriptor = struct {
+    kind: AccelerationStructureGeometryKind = .triangles,
+    primitive_count: u32,
+    vertex_stride: u32 = 0,
+    is_opaque: bool = true,
+
+    pub fn validate(self: AccelerationStructureGeometryDescriptor) AdvancedFeatureError!void {
+        if (self.primitive_count == 0) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+    }
+};
+
+pub const AccelerationStructureBuildMode = enum {
+    build,
+    update,
+};
+
+pub const AccelerationStructureBuildFlags = struct {
+    allow_update: bool = false,
+    prefer_fast_trace: bool = false,
+    prefer_fast_build: bool = false,
+    minimize_memory: bool = false,
+    allow_compaction: bool = false,
+};
+
+pub const AccelerationStructureBuildDescriptor = struct {
+    acceleration_structure: AccelerationStructureDescriptor,
+    geometries: []const AccelerationStructureGeometryDescriptor = &.{},
+    mode: AccelerationStructureBuildMode = .build,
+    flags: AccelerationStructureBuildFlags = .{},
+    scratch_alignment: u64 = 256,
+
+    pub fn validate(self: AccelerationStructureBuildDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        try self.acceleration_structure.validate(features);
+        if (self.scratch_alignment == 0 or !isAlignedU64(self.scratch_alignment, 8)) {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+        if (self.mode == .update and !self.acceleration_structure.allow_update and !self.flags.allow_update) {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+        var primitive_count: u32 = 0;
+        for (self.geometries) |geometry| {
+            try geometry.validate();
+            primitive_count +|= geometry.primitive_count;
+        }
+        if (self.geometries.len != 0 and primitive_count != self.acceleration_structure.primitive_count) {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+    }
+};
+
 pub fn estimateAccelerationStructureBuildSizes(descriptor: AccelerationStructureDescriptor) AccelerationStructureBuildSizes {
     const primitive_count = @as(u64, @max(descriptor.primitive_count, 1));
     const base_size: u64 = switch (descriptor.kind) {
@@ -2451,6 +2507,47 @@ pub fn estimateAccelerationStructureBuildSizes(descriptor: AccelerationStructure
         .update_scratch_size = if (descriptor.allow_update) result_size else 0,
     };
 }
+
+pub const AccelerationStructureBuildPlan = struct {
+    backend: Backend,
+    kind: AccelerationStructureKind,
+    mode: AccelerationStructureBuildMode,
+    primitive_count: u32,
+    geometry_count: u32,
+    result_size: u64,
+    scratch_size: u64,
+    update_scratch_size: u64 = 0,
+    scratch_alignment: u64,
+    allow_compaction: bool = false,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: AccelerationStructureBuildDescriptor,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!AccelerationStructureBuildPlan {
+        try descriptor.validate(features);
+        const sizes = estimateAccelerationStructureBuildSizes(descriptor.acceleration_structure);
+        return .{
+            .backend = backend,
+            .kind = descriptor.acceleration_structure.kind,
+            .mode = descriptor.mode,
+            .primitive_count = descriptor.acceleration_structure.primitive_count,
+            .geometry_count = if (descriptor.geometries.len == 0) 1 else @intCast(descriptor.geometries.len),
+            .result_size = sizes.result_size,
+            .scratch_size = alignForwardU64(sizes.scratch_size, descriptor.scratch_alignment),
+            .update_scratch_size = if (descriptor.mode == .update or descriptor.acceleration_structure.allow_update or descriptor.flags.allow_update)
+                alignForwardU64(sizes.update_scratch_size, descriptor.scratch_alignment)
+            else
+                0,
+            .scratch_alignment = descriptor.scratch_alignment,
+            .allow_compaction = descriptor.flags.allow_compaction,
+        };
+    }
+
+    pub fn requiresUpdateSource(self: AccelerationStructureBuildPlan) bool {
+        return self.mode == .update;
+    }
+};
 
 pub const RayTracingShaderGroupKind = enum {
     ray_generation,
@@ -5835,6 +5932,11 @@ fn sparseCeilDivU32(numerator: u32, denominator: u32) u32 {
 
 fn isAlignedU64(value: u64, alignment: u64) bool {
     return alignment == 0 or value % alignment == 0;
+}
+
+fn alignForwardU64(value: u64, alignment: u64) u64 {
+    if (alignment == 0 or isAlignedU64(value, alignment)) return value;
+    return value + (alignment - value % alignment);
 }
 
 fn defaultViewDimension(texture: TextureDescriptor) TextureViewDimension {
@@ -9630,6 +9732,47 @@ test "acceleration structure descriptors estimate build sizes" {
     try (AccelerationStructureInstanceDescriptor{
         .instance_count = 1,
     }).validate(.{ .acceleration_structures = true });
+}
+
+test "acceleration structure build plans validate geometry and scratch requirements" {
+    const geometries = [_]AccelerationStructureGeometryDescriptor{
+        .{ .kind = .triangles, .primitive_count = 2, .vertex_stride = 32 },
+        .{ .kind = .aabbs, .primitive_count = 1 },
+    };
+    const plan = try AccelerationStructureBuildPlan.fromDescriptor(.vulkan, .{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 3,
+            .allow_update = true,
+        },
+        .geometries = geometries[0..],
+        .mode = .update,
+        .flags = .{ .allow_compaction = true },
+        .scratch_alignment = 512,
+    }, .{ .acceleration_structures = true });
+    try std.testing.expectEqual(Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(AccelerationStructureBuildMode.update, plan.mode);
+    try std.testing.expectEqual(@as(u32, 3), plan.primitive_count);
+    try std.testing.expectEqual(@as(u32, 2), plan.geometry_count);
+    try std.testing.expect(isAlignedU64(plan.scratch_size, 512));
+    try std.testing.expect(plan.update_scratch_size > 0);
+    try std.testing.expect(plan.requiresUpdateSource());
+    try std.testing.expect(plan.allow_compaction);
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureBuildDescriptor{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 2,
+        },
+        .geometries = geometries[0..],
+    }).validate(.{ .acceleration_structures = true }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureBuildDescriptor{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 1,
+        },
+        .mode = .update,
+    }).validate(.{ .acceleration_structures = true }));
 }
 
 test "Vulkan ray tracing lowering counts shader groups" {
