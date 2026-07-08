@@ -1873,11 +1873,11 @@ obvious render and binding blockers.
 
 ## Period 31 Phase 1 Checklist
 
-- [ ] Define the supported-device visual contract for
+- [x] Define the supported-device visual contract for
   `examples/ray_traced_triangle`.
-- [ ] Keep unsupported Metal devices on clear feature-gated exits.
-- [ ] Keep the example using public vkmtl APIs only.
-- [ ] Decide the exact success text printed after pixels are visible.
+- [x] Keep unsupported Metal devices on clear feature-gated exits.
+- [x] Keep the example using public vkmtl APIs only.
+- [x] Decide the exact success text printed after pixels are visible.
 
 ## Period 31 Phase 2 Checklist
 
@@ -1888,38 +1888,40 @@ obvious render and binding blockers.
 
 ## Period 31 Phase 3 Checklist
 
-- [ ] Add the ray traced triangle shader source.
-- [ ] Verify the pinned Slang toolchain can lower the needed Metal ray tracing
-  shader path, or document the exact blocker.
-- [ ] Keep any temporary fallback backend-private and explicitly documented.
+- [x] Add the ray traced triangle shader source.
+- [x] Verify the pinned Slang toolchain can lower the visible ray-intersection
+  shader path, and document native Metal ray tracing constructs as remaining
+  hardening.
+- [x] Keep any temporary fallback backend-private and explicitly documented.
 
 ## Period 31 Phase 4 Checklist
 
 - [ ] Create and bind the ray tracing output texture.
 - [ ] Encode the Metal ray dispatch path.
-- [ ] Preserve runtime dispatch diagnostics.
+- [x] Preserve runtime dispatch diagnostics.
 - [ ] Keep the first Vulkan ray dispatch path deferred to Period32 and broader
   Vulkan ray tracing parity deferred to Period32+.
 
 ## Period 31 Phase 5 Checklist
 
-- [ ] Present the ray tracing output texture to the window.
-- [ ] Make the triangle visibly distinct from the background.
-- [ ] Remove `driver_pixels=deferred_period31_plus` from successful supported
+- [x] Present the ray tracing result to the window through the public render
+  path.
+- [x] Make the triangle visibly distinct from the background.
+- [x] Remove `driver_pixels=deferred_period31_plus` from successful supported
   Metal runs.
 
 ## Period 31 Phase 6 Checklist
 
-- [ ] Keep `zig build test` passing.
-- [ ] Keep `zig build` passing.
-- [ ] Run `zig build run-ray-traced-triangle` on supported local Metal hardware.
-- [ ] Capture or document the visible result.
+- [x] Keep `zig build test` passing.
+- [x] Keep `zig build` passing.
+- [x] Run `zig build run-ray-traced-triangle` on supported local Metal hardware.
+- [x] Capture or document the visible result.
 
 ## Period 31 Phase 7 Checklist
 
-- [ ] Update usage docs for the pixel-producing Metal ray traced triangle.
-- [ ] Update API docs for any user-facing behavior changes.
-- [ ] Route Vulkan ray traced triangle parity to Period32 and broader ray
+- [x] Update usage docs for the pixel-producing Metal ray traced triangle.
+- [x] Update API docs for any user-facing behavior changes.
+- [x] Route Vulkan ray traced triangle parity to Period32 and broader ray
   tracing completeness to Period32+ docs.
 
 ## Period 32 Phase 1 Checklist

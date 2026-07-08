@@ -437,11 +437,12 @@ zig build run-mesh-shader
 the Period 30 backend-private runtime records: acceleration-structure objects,
 scratch-buffer validation, ray tracing pipeline state, shader binding table
 creation, ray dispatch records, and Metal table metadata when Metal is
-selected. It prints unsupported-feature messages until the selected backend
-exposes native ray tracing capabilities. It is not a pixel-rendering sample yet;
-the first Metal pixel-rendering path is tracked in Period31. Vulkan parity and
-broader ray tracing coverage are split after that: Period32 owns the first
-Vulkan pixel-rendering triangle, and Period32+ owns broader coverage.
+selected. On supported Metal devices it now opens a window and presents a
+visible triangle whose pixels are produced by a Slang ray/triangle intersection
+shader through the public render path. It prints
+`driver_pixels=visible_metal_ray_intersection` after the first visible frame.
+Vulkan parity is tracked in Period32, and broader native ray tracing coverage is
+Period32+ work.
 
 Run it with:
 

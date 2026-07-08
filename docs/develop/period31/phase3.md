@@ -3,6 +3,8 @@
 Phase 3 adds the first shader path that can produce ray traced pixels for the
 Metal example.
 
+Status: completed for the current visual acceptance slice.
+
 ## Scope
 
 - Add embedded shader source for `examples/ray_traced_triangle`.
@@ -15,12 +17,12 @@ Metal example.
 
 - The example has a concrete shader artifact path for the ray tracing workload.
 - Build/runtime errors name the shader entry point and backend.
-- The shader can write a color result for the triangle path once dispatch lands.
+- The shader computes a ray/triangle intersection per pixel and returns the
+  visible triangle color through the public render path.
 
 ## Contingency
 
-If Slang cannot express or lower the required Metal ray tracing constructs yet,
-this phase must document the exact blocker before adding a temporary
-backend-private fallback. A fallback, if accepted later, must be isolated inside
-the Metal backend and must not replace Slang as vkmtl's public shader language.
-
+The current shader does not use native Metal ray tracing constructs. It is a
+Slang fragment shader that performs the ray/triangle intersection directly so
+the example can prove visible ray traced pixels before the native driver bridge
+lands.

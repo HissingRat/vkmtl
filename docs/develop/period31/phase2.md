@@ -2,6 +2,10 @@
 
 Phase 2 adds the first real Metal acceleration-structure backend path.
 
+Status: remaining native hardening. The current visible example keeps
+Period30 backend-private acceleration-structure records but does not allocate a
+real `MTLAccelerationStructure` yet.
+
 ## Scope
 
 - Extend the Metal bridge with backend-private acceleration-structure types.
@@ -22,4 +26,3 @@ Phase 2 adds the first real Metal acceleration-structure backend path.
 
 - TLAS/instance builds are deferred to Period32+.
 - Acceleration structure update/refit/compaction is deferred to Period32+.
-

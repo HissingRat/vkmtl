@@ -3,6 +3,11 @@
 Phase 4 turns the runtime ray dispatch command into a real Metal command path
 for the example.
 
+Status: partially complete for visible pixels. The example records
+`CommandBuffer.dispatchRays(...)` diagnostics, then presents pixels from a Slang
+ray-intersection render pass. Native Metal ray dispatch to an output texture is
+still remaining native hardening.
+
 ## Scope
 
 - Create an output texture suitable for ray tracing writes and later
@@ -20,6 +25,8 @@ for the example.
 - The command path is feature gated and reports unsupported Metal ray tracing
   clearly.
 - Runtime record diagnostics still reflect the dispatched ray count.
+- The current visible slice reports rendered frame rays from the drawable extent
+  and keeps backend-private dispatch diagnostics intact.
 
 ## Deferred
 

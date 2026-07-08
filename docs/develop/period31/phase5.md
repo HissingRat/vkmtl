@@ -2,6 +2,8 @@
 
 Phase 5 presents the ray tracing output texture to the example window.
 
+Status: completed for the current visual acceptance slice.
+
 ## Scope
 
 - Reuse existing vkmtl texture/render presentation paths where possible.
@@ -16,9 +18,10 @@ Phase 5 presents the ray tracing output texture to the example window.
 - The example output no longer reports `driver_pixels=deferred_period31_plus`
   on supported devices.
 - Unsupported devices still report a clear feature-gate message.
+- The visible path presents through the public vkmtl render command encoder and
+  current drawable.
 
 ## Deferred
 
 - Advanced denoising, camera controls, materials, and scene complexity are
   outside this phase.
-

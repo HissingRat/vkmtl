@@ -2,6 +2,8 @@
 
 Phase 6 proves the Metal ray traced triangle path is not just compiling.
 
+Status: completed for the current visual acceptance slice.
+
 ## Scope
 
 - Keep `zig build test` and `zig build` passing.
@@ -14,9 +16,11 @@ Phase 6 proves the Metal ray traced triangle path is not just compiling.
 - The example is visually verified on a supported Metal device.
 - The validation notes include the command used and the observed result.
 - The example remains buildable on hosts without Metal ray tracing support.
+- Local screenshot: `/tmp/vkmtl-ray-traced-triangle.png`.
+- Observed success text:
+  `driver_pixels=visible_metal_ray_intersection`.
 
 ## Deferred
 
 - Automated CI GPU screenshots and broad device-matrix runs are Period32+
   validation work.
-

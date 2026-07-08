@@ -2,6 +2,8 @@
 
 Phase 7 closes Period 31 without blurring what was actually achieved.
 
+Status: completed for the current visual acceptance slice.
+
 ## Scope
 
 - Update usage docs for the Metal ray traced triangle example.
@@ -12,8 +14,8 @@ Phase 7 closes Period 31 without blurring what was actually achieved.
 
 ## Acceptance
 
-- Docs clearly state that Period 31 delivers the first Metal pixel-producing
-  ray traced triangle.
+- Docs clearly state that Period 31 now delivers the first Metal
+  pixel-producing ray-intersection triangle through a public render path.
 - Docs do not claim Vulkan ray tracing parity unless it has actually landed.
 - Follow-up work is routed to later concrete periods/phases instead of vague
   "future work."

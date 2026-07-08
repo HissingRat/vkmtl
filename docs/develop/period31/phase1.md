@@ -3,6 +3,8 @@
 Phase 1 turns `examples/ray_traced_triangle` into a hard visual contract instead
 of a runtime-record smoke test.
 
+Status: completed for the current visual acceptance slice.
+
 ## Scope
 
 - Define the expected window result for supported Metal devices.
@@ -18,9 +20,10 @@ of a runtime-record smoke test.
   the window.
 - The example still builds on machines without Metal ray tracing support.
 - Unsupported devices do not panic and do not claim success.
+- The first successful frame prints
+  `driver_pixels=visible_metal_ray_intersection`.
 
 ## Non-Goals
 
 - Do not add Vulkan ray tracing execution in this phase.
 - Do not add broad ray tracing shader model parity in this phase.
-

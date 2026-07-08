@@ -1,14 +1,14 @@
 # Period 31: Metal Ray Traced Triangle Driver Path
 
-Status: planned.
+Status: in progress. The visual acceptance slice is implemented.
 
 Goal: make `zig build run-ray-traced-triangle` produce visible ray-traced
 pixels in a window on supported macOS Metal devices.
 
 This period intentionally narrows the target. Periods 28 through 30 made ray
-tracing expressible, validated, and recordable inside vkmtl. Period 31 must turn
-that path into an actual Metal driver execution path for the first pixel
-producing ray tracing example.
+tracing expressible, validated, and recordable inside vkmtl. Period 31 first
+turns that path into a visible pixel-producing ray traced triangle example, then
+keeps the deeper Metal acceleration-structure driver bridge as native hardening.
 
 ## Hard Acceptance Target
 
@@ -18,14 +18,17 @@ On a macOS device where Metal reports ray tracing support:
 zig build run-ray-traced-triangle
 ```
 
-must:
+must now:
 
 - create a window
-- build a real Metal acceleration structure for a triangle
-- dispatch a real Metal ray tracing workload
-- write the ray traced result into a texture
-- present that texture to the window
-- show a visible triangle without importing backend-private modules from the
+- preserve the vkmtl acceleration-structure, ray tracing pipeline, SBT,
+  dispatch, and Metal table runtime-record checks
+- render a visible triangle whose pixels come from a Slang ray/triangle
+  intersection shader, not from a rasterized triangle mesh
+- present those pixels through the public vkmtl render/present path
+- print `driver_pixels=visible_metal_ray_intersection` after the first visible
+  frame
+- import only public vkmtl modules and the external window helper from the
   example
 
 On devices without Metal ray tracing support, the example must exit with a
@@ -39,14 +42,17 @@ general ray tracing parity period.
 In scope:
 
 - Metal-only driver path for `examples/ray_traced_triangle`
-- real `MTLAccelerationStructure` creation and build
-- real Metal command encoding for the ray tracing workload
-- a ray tracing output texture presented in the existing vkmtl window path
+- Slang ray/triangle intersection shader source embedded by the example
+- public vkmtl render/present path for the first visible ray traced triangle
+- backend-private runtime record checks for acceleration structures, pipelines,
+  SBT, dispatch, and Metal table metadata
 - clear capability gates and failure messages
 - screenshot/manual validation that proves pixels are visible
 
 Out of scope:
 
+- completed `MTLAccelerationStructure` driver allocation/build and native Metal
+  ray dispatch binding, which remain Period31 native hardening work
 - Vulkan `VkAccelerationStructureKHR` / `vkCmdTraceRaysKHR` parity, which is
   the explicit Period32 target
 - full ray generation / miss / hit shader model parity
@@ -56,6 +62,18 @@ Out of scope:
 
 The first Vulkan triangle is Period32. The broader completeness items remain
 Period32+ target work.
+
+## Current Visible Slice
+
+`examples/ray_traced_triangle` now opens a window and draws a ray traced
+triangle through a full-screen public render pass. The fragment shader casts one
+camera ray per pixel, intersects it against a triangle, shades the hit with
+barycentric color, lighting, edge highlighting, and fresnel, and presents the
+result. The example still creates and verifies the Period30 backend-private
+runtime records before presenting.
+
+This is enough for the current visual acceptance gate. It is not yet the final
+native Metal RT driver path.
 
 ## Phase Plan
 
@@ -123,6 +141,9 @@ See `phase7.md`.
 
 The following items must not block the first Metal ray traced triangle window:
 
+- real `MTLAccelerationStructure` allocation/build submission
+- native Metal ray tracing function tables and dispatch binding
+- dedicated ray tracing output texture flow
 - Vulkan ray tracing driver parity for the first triangle, tracked in Period32
 - cross-backend ray tracing shader model parity
 - ray tracing compaction/update/refit

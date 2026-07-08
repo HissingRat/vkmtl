@@ -275,10 +275,10 @@ zig build run-mesh-shader
 `examples/ray_traced_triangle` 会验证 ray tracing runtime contract 和 Period 30 的
 backend-private runtime record：acceleration-structure 对象、scratch buffer validation、
 ray tracing pipeline state、shader binding table 创建、ray dispatch record，以及选择 Metal
-时的 Metal table metadata。在所选 backend 暴露 native ray tracing capability 之前，它会打印
-unsupported-feature 信息。它还不是实际输出像素的 ray tracing sample；driver-level ray tracing
-pixels 的第一步会在 Period31 压实 Metal 路径。Period32 压实 Vulkan 的第一个出图三角形；
-更完整的 ray tracing 覆盖是 Period32+ 工作。
+时的 Metal table metadata。在支持的 Metal 设备上，它现在会打开窗口，并通过 Slang
+ray/triangle intersection shader 在 public render path 上显示一个可见三角形。首帧成功后会打印
+`driver_pixels=visible_metal_ray_intersection`。Period32 压实 Vulkan 的第一个出图三角形；
+更完整的 native ray tracing 覆盖是 Period32+ 工作。
 
 运行：
 
