@@ -1564,6 +1564,17 @@ obvious render and binding blockers.
 - [x] Document persistent native staging-buffer pooling as deferred to Period
   28 Phase 5.
 
+## Period 26 Phase 6 Checklist
+
+- [x] Add Period 26 production-hardening rows to backend and validation
+  matrices.
+- [x] Add development-matrix metadata and tests for production hardening.
+- [x] Split completed portable planning/diagnostics work from deferred native
+  lowering work in backend-completion docs.
+- [x] Update Period 26 status in roadmap and period README.
+- [x] Assign native object pooling, native driver cache consumption, manifest
+  I/O, persistent staging pools, and GPU-backed soak loops to Period 28 phases.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

@@ -1,30 +1,36 @@
 # Period 26: Object Cache And Production Backend Hardening
 
-Status: planned after Period 25.
+Status: completed production-hardening planning and diagnostics slice. Native
+cache object consumption, native object pooling, persistent staging pools, and
+GPU-backed soak loops are deferred to Period 28.
 
 Goal: make completed backend paths efficient, cacheable, diagnosable, and stable
 under long-running applications.
 
 Expected result: vkmtl behaves less like a prototype and more like a reusable
-graphics runtime: repeated object creation is reduced, diagnostics explain
-costs, and long-run stress tests catch resource churn.
+graphics runtime: repeated object creation is visible, cache and stability plans
+are deterministic, diagnostics explain costs, and the remaining native
+hardening work is assigned to explicit later phases.
 
 ## Phase 1: Native Object Reuse
 
-- Implement reuse for shader modules, bind group layouts, pipelines, and
-  samplers.
+- Add lookup diagnostics and reuse candidates for shader modules, bind group
+  layouts, pipelines, and samplers. Lifetime-safe native handle pooling is
+  deferred to Period 28 Phase 5.
 
 See `phase1.md`.
 
 ## Phase 2: Driver Pipeline Cache And Binary Archive
 
-- Integrate Vulkan driver pipeline cache and Metal binary archives.
+- Add driver cache / binary archive planning. Native `VkPipelineCache` and
+  `MTLBinaryArchive` consumption is deferred to Period 28 Phase 5.
 
 See `phase2.md`.
 
 ## Phase 3: Persistent Runtime Cache
 
-- Persist selected cache artifacts across runs.
+- Add runtime cache manifest planning and compatibility checks. Automatic
+  manifest read/write is deferred to Period 28 Phase 5.
 
 See `phase3.md`.
 
@@ -36,7 +42,8 @@ See `phase4.md`.
 
 ## Phase 5: Long-Run Stability
 
-- Add stress loops for resize, resource churn, shader cache, and uploads.
+- Add deterministic stability plans and an opt-in planning command. GPU-backed
+  soak loops are deferred to Period 28 Phase 6.
 
 See `phase5.md`.
 

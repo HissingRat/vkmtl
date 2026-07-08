@@ -490,10 +490,13 @@ See `docs/develop/period25/`.
 
 ## Period 26: Object Cache And Production Backend Hardening
 
-Status: planned after Period 25.
+Status: completed production-hardening planning and diagnostics slice, with
+native cache/object reuse and GPU soak execution deferred to Period 28.
 
 Goal: make native backend paths cacheable, diagnosable, persistent where useful,
-and stable under long-running workloads.
+and stable under long-running workloads. Period 26 closed the portable planning,
+diagnostics, and regression-command layer; native cache consumption and
+long-running GPU execution are tracked in Period 28.
 
 - Phase 1: native object reuse
 - Phase 2: driver pipeline cache and binary archive

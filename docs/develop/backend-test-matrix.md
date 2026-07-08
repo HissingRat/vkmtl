@@ -13,6 +13,7 @@ The authoritative matrix metadata lives in `src/development_matrix.zig`.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, logical queues, ownership transfer validation, and query readback/resolve validation.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
+- `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-triangle`
 
@@ -99,3 +100,18 @@ conservative until the relevant backend period lands.
 | Native external sync wait/signal | Deferred | Deferred | Period 28 Phase 5 native lowering |
 | Native command insertion API | Capability-gated | Capability-gated | Encoder methods validate explicit callbacks |
 | Native command handle lowering | Deferred | Deferred | Period 28 Phase 5 native handle view |
+
+## Period 26 Production Hardening Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Object-cache lookup diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | `cache_policy` and `objectCacheDiagnostics()` |
+| Native object handle pooling | Deferred | Deferred | Period 28 Phase 5 native pools |
+| Driver cache planning | Portable runtime planning | Portable runtime planning | `Device.planDriverPipelineCache(...)` |
+| Native driver cache lowering | Deferred | Deferred | Period 28 Phase 5 `VkPipelineCache` / `MTLBinaryArchive` consumption |
+| Runtime cache manifest planning | Portable runtime planning | Portable runtime planning | `Device.planRuntimeCache(...)` |
+| Runtime cache manifest I/O | Deferred | Deferred | Period 28 Phase 5 automatic manifest read/write |
+| Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `runtimeDiagnostics()` |
+| Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
+| Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
+| GPU-backed soak loops | Deferred | Deferred | Period 28 Phase 6 native long-run validation |

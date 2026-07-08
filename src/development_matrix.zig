@@ -512,6 +512,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .command = "zig build test",
         .expectation = "surface registries, present-mode diagnostics, external wrappers, external sync validation, and native insertion gates pass",
     },
+    .{
+        .name = "production_hardening_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test && zig build run-stability-plan -- --iterations 120",
+        .expectation = "object-cache diagnostics, runtime cache planning, runtime diagnostics, and stability planning stay deterministic",
+    },
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
@@ -928,6 +936,121 @@ pub fn validatePlatformInteropMatrix(entries: []const PlatformInteropMatrixEntry
     }
 }
 
+pub const ProductionHardeningFeature = enum {
+    object_cache_lookup_diagnostics,
+    native_object_handle_pooling,
+    driver_cache_planning,
+    native_driver_cache_lowering,
+    runtime_cache_manifest_planning,
+    runtime_cache_manifest_io,
+    runtime_diagnostics_snapshot,
+    capture_name_helpers,
+    stability_run_planning,
+    gpu_backed_soak_loops,
+};
+
+pub const ProductionHardeningMatrixEntry = struct {
+    feature: ProductionHardeningFeature,
+    public_api: []const u8,
+    vulkan_status: BackendFeatureStatus,
+    metal_status: BackendFeatureStatus,
+    deferred_to: ?[]const u8 = null,
+    validation: []const u8,
+
+    pub fn validate(self: ProductionHardeningMatrixEntry) DevelopmentMatrixError!void {
+        if (self.public_api.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.validation.len == 0) return DevelopmentMatrixError.EmptyValidationGoal;
+        const deferred = self.vulkan_status == .deferred_native_lowering or self.metal_status == .deferred_native_lowering;
+        if (deferred and self.deferred_to == null) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
+    .{
+        .feature = .object_cache_lookup_diagnostics,
+        .public_api = "cache_policy fields and objectCacheDiagnostics",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "cacheable descriptors record hits, misses, equivalent recreations, and policy opt-outs",
+    },
+    .{
+        .feature = .native_object_handle_pooling,
+        .public_api = "ObjectCachePolicy reuse mode",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "lookup diagnostics do not claim native handle reuse until lifetime-safe pools exist",
+    },
+    .{
+        .feature = .driver_cache_planning,
+        .public_api = "Device.planDriverPipelineCache",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "driver pipeline cache descriptors validate identity and native feature reports",
+    },
+    .{
+        .feature = .native_driver_cache_lowering,
+        .public_api = "DriverPipelineCacheDescriptor",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "VkPipelineCache and MTLBinaryArchive consumption remains explicit backend work",
+    },
+    .{
+        .feature = .runtime_cache_manifest_planning,
+        .public_api = "RuntimeCachePlanDescriptor and Device.planRuntimeCache",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "runtime cache manifests classify missing, stale, backend, source, and toolchain mismatches",
+    },
+    .{
+        .feature = .runtime_cache_manifest_io,
+        .public_api = "RuntimeCachePlan",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 5",
+        .validation = "automatic manifest read/write is deferred until native cache ownership lands",
+    },
+    .{
+        .feature = .runtime_diagnostics_snapshot,
+        .public_api = "Device.runtimeDiagnostics and WindowContext.runtimeDiagnostics",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "runtime diagnostics expose live resources, pending retirements, work serials, and object-cache counters",
+    },
+    .{
+        .feature = .capture_name_helpers,
+        .public_api = "CaptureNameDescriptor and writeCaptureName",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "capture names format scope, backend, and frame metadata deterministically",
+    },
+    .{
+        .feature = .stability_run_planning,
+        .public_api = "StabilityRunDescriptor, StabilityRunPlan, and StabilityRunDiagnostics",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "stability plans count resize, churn, shader-cache, upload, and unaligned-fill fallback checks",
+    },
+    .{
+        .feature = .gpu_backed_soak_loops,
+        .public_api = "run-stability-plan contract",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .deferred_to = "Period 28 Phase 6",
+        .validation = "current opt-in command is deterministic planning; windowed GPU soak loops remain future backend validation",
+    },
+};
+
+pub fn validateProductionHardeningMatrix(entries: []const ProductionHardeningMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (entry.feature == other.feature) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
 pub const ValidationCaseKind = enum {
     invalid_bind_group,
     invalid_texture_format,
@@ -940,6 +1063,7 @@ pub const ValidationCaseKind = enum {
     query_readback,
     resource_utilities,
     platform_interop,
+    production_hardening,
 };
 
 pub const ValidationCase = struct {
@@ -1023,6 +1147,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .platform_interop,
         .test_location = "src/core.zig and src/runtime/window_context.zig Period 25 platform interop tests",
         .expectation = "surface registries, present diagnostics, external wrappers, external sync, and native insertion gates keep typed validation",
+    },
+    .{
+        .name = "production_hardening",
+        .kind = .production_hardening,
+        .test_location = "src/core.zig, src/runtime/window_context.zig, src/backend/vulkan/command.zig, and tools/stability_plan/main.zig Period 26 tests",
+        .expectation = "cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics stay deterministic",
     },
 };
 
@@ -1158,16 +1288,19 @@ test "backend test matrix metadata is valid" {
     var has_sync_query_regression = false;
     var has_resource_utility_regression = false;
     var has_platform_interop_regression = false;
+    var has_production_hardening_regression = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
         if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
         if (std.mem.eql(u8, entry.name, "resource_utility_regression")) has_resource_utility_regression = true;
         if (std.mem.eql(u8, entry.name, "platform_interop_regression")) has_platform_interop_regression = true;
+        if (std.mem.eql(u8, entry.name, "production_hardening_regression")) has_production_hardening_regression = true;
     }
     try std.testing.expect(configured_optional >= 1);
     try std.testing.expect(has_sync_query_regression);
     try std.testing.expect(has_resource_utility_regression);
     try std.testing.expect(has_platform_interop_regression);
+    try std.testing.expect(has_production_hardening_regression);
 }
 
 test "sync and query backend matrix is complete" {
@@ -1246,6 +1379,29 @@ test "platform interop backend matrix is complete" {
     try std.testing.expect(runtime_paths >= 5);
     try std.testing.expect(capability_gated >= 1);
     try std.testing.expect(deferred_paths >= 5);
+}
+
+test "production hardening backend matrix is complete" {
+    try validateProductionHardeningMatrix(production_hardening_matrix[0..]);
+
+    var seen = [_]bool{false} ** @typeInfo(ProductionHardeningFeature).@"enum".fields.len;
+    var runtime_paths: usize = 0;
+    var deferred_paths: usize = 0;
+
+    for (production_hardening_matrix) |entry| {
+        seen[@intFromEnum(entry.feature)] = true;
+        if (entry.vulkan_status == .portable_runtime or entry.metal_status == .portable_runtime) runtime_paths += 1;
+        if (entry.vulkan_status == .deferred_native_lowering or entry.metal_status == .deferred_native_lowering) {
+            deferred_paths += 1;
+            try std.testing.expect(entry.deferred_to != null);
+        }
+    }
+
+    for (seen) |was_seen| {
+        try std.testing.expect(was_seen);
+    }
+    try std.testing.expect(runtime_paths >= 6);
+    try std.testing.expect(deferred_paths >= 4);
 }
 
 test "validation case inventory is valid" {

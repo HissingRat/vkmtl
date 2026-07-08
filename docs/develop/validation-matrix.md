@@ -28,6 +28,9 @@ Current cases:
 - `platform_interop`: surface registries, present-mode diagnostics, external
   memory/buffer/texture wrappers, external sync wrappers, and native insertion
   gates keep typed validation.
+- `production_hardening`: cache planning, runtime diagnostics, capture names,
+  stability planning, and Vulkan fallback diagnostics keep deterministic
+  validation.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

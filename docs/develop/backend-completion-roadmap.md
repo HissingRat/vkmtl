@@ -144,12 +144,20 @@ Period 28 Phase 5.
 
 Tracked in `docs/develop/period26/`.
 
-- [ ] Native object reuse for shader modules, layouts, pipelines, and samplers.
-- [ ] Vulkan driver pipeline cache integration.
-- [ ] Metal binary archive integration.
-- [ ] Persistent runtime cache versioning.
-- [ ] Diagnostics for cache misses, creation cost, and resource churn.
-- [ ] Long-run stability commands.
+- [x] Object-cache lookup diagnostics for shader modules, layouts, pipelines,
+  and samplers.
+- [ ] Native object handle pooling for shader modules, layouts, pipelines, and
+  samplers. Deferred to Period 28 Phase 5.
+- [x] Driver pipeline cache / binary archive planning descriptors.
+- [ ] Vulkan `VkPipelineCache` and Metal `MTLBinaryArchive` consumption.
+  Deferred to Period 28 Phase 5.
+- [x] Persistent runtime cache manifest versioning and compatibility planning.
+- [ ] Automatic runtime cache manifest read/write. Deferred to Period 28 Phase
+  5.
+- [x] Diagnostics for cache misses, creation cost, resource churn, capture
+  names, and runtime live-resource snapshots.
+- [x] Long-run stability planning command.
+- [ ] GPU-backed long-run soak loops. Deferred to Period 28 Phase 6.
 
 Expected result: completed backend paths are fast enough and observable enough
 for real applications instead of only examples.
