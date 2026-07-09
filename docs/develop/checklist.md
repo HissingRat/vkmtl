@@ -2300,9 +2300,9 @@ obvious render and binding blockers.
 
 ## Period 40 Phase 1 Checklist
 
-- [ ] Define tessellation shader stage and pipeline descriptors.
-- [ ] Define patch topology, factor buffers, and validation rules.
-- [ ] Preserve non-tessellated render pipelines.
+- [x] Define tessellation shader stage and pipeline descriptors.
+- [x] Define patch topology, factor buffers, and validation rules.
+- [x] Preserve non-tessellated render pipelines.
 
 ## Period 40 Phase 2 Checklist
 

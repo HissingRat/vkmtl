@@ -1,6 +1,6 @@
 # Period 40: Advanced Geometry Draw Paths
 
-Status: planned after Period39.
+Status: Phase 1 complete.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
 probes into real draw paths with backend-native execution where supported.
@@ -19,6 +19,17 @@ execute the feature.
 - Define public tessellation shader stage and pipeline descriptors.
 - Define patch topology, factor buffers, and validation rules.
 - Preserve existing non-tessellated render pipelines.
+
+Phase 1 result:
+
+- `TessellationShaderStageDescriptor` names control/evaluation entry points
+  without exposing backend shader objects.
+- `TessellationPatchDrawDescriptor` describes patch-list draws, instance
+  counts, base patch/instance offsets, and optional factor-buffer metadata.
+- `TessellationDrawPlan` validates the descriptor and records backend-neutral
+  lowering metadata for later Vulkan/Metal command paths.
+- Existing non-tessellated render pipelines and `drawPrimitives` APIs are
+  unchanged.
 
 ### Phase 2: Vulkan Tessellation Draw Path
 

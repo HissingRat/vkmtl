@@ -1008,6 +1008,8 @@ pub const AdvancedFeatureError = error{
     UnsupportedTessellation,
     InvalidPatchControlPointCount,
     MissingTessellationStage,
+    InvalidTessellationPatchDraw,
+    InvalidTessellationFactorBuffer,
     UnsupportedMeshShaders,
     UnsupportedTaskShaders,
     MissingMeshStage,
@@ -2084,6 +2086,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.NativeCommandEncoderMismatch,
         error.InvalidPatchControlPointCount,
         error.MissingTessellationStage,
+        error.InvalidTessellationPatchDraw,
+        error.InvalidTessellationFactorBuffer,
         error.MissingMeshStage,
         error.InvalidMeshThreadgroupSize,
         error.InvalidAccelerationStructureDescriptor,
@@ -2743,20 +2747,40 @@ pub const TessellationPartitionMode = enum {
     fractional_odd,
 };
 
+pub const TessellationShaderStageDescriptor = struct {
+    entry_point: []const u8,
+
+    pub fn validate(self: TessellationShaderStageDescriptor) AdvancedFeatureError!void {
+        if (self.entry_point.len == 0) return AdvancedFeatureError.MissingTessellationStage;
+    }
+};
+
 pub const TessellationDescriptor = struct {
     control_point_count: u32,
     domain: TessellationDomain = .triangle,
     partition_mode: TessellationPartitionMode = .integer,
     has_control_stage: bool = false,
     has_evaluation_stage: bool = false,
+    control_stage: ?TessellationShaderStageDescriptor = null,
+    evaluation_stage: ?TessellationShaderStageDescriptor = null,
 
     pub fn validate(self: TessellationDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
         if (!features.tessellation) return AdvancedFeatureError.UnsupportedTessellation;
-        if (!self.has_control_stage or !self.has_evaluation_stage) return AdvancedFeatureError.MissingTessellationStage;
+        if (self.control_stage) |stage| try stage.validate();
+        if (self.evaluation_stage) |stage| try stage.validate();
+        if (!self.hasControlStage() or !self.hasEvaluationStage()) return AdvancedFeatureError.MissingTessellationStage;
         if (self.control_point_count == 0) return AdvancedFeatureError.InvalidPatchControlPointCount;
         if (limits.max_tessellation_control_points != 0 and self.control_point_count > limits.max_tessellation_control_points) {
             return AdvancedFeatureError.InvalidPatchControlPointCount;
         }
+    }
+
+    pub fn hasControlStage(self: TessellationDescriptor) bool {
+        return self.has_control_stage or self.control_stage != null;
+    }
+
+    pub fn hasEvaluationStage(self: TessellationDescriptor) bool {
+        return self.has_evaluation_stage or self.evaluation_stage != null;
     }
 };
 
@@ -2833,6 +2857,92 @@ pub const TessellationLowering = union(Backend) {
             .vulkan => false,
             .metal => |lowering| lowering.requires_factor_buffer,
         };
+    }
+};
+
+pub const TessellationPatchTopology = enum {
+    patch_list,
+};
+
+pub const TessellationFactorFormat = enum {
+    float16,
+    float32,
+};
+
+pub const TessellationFactorBufferDescriptor = struct {
+    byte_offset: u64 = 0,
+    stride: u32 = 0,
+    patch_count: u32 = 0,
+    format: TessellationFactorFormat = .float32,
+
+    pub fn validate(self: TessellationFactorBufferDescriptor, draw_patch_count: u32) AdvancedFeatureError!void {
+        if (self.byte_offset % 4 != 0) return AdvancedFeatureError.InvalidTessellationFactorBuffer;
+        if (self.stride != 0 and self.stride % 4 != 0) return AdvancedFeatureError.InvalidTessellationFactorBuffer;
+        if (self.patch_count != 0 and self.patch_count < draw_patch_count) {
+            return AdvancedFeatureError.InvalidTessellationFactorBuffer;
+        }
+    }
+};
+
+pub const TessellationPatchDrawDescriptor = struct {
+    tessellation: TessellationDescriptor,
+    topology: TessellationPatchTopology = .patch_list,
+    patch_count: u32 = 0,
+    instance_count: u32 = 1,
+    base_patch: u32 = 0,
+    base_instance: u32 = 0,
+    factor_buffer: ?TessellationFactorBufferDescriptor = null,
+
+    pub fn validate(self: TessellationPatchDrawDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        try self.tessellation.validate(features, limits);
+        if (self.patch_count == 0 or self.instance_count == 0) return AdvancedFeatureError.InvalidTessellationPatchDraw;
+        if (self.factor_buffer) |factor_buffer| try factor_buffer.validate(self.patch_count);
+    }
+
+    pub fn totalPatches(self: TessellationPatchDrawDescriptor) u64 {
+        return @as(u64, self.patch_count) * @as(u64, self.instance_count);
+    }
+};
+
+pub const TessellationDrawPlan = struct {
+    lowering: TessellationLowering,
+    topology: TessellationPatchTopology,
+    patch_count: u32,
+    instance_count: u32,
+    base_patch: u32,
+    base_instance: u32,
+    total_patches: u64,
+    factor_buffer: ?TessellationFactorBufferDescriptor = null,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: TessellationPatchDrawDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!TessellationDrawPlan {
+        try descriptor.validate(features, limits);
+        return .{
+            .lowering = try TessellationLowering.fromDescriptor(backend, descriptor.tessellation, features, limits),
+            .topology = descriptor.topology,
+            .patch_count = descriptor.patch_count,
+            .instance_count = descriptor.instance_count,
+            .base_patch = descriptor.base_patch,
+            .base_instance = descriptor.base_instance,
+            .total_patches = descriptor.totalPatches(),
+            .factor_buffer = descriptor.factor_buffer,
+        };
+    }
+
+    pub fn patchControlPoints(self: TessellationDrawPlan) u32 {
+        return self.lowering.patchControlPoints();
+    }
+
+    pub fn requiresFactorBuffer(self: TessellationDrawPlan) bool {
+        return self.lowering.requiresFactorBuffer();
+    }
+
+    pub fn hasFactorBuffer(self: TessellationDrawPlan) bool {
+        return self.factor_buffer != null;
     }
 };
 
@@ -11563,6 +11673,54 @@ test "Metal tessellation lowering records factor buffer requirement" {
     }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 16 });
     try std.testing.expectEqual(@as(u32, 3), lowering.patch_control_points);
     try std.testing.expect(lowering.requires_factor_buffer);
+}
+
+test "tessellation patch draw plan validates stage entries and factor buffers" {
+    const descriptor = TessellationPatchDrawDescriptor{
+        .tessellation = .{
+            .control_point_count = 4,
+            .domain = .quad,
+            .partition_mode = .fractional_even,
+            .control_stage = .{ .entry_point = "ts_control" },
+            .evaluation_stage = .{ .entry_point = "ts_eval" },
+        },
+        .patch_count = 12,
+        .instance_count = 2,
+        .base_patch = 3,
+        .factor_buffer = .{
+            .byte_offset = 16,
+            .stride = 32,
+            .patch_count = 12,
+        },
+    };
+
+    const plan = try TessellationDrawPlan.fromDescriptor(.metal, descriptor, .{ .tessellation = true }, .{
+        .max_tessellation_control_points = 32,
+    });
+    try std.testing.expectEqual(TessellationPatchTopology.patch_list, plan.topology);
+    try std.testing.expectEqual(@as(u32, 4), plan.patchControlPoints());
+    try std.testing.expectEqual(@as(u64, 24), plan.total_patches);
+    try std.testing.expect(plan.requiresFactorBuffer());
+    try std.testing.expect(plan.hasFactorBuffer());
+
+    try std.testing.expectError(AdvancedFeatureError.MissingTessellationStage, (TessellationPatchDrawDescriptor{
+        .tessellation = .{
+            .control_point_count = 4,
+            .control_stage = .{ .entry_point = "" },
+            .evaluation_stage = .{ .entry_point = "ts_eval" },
+        },
+        .patch_count = 1,
+    }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 }));
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidTessellationPatchDraw, (TessellationPatchDrawDescriptor{
+        .tessellation = descriptor.tessellation,
+    }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 }));
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidTessellationFactorBuffer, (TessellationPatchDrawDescriptor{
+        .tessellation = descriptor.tessellation,
+        .patch_count = 2,
+        .factor_buffer = .{ .byte_offset = 2 },
+    }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 }));
 }
 
 test "Vulkan mesh pipeline lowering preserves optional task stage" {

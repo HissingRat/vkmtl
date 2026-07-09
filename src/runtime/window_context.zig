@@ -5023,6 +5023,19 @@ pub const Device = struct {
         );
     }
 
+    pub fn validateTessellationPatchDrawDescriptor(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn planTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.TessellationDrawPlan {
+        return try core.TessellationDrawPlan.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -7272,6 +7285,43 @@ test "runtime device plans tessellation lowering from native capabilities" {
     try std.testing.expectEqual(@as(u32, 4), lowering.patchControlPoints());
     try std.testing.expectEqual(core.TessellationDomain.quad, lowering.domain());
     try std.testing.expect(lowering.requiresFactorBuffer());
+}
+
+test "runtime device plans tessellation patch draws from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.tessellation = false;
+    report.native_features.tessellation = true;
+    report.limits.max_tessellation_control_points = 32;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test tessellation patch draw adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.TessellationPatchDrawDescriptor{
+        .tessellation = .{
+            .control_point_count = 3,
+            .control_stage = .{ .entry_point = "tc_main" },
+            .evaluation_stage = .{ .entry_point = "te_main" },
+        },
+        .patch_count = 8,
+        .instance_count = 2,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedTessellation, device.validateTessellationPatchDrawDescriptor(descriptor));
+
+    const plan = try device.planTessellationPatchDraw(descriptor);
+    try std.testing.expectEqual(@as(u32, 3), plan.patchControlPoints());
+    try std.testing.expectEqual(@as(u64, 16), plan.total_patches);
+    try std.testing.expect(!plan.requiresFactorBuffer());
 }
 
 test "runtime device plans mesh lowering from native capabilities" {
