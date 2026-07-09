@@ -5262,6 +5262,17 @@ pub const Device = struct {
         };
     }
 
+    pub fn planComplexShaderBindingTable(
+        self: Device,
+        descriptor: core.ComplexShaderBindingTableDescriptor,
+    ) core.AdvancedFeatureError!core.ComplexShaderBindingTablePlan {
+        return try core.ComplexShaderBindingTablePlan.fromDescriptor(
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn planRayDispatch(
         self: Device,
         sbt: core.ShaderBindingTableDescriptor,
@@ -6061,6 +6072,14 @@ pub const WindowContext = struct {
     pub fn planRayQuery(self: *WindowContext, descriptor: core.RayQueryDescriptor) core.AdvancedFeatureError!core.RayQueryPlan {
         const device_view = self.device();
         return try device_view.planRayQuery(descriptor);
+    }
+
+    pub fn planComplexShaderBindingTable(
+        self: *WindowContext,
+        descriptor: core.ComplexShaderBindingTableDescriptor,
+    ) core.AdvancedFeatureError!core.ComplexShaderBindingTablePlan {
+        const device_view = self.device();
+        return try device_view.planComplexShaderBindingTable(descriptor);
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -7698,6 +7717,51 @@ test "runtime device plans ray dispatch from native capabilities" {
     });
     try std.testing.expectEqual(@as(u64, 32), plan.total_rays);
     try std.testing.expectEqual(@as(u64, 192), plan.sbt_size);
+}
+
+test "runtime plans complex shader binding tables through device" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.ray_tracing = false;
+    report.native_features.ray_tracing = true;
+    report.native_features.ray_tracing_callable_shaders = true;
+    report.native_features.ray_tracing_procedural_geometry = true;
+    report.native_features.ray_tracing_custom_intersection = true;
+    report.limits.shader_binding_table_alignment = 64;
+    report.limits.max_shader_binding_table_records = 12;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test complex sbt adapter",
+        },
+        .capability_report = report,
+    };
+
+    const ranges = [_]core.ShaderBindingTableHitGroupRangeDescriptor{
+        .{ .first_record = 0, .record_count = 1 },
+        .{ .hit_group_kind = .procedural, .first_record = 1, .record_count = 1 },
+    };
+    const plan = try device.planComplexShaderBindingTable(.{
+        .table = .{
+            .stride = 64,
+            .ray_generation_count = 1,
+            .miss_count = 2,
+            .hit_count = 2,
+            .callable_count = 2,
+        },
+        .hit_group_ranges = ranges[0..],
+    });
+    try std.testing.expectEqual(@as(u32, 7), plan.total_records);
+    try std.testing.expectEqual(@as(u32, 2), plan.callable_records);
+    try std.testing.expect(plan.hasCallableRecords());
+    try std.testing.expect(plan.requires_custom_intersection);
+    try std.testing.expect(plan.coversAllHitRecords());
 }
 
 test "runtime creates shader binding tables and dispatches rays" {

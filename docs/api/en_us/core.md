@@ -379,6 +379,11 @@ combine shader binding table layout with dispatch dimensions and total ray
 counts before native ray dispatch commands are available. Metal-specific ray
 tracing differences are explicit through `MetalRayTracingMappingDescriptor`,
 `MetalRayTracingMappingPlan`, and `Device.planMetalRayTracingMapping(...)`.
+`ComplexShaderBindingTableDescriptor`,
+`ShaderBindingTableHitGroupRangeDescriptor`, and
+`Device.planComplexShaderBindingTable(...)` validate larger miss/hit/callable
+record layouts, hit-group ranges, procedural hit ranges, total SBT record
+limits, and callable shader feature requirements.
 
 Period 29 adds public runtime contracts for those advanced paths:
 `AccelerationStructure` and `Device.makeAccelerationStructure(...)`,

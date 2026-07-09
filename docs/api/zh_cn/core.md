@@ -312,6 +312,10 @@ group count 或 Metal function-table metadata，先于 executable ray tracing pi
 table layout、dispatch dimensions 和 total ray count 合成可检查的 dispatch plan。Metal 特有的
 ray tracing 差异通过 `MetalRayTracingMappingDescriptor`、`MetalRayTracingMappingPlan` 和
 `Device.planMetalRayTracingMapping(...)` 显式表达。
+`ComplexShaderBindingTableDescriptor`、`ShaderBindingTableHitGroupRangeDescriptor` 和
+`Device.planComplexShaderBindingTable(...)` 会校验更大的 miss/hit/callable record layout、
+hit-group range、procedural hit range、SBT total record limit，以及 callable shader feature
+要求。
 
 Period 29 新增这些 advanced path 的公开 runtime contract：
 `AccelerationStructure` / `Device.makeAccelerationStructure(...)`、

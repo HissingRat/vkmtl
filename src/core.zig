@@ -3411,6 +3411,9 @@ pub const RayTracingShaderGroupDescriptor = struct {
 
     pub fn validate(self: RayTracingShaderGroupDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
         if (self.entry_point.len == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        if (self.kind == .callable and !features.ray_tracing_callable_shaders) {
+            return AdvancedFeatureError.UnsupportedRayTracing;
+        }
         if (self.kind != .hit and self.hit_group_kind != .triangles) {
             return AdvancedFeatureError.InvalidRayTracingPipeline;
         }
@@ -3680,6 +3683,21 @@ pub const ShaderBindingTableDescriptor = struct {
             return AdvancedFeatureError.InvalidShaderBindingTable;
         }
         if (self.ray_generation_count == 0) return AdvancedFeatureError.InvalidShaderBindingTable;
+        if (self.callable_count != 0 and !features.ray_tracing_callable_shaders) {
+            return AdvancedFeatureError.UnsupportedRayTracing;
+        }
+        const total_records = self.totalRecordCount();
+        if (limits.max_shader_binding_table_records != 0 and total_records > limits.max_shader_binding_table_records) {
+            return AdvancedFeatureError.InvalidShaderBindingTable;
+        }
+        if (total_records > std.math.maxInt(u32)) return AdvancedFeatureError.InvalidShaderBindingTable;
+    }
+
+    pub fn totalRecordCount(self: ShaderBindingTableDescriptor) u64 {
+        return @as(u64, self.ray_generation_count) +
+            @as(u64, self.miss_count) +
+            @as(u64, self.hit_count) +
+            @as(u64, self.callable_count);
     }
 };
 
@@ -3706,6 +3724,86 @@ pub const ShaderBindingTableLayout = struct {
             .callable_offset = callable_offset,
             .total_size = callable_offset + callable_size,
         };
+    }
+};
+
+pub const ShaderBindingTableHitGroupRangeDescriptor = struct {
+    hit_group_kind: RayTracingHitGroupKind = .triangles,
+    first_record: u32 = 0,
+    record_count: u32,
+    material_index_base: u32 = 0,
+
+    pub fn validate(self: ShaderBindingTableHitGroupRangeDescriptor, sbt: ShaderBindingTableDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        if (self.record_count == 0) return AdvancedFeatureError.InvalidShaderBindingTable;
+        const end = @as(u64, self.first_record) + @as(u64, self.record_count);
+        if (end > sbt.hit_count) return AdvancedFeatureError.InvalidShaderBindingTable;
+        if (self.hit_group_kind == .procedural) {
+            if (!features.ray_tracing_procedural_geometry) {
+                return AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry;
+            }
+            if (!features.ray_tracing_custom_intersection) {
+                return AdvancedFeatureError.UnsupportedRayTracingCustomIntersection;
+            }
+        }
+    }
+};
+
+pub const ComplexShaderBindingTableDescriptor = struct {
+    table: ShaderBindingTableDescriptor,
+    hit_group_ranges: []const ShaderBindingTableHitGroupRangeDescriptor = &.{},
+
+    pub fn validate(self: ComplexShaderBindingTableDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        try self.table.validate(features, limits);
+        for (self.hit_group_ranges) |range| try range.validate(self.table, features);
+    }
+};
+
+pub const ComplexShaderBindingTablePlan = struct {
+    layout: ShaderBindingTableLayout,
+    total_records: u32,
+    miss_records: u32,
+    hit_records: u32,
+    callable_records: u32,
+    hit_group_range_count: usize,
+    procedural_hit_group_ranges: usize,
+    max_hit_group_record_end: u32 = 0,
+    requires_callable_shaders: bool = false,
+    requires_custom_intersection: bool = false,
+
+    pub fn fromDescriptor(
+        descriptor: ComplexShaderBindingTableDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!ComplexShaderBindingTablePlan {
+        try descriptor.validate(features, limits);
+        const layout = try ShaderBindingTableLayout.fromDescriptor(descriptor.table, features, limits);
+        var procedural_ranges: usize = 0;
+        var max_end: u32 = 0;
+        for (descriptor.hit_group_ranges) |range| {
+            const end: u32 = @intCast(@as(u64, range.first_record) + @as(u64, range.record_count));
+            max_end = @max(max_end, end);
+            if (range.hit_group_kind == .procedural) procedural_ranges += 1;
+        }
+        return .{
+            .layout = layout,
+            .total_records = @intCast(descriptor.table.totalRecordCount()),
+            .miss_records = descriptor.table.miss_count,
+            .hit_records = descriptor.table.hit_count,
+            .callable_records = descriptor.table.callable_count,
+            .hit_group_range_count = descriptor.hit_group_ranges.len,
+            .procedural_hit_group_ranges = procedural_ranges,
+            .max_hit_group_record_end = max_end,
+            .requires_callable_shaders = descriptor.table.callable_count != 0,
+            .requires_custom_intersection = procedural_ranges != 0,
+        };
+    }
+
+    pub fn hasCallableRecords(self: ComplexShaderBindingTablePlan) bool {
+        return self.callable_records != 0;
+    }
+
+    pub fn coversAllHitRecords(self: ComplexShaderBindingTablePlan) bool {
+        return self.hit_records != 0 and self.max_hit_group_record_end == self.hit_records;
     }
 };
 
@@ -11775,12 +11873,78 @@ test "shader binding table layout computes group offsets" {
         .miss_count = 2,
         .hit_count = 3,
         .callable_count = 1,
-    }, .{ .ray_tracing = true }, .{ .shader_binding_table_alignment = 64 });
+    }, .{ .ray_tracing = true, .ray_tracing_callable_shaders = true }, .{ .shader_binding_table_alignment = 64 });
     try std.testing.expectEqual(@as(u64, 0), layout.ray_generation_offset);
     try std.testing.expectEqual(@as(u64, 64), layout.miss_offset);
     try std.testing.expectEqual(@as(u64, 192), layout.hit_offset);
     try std.testing.expectEqual(@as(u64, 384), layout.callable_offset);
     try std.testing.expectEqual(@as(u64, 448), layout.total_size);
+}
+
+test "complex shader binding table plan validates callable and hit ranges" {
+    const ranges = [_]ShaderBindingTableHitGroupRangeDescriptor{
+        .{
+            .hit_group_kind = .triangles,
+            .first_record = 0,
+            .record_count = 2,
+        },
+        .{
+            .hit_group_kind = .procedural,
+            .first_record = 2,
+            .record_count = 1,
+            .material_index_base = 8,
+        },
+    };
+    const features = DeviceFeatures{
+        .ray_tracing = true,
+        .ray_tracing_callable_shaders = true,
+        .ray_tracing_procedural_geometry = true,
+        .ray_tracing_custom_intersection = true,
+    };
+    const limits = DeviceLimits{
+        .shader_binding_table_alignment = 64,
+        .max_shader_binding_table_records = 8,
+    };
+    const plan = try ComplexShaderBindingTablePlan.fromDescriptor(.{
+        .table = .{
+            .stride = 64,
+            .ray_generation_count = 1,
+            .miss_count = 2,
+            .hit_count = 3,
+            .callable_count = 1,
+        },
+        .hit_group_ranges = ranges[0..],
+    }, features, limits);
+    try std.testing.expectEqual(@as(u32, 7), plan.total_records);
+    try std.testing.expectEqual(@as(u32, 2), plan.miss_records);
+    try std.testing.expectEqual(@as(u32, 3), plan.hit_records);
+    try std.testing.expectEqual(@as(u32, 1), plan.callable_records);
+    try std.testing.expectEqual(@as(usize, 2), plan.hit_group_range_count);
+    try std.testing.expectEqual(@as(usize, 1), plan.procedural_hit_group_ranges);
+    try std.testing.expectEqual(@as(u32, 3), plan.max_hit_group_record_end);
+    try std.testing.expect(plan.hasCallableRecords());
+    try std.testing.expect(plan.coversAllHitRecords());
+    try std.testing.expect(plan.requires_callable_shaders);
+    try std.testing.expect(plan.requires_custom_intersection);
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracing, (ShaderBindingTableDescriptor{
+        .stride = 64,
+        .callable_count = 1,
+    }).validate(.{ .ray_tracing = true }, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidShaderBindingTable, (ShaderBindingTableDescriptor{
+        .stride = 64,
+        .ray_generation_count = 1,
+        .miss_count = 4,
+        .hit_count = 4,
+    }).validate(features, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidShaderBindingTable, ranges[1].validate(.{
+        .stride = 64,
+        .hit_count = 2,
+    }, features));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry, ranges[1].validate(.{
+        .stride = 64,
+        .hit_count = 3,
+    }, .{ .ray_tracing = true }));
 }
 
 test "ray dispatch plan combines sbt layout and dimensions" {

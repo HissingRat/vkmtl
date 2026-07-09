@@ -52,11 +52,12 @@ larger SBT layouts.
 
 ### Phase 4: Complex SBT Layouts And Callable Records
 
-- Support larger miss/hit group layouts.
-- Add callable shader records where the backend supports them.
-- Validate SBT alignment and stride limits under stress.
-- Validate hit group offsets for mixed triangle/procedural geometry, including
-  the Metal procedural function-table lowering path.
+- Done. `ComplexShaderBindingTableDescriptor` plans larger miss/hit/callable
+  layouts on top of the existing SBT descriptor.
+- Done. Callable records are gated by
+  `DeviceFeatures.ray_tracing_callable_shaders`.
+- Done. SBT alignment, stride, total record limits, hit group offsets, and
+  procedural hit ranges are validated before native dispatch.
 
 ### Phase 5: RT Stress Examples And Validation
 

@@ -2288,9 +2288,9 @@ obvious render and binding blockers.
 
 ## Period 39 Phase 4 Checklist
 
-- [ ] Support larger miss/hit group layouts.
-- [ ] Add callable shader records where supported.
-- [ ] Validate SBT alignment and stride limits under stress.
+- [x] Support larger miss/hit group layouts.
+- [x] Add callable shader records where supported.
+- [x] Validate SBT alignment and stride limits under stress.
 
 ## Period 39 Phase 5 Checklist
 
