@@ -72,6 +72,11 @@ acceleration structure, and presents the resulting drawable. The example still
 creates and verifies the Period30 backend-private runtime records, but the
 visible Metal pixels now come from native Metal RT driver work.
 
+The previous Shadertoy-inspired Slang fragment shader is kept at
+`examples/ray_traced_scene/shaders/ray_traced_scene.slang` as a visual and
+material reference for future native RT scene parity work. It is reference-only
+and is not part of the current runtime/precompile path.
+
 ## Phase Plan
 
 ### Phase 1: Example Contract And Capability Gate
