@@ -2952,6 +2952,14 @@ pub const TessellationDrawPlan = struct {
         };
         return try VulkanTessellationDrawLowering.fromPlan(self, lowering);
     }
+
+    pub fn metalLowering(self: TessellationDrawPlan) AdvancedFeatureError!MetalTessellationDrawLowering {
+        const lowering = switch (self.lowering) {
+            .vulkan => return AdvancedFeatureError.UnsupportedTessellation,
+            .metal => |metal| metal,
+        };
+        return MetalTessellationDrawLowering.fromPlan(self, lowering);
+    }
 };
 
 pub const VulkanTessellationDrawLowering = struct {
@@ -2978,6 +2986,52 @@ fn patchDrawVertexCount(patch_count: u32, patch_control_points: u32) AdvancedFea
     const result = @as(u64, patch_count) * @as(u64, patch_control_points);
     if (result > std.math.maxInt(u32)) return AdvancedFeatureError.InvalidTessellationPatchDraw;
     return @intCast(result);
+}
+
+pub const MetalTessellationFactorBufferOwnership = enum {
+    application_provided,
+    vkmtl_generated,
+};
+
+pub const MetalTessellationDrawLowering = struct {
+    patch_control_points: u32,
+    domain: TessellationDomain,
+    partition_mode: TessellationPartitionMode,
+    patch_count: u32,
+    instance_count: u32,
+    base_patch: u32,
+    base_instance: u32,
+    factor_buffer_ownership: MetalTessellationFactorBufferOwnership,
+    factor_buffer: TessellationFactorBufferDescriptor,
+
+    pub fn fromPlan(plan: TessellationDrawPlan, lowering: MetalTessellationLowering) AdvancedFeatureError!MetalTessellationDrawLowering {
+        if (!lowering.requires_factor_buffer) return AdvancedFeatureError.UnsupportedTessellation;
+        const ownership: MetalTessellationFactorBufferOwnership = if (plan.factor_buffer == null) .vkmtl_generated else .application_provided;
+        const factor_buffer = plan.factor_buffer orelse TessellationFactorBufferDescriptor{
+            .patch_count = plan.patch_count,
+            .stride = defaultMetalTessellationFactorStride(lowering.domain),
+        };
+        try factor_buffer.validate(plan.patch_count);
+        return .{
+            .patch_control_points = lowering.patch_control_points,
+            .domain = lowering.domain,
+            .partition_mode = lowering.partition_mode,
+            .patch_count = plan.patch_count,
+            .instance_count = plan.instance_count,
+            .base_patch = plan.base_patch,
+            .base_instance = plan.base_instance,
+            .factor_buffer_ownership = ownership,
+            .factor_buffer = factor_buffer,
+        };
+    }
+};
+
+pub fn defaultMetalTessellationFactorStride(domain: TessellationDomain) u32 {
+    return switch (domain) {
+        .triangle => 24,
+        .quad => 32,
+        .isoline => 16,
+    };
 }
 
 pub const MeshPipelineDescriptor = struct {
@@ -11788,6 +11842,42 @@ test "Vulkan tessellation draw lowering resolves patch-list draw parameters" {
         .patch_count = std.math.maxInt(u32),
     }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 32 });
     try std.testing.expectError(AdvancedFeatureError.InvalidTessellationPatchDraw, overflow_plan.vulkanLowering());
+}
+
+test "Metal tessellation draw lowering defines factor-buffer ownership" {
+    const generated_plan = try TessellationDrawPlan.fromDescriptor(.metal, .{
+        .tessellation = .{
+            .control_point_count = 3,
+            .domain = .triangle,
+            .has_control_stage = true,
+            .has_evaluation_stage = true,
+        },
+        .patch_count = 5,
+    }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 16 });
+    const generated = try generated_plan.metalLowering();
+    try std.testing.expectEqual(MetalTessellationFactorBufferOwnership.vkmtl_generated, generated.factor_buffer_ownership);
+    try std.testing.expectEqual(@as(u32, 24), generated.factor_buffer.stride);
+    try std.testing.expectEqual(@as(u32, 5), generated.factor_buffer.patch_count);
+
+    const provided_plan = try TessellationDrawPlan.fromDescriptor(.metal, .{
+        .tessellation = .{
+            .control_point_count = 4,
+            .domain = .quad,
+            .has_control_stage = true,
+            .has_evaluation_stage = true,
+        },
+        .patch_count = 8,
+        .factor_buffer = .{
+            .byte_offset = 32,
+            .stride = 64,
+            .patch_count = 16,
+            .format = .float16,
+        },
+    }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 16 });
+    const provided = try provided_plan.metalLowering();
+    try std.testing.expectEqual(MetalTessellationFactorBufferOwnership.application_provided, provided.factor_buffer_ownership);
+    try std.testing.expectEqual(TessellationFactorFormat.float16, provided.factor_buffer.format);
+    try std.testing.expectEqual(@as(u32, 64), provided.factor_buffer.stride);
 }
 
 test "Vulkan mesh pipeline lowering preserves optional task stage" {

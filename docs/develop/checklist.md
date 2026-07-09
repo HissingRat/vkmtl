@@ -2312,9 +2312,9 @@ obvious render and binding blockers.
 
 ## Period 40 Phase 3 Checklist
 
-- [ ] Lower to Metal tessellation where supported.
-- [ ] Define factor-buffer ownership and encoding.
-- [ ] Report precise unsupported reasons where unavailable.
+- [x] Lower to Metal tessellation metadata where supported.
+- [x] Define factor-buffer ownership and encoding.
+- [x] Report precise unsupported reasons where unavailable.
 
 ## Period 40 Phase 4 Checklist
 

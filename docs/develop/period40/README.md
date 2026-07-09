@@ -1,6 +1,6 @@
 # Period 40: Advanced Geometry Draw Paths
 
-Status: Phase 2 contract work complete.
+Status: Phase 3 contract work complete.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
 probes into real draw paths with backend-native execution where supported.
@@ -54,6 +54,17 @@ Phase 2 result:
 - Lower to Metal tessellation where supported.
 - Define factor-buffer ownership and encoding.
 - Report precise unsupported reasons where the backend cannot execute it.
+
+Phase 3 result:
+
+- `MetalTessellationDrawLowering` records patch metadata plus Metal-specific
+  factor-buffer ownership.
+- Factor buffers can be application-provided through
+  `TessellationFactorBufferDescriptor` or represented as vkmtl-generated
+  metadata when omitted.
+- Backend mismatch and unavailable tessellation support use typed
+  `UnsupportedTessellation`; invalid factor-buffer shape uses
+  `InvalidTessellationFactorBuffer`.
 
 ### Phase 4: Vulkan Mesh/Task Shader Draw Path
 

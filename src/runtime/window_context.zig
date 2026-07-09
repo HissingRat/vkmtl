@@ -5042,6 +5042,12 @@ pub const Device = struct {
         return try plan.vulkanLowering();
     }
 
+    pub fn planMetalTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.MetalTessellationDrawLowering {
+        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedTessellation;
+        const plan = try self.planTessellationPatchDraw(descriptor);
+        return try plan.metalLowering();
+    }
+
     pub fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -7360,6 +7366,39 @@ test "runtime device plans Vulkan tessellation patch draw lowering" {
     });
     try std.testing.expectEqual(@as(u32, 28), lowering.draw_vertex_count);
     try std.testing.expectEqual(@as(u32, 4), lowering.first_vertex);
+}
+
+test "runtime device plans Metal tessellation factor buffer ownership" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.native_features.tessellation = true;
+    report.limits.max_tessellation_control_points = 16;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal tessellation draw adapter",
+        },
+        .capability_report = report,
+    };
+
+    const lowering = try device.planMetalTessellationPatchDraw(.{
+        .tessellation = .{
+            .control_point_count = 4,
+            .domain = .quad,
+            .has_control_stage = true,
+            .has_evaluation_stage = true,
+        },
+        .patch_count = 4,
+        .factor_buffer = .{ .stride = 32, .patch_count = 4 },
+    });
+    try std.testing.expectEqual(core.MetalTessellationFactorBufferOwnership.application_provided, lowering.factor_buffer_ownership);
+    try std.testing.expectEqual(@as(u32, 32), lowering.factor_buffer.stride);
 }
 
 test "runtime device plans mesh lowering from native capabilities" {
