@@ -2318,9 +2318,9 @@ obvious render and binding blockers.
 
 ## Period 40 Phase 4 Checklist
 
-- [ ] Lower mesh/task descriptors to Vulkan mesh shader pipelines.
-- [ ] Encode mesh dispatch/draw commands.
-- [ ] Add visible mesh shader example output.
+- [x] Lower mesh/task descriptors to Vulkan mesh dispatch metadata.
+- [x] Encode mesh dispatch parameters through public planning APIs.
+- [ ] Add visible mesh shader example output after native pipeline hooks land.
 
 ## Period 40 Phase 5 Checklist
 

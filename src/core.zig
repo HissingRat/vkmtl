@@ -1014,6 +1014,7 @@ pub const AdvancedFeatureError = error{
     UnsupportedTaskShaders,
     MissingMeshStage,
     InvalidMeshThreadgroupSize,
+    InvalidMeshDispatch,
     UnsupportedAccelerationStructures,
     UnsupportedRayTracing,
     UnsupportedRayTracingProceduralGeometry,
@@ -2090,6 +2091,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidTessellationFactorBuffer,
         error.MissingMeshStage,
         error.InvalidMeshThreadgroupSize,
+        error.InvalidMeshDispatch,
         error.InvalidAccelerationStructureDescriptor,
         error.InvalidAccelerationStructureResources,
         error.InvalidRayTracingPipeline,
@@ -3139,6 +3141,98 @@ pub const MeshPipelineLowering = union(Backend) {
 
     pub fn hasTaskStage(self: MeshPipelineLowering) bool {
         return self.taskEntryPoint() != null;
+    }
+};
+
+pub const MeshDispatchDescriptor = struct {
+    pipeline: MeshPipelineDescriptor,
+    threadgroup_count_x: u32 = 1,
+    threadgroup_count_y: u32 = 1,
+    threadgroup_count_z: u32 = 1,
+
+    pub fn validate(self: MeshDispatchDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        try self.pipeline.validate(features, limits);
+        if (self.threadgroup_count_x == 0 or self.threadgroup_count_y == 0 or self.threadgroup_count_z == 0) {
+            return AdvancedFeatureError.InvalidMeshDispatch;
+        }
+    }
+
+    pub fn totalThreadgroups(self: MeshDispatchDescriptor) u64 {
+        return @as(u64, self.threadgroup_count_x) *
+            @as(u64, self.threadgroup_count_y) *
+            @as(u64, self.threadgroup_count_z);
+    }
+};
+
+pub const MeshDispatchPlan = struct {
+    lowering: MeshPipelineLowering,
+    threadgroup_count_x: u32,
+    threadgroup_count_y: u32,
+    threadgroup_count_z: u32,
+    total_threadgroups: u64,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: MeshDispatchDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!MeshDispatchPlan {
+        try descriptor.validate(features, limits);
+        return .{
+            .lowering = try MeshPipelineLowering.fromDescriptor(backend, descriptor.pipeline, features, limits),
+            .threadgroup_count_x = descriptor.threadgroup_count_x,
+            .threadgroup_count_y = descriptor.threadgroup_count_y,
+            .threadgroup_count_z = descriptor.threadgroup_count_z,
+            .total_threadgroups = descriptor.totalThreadgroups(),
+        };
+    }
+
+    pub fn meshThreadsPerThreadgroup(self: MeshDispatchPlan) u32 {
+        return self.lowering.meshThreadsPerThreadgroup();
+    }
+
+    pub fn taskThreadsPerThreadgroup(self: MeshDispatchPlan) u32 {
+        return self.lowering.taskThreadsPerThreadgroup();
+    }
+
+    pub fn hasTaskStage(self: MeshDispatchPlan) bool {
+        return self.lowering.hasTaskStage();
+    }
+
+    pub fn vulkanLowering(self: MeshDispatchPlan) AdvancedFeatureError!VulkanMeshDispatchLowering {
+        const lowering = switch (self.lowering) {
+            .vulkan => |vulkan| vulkan,
+            .metal => return AdvancedFeatureError.UnsupportedMeshShaders,
+        };
+        return VulkanMeshDispatchLowering.fromPlan(self, lowering);
+    }
+};
+
+pub const VulkanMeshDispatchLowering = struct {
+    mesh_entry_point: []const u8,
+    task_entry_point: ?[]const u8,
+    mesh_threads_per_threadgroup: u32,
+    task_threads_per_threadgroup: u32,
+    group_count_x: u32,
+    group_count_y: u32,
+    group_count_z: u32,
+    total_threadgroups: u64,
+
+    pub fn fromPlan(plan: MeshDispatchPlan, lowering: VulkanMeshPipelineLowering) VulkanMeshDispatchLowering {
+        return .{
+            .mesh_entry_point = lowering.mesh_entry_point,
+            .task_entry_point = lowering.task_entry_point,
+            .mesh_threads_per_threadgroup = lowering.mesh_threads_per_threadgroup,
+            .task_threads_per_threadgroup = lowering.task_threads_per_threadgroup,
+            .group_count_x = plan.threadgroup_count_x,
+            .group_count_y = plan.threadgroup_count_y,
+            .group_count_z = plan.threadgroup_count_z,
+            .total_threadgroups = plan.total_threadgroups,
+        };
+    }
+
+    pub fn hasTaskStage(self: VulkanMeshDispatchLowering) bool {
+        return self.task_entry_point != null;
     }
 };
 
@@ -11908,6 +12002,39 @@ test "Metal mesh pipeline lowering maps task stage to object function metadata" 
     try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
     try std.testing.expectEqualStrings("object_main", lowering.object_entry_point.?);
     try std.testing.expectEqual(@as(u32, 16), lowering.object_threads_per_threadgroup);
+}
+
+test "Vulkan mesh dispatch lowering records draw mesh task metadata" {
+    const plan = try MeshDispatchPlan.fromDescriptor(.vulkan, .{
+        .pipeline = .{
+            .mesh_entry_point = "mesh_main",
+            .task_entry_point = "task_main",
+            .mesh_threads_per_threadgroup = 64,
+            .task_threads_per_threadgroup = 16,
+        },
+        .threadgroup_count_x = 4,
+        .threadgroup_count_y = 2,
+        .threadgroup_count_z = 3,
+    }, .{ .mesh_shaders = true, .task_shaders = true }, .{
+        .max_mesh_threads_per_threadgroup = 128,
+        .max_task_threads_per_threadgroup = 64,
+    });
+
+    try std.testing.expectEqual(@as(u64, 24), plan.total_threadgroups);
+    try std.testing.expect(plan.hasTaskStage());
+
+    const lowering = try plan.vulkanLowering();
+    try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
+    try std.testing.expectEqualStrings("task_main", lowering.task_entry_point.?);
+    try std.testing.expectEqual(@as(u32, 4), lowering.group_count_x);
+    try std.testing.expectEqual(@as(u32, 2), lowering.group_count_y);
+    try std.testing.expectEqual(@as(u32, 3), lowering.group_count_z);
+    try std.testing.expectEqual(@as(u64, 24), lowering.total_threadgroups);
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidMeshDispatch, (MeshDispatchDescriptor{
+        .pipeline = .{ .mesh_entry_point = "mesh_main" },
+        .threadgroup_count_x = 0,
+    }).validate(.{ .mesh_shaders = true }, .{ .max_mesh_threads_per_threadgroup = 128 }));
 }
 
 test "advanced geometry shader stages are classified for Slang reflection" {

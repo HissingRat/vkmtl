@@ -1,6 +1,6 @@
 # Period 40: Advanced Geometry Draw Paths
 
-Status: Phase 3 contract work complete.
+Status: Phase 4 contract work complete.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
 probes into real draw paths with backend-native execution where supported.
@@ -71,6 +71,17 @@ Phase 3 result:
 - Lower mesh/task shader descriptors to Vulkan mesh shader pipelines.
 - Encode mesh dispatch/draw commands.
 - Add visible mesh shader example output.
+
+Phase 4 result:
+
+- `MeshDispatchDescriptor` combines a mesh/task pipeline descriptor with
+  backend-neutral threadgroup counts.
+- `MeshDispatchPlan` validates mesh/task feature gates and records total
+  threadgroups.
+- `VulkanMeshDispatchLowering` exposes Vulkan-style draw-mesh-task command
+  metadata while keeping raw Vulkan symbols out of the public API.
+- Visible Vulkan mesh/task output still requires native mesh pipeline creation
+  and backend command encoder hooks.
 
 ### Phase 5: Metal Object/Mesh Equivalent Path Or Unsupported Contract
 

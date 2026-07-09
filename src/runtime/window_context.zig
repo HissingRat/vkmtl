@@ -5061,6 +5061,25 @@ pub const Device = struct {
         );
     }
 
+    pub fn validateMeshDispatchDescriptor(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.features(), self.limits());
+    }
+
+    pub fn planMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.MeshDispatchPlan {
+        return try core.MeshDispatchPlan.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
+    pub fn planVulkanMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.VulkanMeshDispatchLowering {
+        if (self.backend != .vulkan) return core.AdvancedFeatureError.UnsupportedMeshShaders;
+        const plan = try self.planMeshDispatch(descriptor);
+        return try plan.vulkanLowering();
+    }
+
     pub fn validateAccelerationStructureDescriptor(self: Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features());
     }
@@ -7438,6 +7457,42 @@ test "runtime device plans mesh lowering from native capabilities" {
     try std.testing.expectEqual(@as(u32, 64), lowering.meshThreadsPerThreadgroup());
     try std.testing.expectEqual(@as(u32, 32), lowering.taskThreadsPerThreadgroup());
     try std.testing.expect(lowering.hasTaskStage());
+}
+
+test "runtime device plans Vulkan mesh dispatch from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.mesh_shaders = false;
+    report.native_features.mesh_shaders = true;
+    report.limits.max_mesh_threads_per_threadgroup = 128;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan mesh dispatch adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.MeshDispatchDescriptor{
+        .pipeline = .{
+            .mesh_entry_point = "mesh_main",
+            .mesh_threads_per_threadgroup = 64,
+        },
+        .threadgroup_count_x = 5,
+        .threadgroup_count_y = 2,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedMeshShaders, device.validateMeshDispatchDescriptor(descriptor));
+
+    const lowering = try device.planVulkanMeshDispatch(descriptor);
+    try std.testing.expectEqual(@as(u32, 5), lowering.group_count_x);
+    try std.testing.expectEqual(@as(u32, 2), lowering.group_count_y);
+    try std.testing.expectEqual(@as(u64, 10), lowering.total_threadgroups);
 }
 
 test "runtime device plans acceleration structure builds from native capabilities" {
