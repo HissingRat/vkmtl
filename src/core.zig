@@ -218,12 +218,70 @@ pub const DeviceCapabilitySource = enum {
     metal_query,
 };
 
+pub const RayTracingCapabilityBlocker = enum {
+    none,
+    not_evaluated,
+    missing_extension,
+    missing_feature,
+    missing_limit,
+    missing_device_proc,
+    unsupported_backend,
+};
+
+pub const RayTracingCapabilityDiagnostics = struct {
+    backend: Backend = .vulkan,
+    supported: bool = false,
+    blocker: RayTracingCapabilityBlocker = .not_evaluated,
+    requirement: []const u8 = "",
+    details: []const u8 = "",
+    max_recursion_depth: u32 = 0,
+    shader_group_handle_size: u32 = 0,
+    shader_group_handle_alignment: u32 = 0,
+    shader_group_base_alignment: u32 = 0,
+    acceleration_structure_scratch_alignment: u32 = 0,
+
+    pub fn supportedVulkan(
+        max_recursion_depth: u32,
+        shader_group_handle_size: u32,
+        shader_group_handle_alignment: u32,
+        shader_group_base_alignment: u32,
+        acceleration_structure_scratch_alignment: u32,
+    ) RayTracingCapabilityDiagnostics {
+        return .{
+            .backend = .vulkan,
+            .supported = true,
+            .blocker = .none,
+            .max_recursion_depth = max_recursion_depth,
+            .shader_group_handle_size = shader_group_handle_size,
+            .shader_group_handle_alignment = shader_group_handle_alignment,
+            .shader_group_base_alignment = shader_group_base_alignment,
+            .acceleration_structure_scratch_alignment = acceleration_structure_scratch_alignment,
+        };
+    }
+
+    pub fn unsupported(
+        backend: Backend,
+        blocker: RayTracingCapabilityBlocker,
+        requirement: []const u8,
+        details: []const u8,
+    ) RayTracingCapabilityDiagnostics {
+        return .{
+            .backend = backend,
+            .supported = false,
+            .blocker = blocker,
+            .requirement = requirement,
+            .details = details,
+        };
+    }
+};
+
 pub const DeviceCapabilityReport = struct {
     backend: Backend,
     source: DeviceCapabilitySource = .defaults,
     features: DeviceFeatures,
     native_features: DeviceFeatures,
     limits: DeviceLimits,
+    ray_tracing: RayTracingCapabilityDiagnostics = .{},
 };
 
 pub const ResourceAccess = enum {
@@ -1972,6 +2030,11 @@ pub fn defaultDeviceCapabilityReport(backend: Backend) DeviceCapabilityReport {
         .features = features,
         .native_features = features,
         .limits = defaultDeviceLimits(backend),
+        .ray_tracing = .{
+            .backend = backend,
+            .supported = features.ray_tracing,
+            .blocker = if (features.ray_tracing) .none else .not_evaluated,
+        },
     };
 }
 
@@ -2746,9 +2809,22 @@ pub const RayTracingShaderGroupDescriptor = struct {
     }
 };
 
+pub const RayTracingShaderStageDescriptor = struct {
+    module: ShaderModuleDescriptor,
+    entry_point: []const u8,
+
+    pub fn validate(self: RayTracingShaderStageDescriptor) AdvancedFeatureError!void {
+        if (self.entry_point.len == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.module.validate() catch return AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+};
+
 pub const RayTracingPipelineDescriptor = struct {
     label: ?[]const u8 = null,
     shader_groups: []const RayTracingShaderGroupDescriptor = &.{},
+    ray_generation: ?RayTracingShaderStageDescriptor = null,
+    miss: ?RayTracingShaderStageDescriptor = null,
+    closest_hit: ?RayTracingShaderStageDescriptor = null,
     max_recursion_depth: u32 = 1,
 
     pub fn validate(self: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
@@ -2763,6 +2839,13 @@ pub const RayTracingPipelineDescriptor = struct {
             if (group.kind == .ray_generation) has_ray_generation = true;
         }
         if (!has_ray_generation) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        if (self.ray_generation) |stage| try stage.validate();
+        if (self.miss) |stage| try stage.validate();
+        if (self.closest_hit) |stage| try stage.validate();
+    }
+
+    pub fn hasNativeShaderStages(self: RayTracingPipelineDescriptor) bool {
+        return self.ray_generation != null and self.miss != null and self.closest_hit != null;
     }
 };
 
@@ -11310,6 +11393,9 @@ test "default capability reports keep advanced backend gates closed" {
     try std.testing.expect(!report.features.external_textures);
     try std.testing.expect(!report.features.tessellation);
     try std.testing.expect(!report.features.mesh_shaders);
+    try std.testing.expect(!report.ray_tracing.supported);
+    try std.testing.expectEqual(RayTracingCapabilityBlocker.not_evaluated, report.ray_tracing.blocker);
+    try std.testing.expectEqual(Backend.vulkan, report.ray_tracing.backend);
     try std.testing.expect(!report.features.ray_tracing);
     try std.testing.expect(!report.features.driver_pipeline_cache);
 }

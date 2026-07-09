@@ -134,7 +134,7 @@ fn stageMaskForOldLayout(layout: vk.ImageLayout) vk.PipelineStageFlags {
         .transfer_src_optimal => .{ .transfer_bit = true },
         .transfer_dst_optimal => .{ .transfer_bit = true },
         .shader_read_only_optimal => .{ .fragment_shader_bit = true },
-        .general => .{ .compute_shader_bit = true },
+        .general => .{ .compute_shader_bit = true, .ray_tracing_shader_bit_khr = true },
         else => .{ .all_commands_bit = true },
     };
 }
@@ -144,7 +144,7 @@ fn stageMaskForNewLayout(layout: vk.ImageLayout) vk.PipelineStageFlags {
         .transfer_src_optimal => .{ .transfer_bit = true },
         .transfer_dst_optimal => .{ .transfer_bit = true },
         .shader_read_only_optimal => .{ .fragment_shader_bit = true },
-        .general => .{ .compute_shader_bit = true },
+        .general => .{ .compute_shader_bit = true, .ray_tracing_shader_bit_khr = true },
         else => .{ .all_commands_bit = true },
     };
 }

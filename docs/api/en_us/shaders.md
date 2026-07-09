@@ -17,9 +17,10 @@ examples/rainbow_cube/shaders/rainbow_cube.slang
 examples/compute_readback/shaders/compute_readback.slang
 ```
 
-Examples embed those `.slang` files and compile them at runtime through
-`Device`. Runtime artifacts are cached under vkmtl's automatically
-managed cache root:
+Examples embed those `.slang` files and declare the required shaders through
+`Device`. `zig build` precompiles matching SPIR-V, MSL, and reflection JSON
+into the executable; runtime restores those artifacts from embedded blobs into
+vkmtl's automatically managed cache root:
 
 ```text
 <internal-cache-root>/<shader-name>/
@@ -35,23 +36,24 @@ managed cache root:
 
 Compute shaders use `compute.spv`, `compute.msl`, and
 `compute.reflect.json`. The `hash` file stores the embedded source hash; if the
-hash or any required artifact does not match, vkmtl recompiles that shader.
+hash or any required artifact does not match, vkmtl restores artifacts from the
+embedded precompiled blob. If no blob matches the name, entry points, and
+source hash, vkmtl returns `PrecompiledShaderMissing`.
 
 ## Build Commands
 
 Default `zig build` prepares the pinned Slang distribution, currently
-`v2026.12.2`, under `.zig-cache/vkmtl-tools`. The default build does not
-precompile example shaders; shader-backed examples compile their embedded Slang
-source the first time they run.
+`v2026.12.2`, under `.zig-cache/vkmtl-tools`, and precompiles embedded shaders
+listed by the current manifest.
 
 The pinned Slang version and release package hashes live in `build.zig`; the
 download, verification, and extraction commands live under `scripts/`. Auto
 download currently covers macOS, Linux, and Windows packages for supported host
-architectures. If the build host has no pinned package, vkmtl falls back to
-`slangc` on `PATH`; pass an explicit path to avoid relying on that fallback:
+architectures. If the build host has no pinned package, the build fails; pass an
+explicit build-time compiler path when needed:
 
 ```sh
-zig build run-rainbow-cube -Dslangc=/path/to/slangc
+zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
 By default, vkmtl uses `vkmtl-cache` next to the executable. The cache directory
@@ -88,7 +90,8 @@ cs_main
 
 ## Runtime Consumption
 
-Applications embed Slang source and ask `Device` to compile it:
+Applications embed Slang source and ask `Device` to resolve the matching
+precompiled shader:
 
 ```zig
 const shader_source = @embedFile("shaders/glow.slang");
@@ -117,8 +120,9 @@ defer compiled.deinit();
 const compute_stage = compiled.stageDescriptor(context.selectedBackend());
 ```
 
-The compiler prints `compiling slang shader: <name>` on a miss and
-`using cached slang shader: <name>` on a hit.
+The compiler prints `using precompiled slang shader: <name>` on a cache miss
+with an embedded blob hit and `using cached slang shader: <name>` on a cache
+hit.
 
 ## Binding Rules
 

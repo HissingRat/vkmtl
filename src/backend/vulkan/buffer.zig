@@ -26,7 +26,10 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.BufferDescriptor) !Vulk
     errdefer gc.dev.destroyBuffer(handle, null);
 
     const mem_reqs = gc.dev.getBufferMemoryRequirements(handle);
-    const memory = try gc.allocate(mem_reqs, memoryFlags(descriptor));
+    const memory = if (requiresDeviceAddress(descriptor.usage))
+        try gc.allocateDeviceAddressable(mem_reqs, memoryFlags(descriptor))
+    else
+        try gc.allocate(mem_reqs, memoryFlags(descriptor));
     errdefer gc.dev.freeMemory(memory, null);
 
     try gc.dev.bindBufferMemory(handle, memory, 0);
@@ -108,6 +111,16 @@ pub fn readBytes(self: *VulkanBuffer, offset: usize, destination: []u8) !void {
     @memcpy(destination, src[0..destination.len]);
 }
 
+pub fn deviceAddress(self: VulkanBuffer) !vk.DeviceAddress {
+    if (self.gc.dev.wrapper.dispatch.vkGetBufferDeviceAddressKHR != null) {
+        return self.gc.dev.getBufferDeviceAddressKHR(&.{ .buffer = self.handle });
+    }
+    if (self.gc.dev.wrapper.dispatch.vkGetBufferDeviceAddress != null) {
+        return self.gc.dev.getBufferDeviceAddress(&.{ .buffer = self.handle });
+    }
+    return error.VulkanUnavailable;
+}
+
 fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
     var flags = vk.BufferUsageFlags{};
 
@@ -132,6 +145,10 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
     }
 
     return flags;
+}
+
+fn requiresDeviceAddress(usage: core.BufferUsage) bool {
+    return usage.acceleration_structure_scratch or usage.shader_binding_table;
 }
 
 fn memoryFlags(descriptor: core.BufferDescriptor) vk.MemoryPropertyFlags {

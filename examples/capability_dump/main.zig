@@ -56,6 +56,7 @@ fn dumpReport(report: vkmtl.DeviceCapabilityReport) void {
     std.debug.print("  max sample count: {}\n", .{report.limits.max_sample_count});
     std.debug.print("  max compute threads/threadgroup: {}\n", .{report.limits.max_compute_total_threads_per_threadgroup});
     std.debug.print("  max bindless descriptors/range: {}\n", .{report.limits.max_bindless_descriptors_per_range});
+    dumpRayTracingDiagnostics(report.ray_tracing);
 }
 
 fn dumpFeatureSet(features: vkmtl.DeviceFeatures) void {
@@ -75,6 +76,25 @@ fn dumpFeatureSet(features: vkmtl.DeviceFeatures) void {
     std.debug.print("  ray tracing: {}\n", .{features.ray_tracing});
     std.debug.print("  driver pipeline cache: {}\n", .{features.driver_pipeline_cache});
     std.debug.print("  Metal binary archive: {}\n", .{features.metal_binary_archive});
+}
+
+fn dumpRayTracingDiagnostics(diagnostics: vkmtl.RayTracingCapabilityDiagnostics) void {
+    std.debug.print("ray tracing diagnostics:\n", .{});
+    std.debug.print("  supported: {}\n", .{diagnostics.supported});
+    std.debug.print("  blocker: {s}\n", .{@tagName(diagnostics.blocker)});
+    if (diagnostics.requirement.len != 0) {
+        std.debug.print("  requirement: {s}\n", .{diagnostics.requirement});
+    }
+    if (diagnostics.details.len != 0) {
+        std.debug.print("  details: {s}\n", .{diagnostics.details});
+    }
+    if (diagnostics.supported) {
+        std.debug.print("  max recursion depth: {}\n", .{diagnostics.max_recursion_depth});
+        std.debug.print("  shader group handle size: {}\n", .{diagnostics.shader_group_handle_size});
+        std.debug.print("  shader group handle alignment: {}\n", .{diagnostics.shader_group_handle_alignment});
+        std.debug.print("  shader group base alignment: {}\n", .{diagnostics.shader_group_base_alignment});
+        std.debug.print("  AS scratch alignment: {}\n", .{diagnostics.acceleration_structure_scratch_alignment});
+    }
 }
 
 fn dumpFormatCaps(device: *vkmtl.Device, format: vkmtl.TextureFormat) void {

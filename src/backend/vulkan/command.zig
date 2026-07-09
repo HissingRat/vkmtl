@@ -2,9 +2,11 @@ const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
 const VulkanAdvancedBinding = @import("advanced_binding.zig");
+const VulkanAccelerationStructure = @import("acceleration_structure.zig");
 const VulkanBindGroup = @import("bind_group.zig").VulkanBindGroup;
 const VulkanBuffer = @import("buffer.zig");
 const VulkanComputePipelineState = @import("compute_pipeline.zig");
+const VulkanRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const VulkanRenderPipelineState = @import("render_pipeline.zig");
 const VulkanTexture = @import("texture.zig");
 const VulkanTextureView = @import("texture_view.zig");
@@ -218,6 +220,162 @@ pub const CommandBuffer = struct {
             .gc = self.gc,
             .cmdbuf = self.cmdbuf,
         };
+    }
+
+    pub fn encodeAccelerationStructureBuild(
+        self: *CommandBuffer,
+        plan: core.AccelerationStructureBuildPlan,
+        acceleration_structure: *VulkanAccelerationStructure,
+        scratch: *const VulkanBuffer,
+        scratch_offset: u64,
+        instance_source: ?*const VulkanAccelerationStructure,
+    ) core.AdvancedFeatureError!void {
+        _ = plan;
+        if (acceleration_structure.kind == .top_level) {
+            const source = instance_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            try acceleration_structure.writeTopLevelInstance(source);
+        }
+        const geometry_address = try acceleration_structure.geometryAddress();
+        const scratch_address = try acceleration_structure.scratchAddress(scratch, scratch_offset);
+        var geometry = acceleration_structure.buildGeometry(geometry_address);
+        const build_info = vk.AccelerationStructureBuildGeometryInfoKHR{
+            .type = acceleration_structure.structureType(),
+            .flags = .{ .prefer_fast_trace_bit_khr = true },
+            .mode = .build_khr,
+            .dst_acceleration_structure = acceleration_structure.handle,
+            .geometry_count = 1,
+            .p_geometries = @ptrCast(&geometry),
+            .scratch_data = .{ .device_address = scratch_address },
+        };
+        var range = acceleration_structure.buildRange();
+        const range_ptrs = [_][*]const vk.AccelerationStructureBuildRangeInfoKHR{
+            @ptrCast(&range),
+        };
+
+        self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+        }) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        self.gc.dev.cmdBuildAccelerationStructuresKHR(self.cmdbuf, &.{build_info}, &range_ptrs);
+        self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        acceleration_structure.markBuilt();
+    }
+
+    pub fn traceRays(
+        self: *CommandBuffer,
+        pipeline: *const VulkanRayTracingPipelineState,
+        dispatch: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!void {
+        self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+        }) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.gc.dev.cmdBindPipeline(self.cmdbuf, .ray_tracing_khr, pipeline.handle);
+        self.gc.dev.cmdTraceRaysKHR(
+            self.cmdbuf,
+            &pipeline.raygen_region,
+            &pipeline.miss_region,
+            &pipeline.hit_region,
+            &pipeline.callable_region,
+            dispatch.width,
+            dispatch.height,
+            dispatch.depth,
+        );
+        self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+
+    pub fn traceRaysToDrawable(
+        self: *CommandBuffer,
+        pipeline: *VulkanRayTracingPipelineState,
+        top_level: *const VulkanAccelerationStructure,
+        output: *const VulkanTextureView,
+        dispatch: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!void {
+        self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        try pipeline.updateDescriptorSet(top_level, output);
+
+        self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+        }) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+
+        output.transitionLayout(self.cmdbuf, .general);
+        self.gc.dev.cmdBindPipeline(self.cmdbuf, .ray_tracing_khr, pipeline.handle);
+        self.gc.dev.cmdBindDescriptorSets(
+            self.cmdbuf,
+            .ray_tracing_khr,
+            pipeline.layout,
+            0,
+            &.{pipeline.descriptor_set},
+            null,
+        );
+        self.gc.dev.cmdTraceRaysKHR(
+            self.cmdbuf,
+            &pipeline.raygen_region,
+            &pipeline.miss_region,
+            &pipeline.hit_region,
+            &pipeline.callable_region,
+            dispatch.width,
+            dispatch.height,
+            dispatch.depth,
+        );
+
+        output.transitionLayout(self.cmdbuf, .transfer_src_optimal);
+        const swapchain_image = self.swapchain.currentImageHandle();
+        transitionSwapchainImage(
+            self.gc,
+            self.cmdbuf,
+            swapchain_image,
+            .undefined,
+            .transfer_dst_optimal,
+            .{},
+            .{ .transfer_write_bit = true },
+            .{ .top_of_pipe_bit = true },
+            .{ .transfer_bit = true },
+        );
+        const copy = vk.ImageCopy{
+            .src_subresource = .{
+                .aspect_mask = .{ .color_bit = true },
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+            .src_offset = .{ .x = 0, .y = 0, .z = 0 },
+            .dst_subresource = .{
+                .aspect_mask = .{ .color_bit = true },
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+            .dst_offset = .{ .x = 0, .y = 0, .z = 0 },
+            .extent = .{
+                .width = @min(output.width, self.swapchain.extent.width),
+                .height = @min(output.height, self.swapchain.extent.height),
+                .depth = 1,
+            },
+        };
+        self.gc.dev.cmdCopyImage(
+            self.cmdbuf,
+            output.image,
+            .transfer_src_optimal,
+            swapchain_image,
+            .transfer_dst_optimal,
+            &.{copy},
+        );
+        transitionSwapchainImage(
+            self.gc,
+            self.cmdbuf,
+            swapchain_image,
+            .transfer_dst_optimal,
+            .present_src_khr,
+            .{ .transfer_write_bit = true },
+            .{ .memory_read_bit = true },
+            .{ .transfer_bit = true },
+            .{ .bottom_of_pipe_bit = true },
+        );
+
+        self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.present_requested = true;
+        self.uses_current_drawable = true;
     }
 
     pub fn presentDrawable(self: *CommandBuffer) !void {
@@ -1367,6 +1525,45 @@ fn imageMipBarrier(
             .base_mip_level = mip_level,
             .level_count = 1,
             .base_array_layer = if (texture.descriptor.dimension == .three_d) 0 else array_layer,
+            .layer_count = 1,
+        },
+    };
+
+    gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        src_stage_mask,
+        dst_stage_mask,
+        .{},
+        null,
+        null,
+        &.{barrier},
+    );
+}
+
+fn transitionSwapchainImage(
+    gc: *const GraphicsContext,
+    cmdbuf: vk.CommandBuffer,
+    image: vk.Image,
+    old_layout: vk.ImageLayout,
+    new_layout: vk.ImageLayout,
+    src_access_mask: vk.AccessFlags,
+    dst_access_mask: vk.AccessFlags,
+    src_stage_mask: vk.PipelineStageFlags,
+    dst_stage_mask: vk.PipelineStageFlags,
+) void {
+    const barrier = vk.ImageMemoryBarrier{
+        .src_access_mask = src_access_mask,
+        .dst_access_mask = dst_access_mask,
+        .old_layout = old_layout,
+        .new_layout = new_layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresource_range = .{
+            .aspect_mask = .{ .color_bit = true },
+            .base_mip_level = 0,
+            .level_count = 1,
+            .base_array_layer = 0,
             .layer_count = 1,
         },
     };

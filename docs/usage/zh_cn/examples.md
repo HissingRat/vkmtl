@@ -16,7 +16,7 @@
 run step、确定性输出 marker 和后端预期不要和文档漂移。
 
 带 shader 的示例用 `@embedFile(...)` 嵌入 Slang source，通过 `Device.compileRenderShader(...)`
-或 `Device.compileComputeShader(...)` 编译，并把运行时生成的 reflection JSON 附到 pipeline
+或 `Device.compileComputeShader(...)` 解析构建期预编译产物，并把 reflection JSON 附到 pipeline
 stage。单 buffer 渲染示例从 reflection 派生 vertex descriptor，shader-resource 示例也从
 reflection 派生 bind group layout。
 

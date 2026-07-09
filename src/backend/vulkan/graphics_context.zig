@@ -17,6 +17,14 @@ const required_device_extensions = if (enable_portability)
     }
 else
     [_][*:0]const u8{vk.extensions.khr_swapchain.name};
+const required_ray_tracing_device_extensions = [_][*:0]const u8{
+    vk.extensions.khr_acceleration_structure.name,
+    vk.extensions.khr_ray_tracing_pipeline.name,
+    vk.extensions.khr_deferred_host_operations.name,
+    vk.extensions.khr_buffer_device_address.name,
+    vk.extensions.khr_spirv_1_4.name,
+    vk.extensions.khr_shader_float_controls.name,
+};
 
 const BaseWrapper = vk.BaseWrapper;
 const InstanceWrapper = vk.InstanceWrapper;
@@ -42,6 +50,7 @@ present_queue: Queue,
 features_value: core.DeviceFeatures,
 native_features_value: core.DeviceFeatures,
 limits_value: core.DeviceLimits,
+ray_tracing_diagnostics_value: core.RayTracingCapabilityDiagnostics,
 
 pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: core.VulkanSurfaceProvider) !GraphicsContext {
     var self: GraphicsContext = undefined;
@@ -130,11 +139,17 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     self.graphics_queue = Queue.init(self.dev, candidate.queues.graphics_family);
     self.present_queue = Queue.init(self.dev, candidate.queues.present_family);
     self.mem_props = self.instance.getPhysicalDeviceMemoryProperties(self.pdev);
-    self.native_features_value = try queryNativeFeatures(self.instance, self.pdev, allocator);
+    self.ray_tracing_diagnostics_value = try queryRayTracingCapabilityDiagnostics(
+        self.instance,
+        self.pdev,
+        allocator,
+        &self.dev.wrapper.dispatch,
+    );
+    self.native_features_value = try queryNativeFeatures(self.instance, self.pdev, allocator, self.ray_tracing_diagnostics_value);
     self.native_features_value.debug_labels = self.debug_utils_enabled;
     self.native_features_value.debug_markers = self.debug_utils_enabled;
     self.features_value = queryUsableFeatures(self.native_features_value);
-    self.limits_value = queryLimits(self.props, self.features_value);
+    self.limits_value = queryLimits(self.props, self.features_value, self.ray_tracing_diagnostics_value);
     self.limits_value.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
 
     return self;
@@ -174,6 +189,10 @@ pub fn nativeFeatures(self: GraphicsContext) core.DeviceFeatures {
 
 pub fn limits(self: GraphicsContext) core.DeviceLimits {
     return self.limits_value;
+}
+
+pub fn rayTracingDiagnostics(self: GraphicsContext) core.RayTracingCapabilityDiagnostics {
+    return self.ray_tracing_diagnostics_value;
 }
 
 pub fn formatCapabilities(self: GraphicsContext, format: core.TextureFormat) core.FormatCapabilities {
@@ -276,6 +295,18 @@ pub fn allocate(self: GraphicsContext, requirements: vk.MemoryRequirements, flag
     }, null);
 }
 
+pub fn allocateDeviceAddressable(self: GraphicsContext, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
+    const allocate_flags = vk.MemoryAllocateFlagsInfo{
+        .flags = .{ .device_address_bit = true },
+        .device_mask = 0,
+    };
+    return try self.dev.allocateMemory(&.{
+        .p_next = &allocate_flags,
+        .allocation_size = requirements.size,
+        .memory_type_index = try self.findMemoryTypeIndex(requirements.memory_type_bits, flags),
+    }, null);
+}
+
 pub fn supportsSampleCount(self: GraphicsContext, format: core.TextureFormat, sample_count: u32) bool {
     const flags = if (core.isDepthFormat(format))
         self.props.limits.framebuffer_depth_sample_counts
@@ -299,7 +330,12 @@ fn maxSupportedSampleCount(self: GraphicsContext, format: core.TextureFormat) u3
     return 1;
 }
 
-fn queryNativeFeatures(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator) !core.DeviceFeatures {
+fn queryNativeFeatures(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
+    allocator: Allocator,
+    ray_tracing: core.RayTracingCapabilityDiagnostics,
+) !core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.vulkan);
     const native = instance.getPhysicalDeviceFeatures(pdev);
     const extensions = try queryExtensionSupport(instance, pdev, allocator);
@@ -321,8 +357,8 @@ fn queryNativeFeatures(instance: Instance, pdev: vk.PhysicalDevice, allocator: A
     result.external_textures = extensions.external_memory;
     result.mesh_shaders = extensions.mesh_shader;
     result.task_shaders = extensions.mesh_shader;
-    result.acceleration_structures = extensions.acceleration_structure or extensions.ray_tracing_nv;
-    result.ray_tracing = (extensions.acceleration_structure and extensions.ray_tracing_pipeline) or extensions.ray_tracing_nv;
+    result.acceleration_structures = ray_tracing.supported;
+    result.ray_tracing = ray_tracing.supported;
     result.driver_pipeline_cache = true;
     return result;
 }
@@ -356,7 +392,11 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures
     return result;
 }
 
-fn queryLimits(props: vk.PhysicalDeviceProperties, queried_features: core.DeviceFeatures) core.DeviceLimits {
+fn queryLimits(
+    props: vk.PhysicalDeviceProperties,
+    queried_features: core.DeviceFeatures,
+    ray_tracing: core.RayTracingCapabilityDiagnostics,
+) core.DeviceLimits {
     _ = queried_features;
     var result = core.defaultDeviceLimits(.vulkan);
     result.max_vertex_buffer_slots = @min(props.limits.max_vertex_input_bindings, core.default_max_vertex_buffer_slots);
@@ -373,6 +413,8 @@ fn queryLimits(props: vk.PhysicalDeviceProperties, queried_features: core.Device
     result.max_compute_threads_per_threadgroup_z = props.limits.max_compute_work_group_size[2];
     result.max_compute_total_threads_per_threadgroup = props.limits.max_compute_work_group_invocations;
     result.max_compute_threadgroup_memory_bytes = props.limits.max_compute_shared_memory_size;
+    result.max_ray_tracing_recursion_depth = ray_tracing.max_recursion_depth;
+    result.shader_binding_table_alignment = ray_tracing.shader_group_handle_alignment;
     result.max_driver_cache_identity_bytes = 4096;
     return result;
 }
@@ -386,6 +428,10 @@ const VulkanExtensionSupport = struct {
     acceleration_structure: bool = false,
     ray_tracing_pipeline: bool = false,
     ray_tracing_nv: bool = false,
+    deferred_host_operations: bool = false,
+    buffer_device_address: bool = false,
+    spirv_1_4: bool = false,
+    shader_float_controls: bool = false,
     mesh_shader: bool = false,
 };
 
@@ -410,12 +456,202 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_acceleration_structure.name)) result.acceleration_structure = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_ray_tracing_pipeline.name)) result.ray_tracing_pipeline = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.nv_ray_tracing.name)) result.ray_tracing_nv = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_deferred_host_operations.name)) result.deferred_host_operations = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_buffer_device_address.name)) result.buffer_device_address = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_spirv_1_4.name)) result.spirv_1_4 = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_shader_float_controls.name)) result.shader_float_controls = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_mesh_shader.name) or
         std.mem.eql(u8, extension_name, vk.extensions.nv_mesh_shader.name))
     {
         result.mesh_shader = true;
     }
     return result;
+}
+
+fn rayTracingExtensionSupported(support: VulkanExtensionSupport, extension_name: [*:0]const u8) bool {
+    const name = std.mem.span(extension_name);
+    if (std.mem.eql(u8, name, vk.extensions.khr_acceleration_structure.name)) return support.acceleration_structure;
+    if (std.mem.eql(u8, name, vk.extensions.khr_ray_tracing_pipeline.name)) return support.ray_tracing_pipeline;
+    if (std.mem.eql(u8, name, vk.extensions.khr_deferred_host_operations.name)) return support.deferred_host_operations;
+    if (std.mem.eql(u8, name, vk.extensions.khr_buffer_device_address.name)) return support.buffer_device_address;
+    if (std.mem.eql(u8, name, vk.extensions.khr_spirv_1_4.name)) return support.spirv_1_4;
+    if (std.mem.eql(u8, name, vk.extensions.khr_shader_float_controls.name)) return support.shader_float_controls;
+    return false;
+}
+
+fn missingRayTracingExtension(support: VulkanExtensionSupport) ?[*:0]const u8 {
+    for (required_ray_tracing_device_extensions) |extension_name| {
+        if (!rayTracingExtensionSupported(support, extension_name)) return extension_name;
+    }
+    return null;
+}
+
+fn getPhysicalDeviceFeatures2(instance: Instance, pdev: vk.PhysicalDevice, out_features: *vk.PhysicalDeviceFeatures2) bool {
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceFeatures2) |get_features2| {
+        get_features2(pdev, out_features);
+        return true;
+    }
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceFeatures2KHR) |get_features2_khr| {
+        get_features2_khr(pdev, out_features);
+        return true;
+    }
+    return false;
+}
+
+fn getPhysicalDeviceProperties2(instance: Instance, pdev: vk.PhysicalDevice, properties: *vk.PhysicalDeviceProperties2) bool {
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceProperties2) |get_properties2| {
+        get_properties2(pdev, properties);
+        return true;
+    }
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceProperties2KHR) |get_properties2_khr| {
+        get_properties2_khr(pdev, properties);
+        return true;
+    }
+    return false;
+}
+
+fn queryRayTracingCapabilityDiagnostics(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
+    allocator: Allocator,
+    device_dispatch: ?*const DeviceWrapper.Dispatch,
+) !core.RayTracingCapabilityDiagnostics {
+    const support = try queryExtensionSupport(instance, pdev, allocator);
+    if (missingRayTracingExtension(support)) |missing| {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_extension,
+            std.mem.span(missing),
+            "required for the Period32 Vulkan ray traced scene path",
+        );
+    }
+
+    var buffer_device_address_features = vk.PhysicalDeviceBufferDeviceAddressFeatures{};
+    var ray_tracing_pipeline_features = vk.PhysicalDeviceRayTracingPipelineFeaturesKHR{
+        .p_next = &buffer_device_address_features,
+    };
+    var acceleration_structure_features = vk.PhysicalDeviceAccelerationStructureFeaturesKHR{
+        .p_next = &ray_tracing_pipeline_features,
+    };
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &acceleration_structure_features,
+        .features = .{},
+    };
+    if (!getPhysicalDeviceFeatures2(instance, pdev, &features2)) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_device_proc,
+            "vkGetPhysicalDeviceFeatures2",
+            "required to query Vulkan ray tracing feature structs",
+        );
+    }
+
+    if (acceleration_structure_features.acceleration_structure != .true) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_feature,
+            "VkPhysicalDeviceAccelerationStructureFeaturesKHR.accelerationStructure",
+            "device extension is present but the feature bit is disabled",
+        );
+    }
+    if (ray_tracing_pipeline_features.ray_tracing_pipeline != .true) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_feature,
+            "VkPhysicalDeviceRayTracingPipelineFeaturesKHR.rayTracingPipeline",
+            "device extension is present but the feature bit is disabled",
+        );
+    }
+    if (buffer_device_address_features.buffer_device_address != .true) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_feature,
+            "VkPhysicalDeviceBufferDeviceAddressFeatures.bufferDeviceAddress",
+            "ray tracing requires device addresses for geometry, AS, and SBT buffers",
+        );
+    }
+
+    var ray_tracing_properties = std.mem.zeroes(vk.PhysicalDeviceRayTracingPipelinePropertiesKHR);
+    ray_tracing_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;
+    var acceleration_structure_properties = std.mem.zeroes(vk.PhysicalDeviceAccelerationStructurePropertiesKHR);
+    acceleration_structure_properties.s_type = .physical_device_acceleration_structure_properties_khr;
+    acceleration_structure_properties.p_next = &ray_tracing_properties;
+    var properties2 = vk.PhysicalDeviceProperties2{
+        .p_next = &acceleration_structure_properties,
+        .properties = undefined,
+    };
+    if (!getPhysicalDeviceProperties2(instance, pdev, &properties2)) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_device_proc,
+            "vkGetPhysicalDeviceProperties2",
+            "required to query Vulkan ray tracing limits",
+        );
+    }
+
+    if (ray_tracing_properties.max_ray_recursion_depth == 0) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_limit,
+            "VkPhysicalDeviceRayTracingPipelinePropertiesKHR.maxRayRecursionDepth",
+            "must be non-zero for the first ray traced scene",
+        );
+    }
+    if (ray_tracing_properties.shader_group_handle_size == 0) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_limit,
+            "VkPhysicalDeviceRayTracingPipelinePropertiesKHR.shaderGroupHandleSize",
+            "must be non-zero to materialize an SBT",
+        );
+    }
+    if (ray_tracing_properties.shader_group_handle_alignment == 0 or ray_tracing_properties.shader_group_base_alignment == 0) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_limit,
+            "VkPhysicalDeviceRayTracingPipelinePropertiesKHR.shaderGroup*Alignment",
+            "must be non-zero to build valid SBT regions",
+        );
+    }
+    if (acceleration_structure_properties.min_acceleration_structure_scratch_offset_alignment == 0) {
+        return core.RayTracingCapabilityDiagnostics.unsupported(
+            .vulkan,
+            .missing_limit,
+            "VkPhysicalDeviceAccelerationStructurePropertiesKHR.minAccelerationStructureScratchOffsetAlignment",
+            "must be non-zero to build acceleration structures",
+        );
+    }
+
+    if (device_dispatch) |dispatch| {
+        if (dispatch.vkCreateAccelerationStructureKHR == null) return missingRayTracingDeviceProc("vkCreateAccelerationStructureKHR");
+        if (dispatch.vkDestroyAccelerationStructureKHR == null) return missingRayTracingDeviceProc("vkDestroyAccelerationStructureKHR");
+        if (dispatch.vkCmdBuildAccelerationStructuresKHR == null) return missingRayTracingDeviceProc("vkCmdBuildAccelerationStructuresKHR");
+        if (dispatch.vkGetAccelerationStructureBuildSizesKHR == null) return missingRayTracingDeviceProc("vkGetAccelerationStructureBuildSizesKHR");
+        if (dispatch.vkGetAccelerationStructureDeviceAddressKHR == null) return missingRayTracingDeviceProc("vkGetAccelerationStructureDeviceAddressKHR");
+        if (dispatch.vkCreateRayTracingPipelinesKHR == null) return missingRayTracingDeviceProc("vkCreateRayTracingPipelinesKHR");
+        if (dispatch.vkGetRayTracingShaderGroupHandlesKHR == null) return missingRayTracingDeviceProc("vkGetRayTracingShaderGroupHandlesKHR");
+        if (dispatch.vkCmdTraceRaysKHR == null) return missingRayTracingDeviceProc("vkCmdTraceRaysKHR");
+        if (dispatch.vkGetBufferDeviceAddressKHR == null and dispatch.vkGetBufferDeviceAddress == null) {
+            return missingRayTracingDeviceProc("vkGetBufferDeviceAddressKHR");
+        }
+    }
+
+    return core.RayTracingCapabilityDiagnostics.supportedVulkan(
+        ray_tracing_properties.max_ray_recursion_depth,
+        ray_tracing_properties.shader_group_handle_size,
+        ray_tracing_properties.shader_group_handle_alignment,
+        ray_tracing_properties.shader_group_base_alignment,
+        acceleration_structure_properties.min_acceleration_structure_scratch_offset_alignment,
+    );
+}
+
+fn missingRayTracingDeviceProc(proc_name: []const u8) core.RayTracingCapabilityDiagnostics {
+    return core.RayTracingCapabilityDiagnostics.unsupported(
+        .vulkan,
+        .missing_device_proc,
+        proc_name,
+        "Vulkan loader or ICD did not expose a required Period32 ray tracing device command",
+    );
 }
 
 fn vertexAttributeDivisorExtensionName(support: VulkanExtensionSupport) ?[*:0]const u8 {
@@ -503,10 +739,15 @@ fn createSurface(instance: Instance, surface_provider: core.VulkanSurfaceProvide
 fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: DeviceCandidate) !vk.Device {
     const extensions = try queryExtensionSupport(instance, candidate.pdev, allocator);
     const enable_vertex_divisor = vertexAttributeDivisorFeatureSupported(instance, candidate.pdev, extensions);
+    const ray_tracing_diagnostics = try queryRayTracingCapabilityDiagnostics(instance, candidate.pdev, allocator, null);
+    const enable_ray_tracing = ray_tracing_diagnostics.supported;
 
     var extension_names: std.ArrayList([*:0]const u8) = .empty;
     defer extension_names.deinit(allocator);
     try extension_names.appendSlice(allocator, &required_device_extensions);
+    if (enable_ray_tracing) {
+        try extension_names.appendSlice(allocator, &required_ray_tracing_device_extensions);
+    }
     if (enable_vertex_divisor) {
         if (vertexAttributeDivisorExtensionName(extensions)) |extension_name| {
             try extension_names.append(allocator, extension_name);
@@ -524,6 +765,26 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     var vertex_divisor_features = vk.PhysicalDeviceVertexAttributeDivisorFeaturesEXT{
         .vertex_attribute_instance_rate_divisor = if (enable_vertex_divisor) .true else .false,
     };
+    var buffer_device_address_features = vk.PhysicalDeviceBufferDeviceAddressFeatures{
+        .buffer_device_address = if (enable_ray_tracing) .true else .false,
+    };
+    var ray_tracing_pipeline_features = vk.PhysicalDeviceRayTracingPipelineFeaturesKHR{
+        .ray_tracing_pipeline = if (enable_ray_tracing) .true else .false,
+    };
+    var acceleration_structure_features = vk.PhysicalDeviceAccelerationStructureFeaturesKHR{
+        .acceleration_structure = if (enable_ray_tracing) .true else .false,
+    };
+    var device_p_next: ?*anyopaque = null;
+    if (enable_vertex_divisor) {
+        vertex_divisor_features.p_next = device_p_next;
+        device_p_next = &vertex_divisor_features;
+    }
+    if (enable_ray_tracing) {
+        buffer_device_address_features.p_next = device_p_next;
+        ray_tracing_pipeline_features.p_next = &buffer_device_address_features;
+        acceleration_structure_features.p_next = &ray_tracing_pipeline_features;
+        device_p_next = &acceleration_structure_features;
+    }
     const qci = [_]vk.DeviceQueueCreateInfo{
         .{
             .queue_family_index = candidate.queues.graphics_family,
@@ -539,7 +800,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     const queue_count: u32 = if (candidate.queues.graphics_family == candidate.queues.present_family) 1 else 2;
 
     return try instance.createDevice(candidate.pdev, &.{
-        .p_next = if (enable_vertex_divisor) &vertex_divisor_features else null,
+        .p_next = device_p_next,
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,
         .enabled_extension_count = @intCast(extension_names.items.len),
@@ -725,6 +986,23 @@ test "Vulkan extension support maps optional backend capabilities" {
     try std.testing.expect(support.acceleration_structure);
     try std.testing.expect(support.ray_tracing_pipeline);
     try std.testing.expect(support.mesh_shader);
+}
+
+test "Vulkan ray tracing extension gate reports the first missing KHR dependency" {
+    var support = VulkanExtensionSupport{};
+    support = mergeExtensionSupport(support, vk.extensions.khr_acceleration_structure.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_ray_tracing_pipeline.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_deferred_host_operations.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_buffer_device_address.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_spirv_1_4.name);
+
+    try std.testing.expectEqualStrings(
+        vk.extensions.khr_shader_float_controls.name,
+        std.mem.span(missingRayTracingExtension(support).?),
+    );
+
+    support = mergeExtensionSupport(support, vk.extensions.khr_shader_float_controls.name);
+    try std.testing.expect(missingRayTracingExtension(support) == null);
 }
 
 test "Vulkan usable features stay conservative before backend lowering" {

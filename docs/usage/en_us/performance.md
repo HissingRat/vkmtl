@@ -3,9 +3,10 @@
 vkmtl is still young, so the most important performance rule is to keep
 expensive object creation out of the frame loop.
 
-## Shader Compilation
+## Shader Resolution
 
-Compile embedded Slang once during startup or asset reload:
+Resolve the precompiled shader that matches embedded Slang during startup or
+asset reload:
 
 ```zig
 var compiled = try device.compileRenderShader("main", source, .{
@@ -16,8 +17,9 @@ defer compiled.deinit();
 ```
 
 Runtime shader artifacts are cached under `vkmtl-cache` by default. Source
-hashes are part of the cache identity, so editing embedded Slang recompiles the
-right artifacts automatically.
+hashes are part of the cache identity, so editing embedded Slang regenerates
+embedded artifacts on the next build, and runtime restores them from the blob on
+a cache miss.
 
 ## Object Creation
 

@@ -2,8 +2,10 @@ const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
 const VulkanBuffer = @import("buffer.zig");
+const VulkanAccelerationStructure = @import("acceleration_structure.zig");
 const VulkanCommand = @import("command.zig");
 const VulkanComputePipelineState = @import("compute_pipeline.zig");
+const VulkanRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const VulkanRenderPipelineState = @import("render_pipeline.zig");
 const VulkanSamplerState = @import("sampler.zig");
 const VulkanShaderModule = @import("shader_module.zig");
@@ -103,6 +105,10 @@ pub fn nativeFeatures(self: *const VulkanClearScreen) core.DeviceFeatures {
     return self.gc.nativeFeatures();
 }
 
+pub fn rayTracingDiagnostics(self: *const VulkanClearScreen) core.RayTracingCapabilityDiagnostics {
+    return self.gc.rayTracingDiagnostics();
+}
+
 pub fn formatCapabilities(self: *const VulkanClearScreen, format: core.TextureFormat) core.FormatCapabilities {
     return self.gc.formatCapabilities(format);
 }
@@ -178,6 +184,10 @@ pub fn makeBuffer(self: *VulkanClearScreen, descriptor: core.BufferDescriptor) !
     return try VulkanBuffer.init(self.gc, descriptor);
 }
 
+pub fn makeAccelerationStructure(self: *VulkanClearScreen, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!VulkanAccelerationStructure {
+    return try VulkanAccelerationStructure.init(self.gc, descriptor);
+}
+
 pub fn makeShaderModule(self: *VulkanClearScreen, descriptor: core.ShaderModuleDescriptor) !VulkanShaderModule {
     return try VulkanShaderModule.init(self.gc, self.allocator, descriptor);
 }
@@ -188,6 +198,10 @@ pub fn makeRenderPipelineState(self: *VulkanClearScreen, descriptor: core.Render
 
 pub fn makeComputePipelineState(self: *VulkanClearScreen, descriptor: core.ComputePipelineDescriptor) !VulkanComputePipelineState {
     return try VulkanComputePipelineState.init(self.gc, self.allocator, descriptor);
+}
+
+pub fn makeRayTracingPipelineState(self: *VulkanClearScreen, descriptor: core.RayTracingPipelineDescriptor) !VulkanRayTracingPipelineState {
+    return try VulkanRayTracingPipelineState.init(self.gc, self.allocator, descriptor);
 }
 
 pub fn makeCommandBuffer(self: *VulkanClearScreen) !VulkanCommand.CommandBuffer {

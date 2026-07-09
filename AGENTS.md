@@ -103,8 +103,12 @@ The shader compilation pipeline is:
 - Metal: Slang to MSL, then runtime Metal library creation.
 
 `zig build` prepares the pinned Slang distribution by default on build hosts
-with known release packages. Unknown hosts fall back to `slangc` on `PATH` or an
-explicit `-Dslangc=/path/to/slangc`. Runtime shader artifacts live in
+with known release packages and precompiles known embedded shader declarations
+into a generated `vkmtl_precompiled_shaders` module. Runtime shader APIs do not
+spawn `slangc`, do not require `slangc` beside the executable, and must report a
+typed missing-precompiled-shader error when no matching name/entry/source hash
+blob exists. Unknown build hosts must use an explicit build-time
+`-Dslangc=/path/to/build-time/slangc` override. Runtime shader artifacts live in
 `vkmtl-cache` beside the executable by default. Applications may either pass an
 explicit `WindowContextOptions.shader_cache_dir` or pass process arguments to
 `WindowContextOptions.process_args` so vkmtl can parse its own runtime
@@ -116,9 +120,9 @@ in `build.zig`.
 Keep runtime shader cache artifacts inspectable while the pipeline is young.
 Reflection data feeds bind group layout derivation, vertex descriptor
 derivation, and binding validation. Explicit descriptors are still allowed when
-an example or application needs direct control. Do not reintroduce a build-time
-shader artifact path; examples should compile embedded Slang through the runtime
-cache.
+an example or application needs direct control. Keep examples on the public
+runtime shader declaration APIs; the build-time precompiler owns the embedded
+artifact blobs.
 
 ## Phase Discipline
 

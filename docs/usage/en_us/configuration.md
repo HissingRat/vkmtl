@@ -93,23 +93,27 @@ zig build run-triangle -Dvulkan \
 `-Dvulkan-loader-dir` should point to the directory containing
 `libvulkan.1.dylib`, and `-Dvulkan-icd` should point to the MoltenVK ICD JSON.
 
-## Slang Compiler
+## Slang Precompile
 
 Default `zig build` prepares the pinned Slang distribution under
-`.zig-cache/vkmtl-tools` on supported hosts. If the host has no pinned package,
-vkmtl falls back to `slangc` on `PATH`.
+`.zig-cache/vkmtl-tools` on supported hosts and precompiles embedded shaders
+listed by the current manifest. Runtime never launches `slangc`, and release
+artifacts do not need to carry a Slang compiler or setup scripts.
 
-Pass an explicit compiler path when needed:
+Pass an explicit build-time compiler path if the build host has no pinned
+package:
 
 ```sh
-zig build run-rainbow-cube -Dslangc=/path/to/slangc
+zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
 ## Shader Cache
 
 vkmtl manages the runtime shader artifact cache automatically. By default, the
 cache lives under `vkmtl-cache` beside the executable. The cache key includes
-the embedded Slang source hash, so source changes trigger recompilation.
+the embedded Slang source hash; source changes regenerate embedded precompiled
+blobs on the next build, and runtime restores artifacts from those blobs on a
+cache miss.
 
 If an application passes `std.process.Init.Minimal.args` to
 `WindowContextOptions.process_args`, vkmtl parses its own runtime arguments

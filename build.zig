@@ -17,6 +17,19 @@ const VulkanRuntimeOptions = struct {
     icd: ?[]const u8,
 };
 
+const shader_source_paths = [_][]const u8{
+    "examples/triangle/shaders/triangle.slang",
+    "examples/uniform_buffer/shaders/uniform_buffer.slang",
+    "examples/sampled_texture/shaders/sampled_texture.slang",
+    "examples/depth_triangles/shaders/depth_triangles.slang",
+    "examples/rainbow_cube/shaders/rainbow_cube.slang",
+    "examples/msaa_triangle/shaders/msaa_triangle.slang",
+    "examples/offscreen_texture/shaders/offscreen_texture.slang",
+    "examples/compute_readback/shaders/compute_readback.slang",
+    "examples/ray_traced_scene/shaders/ray_traced_scene.slang",
+    "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
+};
+
 const slang_packages = [_]SlangPackage{
     .{
         .id = "macos-aarch64",
@@ -59,17 +72,14 @@ const slang_packages = [_]SlangPackage{
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const shader_tools = resolveSlangTool(b, b.option([]const u8, "slangc", "Path to a Slang compiler executable"));
+    const shader_tools = resolveSlangTool(b, b.option([]const u8, "slangc", "Path to a build-time Slang compiler executable"), b.graph.host.result);
+    const precompiled_shaders = addPrecompiledShaderModule(b, shader_tools, target, optimize);
     const force_vulkan = b.option(bool, "vulkan", "Force WindowContext to use the Vulkan backend") orelse false;
     const vulkan_runtime = VulkanRuntimeOptions{
         .loader_dir = b.option([]const u8, "vulkan-loader-dir", "Directory containing the macOS Vulkan loader dylib for forced Vulkan example runs"),
         .icd = b.option([]const u8, "vulkan-icd", "Path to the macOS MoltenVK ICD JSON for forced Vulkan example runs"),
     };
-    if (shader_tools.setup_step) |setup_step| {
-        b.getInstallStep().dependOn(setup_step);
-    }
     const vkmtl_build_options = b.addOptions();
-    vkmtl_build_options.addOption([]const u8, "slangc_path", shader_tools.slangc);
     vkmtl_build_options.addOption(bool, "force_vulkan", force_vulkan);
 
     const vulkan_headers = b.dependency("vulkan_headers", .{});
@@ -99,6 +109,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "vulkan", .module = vulkan },
             .{ .name = "metal_bridge", .module = metal_bridge.createModule() },
             .{ .name = "vkmtl_build_options", .module = vkmtl_build_options.createModule() },
+            .{ .name = "vkmtl_precompiled_shaders", .module = precompiled_shaders },
         },
     });
     addMetalBridge(b, vkmtl, target.result.os.tag);
@@ -627,6 +638,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "vulkan", .module = vulkan },
                 .{ .name = "metal_bridge", .module = metal_bridge.createModule() },
                 .{ .name = "vkmtl_build_options", .module = vkmtl_build_options.createModule() },
+                .{ .name = "vkmtl_precompiled_shaders", .module = precompiled_shaders },
             },
         }),
     });
@@ -659,17 +671,17 @@ const SlangTool = struct {
     setup_step: ?*std.Build.Step = null,
 };
 
-fn resolveSlangTool(b: *std.Build, explicit_slangc: ?[]const u8) SlangTool {
+fn resolveSlangTool(b: *std.Build, explicit_slangc: ?[]const u8, target: std.Target) SlangTool {
     if (explicit_slangc) |slangc| {
         return .{ .slangc = slangc };
     }
 
-    const package = slangPackageForHost() orelse {
-        std.log.warn(
-            "vkmtl has no pinned Slang distribution for build host {s}-{s}; using 'slangc' from PATH. Pass -Dslangc=/path/to/slangc to override.",
-            .{ @tagName(builtin.os.tag), @tagName(builtin.cpu.arch) },
+    const package = slangPackageForTarget(target) orelse {
+        std.log.err(
+            "vkmtl has no pinned build-time Slang distribution for host {s}-{s}; pass -Dslangc=/path/to/slangc.",
+            .{ @tagName(target.os.tag), @tagName(target.cpu.arch) },
         );
-        return .{ .slangc = "slangc" };
+        @panic("missing build-time Slang compiler");
     };
     const cache_root = b.cache_root.path orelse ".zig-cache";
     const root = b.pathJoin(&.{ cache_root, slang_cache_namespace, "slang", slang_tag, package.id });
@@ -683,6 +695,40 @@ fn resolveSlangTool(b: *std.Build, explicit_slangc: ?[]const u8) SlangTool {
         .slangc = slangc,
         .setup_step = &setup.step,
     };
+}
+
+fn addPrecompiledShaderModule(
+    b: *std.Build,
+    shader_tools: SlangTool,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Module {
+    const generator = b.addExecutable(.{
+        .name = "vkmtl-precompile-shaders",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/precompile_shaders/main.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+        }),
+    });
+
+    const run_generator = b.addRunArtifact(generator);
+    run_generator.setName("precompile vkmtl shaders");
+    const generated_dir = run_generator.addOutputDirectoryArg("vkmtl-precompiled-shaders");
+    run_generator.addArg(shader_tools.slangc);
+    run_generator.setCwd(b.path("."));
+    if (shader_tools.setup_step) |setup_step| {
+        run_generator.step.dependOn(setup_step);
+    }
+    for (shader_source_paths) |path| {
+        run_generator.addFileArg(b.path(path));
+    }
+
+    return b.createModule(.{
+        .root_source_file = generated_dir.path(b, "precompiled_shaders.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 }
 
 fn addSlangSetupStep(
@@ -758,9 +804,9 @@ fn addSlangSetupArgs(
     });
 }
 
-fn slangPackageForHost() ?SlangPackage {
-    const os = builtin.os.tag;
-    const arch = builtin.cpu.arch;
+fn slangPackageForTarget(target: std.Target) ?SlangPackage {
+    const os = target.os.tag;
+    const arch = target.cpu.arch;
 
     for (slang_packages) |package| {
         if (std.mem.eql(u8, package.id, "macos-aarch64") and os == .macos and arch == .aarch64) return package;

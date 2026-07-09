@@ -17,10 +17,12 @@ const MetalTexture = @import("../backend/metal/texture.zig");
 const MetalTextureView = @import("../backend/metal/texture_view.zig");
 const VulkanBindGroupBackend = @import("../backend/vulkan/bind_group.zig");
 const VulkanAdvancedBindGroupBackend = @import("../backend/vulkan/advanced_binding.zig");
+const VulkanAccelerationStructure = @import("../backend/vulkan/acceleration_structure.zig");
 const VulkanBuffer = @import("../backend/vulkan/buffer.zig");
 const VulkanCommand = @import("../backend/vulkan/command.zig");
 const VulkanComputePipelineState = @import("../backend/vulkan/compute_pipeline.zig");
 const VulkanClearScreen = @import("../backend/vulkan/clear_screen.zig");
+const VulkanRayTracingPipelineState = @import("../backend/vulkan/ray_tracing_pipeline.zig");
 const VulkanRenderPipelineState = @import("../backend/vulkan/render_pipeline.zig");
 const VulkanSamplerState = @import("../backend/vulkan/sampler.zig");
 const VulkanShaderModule = @import("../backend/vulkan/shader_module.zig");
@@ -1592,10 +1594,20 @@ pub const AccelerationStructure = struct {
     build_count: u64 = 0,
     built_value: bool = false,
     alive: bool = true,
+    impl: ?Impl = null,
+
+    const Impl = union(core.Backend) {
+        vulkan: VulkanAccelerationStructure,
+        metal: void,
+    };
 
     pub fn deinit(self: *AccelerationStructure) void {
         assertAlive(self.alive, .acceleration_structure);
         self.alive = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => {},
+        };
         self.tracker.release(.acceleration_structure);
     }
 
@@ -1641,6 +1653,10 @@ pub const AccelerationStructure = struct {
 
     pub fn hasBackendPrivateHandle(self: AccelerationStructure) bool {
         assertAlive(self.alive, .acceleration_structure);
+        if (self.impl) |impl| switch (impl) {
+            .vulkan => |vulkan| return vulkan.hasDriverHandle(),
+            .metal => {},
+        };
         return self.native_handle.matchesPlan(.{
             .backend = self.backend,
             .kind = self.descriptor_value.kind,
@@ -1673,6 +1689,7 @@ pub const AccelerationStructure = struct {
         plan: core.AccelerationStructureBuildPlan,
         resources: AccelerationStructureBuildResources,
         command_recorded: bool,
+        driver_submitted: bool,
     ) core.AdvancedFeatureError!void {
         assertAlive(self.alive, .acceleration_structure);
         if (!self.native_handle.matchesPlan(plan)) {
@@ -1688,7 +1705,7 @@ pub const AccelerationStructure = struct {
             .scratch_size = required_scratch,
             .update_source_used = resources.update_source != null,
             .command_recorded = command_recorded,
-            .driver_submitted = false,
+            .driver_submitted = driver_submitted,
         };
     }
 };
@@ -1697,6 +1714,7 @@ pub const AccelerationStructureBuildResources = struct {
     result: *AccelerationStructure,
     scratch: *Buffer,
     update_source: ?*AccelerationStructure = null,
+    instance_source: ?*AccelerationStructure = null,
     scratch_offset: u64 = 0,
 
     pub fn validate(
@@ -1708,6 +1726,16 @@ pub const AccelerationStructureBuildResources = struct {
         assertAlive(self.scratch.alive, .buffer);
         if (self.result.backend != backend or self.scratch.backend != backend) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (plan.kind == .top_level) {
+            const instance_source = self.instance_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            assertAlive(instance_source.alive, .acceleration_structure);
+            if (instance_source.backend != backend or
+                instance_source.descriptor_value.kind != .bottom_level or
+                !instance_source.isBuilt())
+            {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
         }
         if (!self.scratch.usage_value.acceleration_structure_scratch) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -1757,7 +1785,6 @@ const BackendPrivateRayTracingPipelineHandle = struct {
             .max_recursion_depth = lowering.maxRecursionDepth(),
         };
     }
-
 };
 
 pub const RayTracingPipelineState = struct {
@@ -1768,11 +1795,21 @@ pub const RayTracingPipelineState = struct {
     descriptor_value: core.RayTracingPipelineDescriptor,
     lowering_value: core.RayTracingPipelineLowering,
     native_handle: BackendPrivateRayTracingPipelineHandle,
+    impl: ?Impl = null,
     alive: bool = true,
+
+    const Impl = union(core.Backend) {
+        vulkan: VulkanRayTracingPipelineState,
+        metal: void,
+    };
 
     pub fn deinit(self: *RayTracingPipelineState) void {
         assertAlive(self.alive, .ray_tracing_pipeline_state);
         self.alive = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => {},
+        };
         self.allocator.free(self.descriptor_value.shader_groups);
         self.tracker.release(.ray_tracing_pipeline_state);
     }
@@ -1788,6 +1825,10 @@ pub const RayTracingPipelineState = struct {
     pub fn setLabel(self: *RayTracingPipelineState, label_value: ?[]const u8) void {
         assertAlive(self.alive, .ray_tracing_pipeline_state);
         self.label_value = label_value;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => {},
+        };
     }
 
     pub fn descriptor(self: RayTracingPipelineState) core.RayTracingPipelineDescriptor {
@@ -1824,6 +1865,14 @@ pub const RayTracingPipelineState = struct {
     pub fn backendPrivatePipelineBoundToDriver(self: RayTracingPipelineState) bool {
         assertAlive(self.alive, .ray_tracing_pipeline_state);
         return self.native_handle.driver_bound;
+    }
+
+    fn vulkanImpl(self: *RayTracingPipelineState) ?*VulkanRayTracingPipelineState {
+        if (self.impl) |*impl| return switch (impl.*) {
+            .vulkan => |*vulkan| vulkan,
+            .metal => null,
+        };
+        return null;
     }
 };
 
@@ -1974,6 +2023,7 @@ pub const ShaderBindingTable = struct {
         self: *ShaderBindingTable,
         plan: core.RayDispatchPlan,
         command_recorded: bool,
+        driver_submitted: bool,
     ) void {
         self.dispatch_count += 1;
         self.last_dispatch_record = .{
@@ -1984,7 +2034,28 @@ pub const ShaderBindingTable = struct {
             .total_rays = plan.total_rays,
             .sbt_size = plan.sbt_size,
             .command_recorded = command_recorded,
+            .driver_submitted = driver_submitted,
         };
+        if (driver_submitted) self.native_records.driver_bound = true;
+    }
+};
+
+pub const RayTracingDrawableResources = struct {
+    acceleration_structure: *AccelerationStructure,
+    output: *TextureView,
+
+    fn validate(
+        self: RayTracingDrawableResources,
+        backend: core.Backend,
+    ) core.AdvancedFeatureError!void {
+        assertAlive(self.acceleration_structure.alive, .acceleration_structure);
+        assertAlive(self.output.alive, .texture_view);
+        if (self.acceleration_structure.backend != backend or self.output.backend != backend) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (self.acceleration_structure.descriptor_value.kind != .top_level or !self.acceleration_structure.isBuilt()) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
     }
 };
 
@@ -3204,7 +3275,36 @@ pub const CommandBuffer = struct {
         if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try resources.validate(self.backend, plan);
         _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
-        try resources.result.markBuilt(plan, resources, self.impl != null);
+        var driver_submitted = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                if (resources.result.impl) |*result_impl| switch (result_impl.*) {
+                    .vulkan => |*vulkan_as| {
+                        const scratch_impl = switch (resources.scratch.impl) {
+                            .vulkan => |*vulkan_scratch| vulkan_scratch,
+                            .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                        };
+                        const instance_source_impl = if (resources.instance_source) |source| switch (source.impl orelse {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }) {
+                            .vulkan => |*vulkan_source| vulkan_source,
+                            .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                        } else null;
+                        try vulkan.encodeAccelerationStructureBuild(
+                            plan,
+                            vulkan_as,
+                            scratch_impl,
+                            resources.scratch_offset,
+                            instance_source_impl,
+                        );
+                        driver_submitted = true;
+                    },
+                    .metal => {},
+                };
+            },
+            .metal => {},
+        };
+        try resources.result.markBuilt(plan, resources, self.impl != null, driver_submitted);
     }
 
     pub fn dispatchRays(
@@ -3221,7 +3321,59 @@ pub const CommandBuffer = struct {
         try expectSameBackend(self.backend, pipeline.backend);
         try expectSameBackend(self.backend, shader_binding_table.backend);
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
-        shader_binding_table.recordDispatch(plan, self.impl != null);
+        var driver_submitted = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                if (pipeline.vulkanImpl()) |vulkan_pipeline| {
+                    try vulkan.traceRays(vulkan_pipeline, descriptor);
+                    driver_submitted = true;
+                }
+            },
+            .metal => {},
+        };
+        shader_binding_table.recordDispatch(plan, self.impl != null, driver_submitted);
+        return plan;
+    }
+
+    pub fn dispatchRaysToDrawable(
+        self: *CommandBuffer,
+        pipeline: *RayTracingPipelineState,
+        shader_binding_table: *ShaderBindingTable,
+        descriptor: core.RayDispatchDescriptor,
+        resources: RayTracingDrawableResources,
+    ) !core.RayDispatchPlan {
+        assertObjectAlive(self.alive, "command_buffer");
+        assertAlive(pipeline.alive, .ray_tracing_pipeline_state);
+        assertAlive(shader_binding_table.alive, .shader_binding_table);
+        if (self.debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try expectSameBackend(self.backend, pipeline.backend);
+        try expectSameBackend(self.backend, shader_binding_table.backend);
+        try resources.validate(self.backend);
+        const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
+        var driver_submitted = false;
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                const vulkan_pipeline = pipeline.vulkanImpl() orelse {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                };
+                const vulkan_as = switch (resources.acceleration_structure.impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => |*acceleration_structure| acceleration_structure,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                };
+                const vulkan_output = switch (resources.output.impl) {
+                    .vulkan => |*output| output,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                };
+                try vulkan.traceRaysToDrawable(vulkan_pipeline, vulkan_as, vulkan_output, descriptor);
+                self.uses_current_drawable_pass = true;
+                driver_submitted = true;
+            },
+            .metal => return core.AdvancedFeatureError.UnsupportedRayTracing,
+        };
+        shader_binding_table.recordDispatch(plan, self.impl != null, driver_submitted);
         return plan;
     }
 
@@ -4244,7 +4396,6 @@ pub const WindowContextOptions = struct {
     debug_backend_override: ?core.Backend = null,
     process_args: ?std.process.Args = null,
     shader_cache_dir: ?[]const u8 = null,
-    slangc_path: ?[]const u8 = null,
     surface: core.SurfaceDescriptor,
     presentation: core.PresentationDescriptor,
 };
@@ -4391,7 +4542,6 @@ pub const Device = struct {
     adapter_info: core.AdapterInfo,
     capability_report: core.DeviceCapabilityReport,
     shader_cache_dir: ?[]const u8 = null,
-    slangc_path: ?[]const u8 = null,
 
     pub fn selectedBackend(self: Device) core.Backend {
         return self.backend;
@@ -4524,7 +4674,20 @@ pub const Device = struct {
 
     pub fn makeAccelerationStructure(self: *Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!AccelerationStructure {
         try descriptor.validate(self.nativeFeatures());
-        const sizes = core.estimateAccelerationStructureBuildSizes(descriptor);
+        var sizes = core.estimateAccelerationStructureBuildSizes(descriptor);
+        var impl: ?AccelerationStructure.Impl = null;
+        if (self.capability_report.source == .vulkan_query or self.capability_report.source == .metal_query) {
+            switch (self.impl.*) {
+                .vulkan => |*vulkan| {
+                    var acceleration_structure = try vulkan.makeAccelerationStructure(descriptor);
+                    sizes = acceleration_structure.buildSizes();
+                    impl = .{ .vulkan = acceleration_structure };
+                },
+                .metal => {
+                    impl = .{ .metal = {} };
+                },
+            }
+        }
         self.tracker.retain(.acceleration_structure);
         return .{
             .backend = self.backend,
@@ -4537,6 +4700,7 @@ pub const Device = struct {
                 descriptor,
                 sizes,
             ),
+            .impl = impl,
         };
     }
 
@@ -4566,6 +4730,23 @@ pub const Device = struct {
         );
         const shader_groups = try self.allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.shader_groups);
         errdefer self.allocator.free(shader_groups);
+        var impl: ?RayTracingPipelineState.Impl = null;
+        errdefer if (impl) |*pipeline_impl| switch (pipeline_impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => {},
+        };
+        if (self.backend == .vulkan and descriptor.hasNativeShaderStages()) {
+            switch (self.impl.*) {
+                .vulkan => |*vulkan| impl = .{ .vulkan = try vulkan.makeRayTracingPipelineState(descriptor) },
+                .metal => {},
+            }
+        }
+        var native_handle = BackendPrivateRayTracingPipelineHandle.fromLowering(
+            self.backend,
+            descriptor,
+            lowering,
+        );
+        native_handle.driver_bound = impl != null;
         self.tracker.retain(.ray_tracing_pipeline_state);
         return .{
             .backend = self.backend,
@@ -4578,11 +4759,8 @@ pub const Device = struct {
                 .max_recursion_depth = descriptor.max_recursion_depth,
             },
             .lowering_value = lowering,
-            .native_handle = BackendPrivateRayTracingPipelineHandle.fromLowering(
-                self.backend,
-                descriptor,
-                lowering,
-            ),
+            .native_handle = native_handle,
+            .impl = impl,
         };
     }
 
@@ -4850,6 +5028,21 @@ pub const Device = struct {
         options: ShaderCompiler.ComputeShaderOptions,
     ) !ShaderCompiler.CompiledComputeShader {
         return try ShaderCompiler.compileComputeShader(
+            self.allocator,
+            name,
+            source,
+            options,
+            self.shaderCompilerOptions(),
+        );
+    }
+
+    pub fn compileRayTracingShader(
+        self: *Device,
+        name: []const u8,
+        source: []const u8,
+        options: ShaderCompiler.RayTracingShaderOptions,
+    ) !ShaderCompiler.CompiledRayTracingShader {
+        return try ShaderCompiler.compileRayTracingShader(
             self.allocator,
             name,
             source,
@@ -5207,7 +5400,6 @@ pub const Device = struct {
 
     fn shaderCompilerOptions(self: Device) ShaderCompiler.CompilerOptions {
         return .{
-            .slangc_path = self.slangc_path orelse build_options.slangc_path,
             .cache_dir = self.shader_cache_dir,
         };
     }
@@ -5251,6 +5443,7 @@ fn resolveCapabilityReport(impl: *BackendRuntime) core.DeviceCapabilityReport {
             .features = vulkan.features(),
             .native_features = vulkan.nativeFeatures(),
             .limits = vulkan.limits(),
+            .ray_tracing = vulkan.rayTracingDiagnostics(),
         },
         .metal => |*metal| .{
             .backend = .metal,
@@ -5258,6 +5451,11 @@ fn resolveCapabilityReport(impl: *BackendRuntime) core.DeviceCapabilityReport {
             .features = metal.features(),
             .native_features = metal.nativeFeatures(),
             .limits = metal.limits(),
+            .ray_tracing = .{
+                .backend = .metal,
+                .supported = metal.nativeFeatures().ray_tracing,
+                .blocker = if (metal.nativeFeatures().ray_tracing) .none else .not_evaluated,
+            },
         },
     };
 }
@@ -5284,7 +5482,6 @@ pub const WindowContext = struct {
     owned_adapter_name: ?[]u8 = null,
     shader_cache_dir: ?[]const u8 = null,
     owns_shader_cache_dir: bool = false,
-    slangc_path: ?[]const u8 = null,
     impl: BackendRuntime,
 
     pub fn init(allocator: std.mem.Allocator, options: WindowContextOptions) !WindowContext {
@@ -5340,7 +5537,6 @@ pub const WindowContext = struct {
             .owned_adapter_name = adapter_info.owned_name,
             .shader_cache_dir = resolved_shader_cache_dir.value,
             .owns_shader_cache_dir = resolved_shader_cache_dir.owned,
-            .slangc_path = options.slangc_path,
             .impl = impl,
         };
     }
@@ -5416,7 +5612,6 @@ pub const WindowContext = struct {
             .adapter_info = self.adapter_info,
             .capability_report = self.capability_report,
             .shader_cache_dir = self.shader_cache_dir,
-            .slangc_path = self.slangc_path,
         };
     }
 
@@ -5489,6 +5684,16 @@ pub const WindowContext = struct {
     ) !ShaderCompiler.CompiledComputeShader {
         var device_view = self.device();
         return try device_view.compileComputeShader(name, source, options);
+    }
+
+    pub fn compileRayTracingShader(
+        self: *WindowContext,
+        name: []const u8,
+        source: []const u8,
+        options: ShaderCompiler.RayTracingShaderOptions,
+    ) !ShaderCompiler.CompiledRayTracingShader {
+        var device_view = self.device();
+        return try device_view.compileRayTracingShader(name, source, options);
     }
 
     pub fn resize(self: *WindowContext, extent: core.Extent2D) !void {

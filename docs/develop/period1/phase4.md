@@ -5,14 +5,16 @@ pluggable backend boundary.
 
 ## Current Status
 
-Phase 4 defines public shader and render pipeline descriptors, runtime Slang
-compilation/cache plumbing, runtime artifact loading, and backend pipeline
-creation.
+Phase 4 defines public shader and render pipeline descriptors, shader
+declaration/cache plumbing, runtime artifact loading, and backend pipeline
+creation. The current implementation keeps the public `compile*Shader(...)`
+declaration APIs, but shader artifacts are produced by build-time precompilation
+and embedded into the executable.
 
 The intended user flow is:
 
 - embed Slang source in the application
-- compile Slang source through `WindowContext`
+- request matching precompiled shader artifacts through `WindowContext`
 - describe vertex and fragment shader stages
 - describe color targets and vertex input layout
 - validate descriptor shape before backend-specific work begins
@@ -35,7 +37,7 @@ Completed so far:
 
 ## Shader Tool Dependencies
 
-Shader tools are external dependencies discovered by `build.zig` or explicit
+Shader tools are build-time dependencies discovered by `build.zig` or explicit
 user-provided paths.
 
 Initial tool preference:
@@ -43,23 +45,25 @@ Initial tool preference:
 - `slangc` for Slang to SPIR-V
 - `slangc` for Slang to MSL
 
-vkmtl should not vendor this tool in this early phase. Missing tools should
-produce clear build errors with the tool name, searched path, and target
-artifact.
+vkmtl should not vendor this tool in release artifacts. Missing build-time
+tools should produce clear build errors with the tool name, searched path, and
+target artifact.
 
 Default `zig build` prepares the pinned Slang distribution when the build host
 has a known package. The resolver covers macOS, Linux, and Windows hosts for
-the pinned release. Unknown hosts fall back to `slangc` on `PATH` unless the
-user passes an explicit tool path. `build.zig` owns package metadata and invokes
-setup scripts from `scripts/`; the scripts own download, hash verification, and
-extraction. Shader artifacts are produced by runtime compilation.
+the pinned release. Unknown build hosts fail unless the user passes an explicit
+build-time tool path. `build.zig` owns package metadata and invokes setup
+scripts from `scripts/`; the scripts own download, hash verification, and
+extraction. Shader artifacts are produced by build-time precompilation and
+embedded into the executable.
 
 Tool overrides:
 
-- `-Dslangc=/path/to/slangc`
+- `-Dslangc=/path/to/build-time/slangc`
 
-Runtime compilation stages embedded source Slang into the shader cache, emits
-SPIR-V for Vulkan, emits MSL for Metal, and writes per-stage reflection JSON.
+Runtime shader declaration stages restore embedded precompiled artifacts into
+the shader cache, exposing SPIR-V for Vulkan, MSL for Metal, and per-stage
+reflection JSON.
 
 ## Shader Artifact Layout
 

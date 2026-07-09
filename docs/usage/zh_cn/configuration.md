@@ -82,22 +82,23 @@ zig build run-triangle -Dvulkan \
 `-Dvulkan-loader-dir` 应该指向包含 `libvulkan.1.dylib` 的目录，`-Dvulkan-icd` 应该指向
 MoltenVK ICD JSON。
 
-## Slang Compiler
+## Slang 预编译
 
 默认 `zig build` 会在受支持 host 上把 pinned Slang distribution 准备到
-`.zig-cache/vkmtl-tools`。如果 host 没有对应 pinned package，vkmtl 会 fallback 到 `PATH` 上的
-`slangc`。
+`.zig-cache/vkmtl-tools`，并在构建期预编译当前 manifest 中的 embedded shader。运行时不会启动
+`slangc`，发布产物也不需要携带 Slang compiler 或脚本。
 
-需要显式指定时：
+如果 build host 没有对应 pinned package，可以显式指定构建期 compiler：
 
 ```sh
-zig build run-rainbow-cube -Dslangc=/path/to/slangc
+zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
 ## Shader Cache
 
 vkmtl 会自动管理 runtime shader artifact cache。默认情况下，cache 位于可执行文件旁边的
-`vkmtl-cache`，cache key 包含 embedded Slang source hash；source 变化时会自动重新编译。
+`vkmtl-cache`，cache key 包含 embedded Slang source hash；source 变化后下一次构建会重新生成
+内嵌预编译 blob，运行时 cache miss 时会从 blob 释放产物。
 
 如果应用把 `std.process.Init.Minimal.args` 传给 `WindowContextOptions.process_args`，vkmtl 会自动
 解析自己的 runtime 参数。用户可以直接传：

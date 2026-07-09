@@ -20,8 +20,8 @@ backend expectations in sync with this document.
 
 Shader-backed examples embed their Slang source with `@embedFile(...)`, compile
 it through `Device.compileRenderShader(...)` or
-`Device.compileComputeShader(...)`, and attach runtime-generated reflection JSON
-to pipeline stages. Single-buffer rendering examples derive their vertex
+`Device.compileComputeShader(...)` by resolving build-time precompiled
+artifacts, and attach reflection JSON to pipeline stages. Single-buffer rendering examples derive their vertex
 descriptors from reflection. Shader-resource examples also derive bind group
 layouts from reflection.
 

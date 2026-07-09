@@ -54,10 +54,10 @@ Apple 平台上，`.auto` 会优先选择 Metal。其他桌面平台优先 Vulka
 `Swapchain` 是当前 drawable resize 和 presentation-chain helper 入口。当前
 `WindowContext.make*`、`resize(...)` 和 `clear(...)` 方法仍然可用，但会逐步退成兼容 helper。
 
-## 运行时编译 Slang
+## 使用预编译 Slang Shader
 
-应用嵌入 Slang source，并通过 device 编译。vkmtl 会把 SPIR-V、MSL 和 reflection JSON 写入
-runtime shader cache。
+应用嵌入 Slang source，并通过 device 请求同名 shader。`zig build` 会预编译匹配的
+SPIR-V、MSL 和 reflection JSON；运行时会把内嵌产物释放到 shader cache。
 
 ```zig
 const shader_source = @embedFile("shaders/triangle.slang");

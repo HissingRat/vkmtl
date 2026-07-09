@@ -52,8 +52,9 @@ closed one by one as vkmtl moves from prototype to library.
   queue, library compilation, layer/drawable, and command buffer hooks.
 
 - [x] Define shader tool dependencies.
-  Decide whether `slangc` is discovered by `build.zig`, vendored, or provided
-  through an explicit user path.
+  Slang tooling is build-time only: `zig build` uses the pinned distribution or
+  an explicit `-Dslangc=/path/to/build-time/slangc` override to generate
+  embedded precompiled artifacts. Runtime must not fall back to `slangc`.
 
 - [x] Define runtime shader cache artifact layout.
   Decide where generated SPIR-V, MSL, and reflection data live so examples and
@@ -1926,37 +1927,37 @@ obvious render and binding blockers.
 
 ## Period 32 Phase 1 Checklist
 
-- [ ] Confirm required Vulkan KHR ray tracing extensions and feature structs.
-- [ ] Update Vulkan capability reports for driver-level ray tracing.
-- [ ] Print actionable unsupported messages for missing loader, ICD,
+- [x] Confirm required Vulkan KHR ray tracing extensions and feature structs.
+- [x] Update Vulkan capability reports for driver-level ray tracing.
+- [x] Print actionable unsupported messages for missing loader, ICD,
   extension, or feature requirements.
-- [ ] Keep `examples/ray_traced_scene` using public vkmtl APIs only.
+- [x] Keep `examples/ray_traced_scene` using public vkmtl APIs only.
 
 ## Period 32 Phase 2 Checklist
 
-- [ ] Allocate triangle geometry buffers with device-address support.
-- [ ] Allocate acceleration-structure storage buffers.
-- [ ] Create a real `VkAccelerationStructureKHR`.
-- [ ] Encode and submit the Vulkan BLAS build.
+- [x] Allocate triangle geometry buffers with device-address support.
+- [x] Allocate acceleration-structure storage buffers.
+- [x] Create a real `VkAccelerationStructureKHR`.
+- [x] Encode and submit the Vulkan BLAS build.
 
 ## Period 32 Phase 3 Checklist
 
-- [ ] Add or reuse embedded Slang shader source for Vulkan ray tracing stages.
-- [ ] Compile Vulkan ray tracing shaders to SPIR-V.
-- [ ] Validate ray generation, miss, and hit entry-point mapping.
+- [x] Add or reuse embedded Slang shader source for Vulkan ray tracing stages.
+- [x] Compile Vulkan ray tracing shaders to SPIR-V.
+- [x] Validate ray generation, miss, and hit entry-point mapping.
 
 ## Period 32 Phase 4 Checklist
 
-- [ ] Create `VkRayTracingPipelineKHR` with the example shader groups.
-- [ ] Query Vulkan shader group handles.
-- [ ] Materialize an aligned SBT buffer with valid device-address regions.
+- [x] Create `VkRayTracingPipelineKHR` with the example shader groups.
+- [x] Query Vulkan shader group handles.
+- [x] Materialize an aligned SBT buffer with valid device-address regions.
 
 ## Period 32 Phase 5 Checklist
 
-- [ ] Create and bind the Vulkan ray tracing output image.
-- [ ] Submit `vkCmdTraceRaysKHR`.
-- [ ] Present the output image to the window.
-- [ ] Remove Vulkan driver-pixels-deferred messaging on supported Vulkan RT
+- [x] Create and bind the Vulkan ray tracing output image.
+- [x] Submit `vkCmdTraceRaysKHR`.
+- [x] Present the output image to the window.
+- [x] Remove Vulkan driver-pixels-deferred messaging on supported Vulkan RT
   devices.
 
 ## Period 32 Phase 6 Checklist

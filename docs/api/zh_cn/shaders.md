@@ -18,7 +18,8 @@ examples/compute_readback/shaders/compute_readback.slang
 ```
 
 示例通过 `@embedFile(...)` 嵌入这些 `.slang` 文件，并在运行时通过 `Device`
-编译。运行时产物缓存到 vkmtl 自动管理的 cache root：
+声明需要的 shader。`zig build` 会把匹配的 SPIR-V、MSL 和 reflection JSON 预编译进
+可执行文件；运行时产物从内嵌 blob 释放到 vkmtl 自动管理的 cache root：
 
 ```text
 <internal-cache-root>/<shader-name>/
@@ -33,20 +34,21 @@ examples/compute_readback/shaders/compute_readback.slang
 ```
 
 Compute shader 使用 `compute.spv`、`compute.msl` 和 `compute.reflect.json`。
-`hash` 文件保存 embedded source hash；如果 hash 或必要产物不匹配，vkmtl 会重新编译。
+`hash` 文件保存 embedded source hash；如果 hash 或必要产物不匹配，vkmtl 会从内嵌
+precompiled blob 重新释放产物。找不到匹配 name、entry 和 source hash 的 blob 时会报
+`PrecompiledShaderMissing`。
 
 ## 构建命令
 
 默认 `zig build` 会准备 pinned Slang distribution，目前是 `v2026.12.2`，位置在
-`.zig-cache/vkmtl-tools`。默认 build 不会预编译 example shader；带 shader 的示例会在
-第一次运行时编译 embedded Slang source。
+`.zig-cache/vkmtl-tools`，并预编译当前 manifest 中的 embedded shader。
 
 pinned Slang 版本和 release package hash 在 `build.zig` 中；下载、校验和解压命令放在
-`scripts/`。当前 auto download 覆盖 macOS、Linux 和 Windows 的受支持 host 架构。如果 host
-没有对应 pinned package，vkmtl 会回退到 `PATH` 上的 `slangc`；需要显式指定时：
+`scripts/`。当前 auto download 覆盖 macOS、Linux 和 Windows 的受支持 host 架构。如果 build
+host 没有对应 pinned package，构建会失败；需要显式指定构建期 compiler 时：
 
 ```sh
-zig build run-rainbow-cube -Dslangc=/path/to/slangc
+zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
 vkmtl 默认使用可执行文件旁边的 `vkmtl-cache`。这个 cache 目录只影响运行时 shader 产物，不影响
@@ -81,7 +83,7 @@ cs_main
 
 ## 运行时消费
 
-应用嵌入 Slang source，然后要求 `Device` 编译：
+应用嵌入 Slang source，然后通过 `Device` 解析对应的预编译 shader：
 
 ```zig
 const shader_source = @embedFile("shaders/glow.slang");
@@ -110,8 +112,8 @@ defer compiled.deinit();
 const compute_stage = compiled.stageDescriptor(context.selectedBackend());
 ```
 
-cache miss 时 compiler 会打印 `compiling slang shader: <name>`；cache hit 时打印
-`using cached slang shader: <name>`。
+cache miss 且内嵌 blob 命中时会打印 `using precompiled slang shader: <name>`；cache hit
+时打印 `using cached slang shader: <name>`。
 
 ## Binding 规则
 

@@ -2,7 +2,12 @@ const std = @import("std");
 const vkmtl = @import("vkmtl");
 
 pub fn main(init: std.process.Init) !void {
-    var args = std.process.Args.Iterator.init(init.minimal.args);
+    var debug_allocator = std.heap.DebugAllocator(.{}){};
+    defer _ = debug_allocator.deinit();
+    const allocator = debug_allocator.allocator();
+
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, allocator);
+    defer args.deinit();
     _ = args.skip();
 
     const iterations = try parseIterations(&args);

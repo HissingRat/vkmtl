@@ -201,7 +201,7 @@ backend step.
 ## Shaders And Pipelines
 
 Slang is the source language. Applications usually embed `.slang` files and
-compile them through `Device` at startup:
+ask `Device` for the matching precompiled shader at startup:
 
 ```zig
 const source = @embedFile("shaders/glow.slang");
@@ -223,8 +223,9 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 Compute shaders use `compileComputeShader(...)` and
 `CompiledComputeShader.stageDescriptor(...)`.
 
-Runtime compilation writes SPIR-V, MSL, and reflection JSON into an automatically
-managed shader cache. By default, the cache lives under `vkmtl-cache` beside the
+Runtime does not spawn `slangc`. On a cache miss, vkmtl restores SPIR-V, MSL,
+and reflection JSON from build-time precompiled blobs embedded in the
+executable. By default, the cache lives under `vkmtl-cache` beside the
 executable. If callers set `WindowContextOptions.process_args = init.args`,
 vkmtl automatically parses `--cache-dir <path>` or `--cache-dir=<path>`.
 Application code does not need to parse that argument itself.
@@ -234,10 +235,9 @@ runtime argument > default `vkmtl-cache`.
 
 Persistent runtime cache planning uses `RuntimeCacheManifestDescriptor`,
 `RuntimeCachePlanDescriptor`, and `RuntimeCachePlan`. The manifest records
-schema version, backend, source hash, and toolchain identity. Plans classify
-existing metadata as compatible, missing, stale, backend-mismatched,
-source-mismatched, or toolchain-mismatched while keeping the existing Slang
-artifact files inspectable.
+schema version, backend, and source hash. Plans classify existing metadata as
+compatible, missing, stale, backend-mismatched, or source-mismatched while
+keeping the existing shader artifact files inspectable.
 
 Programmable stages can optionally attach reflection data with
 `ProgrammableStageDescriptor.reflection`. Runtime pipeline creation validates

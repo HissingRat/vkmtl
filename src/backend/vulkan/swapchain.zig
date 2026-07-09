@@ -133,6 +133,10 @@ pub fn currentSwapImage(self: Swapchain) *const SwapImage {
     return &self.swap_images[self.image_index];
 }
 
+pub fn currentImageHandle(self: Swapchain) vk.Image {
+    return self.currentSwapImage().image;
+}
+
 pub fn present(self: *Swapchain, cmdbuf: vk.CommandBuffer) !PresentState {
     const current = self.currentSwapImage();
     try current.waitForFence(self.gc);

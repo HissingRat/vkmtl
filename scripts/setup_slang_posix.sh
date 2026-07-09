@@ -10,7 +10,14 @@ expected_sha="$7"
 tag="$8"
 package_id="$9"
 
-if [ -x "$slangc" ] && [ -f "$stamp" ]; then
+if [ -f "$slangc" ] && [ -f "$stamp" ]; then
+    exit 0
+fi
+
+if [ -f "$slangc" ]; then
+    echo "using existing Slang $tag for $package_id"
+    mkdir -p "$(dirname "$stamp")"
+    touch "$stamp"
     exit 0
 fi
 
@@ -18,7 +25,7 @@ mkdir -p "$archive_dir"
 tmp="$archive.tmp"
 rm -f "$tmp"
 echo "fetching Slang $tag for $package_id"
-curl -L --fail --retry 3 --retry-delay 2 -o "$tmp" "$url"
+curl -L --fail --connect-timeout 20 --max-time 300 --retry 3 --retry-delay 2 --retry-connrefused -o "$tmp" "$url"
 
 if command -v shasum >/dev/null 2>&1; then
     actual_sha="$(shasum -a 256 "$tmp" | awk '{print $1}')"
@@ -44,11 +51,10 @@ mv "$tmp" "$archive"
 unzip -q "$archive" -d "$root"
 chmod +x "$slangc" 2>/dev/null || true
 
-if [ ! -x "$slangc" ]; then
+if [ ! -f "$slangc" ]; then
     echo "vkmtl could not find slangc at $slangc after extracting $archive" >&2
     find "$root" -maxdepth 4 -name 'slangc*' -type f >&2 || true
     exit 1
 fi
 
-"$slangc" -version >/dev/null
 touch "$stamp"

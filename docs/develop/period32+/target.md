@@ -5,15 +5,15 @@ driver-execution periods for the first Metal and Vulkan ray traced scenes.
 Broader parity periods should be planned after both paths are visible or after a
 platform is explicitly documented as unsupported.
 
-Goal: move vkmtl from "first Metal and Vulkan ray traced scene paths are
-visible on supported devices" to "most Vulkan and Metal workloads have either a
-portable vkmtl path, a capability-gated vkmtl path, or an explicit documented
-reason why the native API escape hatch is required."
+Goal: move vkmtl from "first Metal and Vulkan ray traced scenes are visible on
+supported devices" to "most Vulkan and Metal workloads have either a portable
+vkmtl path, a capability-gated vkmtl path, or an explicit documented reason why
+the native API escape hatch is required."
 
 Period 30 closed backend-private runtime records. Period 31 targets Metal ray
-tracing pixels. Period 32 targets Vulkan ray tracing pixels. Period 32+ owns the
-long tail: semantic parity, platform coverage, pressure testing, production
-behavior, and deeper ray tracing coverage.
+tracing pixels. Period 32 targets the first Vulkan native ray tracing output
+path. Period 32+ owns the long tail: semantic parity, platform coverage,
+pressure testing, production behavior, and deeper ray tracing coverage.
 
 ## Expected Baseline After Period 32
 
@@ -21,13 +21,15 @@ Period32+ assumes:
 
 - common buffer, texture, sampler, pipeline, render, compute, transfer, and
   presentation paths are usable through public vkmtl APIs
-- runtime Slang compilation, reflection, bind groups, pipeline creation, and
-  shader caches are connected to real backend objects
+- runtime Slang shader declaration, build-time precompiled artifacts,
+  reflection, bind groups, pipeline creation, and shader caches are connected
+  to real backend objects
 - Period31 has made the Metal ray traced scene visible on supported Metal
   devices
-- Period32 has made the Vulkan ray traced scene visible on supported Vulkan
-  RT devices, or has documented a specific unsupported-runtime reason for a
-  given platform
+- Period32 has created native Vulkan AS/pipeline/SBT objects, submitted
+  `vkCmdTraceRaysKHR` on supported Vulkan RT devices, presented the ray tracing
+  output image in the window, or documented a specific unsupported-runtime
+  reason for a given platform
 - advanced native escape hatches have runtime inventory and driver-work routing
 
 After that, Period32+ should continue with broader ray tracing completeness,
@@ -138,7 +140,7 @@ Period32+ should eventually close these families of work.
 ## Planning Rules For Concrete Periods
 
 After Period31 and Period32 close, split the remaining target into concrete
-Period33, Period34, and later docs after checking:
+follow-up periods after checking:
 
 - which native paths actually produce pixels on supported devices
 - which advanced features remain typed unsupported
@@ -162,4 +164,3 @@ Each concrete period should:
 - Do not claim near-total Vulkan/Metal parity from Period31 or Period32 alone.
 - Do not make the voxel world example the next blocker for backend completion.
 - Do not expose raw Vulkan or Metal details through ordinary portable APIs.
-

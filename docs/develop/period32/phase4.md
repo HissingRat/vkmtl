@@ -3,6 +3,8 @@
 Phase 4 creates the first real Vulkan ray tracing pipeline and shader binding
 table.
 
+Status: complete for the first-scene Vulkan path.
+
 ## Scope
 
 - Create `VkRayTracingPipelineKHR` with the example shader groups.
@@ -17,7 +19,15 @@ table.
 - Existing `ShaderBindingTable` diagnostics match the native SBT layout.
 - Unsupported limits or alignment failures produce typed errors.
 
+## Completed
+
+- Added a Vulkan `ray_tracing_pipeline.zig` backend module.
+- Created `VkRayTracingPipelineKHR` from raygen, miss, and closest-hit shader
+  stages.
+- Queried Vulkan shader group handles.
+- Materialized a host-written SBT buffer with device-address allocation flags.
+- Stored raygen, miss, hit, and callable SBT regions for command lowering.
+
 ## Deferred
 
 - Large SBT stress tests and callable shader coverage are Period32+ work.
-

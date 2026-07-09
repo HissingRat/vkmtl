@@ -62,10 +62,11 @@ drawable resize and presentation-chain helper entry point. Existing
 `WindowContext.make*`, `resize(...)`, and `clear(...)` methods still work, but
 they should gradually become compatibility helpers.
 
-## Compile Slang At Runtime
+## Use Precompiled Slang Shaders
 
-Applications embed Slang source and compile it through the device. vkmtl writes
-SPIR-V, MSL, and reflection JSON into the runtime shader cache.
+Applications embed Slang source and request the matching shader through the
+device. `zig build` precompiles matching SPIR-V, MSL, and reflection JSON;
+runtime restores embedded artifacts into the shader cache.
 
 ```zig
 const shader_source = @embedFile("shaders/triangle.slang");

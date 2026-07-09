@@ -2,9 +2,9 @@
 
 vkmtl 还很年轻，所以最重要的性能规则是：不要在每帧循环里反复创建 expensive object。
 
-## Shader Compilation
+## Shader Resolution
 
-启动或资源 reload 时编译 embedded Slang：
+启动或资源 reload 时解析 embedded Slang 对应的预编译 shader：
 
 ```zig
 var compiled = try device.compileRenderShader("main", source, .{
@@ -14,8 +14,8 @@ var compiled = try device.compileRenderShader("main", source, .{
 defer compiled.deinit();
 ```
 
-runtime shader artifact 默认缓存在 `vkmtl-cache`。source hash 是 cache identity 的一部分，所以修改
-embedded Slang 会自动触发对应 artifact 重新编译。
+runtime shader artifact 默认缓存在 `vkmtl-cache`。source hash 是 cache identity 的一部分，所以
+修改 embedded Slang 后下一次构建会重新生成内嵌 artifact，运行时 cache miss 会从内嵌 blob 恢复。
 
 ## Object Creation
 

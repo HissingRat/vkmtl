@@ -13,11 +13,12 @@ The repository now uses backend modules for Vulkan and Metal behind public
 runtime wrappers. Examples live under `examples/` and use the vkmtl API instead
 of calling Vulkan or Metal directly.
 
-Shader authoring uses Slang. Applications embed Slang source and compile it
-through `Device` at runtime; vkmtl caches SPIR-V for Vulkan, MSL for
-Metal, and reflection JSON that can validate or derive bind group layouts. The
-public API should only expose vkmtl concepts, not raw Vulkan or Metal handles
-except through explicit debug/native-handle escape hatches.
+Shader authoring uses Slang. Applications embed Slang source and declare shader
+usage through `Device`; `zig build` precompiles matching SPIR-V, MSL, and
+reflection JSON into the executable, and runtime restores inspectable artifacts
+into `vkmtl-cache`. The public API should only expose vkmtl concepts, not raw
+Vulkan or Metal handles except through explicit debug/native-handle escape
+hatches.
 
 ## Documentation
 
@@ -61,7 +62,7 @@ zig build run-triangle -Dvulkan
 
 See [Configuration zh_CN](docs/usage/zh_cn/configuration.md) or
 [Configuration en_US](docs/usage/en_us/configuration.md) for backend overrides,
-macOS Vulkan paths, Slang compiler selection, and vkmtl runtime arguments.
+macOS Vulkan paths, Slang precompile setup, and vkmtl runtime arguments.
 
 ## References
 

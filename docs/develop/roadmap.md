@@ -68,7 +68,7 @@ the same public examples through Vulkan and Metal.
 - Phase 1: public API shape / backend selection
 - Phase 2: surface / presentation
 - Phase 3: buffer / texture / sampler
-- Phase 4: Slang runtime shader compile
+- Phase 4: Slang shader declaration and precompiled artifact cache
 - Phase 5: command buffer / render encoder
 - Phase 6: bind group / reflection
 - Phase 7: depth / offscreen / MSAA / cube
@@ -594,18 +594,21 @@ pixels in a window on supported macOS Metal devices.
 
 See `docs/develop/period31/`.
 
-## Period 32: Vulkan Ray Traced Triangle Driver Path
+## Period 32: Vulkan Ray Traced Scene Driver Path
 
-Status: planned after Period 31.
+Status: in progress; Phases 1-5 implement the first direct Vulkan ray tracing
+output path. Phases 6-7 own supported-hardware validation and docs closure.
 
-Goal: make `zig build run-ray-traced-scene -Dvulkan` produce visible
-ray-traced pixels in a window on supported Vulkan ray tracing devices.
+Goal: make `zig build run-ray-traced-scene -Dvulkan` pass Vulkan capability
+gates, create real Vulkan AS/pipeline/SBT objects, submit `vkCmdTraceRaysKHR`,
+and present ray-traced pixels in the window on supported Vulkan ray tracing
+devices.
 
 - Phase 1: Vulkan capability gate and loader contract
 - Phase 2: Vulkan acceleration structure build
 - Phase 3: Vulkan ray tracing shader path
 - Phase 4: Vulkan ray tracing pipeline and SBT
-- Phase 5: Vulkan trace rays and present
+- Phase 5: Vulkan trace rays and direct output presentation
 - Phase 6: validation on supported Vulkan hardware
 - Phase 7: documentation and Period32+ routing
 
@@ -628,8 +631,8 @@ See `docs/develop/period32+/target.md`.
   claim driver-level ray tracing pixels or full native parity.
 - Period 31 is the current priority. It must make the Metal ray traced scene
   visibly render in the window before Vulkan parity work resumes.
-- Period 32 follows Period31 and must make the Vulkan ray traced scene
-  visibly render on supported Vulkan ray tracing devices.
+- Period 32 follows Period31 and must present pixels produced by the Vulkan ray
+  tracing shader on supported Vulkan ray tracing devices.
 - Period 32+ remains target-only for broad parity until the Period31 Metal
   scene and Period32 Vulkan scene are handled.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the

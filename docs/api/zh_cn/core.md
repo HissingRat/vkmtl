@@ -164,7 +164,7 @@ event 仍由 `DeviceFeatures.shared_events` gate 控制。Queue-submit 集成是
 ## Shader 与 Pipeline
 
 Slang 是唯一的 shader 源语言。应用通常用 `@embedFile(...)` 嵌入 `.slang` 文件，
-并在启动时通过 `Device` 编译：
+并在启动时通过 `Device` 请求对应的预编译 shader：
 
 ```zig
 const source = @embedFile("shaders/glow.slang");
@@ -185,8 +185,9 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 Compute shader 使用 `compileComputeShader(...)` 和
 `CompiledComputeShader.stageDescriptor(...)`。
 
-运行时编译会把 SPIR-V、MSL 和 reflection JSON 写入自动管理的 shader cache。默认 cache
-位于可执行文件旁边的 `vkmtl-cache`。如果调用方设置
+运行时不会启动 `slangc`。cache miss 时，vkmtl 会从可执行文件内嵌的构建期预编译 blob
+释放 SPIR-V、MSL 和 reflection JSON 到自动管理的 shader cache。默认 cache 位于可执行文件
+旁边的 `vkmtl-cache`。如果调用方设置
 `WindowContextOptions.process_args = init.args`，vkmtl 会自动解析 `--cache-dir <path>` 或
 `--cache-dir=<path>`。应用代码不需要自己解析这个参数。
 
@@ -195,9 +196,8 @@ Compute shader 使用 `compileComputeShader(...)` 和
 
 Persistent runtime cache planning 使用 `RuntimeCacheManifestDescriptor`、
 `RuntimeCachePlanDescriptor` 和 `RuntimeCachePlan`。Manifest 会记录 schema version、backend、
-source hash 和 toolchain identity。Plan 会把已有 metadata 分类为 compatible、missing、
-stale、backend mismatch、source mismatch 或 toolchain mismatch，同时保持现有 Slang artifact
-文件可检查。
+source hash。Plan 会把已有 metadata 分类为 compatible、missing、stale、backend mismatch 或
+source mismatch，同时保持现有 shader artifact 文件可检查。
 
 `ProgrammableStageDescriptor.reflection` 可以携带 reflection 数据。创建 runtime
 pipeline 时，vkmtl 会把 reflection artifact 或 inline reflection data 与显式
