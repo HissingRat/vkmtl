@@ -76,9 +76,10 @@ Period32+ work is split into concrete periods:
   update/refit/compaction, large instance sets, complex SBT layouts, and RT
   stress plans beyond the Period35 scene. Native GPU stress evidence remains
   Period44 work.
-- Period40: advanced geometry draw paths. This turns tessellation and
-  mesh/task shader support from descriptor probes into backend-native draw
-  paths where supported.
+- Period40: advanced geometry draw planning. This turns tessellation and
+  mesh/task shader support from descriptor probes into public patch-draw and
+  mesh-dispatch planning contracts. Backend-native visible output remains
+  Period44 device-evidence work after pipeline hooks land.
 - Period41: external interop matrix. This closes external memory, texture, and
   synchronization interop across Vulkan, Metal, and platform-specific handle
   types.
@@ -108,7 +109,8 @@ The current routing for the remaining Vulkan/Metal parity list is:
 | descriptor indexing / argument buffer large table pressure tests | Period38 for portable planning; Period44 for GPU-scale device evidence |
 | pipeline library / binary archive / cache production persistence | Period38 for compatibility contract; Period44 for native persistence evidence |
 | ray query, AS update/compaction, instances, procedural parity, complex SBT | Period39 for portable planning; Period44 for native GPU/device evidence |
-| tessellation and mesh/task shader real lowering and draw paths | Period40 |
+| tessellation and mesh/task shader planning contracts | Period40 |
+| tessellation and mesh/task shader native visible output | Period44 after backend pipeline hooks |
 | external memory / texture / sync platform interop matrix | Period41 |
 | format/copy/layout/depth-stencil/MSAA edge semantics | Period42 |
 | profiling, capture, debug marker native experience | Period43 |
@@ -166,8 +168,8 @@ Period32+ should eventually close these families of work.
 
 - production-grade pipeline libraries, binary archives, and persistent caches
 - specialization variants and pipeline cache invalidation behavior
-- tessellation lowering where supported
-- mesh/task or object/mesh shader paths where supported
+- tessellation draw planning where supported
+- mesh/task or object/mesh dispatch planning where supported
 - shader diagnostics that point back to embedded Slang source and entry points
 
 ### Resource Tables And Binding Scale

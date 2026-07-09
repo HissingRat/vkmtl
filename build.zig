@@ -446,7 +446,7 @@ pub fn build(b: *std.Build) void {
     configureVulkanRuntimeForRun(b, tessellation_cmd, target.result.os.tag, vulkan_runtime);
     forwardRunArgs(b, tessellation_cmd);
 
-    const tessellation_step = b.step("run-tessellation", "Run the vkmtl tessellation feature-gate example");
+    const tessellation_step = b.step("run-tessellation", "Run the vkmtl tessellation planning example");
     tessellation_step.dependOn(&tessellation_cmd.step);
 
     const mesh_shader = b.addExecutable(.{
@@ -471,7 +471,7 @@ pub fn build(b: *std.Build) void {
     configureVulkanRuntimeForRun(b, mesh_shader_cmd, target.result.os.tag, vulkan_runtime);
     forwardRunArgs(b, mesh_shader_cmd);
 
-    const mesh_shader_step = b.step("run-mesh-shader", "Run the vkmtl mesh shader feature-gate example");
+    const mesh_shader_step = b.step("run-mesh-shader", "Run the vkmtl mesh shader planning example");
     mesh_shader_step.dependOn(&mesh_shader_cmd.step);
 
     const ray_traced_scene = b.addExecutable(.{

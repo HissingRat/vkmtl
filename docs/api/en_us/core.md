@@ -330,18 +330,20 @@ Vulkan vertex binding divisors when the selected device exposes
 `TessellationDescriptor` represents future tessellation pipeline extension
 state. It is gated by `DeviceFeatures.tessellation`, validates patch control
 point counts and required stage presence, and is intentionally separate from the
-base render pipeline path until backend lowering is fully executable. Period 27
-adds `TessellationLowering` and `Device.planTessellationLowering(...)` so
-advanced applications can inspect Vulkan patch metadata or Metal factor-buffer
-requirements from native feature reports.
+base render pipeline path until backend lowering is fully executable.
+`TessellationPatchDrawDescriptor` and `Device.planTessellationPatchDraw(...)`
+describe neutral patch-list draw plans; `Device.planVulkanTessellationPatchDraw(...)`
+and `Device.planMetalTessellationPatchDraw(...)` produce Vulkan draw metadata
+or Metal factor-buffer metadata.
 
 `MeshPipelineDescriptor` represents future mesh/task shader pipeline metadata.
 It is gated by `DeviceFeatures.mesh_shaders` and `DeviceFeatures.task_shaders`,
 validates mesh and optional task entry points plus workgroup limits, and remains
-outside the base render pipeline until backend execution is enabled. Period 27
-adds `MeshPipelineLowering` and `Device.planMeshPipelineLowering(...)` so
-applications can inspect Vulkan task/mesh metadata or Metal object/mesh
-metadata from native feature reports.
+outside the base render pipeline until backend execution is enabled.
+`MeshDispatchDescriptor` and `Device.planMeshDispatch(...)` describe neutral
+mesh/task dispatch plans; `Device.planVulkanMeshDispatch(...)` and
+`Device.planMetalMeshDispatch(...)` produce Vulkan task/mesh metadata or Metal
+object/mesh metadata.
 
 Ray tracing is isolated in advanced descriptors:
 `AccelerationStructureDescriptor`, `RayTracingPipelineDescriptor`, and

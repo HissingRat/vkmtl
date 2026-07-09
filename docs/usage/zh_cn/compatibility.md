@@ -60,10 +60,12 @@ platform/backend handle descriptor。Runtime wrapper 会校验 ownership 和 bac
 compatibility；native import 和 wait/signal lowering 仍是高级 feature-gated work。
 
 Tessellation 由 `TessellationDescriptor` 表示，仍然是 optional render pipeline extension，不是默认
-portable render path。
+portable render path。`TessellationPatchDrawDescriptor` 可以生成 Vulkan / Metal 的 public
+planning metadata；可见 native 输出还需要 backend pipeline hook。
 
 Mesh/task shader 由 `MeshPipelineDescriptor` 表示。Vulkan mesh shader 和 Metal object/mesh-like
-path 都被视为 backend-gated advanced feature。
+path 都被视为 backend-gated advanced feature。`MeshDispatchDescriptor` 可以生成 Vulkan
+task/mesh 或 Metal object/mesh planning metadata。
 
 Ray tracing descriptor 和普通 render pipeline 隔离，因为 Vulkan 和 Metal 在 acceleration
 structure、pipeline 和 shader table 细节上差异很大。

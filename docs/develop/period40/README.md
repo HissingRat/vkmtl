@@ -1,16 +1,18 @@
 # Period 40: Advanced Geometry Draw Paths
 
-Status: Phase 5 contract work complete.
+Status: complete for public contracts and planning examples.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
-probes into real draw paths with backend-native execution where supported.
+probes into public draw/dispatch planning contracts, with remaining native
+backend hooks clearly tracked.
 
 ## Expected Result
 
-After Period40, `examples/tessellation` and `examples/mesh_shader` should no
-longer be descriptor-only probes. They should render visible output on
-supported backends, or report exact unsupported reasons on backends that cannot
-execute the feature.
+After Period40, `examples/tessellation` and `examples/mesh_shader` are no
+longer descriptor-only probes. They exercise public patch-draw and mesh-dispatch
+planning APIs, report exact unsupported reasons on backends that cannot execute
+the feature, and identify the remaining native backend hooks needed for visible
+output.
 
 ## Phase Plan
 
@@ -31,11 +33,11 @@ Phase 1 result:
 - Existing non-tessellated render pipelines and `drawPrimitives` APIs are
   unchanged.
 
-### Phase 2: Vulkan Tessellation Draw Path
+### Phase 2: Vulkan Tessellation Draw Planning
 
-- Lower tessellation stages to Vulkan pipeline state.
-- Encode patch draws through public command APIs.
-- Add visible tessellation example output.
+- Lower tessellation stages to Vulkan draw metadata.
+- Encode patch draw parameters through public planning APIs.
+- Track visible tessellation output as native pipeline hook work.
 
 Phase 2 result:
 
@@ -66,11 +68,11 @@ Phase 3 result:
   `UnsupportedTessellation`; invalid factor-buffer shape uses
   `InvalidTessellationFactorBuffer`.
 
-### Phase 4: Vulkan Mesh/Task Shader Draw Path
+### Phase 4: Vulkan Mesh/Task Shader Dispatch Planning
 
-- Lower mesh/task shader descriptors to Vulkan mesh shader pipelines.
-- Encode mesh dispatch/draw commands.
-- Add visible mesh shader example output.
+- Lower mesh/task shader descriptors to Vulkan mesh dispatch metadata.
+- Encode mesh dispatch parameters through public planning APIs.
+- Track visible mesh shader output as native pipeline hook work.
 
 Phase 4 result:
 
@@ -100,13 +102,24 @@ Phase 5 result:
 
 ### Phase 6: Advanced Geometry Examples And Validation
 
-- Convert advanced geometry examples from probes to visible output.
+- Convert advanced geometry examples from descriptor-only probes to public
+  draw/dispatch planning examples.
 - Add backend matrix entries for supported and unsupported paths.
 - Keep examples using public vkmtl APIs only.
 
+Phase 6 result:
+
+- `examples/tessellation` now calls `Device.planTessellationPatchDraw(...)`
+  and backend-specific public lowering helpers.
+- `examples/mesh_shader` now calls `Device.planMeshDispatch(...)` and
+  backend-specific public lowering helpers.
+- `tools/development_matrix.zig` records the difference between portable
+  planning contracts and deferred native executable pipeline hooks.
+
 ## Acceptance
 
-- Advanced geometry examples render visible output on at least one supported
-  backend path.
-- Unsupported backends return typed feature-gate errors.
+- Advanced geometry examples use public draw/dispatch planning APIs and return
+  typed feature-gate errors when unsupported.
 - The public API remains backend-neutral.
+- Visible advanced-geometry output is still blocked on native tessellation and
+  mesh/task pipeline hooks in the backend command encoders.

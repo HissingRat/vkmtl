@@ -74,10 +74,13 @@ lowering remain advanced feature-gated work.
 
 Tessellation is represented by `TessellationDescriptor` and remains an optional
 render pipeline extension, not a default portable render path.
+`TessellationPatchDrawDescriptor` can produce Vulkan / Metal public planning
+metadata; visible native output still requires backend pipeline hooks.
 
 Mesh/task shaders are represented by `MeshPipelineDescriptor`. Vulkan mesh
 shader and Metal object/mesh-like paths are treated as backend-gated advanced
-features.
+features. `MeshDispatchDescriptor` can produce Vulkan task/mesh or Metal
+object/mesh planning metadata.
 
 Ray tracing descriptors are isolated from the normal render pipeline because
 Vulkan and Metal differ in acceleration structure, pipeline, and shader table

@@ -230,9 +230,9 @@ zig build run-streaming-texture
 
 ## Advanced Geometry
 
-`examples/tessellation` 和 `examples/mesh_shader` 会验证 tessellation / mesh pipeline descriptor
-以及 backend lowering metadata。在所选 backend 暴露对应 advanced geometry features 之前，它们会打印
-unsupported-feature 信息。
+`examples/tessellation` 和 `examples/mesh_shader` 会验证 tessellation patch draw planning
+和 mesh dispatch planning，并打印 Vulkan / Metal 对应的 public lowering metadata。在所选 backend
+暴露对应 advanced geometry features 之前，它们会打印 unsupported-feature 信息。
 
 运行：
 

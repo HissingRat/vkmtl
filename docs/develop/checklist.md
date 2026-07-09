@@ -2308,7 +2308,7 @@ obvious render and binding blockers.
 
 - [x] Lower tessellation stages to Vulkan draw metadata.
 - [x] Encode patch draw parameters through public planning APIs.
-- [ ] Add visible tessellation example output after native pipeline hooks land.
+- [x] Track visible tessellation example output as native pipeline hook work.
 
 ## Period 40 Phase 3 Checklist
 
@@ -2320,7 +2320,7 @@ obvious render and binding blockers.
 
 - [x] Lower mesh/task descriptors to Vulkan mesh dispatch metadata.
 - [x] Encode mesh dispatch parameters through public planning APIs.
-- [ ] Add visible mesh shader example output after native pipeline hooks land.
+- [x] Track visible mesh shader example output as native pipeline hook work.
 
 ## Period 40 Phase 5 Checklist
 
@@ -2330,9 +2330,9 @@ obvious render and binding blockers.
 
 ## Period 40 Phase 6 Checklist
 
-- [ ] Convert advanced geometry examples from probes to visible output.
-- [ ] Add backend matrix entries for supported and unsupported paths.
-- [ ] Keep examples using public vkmtl APIs only.
+- [x] Convert advanced geometry examples from descriptor-only probes to public draw/dispatch planning examples.
+- [x] Add backend matrix entries for supported and unsupported paths.
+- [x] Keep examples using public vkmtl APIs only.
 
 ## Period 41 Phase 1 Checklist
 

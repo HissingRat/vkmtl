@@ -274,15 +274,19 @@ index、重复 attribute location、非法 stride/offset，以及为 0 的 insta
 
 `TessellationDescriptor` 表示 future tessellation pipeline extension state。它由
 `DeviceFeatures.tessellation` gate，校验 patch control point count 和 required stage presence，
-并且在 backend lowering 完全可执行前不会进入 base render pipeline path。Period 27 新增
-`TessellationLowering` 和 `Device.planTessellationLowering(...)`，让高级应用能通过
-native feature report 检查 Vulkan patch metadata 或 Metal factor-buffer requirement。
+并且在 backend lowering 完全可执行前不会进入 base render pipeline path。
+`TessellationPatchDrawDescriptor` 和 `Device.planTessellationPatchDraw(...)` 描述 patch-list
+draw 的中立计划；`Device.planVulkanTessellationPatchDraw(...)` 和
+`Device.planMetalTessellationPatchDraw(...)` 会分别生成 Vulkan draw metadata 或 Metal
+factor-buffer metadata。
 
 `MeshPipelineDescriptor` 表示 future mesh/task shader pipeline metadata。它由
 `DeviceFeatures.mesh_shaders` 和 `DeviceFeatures.task_shaders` gate，校验 mesh entry point、
 可选 task entry point 和 workgroup limits，并且在 backend execution 启用前保持在 base render
-pipeline 之外。Period 27 新增 `MeshPipelineLowering` 和 `Device.planMeshPipelineLowering(...)`，
-让应用能通过 native feature report 检查 Vulkan task/mesh metadata 或 Metal object/mesh metadata。
+pipeline 之外。`MeshDispatchDescriptor` 和 `Device.planMeshDispatch(...)` 描述 mesh/task
+dispatch 的中立计划；`Device.planVulkanMeshDispatch(...)` 和
+`Device.planMetalMeshDispatch(...)` 会分别生成 Vulkan task/mesh metadata 或 Metal object/mesh
+metadata。
 
 Ray tracing 被隔离在高级 descriptor 里：`AccelerationStructureDescriptor`、
 `RayTracingPipelineDescriptor` 和 `ShaderBindingTableDescriptor`。它们会在

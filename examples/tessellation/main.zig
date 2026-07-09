@@ -33,25 +33,40 @@ pub fn main() !void {
         .control_point_count = 3,
         .domain = .triangle,
         .partition_mode = .integer,
-        .has_control_stage = true,
-        .has_evaluation_stage = true,
+        .control_stage = .{ .entry_point = "tc_main" },
+        .evaluation_stage = .{ .entry_point = "te_main" },
     };
-    device.validateTessellationDescriptor(descriptor) catch |err| {
-        std.debug.print("tessellation unsupported: {s}\n", .{@errorName(err)});
-        return;
+    const patch_draw = vkmtl.TessellationPatchDrawDescriptor{
+        .tessellation = descriptor,
+        .patch_count = 16,
+        .instance_count = 1,
     };
 
-    const backend = device.selectedBackend();
-    switch (backend) {
+    const patch_plan = device.planTessellationPatchDraw(patch_draw) catch |err| {
+        std.debug.print("tessellation patch draw unsupported: {s}\n", .{@errorName(err)});
+        return;
+    };
+    std.debug.print("tessellation patch draw plan: patches={}, total={}\n", .{
+        patch_plan.patch_count,
+        patch_plan.total_patches,
+    });
+
+    switch (device.selectedBackend()) {
         .vulkan => {
-            const lowering = try vkmtl.VulkanTessellationLowering.fromDescriptor(descriptor, device.features(), device.limits());
-            std.debug.print("Vulkan tessellation lowering ok: patch_points={}\n", .{lowering.patch_control_points});
+            const lowering = try device.planVulkanTessellationPatchDraw(patch_draw);
+            std.debug.print("Vulkan tessellation patch draw plan ok: patch_points={}, vertices={}, instances={}, first_vertex={}\n", .{
+                lowering.patch_control_points,
+                lowering.draw_vertex_count,
+                lowering.draw_instance_count,
+                lowering.first_vertex,
+            });
         },
         .metal => {
-            const lowering = try vkmtl.MetalTessellationLowering.fromDescriptor(descriptor, device.features(), device.limits());
-            std.debug.print("Metal tessellation lowering ok: patch_points={}, factor_buffer={}\n", .{
+            const lowering = try device.planMetalTessellationPatchDraw(patch_draw);
+            std.debug.print("Metal tessellation patch draw plan ok: patch_points={}, factor_owner={s}, factor_stride={}\n", .{
                 lowering.patch_control_points,
-                lowering.requires_factor_buffer,
+                @tagName(lowering.factor_buffer_ownership),
+                lowering.factor_buffer.stride,
             });
         },
     }

@@ -14,7 +14,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
-- `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation lowering plans, and mesh/task lowering plans.
+- `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation draw plans, and mesh/task dispatch plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, and Period 29 routing.
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-scene`
@@ -152,11 +152,11 @@ conservative until the relevant backend period lands.
 | Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `Device.planSparseMappingCommit(...)` |
 | Residency churn planning | Runtime commit/evict cycle summary | Runtime commit/evict cycle summary | `Device.planSparseResidencyChurn(...)` and `SparseResidencyMap.runChurn(...)` |
 | Native sparse/tiled page binding | Deferred | Deferred | Period 32+ driver parity plan native integration |
-| Tessellation lowering planning | Runtime patch metadata plan | Runtime factor-buffer requirement plan | `Device.planTessellationLowering(...)` |
-| Native tessellation pipeline | Deferred | Deferred | Period 32+ driver parity plan native integration |
-| Mesh/task lowering planning | Runtime task/mesh metadata plan | Runtime object/mesh metadata plan | `Device.planMeshPipelineLowering(...)` |
-| Native mesh/task pipeline | Deferred | Deferred | Period 32+ driver parity plan native integration |
-| Advanced geometry examples | Feature-gated examples | Feature-gated examples | `examples/tessellation` and `examples/mesh_shader` |
+| Tessellation draw planning | Runtime patch-list draw metadata plan | Runtime factor-buffer metadata plan | `Device.planTessellationPatchDraw(...)` |
+| Native tessellation pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
+| Mesh/task dispatch planning | Runtime task/mesh dispatch metadata plan | Runtime object/mesh dispatch metadata plan | `Device.planMeshDispatch(...)` |
+| Native mesh/task pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
+| Advanced geometry examples | Feature-gated planning examples | Feature-gated planning examples | `examples/tessellation` and `examples/mesh_shader` |
 
 ## Period 28 Ray Tracing And Native Parity Expectations
 

@@ -37,7 +37,7 @@ Current cases:
   pipeline artifact compatibility plans classify scale, opt-in table semantics,
   stale cache reasons, and read-only persistence behavior deterministically.
 - `advanced_resource_geometry`: sparse/tiled resource planning, residency
-  commit/churn plans, tessellation lowering, and mesh/task lowering stay
+  commit/churn plans, tessellation draw planning, and mesh/task dispatch planning stay
   capability-gated.
 - `ray_tracing_native_parity`: ray tracing planning, Metal mapping, native
   advanced closure, and future Period 29 assignments stay explicit.

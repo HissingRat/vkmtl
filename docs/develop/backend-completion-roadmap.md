@@ -417,13 +417,16 @@ device-matrix work.
 
 Tracked in `docs/develop/period40/`.
 
-- [ ] Tessellation draw paths.
-- [ ] Vulkan mesh/task shader draw paths.
-- [ ] Metal object/mesh equivalent paths or precise unsupported contracts.
-- [ ] Visible advanced-geometry examples.
+- [x] Tessellation draw planning contracts.
+- [x] Vulkan mesh/task shader dispatch planning contracts.
+- [x] Metal object/mesh equivalent planning contracts or precise unsupported contracts.
+- [x] Advanced-geometry examples use public planning APIs.
+- [ ] Visible native advanced-geometry examples after backend pipeline hooks.
 
-Expected result: tessellation and mesh/task examples become real rendering
-examples instead of descriptor/lowering probes.
+Expected result: tessellation and mesh/task examples exercise public draw and
+dispatch planning APIs instead of descriptor-only probes. Visible native output
+remains part of the Period44 device-matrix evidence work after backend pipeline
+hooks land.
 
 ## Wave 22: External Interop Matrix
 

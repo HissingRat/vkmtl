@@ -748,10 +748,12 @@ See `docs/develop/period39/`.
 
 ## Period 40: Advanced Geometry Draw Paths
 
-Status: planned after Period39.
+Status: complete for public contracts and planning examples; native visible
+output remains backend hook work.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
-probes into real draw paths with backend-native execution where supported.
+probes into public draw/dispatch planning contracts, with the remaining native
+backend hooks clearly tracked.
 
 - Phase 1: tessellation public pipeline contract
 - Phase 2: Vulkan tessellation draw path
