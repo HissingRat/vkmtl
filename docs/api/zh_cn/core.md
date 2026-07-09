@@ -297,6 +297,11 @@ result size、scratch size 和 compaction intent。Period 39 新增
 Update/refit 需要 `DeviceFeatures.acceleration_structure_update` 或
 `DeviceFeatures.acceleration_structure_refit`，并且 AS 本身允许 update；compaction 需要
 `DeviceFeatures.acceleration_structure_compaction` 和单独的 destination AS。
+`TopLevelAccelerationStructureInstanceDescriptor`、
+`TopLevelAccelerationStructureLayoutDescriptor` 和
+`Device.planTopLevelAccelerationStructureLayout(...)` 用 backend-neutral 方式描述 TLAS
+instance metadata：transform、mask、custom index、SBT record offset、material index、
+triangle instance、procedural AABB instance，以及 mixed geometry 要求。
 `RayTracingPipelineLowering` 和
 `Device.planRayTracingPipelineLowering(...)` 会通过 native feature report 暴露 Vulkan shader
 group count 或 Metal function-table metadata，先于 executable ray tracing pipeline 接入。

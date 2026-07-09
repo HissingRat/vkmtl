@@ -361,6 +361,12 @@ compaction planning. Update/refit require
 `DeviceFeatures.acceleration_structure_refit` plus an update-capable AS;
 compaction requires `DeviceFeatures.acceleration_structure_compaction` and a
 separate destination AS.
+`TopLevelAccelerationStructureInstanceDescriptor`,
+`TopLevelAccelerationStructureLayoutDescriptor`, and
+`Device.planTopLevelAccelerationStructureLayout(...)` describe backend-neutral
+TLAS instance metadata: transforms, masks, custom indices, SBT record offsets,
+material indices, triangle instances, procedural AABB instances, and mixed
+geometry requirements.
 `RayTracingPipelineLowering` and `Device.planRayTracingPipelineLowering(...)`
 expose Vulkan shader-group counts or Metal function-table metadata from native
 feature reports before executable ray tracing pipelines are enabled.

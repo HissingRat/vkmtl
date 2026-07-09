@@ -5086,6 +5086,17 @@ pub const Device = struct {
         );
     }
 
+    pub fn planTopLevelAccelerationStructureLayout(
+        self: Device,
+        descriptor: core.TopLevelAccelerationStructureLayoutDescriptor,
+    ) core.AdvancedFeatureError!core.TopLevelAccelerationStructureLayoutPlan {
+        return try descriptor.plan(
+            self.backend,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn makeAccelerationStructure(self: *Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!AccelerationStructure {
         try descriptor.validate(self.nativeFeatures());
         var sizes = core.estimateAccelerationStructureBuildSizes(descriptor);
@@ -6028,6 +6039,14 @@ pub const WindowContext = struct {
     ) core.AdvancedFeatureError!core.AccelerationStructureMaintenancePlan {
         const device_view = self.device();
         return try device_view.planAccelerationStructureMaintenance(descriptor);
+    }
+
+    pub fn planTopLevelAccelerationStructureLayout(
+        self: *WindowContext,
+        descriptor: core.TopLevelAccelerationStructureLayoutDescriptor,
+    ) core.AdvancedFeatureError!core.TopLevelAccelerationStructureLayoutPlan {
+        const device_view = self.device();
+        return try device_view.planTopLevelAccelerationStructureLayout(descriptor);
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -7338,6 +7357,56 @@ test "runtime device plans acceleration structure maintenance from native capabi
     try std.testing.expect(compact_plan.isCompaction());
     try std.testing.expect(compact_plan.requires_destination_as);
     try std.testing.expectEqual(@as(u64, 2048), compact_plan.compacted_size_upper_bound);
+}
+
+test "runtime device plans top level acceleration structure instance layouts from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.acceleration_structures = false;
+    report.native_features.acceleration_structures = true;
+    report.native_features.ray_tracing_procedural_geometry = true;
+    report.native_features.ray_tracing_custom_intersection = true;
+    report.limits.max_acceleration_structure_instances = 64;
+    report.limits.max_shader_binding_table_records = 16;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test many instance adapter",
+        },
+        .capability_report = report,
+    };
+
+    const instances = [_]core.TopLevelAccelerationStructureInstanceDescriptor{
+        .{
+            .geometry_kind = .triangles,
+            .custom_index = 1,
+            .material_index = 1,
+        },
+        .{
+            .geometry_kind = .aabbs,
+            .instance_mask = 0x3f,
+            .shader_binding_table_record_offset = 3,
+            .material_index = 2,
+        },
+    };
+    const plan = try device.planTopLevelAccelerationStructureLayout(.{
+        .instances = instances[0..],
+        .allow_mixed_geometry = true,
+        .material_table_entries = 4,
+    });
+    try std.testing.expectEqual(core.Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(@as(u32, 2), plan.instance_count);
+    try std.testing.expectEqual(@as(u32, 1), plan.triangle_instances);
+    try std.testing.expectEqual(@as(u32, 1), plan.procedural_instances);
+    try std.testing.expect(plan.requires_procedural_geometry);
+    try std.testing.expect(plan.requires_custom_intersection);
+    try std.testing.expectEqual(@as(u32, 3), plan.max_shader_binding_table_record_offset);
 }
 
 test "runtime encodes acceleration structure build resources from native capabilities" {

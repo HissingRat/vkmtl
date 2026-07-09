@@ -2977,6 +2977,157 @@ pub const AccelerationStructureInstanceDescriptor = struct {
     }
 };
 
+pub const acceleration_structure_identity_transform = [12]f32{
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+};
+
+pub const AccelerationStructureInstanceFlags = struct {
+    triangle_cull_disable: bool = false,
+    triangle_front_counter_clockwise: bool = false,
+    force_opaque: bool = false,
+    force_non_opaque: bool = false,
+
+    pub fn validate(self: AccelerationStructureInstanceFlags) AdvancedFeatureError!void {
+        if (self.force_opaque and self.force_non_opaque) {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+    }
+};
+
+pub const TopLevelAccelerationStructureInstanceDescriptor = struct {
+    transform: [12]f32 = acceleration_structure_identity_transform,
+    geometry_kind: AccelerationStructureGeometryKind = .triangles,
+    instance_mask: u8 = 0xff,
+    custom_index: u32 = 0,
+    shader_binding_table_record_offset: u32 = 0,
+    material_index: u32 = 0,
+    flags: AccelerationStructureInstanceFlags = .{},
+
+    pub fn validate(self: TopLevelAccelerationStructureInstanceDescriptor, limits: DeviceLimits) AdvancedFeatureError!void {
+        try self.flags.validate();
+        if (self.geometry_kind == .instances) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        for (self.transform) |component| {
+            if (!std.math.isFinite(component)) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+        if (self.custom_index > 0x00ff_ffff) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        if (limits.max_shader_binding_table_records != 0 and
+            self.shader_binding_table_record_offset >= limits.max_shader_binding_table_records)
+        {
+            return AdvancedFeatureError.InvalidShaderBindingTable;
+        }
+    }
+
+    pub fn isProcedural(self: TopLevelAccelerationStructureInstanceDescriptor) bool {
+        return self.geometry_kind == .aabbs;
+    }
+
+    pub fn hasNonDefaultMetadata(self: TopLevelAccelerationStructureInstanceDescriptor) bool {
+        return self.instance_mask != 0xff or
+            self.custom_index != 0 or
+            self.shader_binding_table_record_offset != 0 or
+            self.material_index != 0;
+    }
+};
+
+pub const TopLevelAccelerationStructureLayoutDescriptor = struct {
+    instances: []const TopLevelAccelerationStructureInstanceDescriptor = &.{},
+    allow_mixed_geometry: bool = false,
+    material_table_entries: u32 = 0,
+
+    pub fn validate(self: TopLevelAccelerationStructureLayoutDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (!features.acceleration_structures) return AdvancedFeatureError.UnsupportedAccelerationStructures;
+        if (self.instances.len == 0) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        if (limits.max_acceleration_structure_instances != 0 and
+            self.instances.len > limits.max_acceleration_structure_instances)
+        {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+
+        var triangle_instances: usize = 0;
+        var procedural_instances: usize = 0;
+        for (self.instances) |instance| {
+            try instance.validate(limits);
+            if (self.material_table_entries != 0 and instance.material_index >= self.material_table_entries) {
+                return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+            }
+            if (instance.isProcedural()) {
+                procedural_instances += 1;
+            } else {
+                triangle_instances += 1;
+            }
+        }
+
+        if (procedural_instances != 0) {
+            if (!features.ray_tracing_procedural_geometry) return AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry;
+            if (!features.ray_tracing_custom_intersection) return AdvancedFeatureError.UnsupportedRayTracingCustomIntersection;
+        }
+        if (triangle_instances != 0 and procedural_instances != 0 and !self.allow_mixed_geometry) {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+    }
+
+    pub fn plan(
+        self: TopLevelAccelerationStructureLayoutDescriptor,
+        backend: Backend,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!TopLevelAccelerationStructureLayoutPlan {
+        try self.validate(features, limits);
+        var triangle_instances: u32 = 0;
+        var procedural_instances: u32 = 0;
+        var masked_instances: u32 = 0;
+        var metadata_instances: u32 = 0;
+        var max_sbt_record_offset: u32 = 0;
+        for (self.instances) |instance| {
+            if (instance.isProcedural()) {
+                procedural_instances += 1;
+            } else {
+                triangle_instances += 1;
+            }
+            if (instance.instance_mask != 0xff) masked_instances += 1;
+            if (instance.hasNonDefaultMetadata()) metadata_instances += 1;
+            max_sbt_record_offset = @max(max_sbt_record_offset, instance.shader_binding_table_record_offset);
+        }
+        return .{
+            .backend = backend,
+            .instance_count = @intCast(self.instances.len),
+            .triangle_instances = triangle_instances,
+            .procedural_instances = procedural_instances,
+            .masked_instances = masked_instances,
+            .metadata_instances = metadata_instances,
+            .material_table_entries = self.material_table_entries,
+            .max_shader_binding_table_record_offset = max_sbt_record_offset,
+            .mixed_geometry = triangle_instances != 0 and procedural_instances != 0,
+            .requires_procedural_geometry = procedural_instances != 0,
+            .requires_custom_intersection = procedural_instances != 0,
+        };
+    }
+};
+
+pub const TopLevelAccelerationStructureLayoutPlan = struct {
+    backend: Backend,
+    instance_count: u32,
+    triangle_instances: u32 = 0,
+    procedural_instances: u32 = 0,
+    masked_instances: u32 = 0,
+    metadata_instances: u32 = 0,
+    material_table_entries: u32 = 0,
+    max_shader_binding_table_record_offset: u32 = 0,
+    mixed_geometry: bool = false,
+    requires_procedural_geometry: bool = false,
+    requires_custom_intersection: bool = false,
+
+    pub fn hasProceduralInstances(self: TopLevelAccelerationStructureLayoutPlan) bool {
+        return self.procedural_instances != 0;
+    }
+
+    pub fn hasMaterialMetadata(self: TopLevelAccelerationStructureLayoutPlan) bool {
+        return self.material_table_entries != 0 or self.metadata_instances != 0;
+    }
+};
+
 pub const AccelerationStructureGeometryKind = enum {
     triangles,
     aabbs,
@@ -11226,6 +11377,76 @@ test "acceleration structure descriptors estimate build sizes" {
     try (AccelerationStructureInstanceDescriptor{
         .instance_count = 1,
     }).validate(.{ .acceleration_structures = true });
+}
+
+test "top level acceleration structure layout plans many instance metadata" {
+    const instances = [_]TopLevelAccelerationStructureInstanceDescriptor{
+        .{
+            .geometry_kind = .triangles,
+            .custom_index = 7,
+            .shader_binding_table_record_offset = 2,
+            .material_index = 1,
+        },
+        .{
+            .geometry_kind = .aabbs,
+            .instance_mask = 0x7f,
+            .custom_index = 8,
+            .shader_binding_table_record_offset = 4,
+            .material_index = 2,
+            .flags = .{ .force_non_opaque = true },
+        },
+        .{
+            .geometry_kind = .triangles,
+        },
+    };
+    const features = DeviceFeatures{
+        .acceleration_structures = true,
+        .ray_tracing_procedural_geometry = true,
+        .ray_tracing_custom_intersection = true,
+    };
+    const limits = DeviceLimits{
+        .max_acceleration_structure_instances = 8,
+        .max_shader_binding_table_records = 16,
+    };
+
+    const plan = try (TopLevelAccelerationStructureLayoutDescriptor{
+        .instances = instances[0..],
+        .allow_mixed_geometry = true,
+        .material_table_entries = 4,
+    }).plan(.vulkan, features, limits);
+    try std.testing.expectEqual(Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(@as(u32, 3), plan.instance_count);
+    try std.testing.expectEqual(@as(u32, 2), plan.triangle_instances);
+    try std.testing.expectEqual(@as(u32, 1), plan.procedural_instances);
+    try std.testing.expectEqual(@as(u32, 1), plan.masked_instances);
+    try std.testing.expectEqual(@as(u32, 2), plan.metadata_instances);
+    try std.testing.expectEqual(@as(u32, 4), plan.material_table_entries);
+    try std.testing.expectEqual(@as(u32, 4), plan.max_shader_binding_table_record_offset);
+    try std.testing.expect(plan.mixed_geometry);
+    try std.testing.expect(plan.hasProceduralInstances());
+    try std.testing.expect(plan.hasMaterialMetadata());
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (TopLevelAccelerationStructureLayoutDescriptor{
+        .instances = instances[0..],
+        .material_table_entries = 4,
+    }).validate(features, limits));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry, (TopLevelAccelerationStructureLayoutDescriptor{
+        .instances = instances[0..],
+        .allow_mixed_geometry = true,
+    }).validate(.{ .acceleration_structures = true }, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (TopLevelAccelerationStructureLayoutDescriptor{
+        .instances = instances[0..],
+        .allow_mixed_geometry = true,
+        .material_table_entries = 2,
+    }).validate(features, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (TopLevelAccelerationStructureInstanceDescriptor{
+        .geometry_kind = .triangles,
+        .custom_index = 0x0100_0000,
+    }).validate(limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidShaderBindingTable, (TopLevelAccelerationStructureInstanceDescriptor{
+        .geometry_kind = .triangles,
+        .shader_binding_table_record_offset = 16,
+    }).validate(limits));
 }
 
 test "acceleration structure build plans validate geometry and scratch requirements" {

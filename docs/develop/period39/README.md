@@ -29,13 +29,17 @@ larger SBT layouts.
 
 ### Phase 2: Many-Instance TLAS And Instance Metadata
 
-- Add stress coverage for many TLAS instances.
-- Validate transforms, masks, custom indices, and material lookup metadata.
-- Keep instance buffer layout backend-neutral.
-- Close the Period35 deferred mixed mesh/procedural scene path: room mesh
-  geometry and procedural sphere geometry in one logical dispatch.
-- Bind driver-level Metal procedural sphere intersection functions where
-  supported, and report typed unsupported reasons where unavailable.
+- Done. `TopLevelAccelerationStructureInstanceDescriptor` and
+  `TopLevelAccelerationStructureLayoutDescriptor` describe many-instance TLAS
+  metadata without baking in any example scene.
+- Done. Transforms, masks, custom indices, SBT record offsets, material
+  metadata, and mixed triangle/procedural geometry are validated through
+  backend-neutral plans.
+- Done. Mixed mesh/procedural TLAS requirements are explicit:
+  procedural AABB instances require procedural geometry and custom intersection
+  feature gates. Driver-level Metal procedural sphere intersection function
+  execution remains backend/device evidence work unless the selected adapter
+  reports support and the backend path binds it.
 
 ### Phase 3: Ray Query Where Supported
 

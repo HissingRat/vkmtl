@@ -2276,9 +2276,9 @@ obvious render and binding blockers.
 
 ## Period 39 Phase 2 Checklist
 
-- [ ] Add many-instance TLAS stress coverage.
-- [ ] Validate transforms, masks, custom indices, and material metadata.
-- [ ] Keep instance buffer layout backend-neutral.
+- [x] Add many-instance TLAS planning coverage.
+- [x] Validate transforms, masks, custom indices, and material metadata.
+- [x] Keep instance buffer layout backend-neutral.
 
 ## Period 39 Phase 3 Checklist
 
