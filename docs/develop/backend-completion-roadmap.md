@@ -254,13 +254,13 @@ Period31, Period32, and Period32+ according to backend and scope.
 
 Tracked in `docs/develop/period31/`.
 
-- [ ] Metal ray traced scene example contract and feature gate.
-- [ ] Real Metal acceleration structure bridge and BLAS build.
-- [ ] Ray tracing shader path for the first triangle.
-- [ ] Metal ray dispatch to an output texture.
-- [ ] Present the ray tracing output texture in the window.
-- [ ] Local screenshot/manual validation on supported Metal hardware.
-- [ ] Documentation closeout and follow-up routing.
+- [x] Metal ray traced scene example contract and feature gate.
+- [x] Real Metal acceleration structure bridge and BLAS build.
+- [x] Ray tracing shader path for the first triangle.
+- [x] Metal ray dispatch to the drawable.
+- [x] Present the ray tracing output in the window.
+- [x] Local screenshot/manual validation on supported Metal hardware.
+- [x] Documentation closeout and follow-up routing.
 
 Expected result: `zig build run-ray-traced-scene` shows a visible ray traced
 triangle on supported macOS Metal devices.

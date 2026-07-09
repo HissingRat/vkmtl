@@ -6,18 +6,9 @@ const common = @import("vkmtl_examples_common");
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
 const app_name = "vkmtl ray traced scene";
-const shader_source = @embedFile("shaders/ray_traced_scene.slang");
 const rt_shader_source = @embedFile("shaders/ray_traced_scene_rt.slang");
 const initial_width = 960;
 const initial_height = 540;
-
-const RayTraceUniforms = extern struct {
-    params: [4]f32,
-};
-
-const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm },
-};
 
 pub fn main(init: std.process.Init.Minimal) !void {
     try glfw.init();
@@ -273,160 +264,96 @@ pub fn main(init: std.process.Init.Minimal) !void {
         return;
     }
 
-    var trace_command_buffer = try queue.makeCommandBuffer();
-    const dispatch_plan = try trace_command_buffer.dispatchRays(&pipeline_state, &shader_binding_table, .{
-        .width = initial_width,
-        .height = initial_height,
-    });
-    try trace_command_buffer.commit();
+    if (device.selectedBackend() == .metal) {
+        var output_texture: ?vkmtl.Texture = null;
+        var output_view: ?vkmtl.TextureView = null;
+        var output_extent = vkmtl.Extent2D{ .width = 0, .height = 0 };
+        defer {
+            if (output_view) |*view| view.deinit();
+            if (output_texture) |*texture| texture.deinit();
+        }
 
-    const backend_private_runtime_ready =
-        acceleration_structure.hasBackendPrivateHandle() and
-        acceleration_structure.backendPrivateBuildCount() == 1 and
-        pipeline_state.hasBackendPrivatePipelineHandle() and
-        shader_binding_table.hasBackendPrivateRecords() and
-        shader_binding_table.dispatchCount() == 1 and
-        (device.selectedBackend() != .metal or metal_backend_tables) and
-        (device.selectedBackend() != .vulkan or
-            (pipeline_state.backendPrivatePipelineBoundToDriver() and
-                shader_binding_table.backendPrivateRecordsBoundToDriver() and
-                shader_binding_table.lastDispatchSubmittedToDriver()));
+        var reported_visible_pixels = false;
+        while (!glfw.windowShouldClose(window)) {
+            const extent = common.framebufferExtent(window);
+            if (extent.isZero()) {
+                glfw.pollEvents();
+                continue;
+            }
 
-    if (device.selectedBackend() != .metal) {
-        std.debug.print("ray traced scene backend-private runtime ok: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, as_built={}, as_driver_submitted={}, pipeline_driver_bound={}, sbt_driver_bound={}, trace_driver_submitted={}, runtime_ready={}, vulkan_rt_gate={}, driver_pixels=backend_private_only\n", .{
-            @tagName(device.selectedBackend()),
-            as_plan.result_size,
-            as_plan.scratch_size,
-            pipeline_state.functionTableEntryCount(),
-            dispatch_plan.sbt_size,
-            dispatch_plan.total_rays,
-            acceleration_structure.isBuilt(),
-            acceleration_structure.lastBuildSubmittedToDriver(),
-            pipeline_state.backendPrivatePipelineBoundToDriver(),
-            shader_binding_table.backendPrivateRecordsBoundToDriver(),
-            shader_binding_table.lastDispatchSubmittedToDriver(),
-            backend_private_runtime_ready,
-            capability_report.ray_tracing.supported,
-        });
-    }
+            try swapchain.resize(extent);
+            if (output_view == null or output_texture == null or output_extent.width != extent.width or output_extent.height != extent.height) {
+                if (output_view) |*view| view.deinit();
+                output_view = null;
+                if (output_texture) |*texture| texture.deinit();
+                output_texture = null;
 
-    var uniforms = makeUniforms(initial_width, initial_height, 0);
-    var uniform_buffer = try device.makeBuffer(.{
-        .label = "ray traced scene uniforms",
-        .bytes = std.mem.asBytes(&uniforms),
-        .usage = .{ .uniform = true },
-        .storage_mode = .shared,
-    });
-    defer uniform_buffer.deinit();
+                var texture = try device.makeTexture(.{
+                    .label = "metal ray traced scene output",
+                    .format = .rgba8_unorm,
+                    .width = extent.width,
+                    .height = extent.height,
+                    .usage = .{
+                        .copy_source = true,
+                        .shader_write = true,
+                    },
+                    .storage_mode = .private,
+                });
+                const view = try texture.makeTextureView(.{});
+                output_texture = texture;
+                output_view = view;
+                output_extent = extent;
+            }
 
-    var compiled_shader = try device.compileRenderShader("ray_traced_scene", shader_source, .{
-        .vertex_entry = "vs_main",
-        .fragment_entry = "fs_main",
-    });
-    defer compiled_shader.deinit();
+            if (output_view) |*view| {
+                var frame_command_buffer = try queue.makeCommandBuffer();
+                const dispatch_plan = try frame_command_buffer.dispatchRaysToDrawable(
+                    &pipeline_state,
+                    &shader_binding_table,
+                    .{
+                        .width = extent.width,
+                        .height = extent.height,
+                    },
+                    .{
+                        .acceleration_structure = &acceleration_structure,
+                        .output = view,
+                    },
+                );
+                try frame_command_buffer.commit();
 
-    const stages = compiled_shader.stageDescriptors(context.selectedBackend());
-    var derived_bind_group_layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
-        allocator,
-        stages.vertex,
-        stages.fragment,
-    );
-    defer derived_bind_group_layouts.deinit();
-    if (derived_bind_group_layouts.descriptors().len == 0) return error.MissingDerivedBindGroupLayout;
+                if (!reported_visible_pixels) {
+                    reported_visible_pixels = true;
+                    const runtime_ready =
+                        acceleration_structure.hasBackendPrivateHandle() and
+                        acceleration_structure.backendPrivateBuildCount() == 1 and
+                        pipeline_state.hasBackendPrivatePipelineHandle() and
+                        pipeline_state.backendPrivatePipelineBoundToDriver() and
+                        shader_binding_table.hasBackendPrivateRecords() and
+                        shader_binding_table.dispatchCount() >= 1 and
+                        shader_binding_table.lastDispatchSubmittedToDriver() and
+                        metal_backend_tables;
+                    std.debug.print("ray traced scene visible: backend=metal, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}, as_driver_submitted={}, pipeline_driver_bound={}, trace_driver_submitted={}, runtime_ready={}, driver_pixels=visible_metal_native_rt_output\n", .{
+                        as_plan.result_size,
+                        as_plan.scratch_size,
+                        pipeline_state.functionTableEntryCount(),
+                        dispatch_plan.sbt_size,
+                        dispatch_plan.total_rays,
+                        metal_function_table_entries,
+                        acceleration_structure.isBuilt(),
+                        acceleration_structure.lastBuildSubmittedToDriver(),
+                        pipeline_state.backendPrivatePipelineBoundToDriver(),
+                        shader_binding_table.lastDispatchSubmittedToDriver(),
+                        runtime_ready,
+                    });
+                }
+            }
 
-    var bind_group_layout = try device.makeBindGroupLayout(derived_bind_group_layouts.descriptors()[0]);
-    defer bind_group_layout.deinit();
-
-    const bind_group_entries = [_]vkmtl.BindGroupEntry{.{
-        .binding = 0,
-        .resource = .{ .uniform_buffer = .{
-            .buffer = &uniform_buffer,
-            .size = @sizeOf(RayTraceUniforms),
-        } },
-    }};
-    var bind_group = try device.makeBindGroup(.{
-        .layout = &bind_group_layout,
-        .entries = bind_group_entries[0..],
-    });
-    defer bind_group.deinit();
-
-    const pipeline_bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
-        bind_group_layout.descriptor(),
-    };
-    var screen_pipeline = try device.makeRenderPipelineState(.{
-        .vertex = stages.vertex,
-        .fragment = stages.fragment,
-        .bind_group_layouts = pipeline_bind_group_layouts[0..],
-        .primitive_topology = .triangle,
-        .color_attachments = color_attachments[0..],
-    });
-    defer screen_pipeline.deinit();
-
-    const start_seconds = glfw.timeSeconds();
-    var reported_visible_pixels = false;
-    const visible_driver_pixels = switch (device.selectedBackend()) {
-        .vulkan => "visible_vulkan_ray_scene",
-        .metal => "visible_metal_ray_scene",
-    };
-    while (!glfw.windowShouldClose(window)) {
-        const extent = common.framebufferExtent(window);
-        if (extent.isZero()) {
             glfw.pollEvents();
-            continue;
         }
-
-        const elapsed = @as(f32, @floatCast(glfw.timeSeconds() - start_seconds));
-        uniforms = makeUniforms(extent.width, extent.height, elapsed);
-        try uniform_buffer.replaceBytes(0, std.mem.asBytes(&uniforms));
-
-        try swapchain.resize(extent);
-
-        var frame_command_buffer = try queue.makeCommandBuffer();
-        var encoder = try frame_command_buffer.makeRenderCommandEncoder(.{
-            .color_attachments = &.{.{
-                .clear_color = .{
-                    .red = 0.015,
-                    .green = 0.020,
-                    .blue = 0.034,
-                    .alpha = 1.0,
-                },
-            }},
-        });
-        try encoder.setRenderPipelineState(&screen_pipeline);
-        try encoder.setBindGroup(&bind_group, .{ .index = 0 });
-        try encoder.drawPrimitives(.{
-            .primitive_type = .triangle,
-            .vertex_count = 3,
-        });
-        try encoder.endEncoding();
-        try frame_command_buffer.presentDrawable();
-        try frame_command_buffer.commit();
-
-        if (!reported_visible_pixels) {
-            reported_visible_pixels = true;
-            std.debug.print("ray traced scene visible: backend={s}, as_size={}, scratch_size={}, groups={}, sbt_size={}, rays={}, metal_table_entries={}, as_built={}, as_driver_submitted={}, trace_driver_submitted={}, runtime_ready={}, driver_pixels={s}\n", .{
-                @tagName(device.selectedBackend()),
-                as_plan.result_size,
-                as_plan.scratch_size,
-                pipeline_state.functionTableEntryCount(),
-                dispatch_plan.sbt_size,
-                @as(u64, extent.width) * @as(u64, extent.height),
-                metal_function_table_entries,
-                acceleration_structure.isBuilt(),
-                acceleration_structure.lastBuildSubmittedToDriver(),
-                shader_binding_table.lastDispatchSubmittedToDriver(),
-                backend_private_runtime_ready,
-                visible_driver_pixels,
-            });
-        }
-
-        glfw.pollEvents();
+        return;
     }
-}
 
-fn makeUniforms(width: u32, height: u32, time_seconds: f32) RayTraceUniforms {
-    const aspect = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
-    return .{ .params = .{ aspect, time_seconds, 0, 0 } };
+    unreachable;
 }
 
 fn printRayTracingUnsupported(diagnostics: vkmtl.RayTracingCapabilityDiagnostics) void {

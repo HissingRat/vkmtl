@@ -26,7 +26,6 @@ const shader_source_paths = [_][]const u8{
     "examples/msaa_triangle/shaders/msaa_triangle.slang",
     "examples/offscreen_texture/shaders/offscreen_texture.slang",
     "examples/compute_readback/shaders/compute_readback.slang",
-    "examples/ray_traced_scene/shaders/ray_traced_scene.slang",
     "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
 };
 

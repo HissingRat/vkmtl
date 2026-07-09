@@ -297,9 +297,9 @@ Period 29 新增这些 advanced path 的公开 runtime contract：
 Period 30 给这些对象补上 backend-private runtime record：acceleration structure handle/build
 record、ray tracing pipeline metadata、SBT record、dispatch record、Metal table metadata、
 advanced inventory routing，以及 parity diagnostics。driver-level ray tracing pixels 和更完整的
-native parity 会拆开推进：Period31 现在已经通过 public render path 压实第一个 Metal
-visible ray traced scene，Period32 压实第一个 Vulkan pixel-producing ray traced
-triangle，Period32+ 继续处理更广的 native coverage。
+native parity 会拆开推进：Period31 现在已经通过 backend-private Metal command path
+压实第一个 native Metal visible ray traced scene，Period32 压实第一个 Vulkan
+pixel-producing ray traced scene，Period32+ 继续处理更广的 native coverage。
 
 ## Binding
 

@@ -1,8 +1,10 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const MetalAccelerationStructure = @import("acceleration_structure.zig");
 const MetalBuffer = @import("buffer.zig");
 const MetalCommand = @import("command.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
+const MetalRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("render_pipeline.zig");
 const MetalSamplerState = @import("sampler.zig");
 const MetalShaderModule = @import("shader_module.zig");
@@ -162,6 +164,26 @@ pub fn makeComputePipelineState(
     descriptor: core.ComputePipelineDescriptor,
 ) !MetalComputePipelineState {
     return try MetalComputePipelineState.init(self, allocator, descriptor);
+}
+
+pub fn accelerationStructureBuildSizes(
+    self: *MetalClearScreen,
+    descriptor: core.AccelerationStructureDescriptor,
+) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
+    return try MetalAccelerationStructure.queryBuildSizes(self, descriptor);
+}
+
+pub fn makeAccelerationStructure(
+    self: *MetalClearScreen,
+    descriptor: core.AccelerationStructureDescriptor,
+) core.AdvancedFeatureError!MetalAccelerationStructure {
+    return try MetalAccelerationStructure.init(self, descriptor);
+}
+
+pub fn makeRayTracingPipelineState(
+    self: *MetalClearScreen,
+) core.AdvancedFeatureError!MetalRayTracingPipelineState {
+    return try MetalRayTracingPipelineState.init(self);
 }
 
 pub fn makeCommandBuffer(self: *MetalClearScreen) !MetalCommand.CommandBuffer {

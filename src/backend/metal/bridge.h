@@ -16,6 +16,8 @@ typedef struct vkmtl_metal_sampler_state vkmtl_metal_sampler_state;
 typedef struct vkmtl_metal_shader_module vkmtl_metal_shader_module;
 typedef struct vkmtl_metal_render_pipeline_state vkmtl_metal_render_pipeline_state;
 typedef struct vkmtl_metal_compute_pipeline_state vkmtl_metal_compute_pipeline_state;
+typedef struct vkmtl_metal_acceleration_structure vkmtl_metal_acceleration_structure;
+typedef struct vkmtl_metal_ray_tracing_pipeline_state vkmtl_metal_ray_tracing_pipeline_state;
 typedef struct vkmtl_metal_command_buffer vkmtl_metal_command_buffer;
 typedef struct vkmtl_metal_render_command_encoder vkmtl_metal_render_command_encoder;
 typedef struct vkmtl_metal_blit_command_encoder vkmtl_metal_blit_command_encoder;
@@ -98,6 +100,11 @@ typedef enum vkmtl_metal_texture_usage {
     VKMTL_METAL_TEXTURE_USAGE_SHADER_WRITE = 1u << 3,
     VKMTL_METAL_TEXTURE_USAGE_RENDER_ATTACHMENT = 1u << 4,
 } vkmtl_metal_texture_usage;
+
+typedef enum vkmtl_metal_acceleration_structure_kind {
+    VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL = 0,
+    VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL = 1,
+} vkmtl_metal_acceleration_structure_kind;
 
 typedef enum vkmtl_metal_filter {
     VKMTL_METAL_FILTER_NEAREST = 0,
@@ -221,6 +228,12 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int max_texture_argument_table_entries;
     unsigned int max_sampler_argument_table_entries;
 } vkmtl_metal_device_capabilities;
+
+typedef struct vkmtl_metal_acceleration_structure_build_sizes {
+    size_t result_size;
+    size_t scratch_size;
+    size_t update_scratch_size;
+} vkmtl_metal_acceleration_structure_build_sizes;
 
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe);
 void vkmtl_metal_probe_destroy(vkmtl_metal_probe *probe);
@@ -444,6 +457,55 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
     size_t label_len
 );
 
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+);
+vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    vkmtl_metal_acceleration_structure **out_acceleration_structure
+);
+void vkmtl_metal_acceleration_structure_destroy(
+    vkmtl_metal_acceleration_structure *acceleration_structure
+);
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_label(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    const char *label,
+    size_t label_len
+);
+size_t vkmtl_metal_acceleration_structure_result_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+);
+size_t vkmtl_metal_acceleration_structure_scratch_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+);
+size_t vkmtl_metal_acceleration_structure_update_scratch_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+);
+unsigned int vkmtl_metal_acceleration_structure_has_driver_handle(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+);
+
+vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_ray_tracing_pipeline_state **out_pipeline
+);
+void vkmtl_metal_ray_tracing_pipeline_state_destroy(
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline
+);
+vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_set_label(
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+);
+unsigned int vkmtl_metal_ray_tracing_pipeline_state_has_driver_handle(
+    const vkmtl_metal_ray_tracing_pipeline_state *pipeline
+);
+
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer **out_command_buffer
@@ -472,6 +534,20 @@ vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
 );
 vkmtl_metal_status vkmtl_metal_command_buffer_commit(
     vkmtl_metal_command_buffer *command_buffer
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *scratch_buffer,
+    size_t scratch_offset,
+    vkmtl_metal_acceleration_structure *instance_source
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    unsigned int width,
+    unsigned int height
 );
 
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(

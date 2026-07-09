@@ -16,8 +16,8 @@ Status: completed for the current visual acceptance slice.
 - The example is visually verified on a supported Metal device.
 - The validation notes include the command used and the observed result.
 - The example remains buildable on hosts without Metal ray tracing support.
-- Local screenshot: `/tmp/vkmtl-ray-scene-source-1to1-unorm.png`.
-- Observed success text: `driver_pixels=visible_metal_ray_scene`.
+- Local screenshot: `/tmp/vkmtl-metal-native-rt.png`.
+- Observed success text: `driver_pixels=visible_metal_native_rt_output`.
 
 ## Deferred
 

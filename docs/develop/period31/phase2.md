@@ -2,9 +2,7 @@
 
 Phase 2 adds the first real Metal acceleration-structure backend path.
 
-Status: remaining native hardening. The current visible example keeps
-Period30 backend-private acceleration-structure records but does not allocate a
-real `MTLAccelerationStructure` yet.
+Status: completed for the first native Metal RT visible slice.
 
 ## Scope
 
@@ -19,10 +17,13 @@ real `MTLAccelerationStructure` yet.
 
 - The ray traced scene example can build a real Metal bottom-level
   acceleration structure for one triangle.
+- `AccelerationStructure.hasBackendPrivateHandle()` reflects the real Metal
+  driver object on supported devices.
+- The first visible Metal path reports `as_driver_submitted=true`.
 - Existing runtime validation still rejects invalid scratch/result resources.
 - Non-Metal or unsupported Metal devices keep typed unsupported behavior.
 
 ## Deferred
 
-- TLAS/instance builds are deferred to Period32+.
+- TLAS/instance build stress coverage is deferred to Period32+.
 - Acceleration structure update/refit/compaction is deferred to Period32+.

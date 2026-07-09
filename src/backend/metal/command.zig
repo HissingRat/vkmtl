@@ -3,10 +3,12 @@ const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalAdvancedBinding = @import("advanced_binding.zig");
+const MetalAccelerationStructure = @import("acceleration_structure.zig");
 const MetalBindGroup = @import("bind_group.zig").MetalBindGroup;
 const MetalBuffer = @import("buffer.zig");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
+const MetalRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("render_pipeline.zig");
 const MetalTexture = @import("texture.zig");
 const MetalTextureView = @import("texture_view.zig");
@@ -151,6 +153,40 @@ pub const CommandBuffer = struct {
 
     pub fn commit(self: *CommandBuffer) !void {
         try check(metal.vkmtl_metal_command_buffer_commit(self.handle));
+    }
+
+    pub fn encodeAccelerationStructureBuild(
+        self: *CommandBuffer,
+        acceleration_structure: *MetalAccelerationStructure,
+        scratch: *MetalBuffer,
+        scratch_offset: u64,
+        instance_source: ?*const MetalAccelerationStructure,
+    ) core.AdvancedFeatureError!void {
+        const native_scratch_offset = std.math.cast(usize, scratch_offset) orelse {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        };
+        try checkAccelerationStructureCommand(metal.vkmtl_metal_command_buffer_build_acceleration_structure(
+            self.handle,
+            acceleration_structure.handle,
+            scratch.handle,
+            native_scratch_offset,
+            if (instance_source) |source| source.handle else null,
+        ));
+    }
+
+    pub fn traceRaysToDrawable(
+        self: *CommandBuffer,
+        pipeline: *const MetalRayTracingPipelineState,
+        acceleration_structure: *const MetalAccelerationStructure,
+        descriptor: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!void {
+        try checkRayTracingCommand(metal.vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
+            self.handle,
+            pipeline.handle,
+            acceleration_structure.handle,
+            descriptor.width,
+            descriptor.height,
+        ));
     }
 };
 
@@ -958,5 +994,34 @@ fn check(status: metal.vkmtl_metal_status) CommandBuffer.Error!void {
         metal.VKMTL_METAL_STATUS_INVALID_COMMAND => CommandBuffer.Error.InvalidCommand,
         metal.VKMTL_METAL_STATUS_COMMAND_FAILED => CommandBuffer.Error.CommandFailed,
         else => CommandBuffer.Error.UnexpectedMetalStatus,
+    };
+}
+
+fn checkAccelerationStructureCommand(status: metal.vkmtl_metal_status) core.AdvancedFeatureError!void {
+    return switch (status) {
+        metal.VKMTL_METAL_STATUS_OK => {},
+        metal.VKMTL_METAL_STATUS_UNSUPPORTED,
+        metal.VKMTL_METAL_STATUS_NO_DEVICE,
+        => core.AdvancedFeatureError.UnsupportedAccelerationStructures,
+        metal.VKMTL_METAL_STATUS_INVALID_COMMAND,
+        metal.VKMTL_METAL_STATUS_INVALID_BUFFER,
+        metal.VKMTL_METAL_STATUS_COMMAND_FAILED,
+        => core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        else => core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+    };
+}
+
+fn checkRayTracingCommand(status: metal.vkmtl_metal_status) core.AdvancedFeatureError!void {
+    return switch (status) {
+        metal.VKMTL_METAL_STATUS_OK => {},
+        metal.VKMTL_METAL_STATUS_UNSUPPORTED,
+        metal.VKMTL_METAL_STATUS_NO_DEVICE,
+        => core.AdvancedFeatureError.UnsupportedRayTracing,
+        metal.VKMTL_METAL_STATUS_NO_DRAWABLE,
+        metal.VKMTL_METAL_STATUS_INVALID_COMMAND,
+        metal.VKMTL_METAL_STATUS_INVALID_PIPELINE,
+        metal.VKMTL_METAL_STATUS_COMMAND_FAILED,
+        => core.AdvancedFeatureError.InvalidRayTracingPipeline,
+        else => core.AdvancedFeatureError.InvalidRayTracingPipeline,
     };
 }

@@ -44,7 +44,6 @@ const render_specs = [_]RenderSpec{
     .{ .name = "sampled_texture", .source_path = "examples/sampled_texture/shaders/sampled_texture.slang" },
     .{ .name = "depth_triangles", .source_path = "examples/depth_triangles/shaders/depth_triangles.slang" },
     .{ .name = "rainbow_cube", .source_path = "examples/rainbow_cube/shaders/rainbow_cube.slang" },
-    .{ .name = "ray_traced_scene", .source_path = "examples/ray_traced_scene/shaders/ray_traced_scene.slang" },
     .{
         .name = "msaa_triangle_msaa",
         .source_path = "examples/msaa_triangle/shaders/msaa_triangle.slang",

@@ -6,8 +6,7 @@ Status: completed for the current visual acceptance slice.
 
 ## Scope
 
-- Reuse existing vkmtl texture/render presentation paths where possible.
-- Draw or copy the ray tracing output into the current drawable.
+- Use the native Metal dispatch path to write the current drawable.
 - Keep resize behavior predictable for the example.
 - Make the triangle visible against a contrasting background.
 
@@ -18,8 +17,8 @@ Status: completed for the current visual acceptance slice.
 - The example output no longer reports `driver_pixels=deferred_period31_plus`
   on supported devices.
 - Unsupported devices still report a clear feature-gate message.
-- The visible path presents through the public vkmtl render command encoder and
-  current drawable.
+- The visible path presents through the vkmtl command buffer on the current
+  drawable.
 
 ## Deferred
 

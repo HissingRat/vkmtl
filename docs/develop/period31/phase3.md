@@ -1,28 +1,30 @@
 # Phase 3: Metal Ray Tracing Shader Path
 
-Phase 3 adds the first shader path that can produce ray traced pixels for the
-Metal example.
+Phase 3 adds the first shader path that can produce native Metal ray traced
+pixels for the Metal example.
 
 Status: completed for the current visual acceptance slice.
 
 ## Scope
 
-- Add embedded shader source for `examples/ray_traced_scene`.
-- Prefer Slang as the source path, consistent with vkmtl shader direction.
-- Verify whether the pinned Slang toolchain can emit the required Metal ray
-  tracing constructs.
+- Add the backend-private Metal ray tracing kernel needed for the first native
+  visible slice.
+- Keep Slang as the project shader language for portable render, compute, and
+  Vulkan ray tracing shaders.
+- Document that the first Metal native RT kernel is bridge-private until the
+  Slang-to-Metal ray tracing model is made portable.
 - Keep shader diagnostics visible when compilation fails.
 
 ## Acceptance
 
-- The example has a concrete shader artifact path for the ray tracing workload.
+- The example has a concrete native Metal shader path for the ray tracing
+  workload.
 - Build/runtime errors name the shader entry point and backend.
-- The shader computes a sphere-room ray traced scene per pixel and returns the
-  visible color through the public render path.
+- The shader uses Metal ray tracing constructs and returns visible pixels
+  through the native Metal dispatch path.
 
 ## Contingency
 
-The current shader does not use native Metal ray tracing constructs. It is a
-Slang fragment shader that performs scene intersection, shadows, reflection, and
-refraction directly so the example can prove visible ray traced pixels before
-the native driver bridge lands.
+The current Metal native RT kernel is backend-private bridge source. It is not
+the final portable Slang ray tracing shader model, which remains Period32+
+parity work.

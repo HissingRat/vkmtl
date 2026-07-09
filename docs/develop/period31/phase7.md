@@ -14,8 +14,8 @@ Status: completed for the current visual acceptance slice.
 
 ## Acceptance
 
-- Docs clearly state that Period 31 now delivers the first Metal
-  pixel-producing ray traced scene through a public render path.
+- Docs clearly state that Period 31 now delivers the first Metal native
+  pixel-producing ray traced scene through the vkmtl command path.
 - Docs do not claim Vulkan ray tracing parity unless it has actually landed.
 - Follow-up work is routed to later concrete periods/phases instead of vague
   "future work."

@@ -1,14 +1,13 @@
 # Period 31: Metal Ray Traced Triangle Driver Path
 
-Status: in progress. The visual acceptance slice is implemented.
+Status: completed for the first native Metal RT visible slice.
 
-Goal: make `zig build run-ray-traced-scene` produce visible ray-traced
-pixels in a window on supported macOS Metal devices.
+Goal: make `zig build run-ray-traced-scene` produce visible native Metal
+ray-traced pixels in a window on supported macOS Metal devices.
 
 This period intentionally narrows the target. Periods 28 through 30 made ray
-tracing expressible, validated, and recordable inside vkmtl. Period 31 first
-turns that path into a visible pixel-producing ray traced scene example, then
-keeps the deeper Metal acceleration-structure driver bridge as native hardening.
+tracing expressible, validated, and recordable inside vkmtl. Period 31 turns
+that path into a visible pixel-producing native Metal ray tracing example.
 
 ## Hard Acceptance Target
 
@@ -23,10 +22,13 @@ must now:
 - create a window
 - preserve the vkmtl acceleration-structure, ray tracing pipeline, SBT,
   dispatch, and Metal table runtime-record checks
-- render a visible sphere-room scene whose pixels come from a Slang ray tracer,
-  not from rasterized scene geometry
-- present those pixels through the public vkmtl render/present path
-- print `driver_pixels=visible_metal_ray_scene` after the first visible
+- allocate and build a real backend-private `MTLAccelerationStructure`
+- dispatch a Metal ray tracing compute kernel that binds that acceleration
+  structure through the Metal driver
+- render a visible ray traced triangle whose pixels come from Metal
+  `intersector` work, not from rasterized scene geometry
+- present those pixels to the current drawable
+- print `driver_pixels=visible_metal_native_rt_output` after the first visible
   frame
 - import only public vkmtl modules and the external window helper from the
   example
@@ -42,8 +44,8 @@ general ray tracing parity period.
 In scope:
 
 - Metal-only driver path for `examples/ray_traced_scene`
-- Slang sphere-room ray tracing shader source embedded by the example
-- public vkmtl render/present path for the first visible ray traced scene
+- backend-private Metal ray tracing kernel for the first native visible slice
+- native Metal command path for the first visible ray traced scene
 - backend-private runtime record checks for acceleration structures, pipelines,
   SBT, dispatch, and Metal table metadata
 - clear capability gates and failure messages
@@ -51,11 +53,9 @@ In scope:
 
 Out of scope:
 
-- completed `MTLAccelerationStructure` driver allocation/build and native Metal
-  ray dispatch binding, which remain Period31 native hardening work
 - Vulkan `VkAccelerationStructureKHR` / `vkCmdTraceRaysKHR` parity, which is
   the explicit Period32 target
-- full ray generation / miss / hit shader model parity
+- full cross-backend ray generation / miss / hit shader model parity
 - acceleration structure compaction, update/refit, instances, procedural
   geometry, and ray query completeness
 - broad native advanced parity unrelated to the first ray traced scene
@@ -65,15 +65,12 @@ Period32+ target work.
 
 ## Current Visible Slice
 
-`examples/ray_traced_scene` now opens a window and draws a Shadertoy-inspired
-sphere-room ray traced scene through a full-screen public render pass. The
-fragment shader casts one camera ray per pixel, intersects it against room
-walls, lights, reflective spheres, and refractive spheres, then shades the result
-with shadows, reflection, refraction, and fresnel. The example still creates and
-verifies the Period30 backend-private runtime records before presenting.
-
-This is enough for the current visual acceptance gate. It is not yet the final
-native Metal RT driver path.
+`examples/ray_traced_scene` now opens a window, builds a backend-private Metal
+bottom-level acceleration structure, creates a backend-private Metal ray
+tracing pipeline state, dispatches a Metal compute kernel that binds the
+acceleration structure, and presents the resulting drawable. The example still
+creates and verifies the Period30 backend-private runtime records, but the
+visible Metal pixels now come from native Metal RT driver work.
 
 ## Phase Plan
 
@@ -139,11 +136,12 @@ See `phase7.md`.
 
 ## Deferred From Period 31
 
-The following items must not block the first Metal ray traced scene window:
+The following items do not block the first native Metal ray traced scene window:
 
-- real `MTLAccelerationStructure` allocation/build submission
-- native Metal ray tracing function tables and dispatch binding
-- dedicated ray tracing output texture flow
+- native Metal ray tracing function/intersection table population beyond the
+  current metadata checks
+- dedicated ray tracing output texture copy/present flow; the current Metal
+  path writes the drawable directly
 - Vulkan ray tracing driver parity for the first scene, tracked in Period32
 - cross-backend ray tracing shader model parity
 - ray tracing compaction/update/refit

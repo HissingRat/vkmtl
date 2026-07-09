@@ -139,12 +139,12 @@ conservative until the relevant backend period lands.
 | Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
 | Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; first-triangle Metal handles in Period 31, Vulkan handles in Period 32, broader parity in Period 32+ |
 | Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
-| Native ray tracing pipelines | Backend-private pipeline metadata | Backend-private pipeline metadata | Period 30 Phase 2 runtime native boundary; first-triangle Metal pipeline in Period 31, Vulkan pipeline in Period 32, broader parity in Period 32+ |
+| Native ray tracing pipelines | Backend-private pipeline metadata | First native Metal RT compute pipeline | Period 31 implements the first visible Metal pipeline path; Vulkan pipeline in Period 32, broader parity in Period 32+ |
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
-| Native ray dispatch commands | Backend-private dispatch records | Backend-private dispatch records | Period 30 Phase 3 runtime native boundary; first-triangle Metal dispatch in Period 31, Vulkan dispatch in Period 32, broader parity in Period 32+ |
+| Native ray dispatch commands | Backend-private dispatch records | First native Metal RT dispatch to drawable | Period 31 implements first-triangle Metal dispatch; Vulkan dispatch in Period 32, broader parity in Period 32+ |
 | Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
-| Native Metal ray tracing execution | Validation no-op | Backend-private table metadata | Period 30 Phase 4 runtime native boundary; first-triangle Metal dispatch binding in Period 31 |
+| Native Metal ray tracing execution | Validation no-op | First native Metal RT AS/build/dispatch path plus table metadata | Period 31 implements first-triangle Metal dispatch binding; function-table completeness remains Period 32+ |
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
 | Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, broader driver execution in Period 32+ |
 | Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period32+ |
-| Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 target: Metal ray traced scene window | Period31/32 make the first ray traced scenes pixel-producing; broader parity remains Period32+ |
+| Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make the first ray traced scenes pixel-producing; broader parity remains Period32+ |

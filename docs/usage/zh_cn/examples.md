@@ -275,9 +275,10 @@ zig build run-mesh-shader
 `examples/ray_traced_scene` 会验证 ray tracing runtime contract 和 Period 30 的
 backend-private runtime record：acceleration-structure 对象、scratch buffer validation、
 ray tracing pipeline state、shader binding table 创建、ray dispatch record，以及选择 Metal
-时的 Metal table metadata。在支持的 Metal 设备上，它现在会打开窗口，并通过 Slang ray tracer
-在 public render path 上显示一个 Shadertoy-inspired sphere-room scene。首帧成功后会打印
-`driver_pixels=visible_metal_ray_scene`。Period32 压实 Vulkan 的第一个出图 scene；
+时的 Metal table metadata。在支持的 Metal 设备上，它现在会打开窗口，创建真实
+`MTLAccelerationStructure`，并通过 backend-private Metal intersector dispatch 显示 native
+ray traced triangle。首帧成功后会打印
+`driver_pixels=visible_metal_native_rt_output`。Period32 压实 Vulkan 的第一个出图 scene；
 更完整的 native ray tracing 覆盖是 Period32+ 工作。
 
 运行：

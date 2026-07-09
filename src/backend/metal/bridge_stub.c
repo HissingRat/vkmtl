@@ -1268,3 +1268,143 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_insert_debug_signpost(
     (void)label_len;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+) {
+    (void)owner;
+    (void)kind;
+    (void)primitive_count;
+    if (out_sizes != NULL) {
+        *out_sizes = (vkmtl_metal_acceleration_structure_build_sizes){0};
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    vkmtl_metal_acceleration_structure **out_acceleration_structure
+) {
+    (void)owner;
+    (void)kind;
+    (void)primitive_count;
+    if (out_acceleration_structure != NULL) {
+        *out_acceleration_structure = NULL;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_acceleration_structure_destroy(
+    vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    (void)acceleration_structure;
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_label(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    const char *label,
+    size_t label_len
+) {
+    (void)acceleration_structure;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+size_t vkmtl_metal_acceleration_structure_result_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    (void)acceleration_structure;
+    return 0;
+}
+
+size_t vkmtl_metal_acceleration_structure_scratch_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    (void)acceleration_structure;
+    return 0;
+}
+
+size_t vkmtl_metal_acceleration_structure_update_scratch_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    (void)acceleration_structure;
+    return 0;
+}
+
+unsigned int vkmtl_metal_acceleration_structure_has_driver_handle(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    (void)acceleration_structure;
+    return 0;
+}
+
+vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_ray_tracing_pipeline_state **out_pipeline
+) {
+    (void)owner;
+    if (out_pipeline != NULL) {
+        *out_pipeline = NULL;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_ray_tracing_pipeline_state_destroy(
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline
+) {
+    (void)pipeline;
+}
+
+vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_set_label(
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+) {
+    (void)pipeline;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+unsigned int vkmtl_metal_ray_tracing_pipeline_state_has_driver_handle(
+    const vkmtl_metal_ray_tracing_pipeline_state *pipeline
+) {
+    (void)pipeline;
+    return 0;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *scratch_buffer,
+    size_t scratch_offset,
+    vkmtl_metal_acceleration_structure *instance_source
+) {
+    (void)command_buffer;
+    (void)acceleration_structure;
+    (void)scratch_buffer;
+    (void)scratch_offset;
+    (void)instance_source;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    unsigned int width,
+    unsigned int height
+) {
+    (void)command_buffer;
+    (void)pipeline;
+    (void)acceleration_structure;
+    (void)width;
+    (void)height;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}

@@ -579,10 +579,10 @@ See `docs/develop/period30/`.
 
 ## Period 31: Metal Ray Traced Triangle Driver Path
 
-Status: planned.
+Status: completed for the first native Metal RT visible slice.
 
-Goal: make `zig build run-ray-traced-scene` produce visible ray-traced
-pixels in a window on supported macOS Metal devices.
+Goal: make `zig build run-ray-traced-scene` produce visible native Metal
+ray-traced pixels in a window on supported macOS Metal devices.
 
 - Phase 1: example contract and capability gate
 - Phase 2: Metal acceleration structure driver bridge
@@ -629,8 +629,8 @@ See `docs/develop/period32+/target.md`.
 
 - Period 30 is complete as backend-private runtime record work. It does not
   claim driver-level ray tracing pixels or full native parity.
-- Period 31 is the current priority. It must make the Metal ray traced scene
-  visibly render in the window before Vulkan parity work resumes.
+- Period 31 has made the Metal ray traced scene visibly render in the window
+  through a native Metal RT command path.
 - Period 32 follows Period31 and must present pixels produced by the Vulkan ray
   tracing shader on supported Vulkan ray tracing devices.
 - Period 32+ remains target-only for broad parity until the Period31 Metal

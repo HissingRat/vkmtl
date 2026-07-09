@@ -437,10 +437,10 @@ zig build run-mesh-shader
 the Period 30 backend-private runtime records: acceleration-structure objects,
 scratch-buffer validation, ray tracing pipeline state, shader binding table
 creation, ray dispatch records, and Metal table metadata when Metal is
-selected. On supported Metal devices it now opens a window and presents a
-Shadertoy-inspired sphere-room scene whose pixels are produced by a Slang ray
-tracer through the public render path. It prints
-`driver_pixels=visible_metal_ray_scene` after the first visible frame.
+selected. On supported Metal devices it now opens a window, creates a real
+`MTLAccelerationStructure`, and presents a native ray traced triangle produced
+by a backend-private Metal intersector dispatch. It prints
+`driver_pixels=visible_metal_native_rt_output` after the first visible frame.
 Vulkan parity is tracked in Period32, and broader native ray tracing coverage is
 Period32+ work.
 

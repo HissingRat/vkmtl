@@ -20,7 +20,8 @@ Status: completed for the current visual acceptance slice.
   the window.
 - The example still builds on machines without Metal ray tracing support.
 - Unsupported devices do not panic and do not claim success.
-- The first successful frame prints `driver_pixels=visible_metal_ray_scene`.
+- The first successful frame prints
+  `driver_pixels=visible_metal_native_rt_output`.
 
 ## Non-Goals
 

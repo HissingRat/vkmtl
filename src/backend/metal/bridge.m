@@ -62,7 +62,25 @@ struct vkmtl_metal_compute_pipeline_state {
     id<MTLComputePipelineState> pipeline;
 };
 
+struct vkmtl_metal_acceleration_structure {
+    id<MTLAccelerationStructure> acceleration_structure;
+    MTLAccelerationStructureDescriptor *descriptor;
+    id<MTLBuffer> geometry_buffer;
+    id<MTLBuffer> instance_buffer;
+    vkmtl_metal_acceleration_structure_kind kind;
+    unsigned int primitive_count;
+    size_t result_size;
+    size_t scratch_size;
+    size_t update_scratch_size;
+    unsigned int built;
+};
+
+struct vkmtl_metal_ray_tracing_pipeline_state {
+    id<MTLComputePipelineState> pipeline;
+};
+
 struct vkmtl_metal_command_buffer {
+    vkmtl_metal_clear_screen *owner;
     id<MTLCommandBuffer> command_buffer;
     id<CAMetalDrawable> drawable;
 };
@@ -79,6 +97,40 @@ struct vkmtl_metal_blit_command_encoder {
 struct vkmtl_metal_compute_command_encoder {
     id<MTLComputeCommandEncoder> encoder;
 };
+
+static const char *vkmtl_metal_native_rt_msl =
+    "#include <metal_stdlib>\n"
+    "#include <metal_raytracing>\n"
+    "using namespace metal;\n"
+    "using namespace raytracing;\n"
+    "kernel void vkmtl_native_rt_drawable(\n"
+    "    texture2d<float, access::write> output [[texture(0)]],\n"
+    "    primitive_acceleration_structure accelerationStructure [[buffer(0)]],\n"
+    "    uint2 tid [[thread_position_in_grid]]) {\n"
+    "    const uint width = output.get_width();\n"
+    "    const uint height = output.get_height();\n"
+    "    if (tid.x >= width || tid.y >= height) return;\n"
+    "    float2 uv = (float2(tid) + 0.5f) / float2(width, height);\n"
+    "    float2 p = uv * 2.0f - 1.0f;\n"
+    "    p.y = -p.y;\n"
+    "    p.x *= float(width) / max(float(height), 1.0f);\n"
+    "    ray r;\n"
+    "    r.origin = float3(0.0f, 0.0f, 2.25f);\n"
+    "    r.direction = normalize(float3(p, -1.55f));\n"
+    "    r.min_distance = 0.001f;\n"
+    "    r.max_distance = 100.0f;\n"
+    "    intersector<triangle_data> intersector;\n"
+    "    intersection_result<triangle_data> hit = intersector.intersect(r, accelerationStructure);\n"
+    "    float3 background = mix(float3(0.025f, 0.035f, 0.055f), float3(0.08f, 0.12f, 0.19f), uv.y);\n"
+    "    float vignette = smoothstep(1.35f, 0.15f, length(p));\n"
+    "    float3 color = background * (0.45f + 0.55f * vignette);\n"
+    "    if (hit.type == intersection_type::triangle) {\n"
+    "        float edge = smoothstep(0.0f, 0.02f, min(min(abs(p.x + 0.62f), abs(p.x - 0.62f)), abs(p.y - 0.58f)));\n"
+    "        color = mix(float3(0.95f, 0.12f, 0.12f), float3(0.10f, 0.30f, 1.0f), clamp((p.y + 0.55f) / 1.15f, 0.0f, 1.0f));\n"
+    "        color += float3(0.16f, 0.08f, 0.02f) * (1.0f - edge);\n"
+    "    }\n"
+    "    output.write(float4(color, 1.0f), tid);\n"
+    "}\n";
 
 static NSString *vkmtl_new_string_from_bytes(const char *bytes, size_t len) {
     if (bytes == NULL) {
@@ -208,6 +260,171 @@ static id<MTLTexture> vkmtl_new_depth_texture(
     return texture;
 }
 
+static BOOL vkmtl_device_supports_raytracing(id<MTLDevice> device) {
+    if (device == nil || ![device respondsToSelector:@selector(supportsRaytracing)]) {
+        return NO;
+    }
+
+    BOOL (*supports_raytracing)(id, SEL) =
+        (BOOL (*)(id, SEL))[device methodForSelector:@selector(supportsRaytracing)];
+    return supports_raytracing != NULL &&
+        supports_raytracing(device, @selector(supportsRaytracing));
+}
+
+static void vkmtl_fill_default_triangle(float *vertices, unsigned int primitive_count) {
+    if (vertices == NULL || primitive_count == 0) {
+        return;
+    }
+
+    const float base_vertices[9] = {
+        -0.72f, -0.56f, 0.0f,
+         0.72f, -0.56f, 0.0f,
+         0.0f,   0.68f, 0.0f,
+    };
+
+    for (unsigned int i = 0; i < primitive_count; i += 1) {
+        memcpy(vertices + i * 9, base_vertices, sizeof(base_vertices));
+    }
+}
+
+static void vkmtl_fill_identity_instance(MTLAccelerationStructureInstanceDescriptor *instance) {
+    if (instance == NULL) {
+        return;
+    }
+
+    memset(instance, 0, sizeof(MTLAccelerationStructureInstanceDescriptor));
+    instance->transformationMatrix.columns[0].x = 1.0f;
+    instance->transformationMatrix.columns[1].y = 1.0f;
+    instance->transformationMatrix.columns[2].z = 1.0f;
+    instance->options = MTLAccelerationStructureInstanceOptionDisableTriangleCulling;
+    instance->mask = 0xffu;
+    instance->intersectionFunctionTableOffset = 0;
+    instance->accelerationStructureIndex = 0;
+}
+
+static vkmtl_metal_status vkmtl_make_acceleration_structure_descriptor(
+    id<MTLDevice> device,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    MTLAccelerationStructureDescriptor **out_descriptor,
+    id<MTLBuffer> *out_auxiliary_buffer
+) {
+    if (out_descriptor == NULL || out_auxiliary_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    *out_descriptor = nil;
+    *out_auxiliary_buffer = nil;
+
+    if (device == nil || !vkmtl_device_supports_raytracing(device) || primitive_count == 0) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+
+    if (kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
+        const NSUInteger vertex_count = (NSUInteger)primitive_count * 3u;
+        const NSUInteger vertex_buffer_len = vertex_count * 3u * sizeof(float);
+        id<MTLBuffer> vertex_buffer =
+            [device newBufferWithLength:vertex_buffer_len options:MTLResourceStorageModeShared];
+        if (vertex_buffer == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        vkmtl_fill_default_triangle((float *)[vertex_buffer contents], primitive_count);
+        [vertex_buffer didModifyRange:NSMakeRange(0, vertex_buffer_len)];
+
+        MTLAccelerationStructureTriangleGeometryDescriptor *geometry =
+            [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+        if (geometry == nil) {
+            [vertex_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        geometry.vertexBuffer = vertex_buffer;
+        geometry.vertexBufferOffset = 0;
+        if ([geometry respondsToSelector:@selector(setVertexFormat:)]) {
+            geometry.vertexFormat = MTLAttributeFormatFloat3;
+        }
+        geometry.vertexStride = 3u * sizeof(float);
+        geometry.triangleCount = primitive_count;
+        geometry.opaque = YES;
+
+        MTLPrimitiveAccelerationStructureDescriptor *descriptor =
+            [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+        if (descriptor == nil) {
+            [vertex_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        descriptor.geometryDescriptors = @[geometry];
+        descriptor.usage = MTLAccelerationStructureUsageNone;
+
+        *out_descriptor = [descriptor retain];
+        *out_auxiliary_buffer = vertex_buffer;
+        return VKMTL_METAL_STATUS_OK;
+    }
+
+    const NSUInteger instance_buffer_len =
+        (NSUInteger)primitive_count * sizeof(MTLAccelerationStructureInstanceDescriptor);
+    id<MTLBuffer> instance_buffer =
+        [device newBufferWithLength:instance_buffer_len options:MTLResourceStorageModeShared];
+    if (instance_buffer == nil) {
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+
+    MTLAccelerationStructureInstanceDescriptor *instances =
+        (MTLAccelerationStructureInstanceDescriptor *)[instance_buffer contents];
+    for (unsigned int i = 0; i < primitive_count; i += 1) {
+        vkmtl_fill_identity_instance(&instances[i]);
+    }
+    [instance_buffer didModifyRange:NSMakeRange(0, instance_buffer_len)];
+
+    MTLInstanceAccelerationStructureDescriptor *descriptor =
+        [MTLInstanceAccelerationStructureDescriptor descriptor];
+    if (descriptor == nil) {
+        [instance_buffer release];
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+    descriptor.instanceDescriptorBuffer = instance_buffer;
+    descriptor.instanceDescriptorBufferOffset = 0;
+    descriptor.instanceDescriptorStride = sizeof(MTLAccelerationStructureInstanceDescriptor);
+    descriptor.instanceCount = primitive_count;
+    descriptor.usage = MTLAccelerationStructureUsageNone;
+    if ([descriptor respondsToSelector:@selector(setInstanceDescriptorType:)]) {
+        descriptor.instanceDescriptorType = MTLAccelerationStructureInstanceDescriptorTypeDefault;
+    }
+
+    *out_descriptor = [descriptor retain];
+    *out_auxiliary_buffer = instance_buffer;
+    return VKMTL_METAL_STATUS_OK;
+}
+
+static vkmtl_metal_status vkmtl_query_acceleration_structure_sizes(
+    id<MTLDevice> device,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    MTLAccelerationStructureSizes *out_sizes
+) {
+    if (out_sizes == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    memset(out_sizes, 0, sizeof(MTLAccelerationStructureSizes));
+
+    MTLAccelerationStructureDescriptor *descriptor = nil;
+    id<MTLBuffer> auxiliary_buffer = nil;
+    vkmtl_metal_status status = vkmtl_make_acceleration_structure_descriptor(
+        device,
+        kind,
+        primitive_count,
+        &descriptor,
+        &auxiliary_buffer
+    );
+    if (status != VKMTL_METAL_STATUS_OK) {
+        return status;
+    }
+
+    *out_sizes = [device accelerationStructureSizesWithDescriptor:descriptor];
+    [descriptor release];
+    [auxiliary_buffer release];
+    return VKMTL_METAL_STATUS_OK;
+}
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe) {
     if (out_probe == NULL) {
         return VKMTL_METAL_STATUS_NO_DEVICE;
@@ -311,7 +528,7 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
 
         layer.device = device;
         layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
-        layer.framebufferOnly = YES;
+        layer.framebufferOnly = NO;
         layer.opaque = YES;
         layer.contentsScale = [window backingScaleFactor];
         layer.drawableSize = CGSizeMake(width, height);
@@ -874,14 +1091,7 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
             }
         }
 
-        if ([device respondsToSelector:@selector(supportsRaytracing)]) {
-            BOOL (*supports_raytracing)(id, SEL) =
-                (BOOL (*)(id, SEL))[device methodForSelector:@selector(supportsRaytracing)];
-            if (supports_raytracing != NULL) {
-                out_capabilities->ray_tracing =
-                    supports_raytracing(device, @selector(supportsRaytracing)) ? 1u : 0u;
-            }
-        }
+        out_capabilities->ray_tracing = vkmtl_device_supports_raytracing(device) ? 1u : 0u;
 
         if ([device respondsToSelector:@selector(newBinaryArchiveWithDescriptor:error:)]) {
             out_capabilities->binary_archive = 1;
@@ -1805,6 +2015,261 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
     );
 }
 
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+) {
+    if (out_sizes == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    memset(out_sizes, 0, sizeof(vkmtl_metal_acceleration_structure_build_sizes));
+
+    if (owner == NULL || owner->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        MTLAccelerationStructureSizes sizes;
+        vkmtl_metal_status status = vkmtl_query_acceleration_structure_sizes(
+            owner->device,
+            kind,
+            primitive_count,
+            &sizes
+        );
+        if (status != VKMTL_METAL_STATUS_OK) {
+            return status;
+        }
+
+        out_sizes->result_size = sizes.accelerationStructureSize;
+        out_sizes->scratch_size = sizes.buildScratchBufferSize;
+        out_sizes->update_scratch_size = sizes.refitScratchBufferSize;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_acceleration_structure_kind kind,
+    unsigned int primitive_count,
+    vkmtl_metal_acceleration_structure **out_acceleration_structure
+) {
+    if (out_acceleration_structure == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    *out_acceleration_structure = NULL;
+
+    if (owner == NULL || owner->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        MTLAccelerationStructureDescriptor *descriptor = nil;
+        id<MTLBuffer> auxiliary_buffer = nil;
+        vkmtl_metal_status status = vkmtl_make_acceleration_structure_descriptor(
+            owner->device,
+            kind,
+            primitive_count,
+            &descriptor,
+            &auxiliary_buffer
+        );
+        if (status != VKMTL_METAL_STATUS_OK) {
+            return status;
+        }
+
+        MTLAccelerationStructureSizes sizes =
+            [owner->device accelerationStructureSizesWithDescriptor:descriptor];
+        id<MTLAccelerationStructure> acceleration_structure =
+            [owner->device newAccelerationStructureWithSize:sizes.accelerationStructureSize];
+        if (acceleration_structure == nil) {
+            [descriptor release];
+            [auxiliary_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        vkmtl_metal_acceleration_structure *result =
+            calloc(1, sizeof(vkmtl_metal_acceleration_structure));
+        if (result == NULL) {
+            [acceleration_structure release];
+            [descriptor release];
+            [auxiliary_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        result->acceleration_structure = acceleration_structure;
+        result->descriptor = descriptor;
+        result->kind = kind;
+        result->primitive_count = primitive_count;
+        result->result_size = sizes.accelerationStructureSize;
+        result->scratch_size = sizes.buildScratchBufferSize;
+        result->update_scratch_size = sizes.refitScratchBufferSize;
+        if (kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
+            result->geometry_buffer = auxiliary_buffer;
+        } else {
+            result->instance_buffer = auxiliary_buffer;
+        }
+
+        *out_acceleration_structure = result;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+void vkmtl_metal_acceleration_structure_destroy(
+    vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    if (acceleration_structure == NULL) {
+        return;
+    }
+
+    @autoreleasepool {
+        [acceleration_structure->instance_buffer release];
+        [acceleration_structure->geometry_buffer release];
+        [acceleration_structure->descriptor release];
+        [acceleration_structure->acceleration_structure release];
+        free(acceleration_structure);
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_label(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    const char *label,
+    size_t label_len
+) {
+    if (acceleration_structure == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    return vkmtl_set_objc_label(
+        acceleration_structure->acceleration_structure,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_COMMAND
+    );
+}
+
+size_t vkmtl_metal_acceleration_structure_result_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    return acceleration_structure != NULL ? acceleration_structure->result_size : 0;
+}
+
+size_t vkmtl_metal_acceleration_structure_scratch_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    return acceleration_structure != NULL ? acceleration_structure->scratch_size : 0;
+}
+
+size_t vkmtl_metal_acceleration_structure_update_scratch_size(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    return acceleration_structure != NULL ? acceleration_structure->update_scratch_size : 0;
+}
+
+unsigned int vkmtl_metal_acceleration_structure_has_driver_handle(
+    const vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    return acceleration_structure != NULL &&
+        acceleration_structure->acceleration_structure != nil ? 1u : 0u;
+}
+
+vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_ray_tracing_pipeline_state **out_pipeline
+) {
+    if (out_pipeline == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    }
+    *out_pipeline = NULL;
+
+    if (owner == NULL || owner->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+    if (!vkmtl_device_supports_raytracing(owner->device)) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+
+    @autoreleasepool {
+        NSString *source = [[NSString alloc]
+            initWithUTF8String:vkmtl_metal_native_rt_msl];
+        if (source == nil) {
+            return VKMTL_METAL_STATUS_INVALID_SHADER;
+        }
+
+        NSError *error = nil;
+        id<MTLLibrary> library = [owner->device newLibraryWithSource:source options:nil error:&error];
+        [source release];
+        if (library == nil) {
+            return VKMTL_METAL_STATUS_INVALID_SHADER;
+        }
+
+        NSString *function_name = [[NSString alloc] initWithUTF8String:"vkmtl_native_rt_drawable"];
+        if (function_name == nil) {
+            [library release];
+            return VKMTL_METAL_STATUS_INVALID_SHADER;
+        }
+
+        id<MTLFunction> function = [library newFunctionWithName:function_name];
+        [function_name release];
+        [library release];
+        if (function == nil) {
+            return VKMTL_METAL_STATUS_INVALID_SHADER;
+        }
+
+        id<MTLComputePipelineState> pipeline =
+            [owner->device newComputePipelineStateWithFunction:function error:&error];
+        [function release];
+        if (pipeline == nil) {
+            return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+        }
+
+        vkmtl_metal_ray_tracing_pipeline_state *state =
+            calloc(1, sizeof(vkmtl_metal_ray_tracing_pipeline_state));
+        if (state == NULL) {
+            [pipeline release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        state->pipeline = pipeline;
+        *out_pipeline = state;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+void vkmtl_metal_ray_tracing_pipeline_state_destroy(
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline
+) {
+    if (pipeline == NULL) {
+        return;
+    }
+
+    @autoreleasepool {
+        [pipeline->pipeline release];
+        free(pipeline);
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_set_label(
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    const char *label,
+    size_t label_len
+) {
+    if (pipeline == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    }
+    return vkmtl_set_objc_label(
+        pipeline->pipeline,
+        label,
+        label_len,
+        VKMTL_METAL_STATUS_INVALID_PIPELINE
+    );
+}
+
+unsigned int vkmtl_metal_ray_tracing_pipeline_state_has_driver_handle(
+    const vkmtl_metal_ray_tracing_pipeline_state *pipeline
+) {
+    return pipeline != NULL && pipeline->pipeline != nil ? 1u : 0u;
+}
+
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer **out_command_buffer
@@ -1830,6 +2295,7 @@ vkmtl_metal_status vkmtl_metal_command_buffer_create(
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
+        command_buffer->owner = owner;
         command_buffer->command_buffer = [metal_command_buffer retain];
         *out_command_buffer = command_buffer;
         return VKMTL_METAL_STATUS_OK;
@@ -1933,6 +2399,126 @@ vkmtl_metal_status vkmtl_metal_command_buffer_commit(
     @autoreleasepool {
         [command_buffer->command_buffer commit];
         [command_buffer->command_buffer waitUntilCompleted];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *scratch_buffer,
+    size_t scratch_offset,
+    vkmtl_metal_acceleration_structure *instance_source
+) {
+    if (command_buffer == NULL ||
+        command_buffer->command_buffer == nil ||
+        acceleration_structure == NULL ||
+        acceleration_structure->acceleration_structure == nil ||
+        acceleration_structure->descriptor == nil ||
+        scratch_buffer == NULL ||
+        scratch_buffer->buffer == nil ||
+        scratch_offset > scratch_buffer->length ||
+        acceleration_structure->scratch_size > scratch_buffer->length - scratch_offset) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        if (acceleration_structure->kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL) {
+            if (instance_source == NULL ||
+                instance_source->acceleration_structure == nil ||
+                instance_source->built == 0 ||
+                acceleration_structure->instance_buffer == nil) {
+                return VKMTL_METAL_STATUS_INVALID_COMMAND;
+            }
+
+            MTLInstanceAccelerationStructureDescriptor *descriptor =
+                (MTLInstanceAccelerationStructureDescriptor *)acceleration_structure->descriptor;
+            descriptor.instancedAccelerationStructures = @[instance_source->acceleration_structure];
+
+            MTLAccelerationStructureInstanceDescriptor *instances =
+                (MTLAccelerationStructureInstanceDescriptor *)[acceleration_structure->instance_buffer contents];
+            for (unsigned int i = 0; i < acceleration_structure->primitive_count; i += 1) {
+                vkmtl_fill_identity_instance(&instances[i]);
+            }
+            [acceleration_structure->instance_buffer didModifyRange:
+                NSMakeRange(
+                    0,
+                    (NSUInteger)acceleration_structure->primitive_count *
+                        sizeof(MTLAccelerationStructureInstanceDescriptor)
+                )];
+        }
+
+        id<MTLAccelerationStructureCommandEncoder> encoder =
+            [command_buffer->command_buffer accelerationStructureCommandEncoder];
+        if (encoder == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        [encoder buildAccelerationStructure:acceleration_structure->acceleration_structure
+                                 descriptor:acceleration_structure->descriptor
+                              scratchBuffer:scratch_buffer->buffer
+                        scratchBufferOffset:scratch_offset];
+        [encoder endEncoding];
+        acceleration_structure->built = 1u;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    unsigned int width,
+    unsigned int height
+) {
+    if (command_buffer == NULL ||
+        command_buffer->command_buffer == nil ||
+        command_buffer->owner == NULL ||
+        command_buffer->owner->layer == nil ||
+        pipeline == NULL ||
+        pipeline->pipeline == nil ||
+        acceleration_structure == NULL ||
+        acceleration_structure->acceleration_structure == nil ||
+        acceleration_structure->built == 0 ||
+        width == 0 ||
+        height == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    if (acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+
+    @autoreleasepool {
+        id<CAMetalDrawable> drawable = [command_buffer->owner->layer nextDrawable];
+        if (drawable == nil || drawable.texture == nil) {
+            return VKMTL_METAL_STATUS_NO_DRAWABLE;
+        }
+
+        id<MTLComputeCommandEncoder> encoder =
+            [command_buffer->command_buffer computeCommandEncoder];
+        if (encoder == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        [encoder setComputePipelineState:pipeline->pipeline];
+        [encoder setTexture:drawable.texture atIndex:0];
+        if (![encoder respondsToSelector:@selector(setAccelerationStructure:atBufferIndex:)]) {
+            [encoder endEncoding];
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        [encoder setAccelerationStructure:acceleration_structure->acceleration_structure atBufferIndex:0];
+
+        const NSUInteger threadgroup_width = 8;
+        const NSUInteger threadgroup_height = 8;
+        MTLSize grid_size = MTLSizeMake(width, height, 1);
+        MTLSize threadgroup_size = MTLSizeMake(threadgroup_width, threadgroup_height, 1);
+        [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
+        [encoder endEncoding];
+
+        [command_buffer->drawable release];
+        command_buffer->drawable = [drawable retain];
+        [command_buffer->command_buffer presentDrawable:drawable];
         return VKMTL_METAL_STATUS_OK;
     }
 }

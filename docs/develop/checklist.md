@@ -1834,8 +1834,8 @@ obvious render and binding blockers.
   mapping object.
 - [x] Keep Vulkan behavior as a validation no-op for Metal-only mapping APIs.
 - [x] Add focused runtime tests for Metal table metadata.
-- [x] Document that direct Metal table population and first-triangle ray
-  dispatch binding move to Period 31.
+- [x] Document that direct Metal table population routes to Period32+ and
+  first-triangle ray dispatch binding is owned by Period 31.
 
 ## Period 30 Phase 5 Checklist
 
@@ -1882,10 +1882,10 @@ obvious render and binding blockers.
 
 ## Period 31 Phase 2 Checklist
 
-- [ ] Add backend-private Metal acceleration-structure bridge types.
-- [ ] Allocate a real `MTLAccelerationStructure` for the triangle.
-- [ ] Encode the Metal BLAS build.
-- [ ] Keep `MTLAccelerationStructure` hidden behind backend-private state.
+- [x] Add backend-private Metal acceleration-structure bridge types.
+- [x] Allocate a real `MTLAccelerationStructure` for the triangle.
+- [x] Encode the Metal BLAS build.
+- [x] Keep `MTLAccelerationStructure` hidden behind backend-private state.
 
 ## Period 31 Phase 3 Checklist
 
@@ -1897,10 +1897,10 @@ obvious render and binding blockers.
 
 ## Period 31 Phase 4 Checklist
 
-- [ ] Create and bind the ray tracing output texture.
-- [ ] Encode the Metal ray dispatch path.
+- [x] Create and bind the ray tracing output texture.
+- [x] Encode the Metal ray dispatch path.
 - [x] Preserve runtime dispatch diagnostics.
-- [ ] Keep the first Vulkan ray dispatch path deferred to Period32 and broader
+- [x] Keep the first Vulkan ray dispatch path deferred to Period32 and broader
   Vulkan ray tracing parity deferred to Period32+.
 
 ## Period 31 Phase 5 Checklist
