@@ -600,6 +600,32 @@ pub const EventWaitDescriptor = struct {
     timeout_ns: ?u64 = null,
 };
 
+pub const SyncCapabilities = struct {
+    fences: bool = false,
+    timeline_fences: bool = false,
+    events: bool = false,
+    shared_events: bool = false,
+    host_wait: bool = false,
+    host_signal: bool = false,
+    queue_wait_signal: bool = false,
+    native_timeline: bool = false,
+    native_shared_event: bool = false,
+
+    pub fn fromFeatures(features: DeviceFeatures) SyncCapabilities {
+        return .{
+            .fences = features.fences,
+            .timeline_fences = features.timeline_fences,
+            .events = features.events,
+            .shared_events = features.shared_events,
+            .host_wait = features.fences or features.events,
+            .host_signal = features.fences or features.events,
+            .queue_wait_signal = features.fences or features.events,
+            .native_timeline = features.timeline_fences,
+            .native_shared_event = features.shared_events,
+        };
+    }
+};
+
 pub const QueueKind = enum {
     graphics,
     compute,
@@ -611,12 +637,31 @@ pub const QueueCapabilities = struct {
     compute: bool = true,
     transfer: bool = true,
     present: bool = true,
+    dedicated_compute: bool = false,
+    dedicated_transfer: bool = false,
+    native_multi_queue: bool = false,
+    ownership_transfer: bool = false,
+    single_queue_fallback: bool = true,
 
     pub fn supports(self: QueueCapabilities, kind: QueueKind) bool {
         return switch (kind) {
             .graphics => self.graphics,
             .compute => self.compute,
             .transfer => self.transfer,
+        };
+    }
+
+    pub fn fromFeatures(features: DeviceFeatures) QueueCapabilities {
+        return .{
+            .graphics = true,
+            .compute = true,
+            .transfer = features.transfer_commands,
+            .present = true,
+            .dedicated_compute = features.multi_queue and features.dedicated_compute_queue,
+            .dedicated_transfer = features.multi_queue and features.dedicated_transfer_queue,
+            .native_multi_queue = features.multi_queue,
+            .ownership_transfer = features.queue_ownership_transfer,
+            .single_queue_fallback = !features.multi_queue,
         };
     }
 };
@@ -644,6 +689,38 @@ pub const QueueDescriptor = struct {
             .compute => if (!features.dedicated_compute_queue) return CommandEncodingError.UnsupportedDedicatedQueue,
             .transfer => if (!features.dedicated_transfer_queue) return CommandEncodingError.UnsupportedDedicatedQueue,
         }
+    }
+};
+
+pub const QueueSelectionPlan = struct {
+    requested: QueueKind,
+    resolved: QueueKind,
+    fallback_to_graphics: bool,
+    dedicated: bool,
+    ownership_transfer_supported: bool,
+
+    pub fn fromDescriptor(
+        descriptor: QueueDescriptor,
+        features: DeviceFeatures,
+        capabilities: QueueCapabilities,
+    ) CommandEncodingError!QueueSelectionPlan {
+        try descriptor.validate(features, capabilities);
+        const resolved: QueueKind = if (descriptor.kind == .graphics or !features.multi_queue)
+            .graphics
+        else
+            descriptor.kind;
+        const dedicated = switch (resolved) {
+            .graphics => false,
+            .compute => capabilities.dedicated_compute,
+            .transfer => capabilities.dedicated_transfer,
+        };
+        return .{
+            .requested = descriptor.kind,
+            .resolved = resolved,
+            .fallback_to_graphics = descriptor.kind != .graphics and resolved == .graphics,
+            .dedicated = dedicated,
+            .ownership_transfer_supported = capabilities.ownership_transfer,
+        };
     }
 };
 
@@ -7636,6 +7713,18 @@ test "fence and event descriptors validate feature gates" {
     try (EventDescriptor{
         .shared = true,
     }).validate(.{ .events = true, .shared_events = true });
+
+    const sync_caps = SyncCapabilities.fromFeatures(.{
+        .fences = true,
+        .events = true,
+        .timeline_fences = true,
+        .shared_events = true,
+    });
+    try std.testing.expect(sync_caps.host_wait);
+    try std.testing.expect(sync_caps.host_signal);
+    try std.testing.expect(sync_caps.queue_wait_signal);
+    try std.testing.expect(sync_caps.native_timeline);
+    try std.testing.expect(sync_caps.native_shared_event);
 }
 
 test "queue descriptors validate capabilities and gates" {
@@ -7659,6 +7748,30 @@ test "queue descriptors validate capabilities and gates" {
         .multi_queue = true,
         .dedicated_transfer_queue = true,
     }, caps);
+    const fallback_plan = try QueueSelectionPlan.fromDescriptor(.{
+        .kind = .compute,
+        .allow_fallback = true,
+    }, .{}, caps);
+    try std.testing.expectEqual(QueueKind.compute, fallback_plan.requested);
+    try std.testing.expectEqual(QueueKind.graphics, fallback_plan.resolved);
+    try std.testing.expect(fallback_plan.fallback_to_graphics);
+
+    const dedicated_caps = QueueCapabilities.fromFeatures(.{
+        .multi_queue = true,
+        .dedicated_compute_queue = true,
+        .queue_ownership_transfer = true,
+    });
+    const dedicated_plan = try QueueSelectionPlan.fromDescriptor(.{
+        .kind = .compute,
+        .require_dedicated = true,
+    }, .{
+        .multi_queue = true,
+        .dedicated_compute_queue = true,
+        .queue_ownership_transfer = true,
+    }, dedicated_caps);
+    try std.testing.expectEqual(QueueKind.compute, dedicated_plan.resolved);
+    try std.testing.expect(dedicated_plan.dedicated);
+    try std.testing.expect(dedicated_plan.ownership_transfer_supported);
     try std.testing.expectError(CommandEncodingError.InvalidQueueCapability, (QueueDescriptor{
         .kind = .transfer,
     }).validate(.{}, .{ .transfer = false }));

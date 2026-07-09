@@ -26,9 +26,11 @@ fences, events, timestamp queries, and occlusion queries are available through
 backend-neutral runtime objects. Explicit barriers and queue ownership transfers
 are advanced escape hatches; Vulkan lowers the barrier path natively, while
 Metal uses validation/no-op markers where encoder boundaries already define
-ordering. Timeline fences, shared events, native dedicated queues, native
-queue-family ownership transfers, and pipeline statistics queries remain
-capability-gated until their backend lowering is complete.
+ordering. Timeline fences, shared events, and logical queue planning now have
+portable descriptor and validation entry points. Native timeline/shared-event
+submit, native dedicated queues, native queue-family ownership transfers, and
+pipeline statistics queries remain capability-gated until their backend
+lowering is complete.
 
 ## Advanced Features
 

@@ -16,10 +16,12 @@ Current cases:
 - `unsupported_feature`: feature-gated APIs return typed unsupported errors.
 - `shader_reflection_mismatch`: reflection layout, kind, visibility, and stage
   mismatches are reported before pipeline creation.
-- `runtime_sync_objects`: fences and events expose deterministic signal, wait,
-  reset, timeout, and unsupported-gate behavior.
-- `logical_queue_ownership`: queue views and ownership transfers reject
-  cross-queue use until an explicit ownership transfer is recorded.
+- `runtime_sync_objects`: fences, events, synchronization commit descriptors,
+  and queue waits/signals expose deterministic signal, wait, reset, timeout,
+  and unsupported-gate behavior.
+- `logical_queue_ownership`: queue planning, queue views, and ownership
+  transfers reject cross-queue use until an explicit ownership transfer is
+  recorded.
 - `query_readback`: timestamp and occlusion query sets validate availability,
   type, range, readback, and resolve paths before native work.
 - `resource_utilities`: mipmap generation, fill fallback selection, texture

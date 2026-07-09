@@ -195,8 +195,17 @@ CPU-visible state. Binary fences are available through `DeviceFeatures.fences`;
 timeline fences remain gated by `DeviceFeatures.timeline_fences`.
 `Device.makeEvent(...)` creates an `Event` with `signal(...)`, `wait(...)`,
 `reset()`, and `isSignaled()`. Shared events remain gated by
-`DeviceFeatures.shared_events`. Queue-submit integration is still a later
-backend step.
+`DeviceFeatures.shared_events`.
+
+`Device.syncCapabilities()` and `WindowContext.syncCapabilities()` summarize
+fence, timeline-fence, event, shared-event, host wait/signal, queue wait/signal,
+and native support gates as `SyncCapabilities`. `SynchronizationDescriptor`
+can be passed to `CommandBuffer.commitWithSynchronization(...)` to perform
+portable runtime wait/signal work around `commit()` while validating
+fence/event lifetime, backend identity, and fence values. This is the portable
+synchronization contract; Vulkan timeline-semaphore submit lowering, Metal
+shared-event command-buffer integration, and true native queue wait/signal
+lowering remain later backend work.
 
 ## Shaders And Pipelines
 
@@ -542,15 +551,19 @@ Command buffers are still one-shot after `commit()`; pooled or reusable command
 buffers are represented by descriptor fields and rejected by feature gates until
 native reset/pooling is implemented.
 
-`QueueKind`, `QueueCapabilities`, and `QueueDescriptor` define the multi-queue
-selection vocabulary. `Device.queue()` still returns the default graphics queue,
-and `Device.queueWithDescriptor(.{})` is the explicit form of that default.
-A non-graphics descriptor falls back to the graphics queue when `multi_queue`
-is not supported and fallback is allowed. When `DeviceFeatures.multi_queue` and
-the relevant dedicated queue gate are enabled, `queueWithDescriptor(...)`
-returns a logical compute or transfer queue view. Current backends still record
-commands through the existing native command queue until dedicated native queue
-families are enabled.
+`QueueKind`, `QueueCapabilities`, `QueueDescriptor`, and `QueueSelectionPlan`
+define the multi-queue selection vocabulary. `Device.queueCapabilities()`
+returns the current device's logical queue capabilities, and
+`Device.planQueue(...)` reports the requested kind, resolved kind, graphics
+fallback state, dedicated logical queue state, and ownership-transfer support.
+`Device.queue()` still returns the default graphics queue, and
+`Device.queueWithDescriptor(.{})` is the explicit form of that default. A
+non-graphics descriptor falls back to the graphics queue when `multi_queue` is
+not supported and fallback is allowed. When `DeviceFeatures.multi_queue` and the
+relevant dedicated queue gate are enabled, `queueWithDescriptor(...)` returns a
+logical compute or transfer queue view. Current backends still record commands
+through the existing native command queue until dedicated native queue families
+and physical async queue scheduling are enabled.
 
 `QueueOwnershipTransferDescriptor` is executable from blit and compute encoders
 through `bufferOwnershipTransfer(...)` and `textureOwnershipTransfer(...)`.

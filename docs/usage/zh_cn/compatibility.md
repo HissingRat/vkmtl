@@ -23,8 +23,9 @@ vkmtl 会保持普通 command path portable：resource usage tracking、binary f
 timestamp query 和 occlusion query 都通过 backend-neutral runtime object 暴露。显式 barrier
 和 queue ownership transfer 是高级 escape hatch；Vulkan 会把 barrier path 下沉到 native，
 Metal 会在 encoder boundary 已经定义 ordering 的地方使用 validation/no-op marker。Timeline
-fence、shared event、native dedicated queue、native queue-family ownership transfer 和
-pipeline statistics query 仍然保持 capability-gated，等 backend lowering 完成后再打开。
+fence、shared event 和 logical queue planning 已经有 portable descriptor / validation 入口；
+native timeline/shared-event submit、native dedicated queue、native queue-family ownership transfer
+和 pipeline statistics query 仍然保持 capability-gated，等 backend lowering 完成后再打开。
 
 ## Advanced Features
 

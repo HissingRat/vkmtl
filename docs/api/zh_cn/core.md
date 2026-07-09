@@ -159,7 +159,15 @@ Fence 与 event synchronization 已经有 runtime object。`Device.makeFence(...
 `currentValue()` 管理 CPU-visible 状态。Binary fence 由 `DeviceFeatures.fences` 控制；
 timeline fence 仍由 `DeviceFeatures.timeline_fences` gate 控制。`Device.makeEvent(...)`
 会创建带 `signal(...)`、`wait(...)`、`reset()` 和 `isSignaled()` 的 `Event`。Shared
-event 仍由 `DeviceFeatures.shared_events` gate 控制。Queue-submit 集成是后续 backend 步骤。
+event 仍由 `DeviceFeatures.shared_events` gate 控制。
+
+`Device.syncCapabilities()` 和 `WindowContext.syncCapabilities()` 会把 fence、timeline
+fence、event、shared event、host wait/signal、queue wait/signal 和 native support gate
+汇总成 `SyncCapabilities`。`SynchronizationDescriptor` 可以传给
+`CommandBuffer.commitWithSynchronization(...)`，用于在 `commit()` 前后执行 portable runtime
+wait/signal，并校验 fence/event lifetime、backend identity 和 fence value。当前这个入口是
+portable synchronization contract；Vulkan timeline semaphore submit lowering、Metal shared-event
+command-buffer integration 和真正 native queue wait/signal 仍是后续 backend work。
 
 ## Shader 与 Pipeline
 
@@ -450,12 +458,16 @@ try command_buffer.commit();
 lifecycle state。当前 command buffer 在 `commit()` 后仍然是 one-shot；pooled 或 reusable
 command buffer 已经由 descriptor 表达，但在 native reset/pooling 接上前会被 feature gate 拒绝。
 
-`QueueKind`、`QueueCapabilities` 和 `QueueDescriptor` 定义 multi-queue selection
-词汇。`Device.queue()` 仍然返回 default graphics queue，`Device.queueWithDescriptor(.{})`
+`QueueKind`、`QueueCapabilities`、`QueueDescriptor` 和 `QueueSelectionPlan` 定义
+multi-queue selection 词汇。`Device.queueCapabilities()` 返回当前 device 的 logical queue
+能力；`Device.planQueue(...)` 会告诉调用方 requested kind、resolved kind、是否 fallback 到
+graphics queue、是否 dedicated logical queue、以及 ownership transfer 是否可用。
+`Device.queue()` 仍然返回 default graphics queue，`Device.queueWithDescriptor(.{})`
 是这个默认路径的显式写法。当 backend 不支持 `multi_queue` 且允许 fallback 时，非 graphics
 descriptor 会回落到 graphics queue。启用 `DeviceFeatures.multi_queue` 以及对应 dedicated queue
 gate 后，`queueWithDescriptor(...)` 会返回 logical compute 或 transfer queue view。当前 backend
-仍通过已有 native command queue 记录命令；dedicated native queue family 后续再接。
+仍通过已有 native command queue 记录命令；dedicated native queue family 和 physical async queue
+scheduling 后续再接。
 
 `QueueOwnershipTransferDescriptor` 已经可以通过 blit / compute encoder 的
 `bufferOwnershipTransfer(...)` 和 `textureOwnershipTransfer(...)` 执行。Resource 会用

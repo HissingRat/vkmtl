@@ -676,17 +676,17 @@ See `docs/develop/period35/`.
 
 ## Period 36: Sync And Queue Semantics
 
-Status: planned after Period35.
+Status: implemented portable sync/queue contract after Period35.
 
 Goal: make synchronization and multi-queue behavior explicit enough for real
 async compute, async transfer, and cross-queue presentation workloads.
 
 - Phase 1: synchronization object contract
-- Phase 2: Vulkan timeline semaphore and fence lowering
-- Phase 3: Metal shared event and fence lowering
-- Phase 4: queue families and queue roles
+- Phase 2: timeline fence gates and typed fallback behavior
+- Phase 3: shared-event gates and native-handle boundary
+- Phase 4: queue families, queue roles, and queue planning
 - Phase 5: queue ownership and hazard tracking
-- Phase 6: async compute/transfer examples and validation
+- Phase 6: deterministic sync/queue validation
 
 See `docs/develop/period36/`.
 
@@ -843,6 +843,10 @@ See `docs/develop/period32+/target.md`.
 - Period 35 owns shared RT scene data and precise ownership for the remaining
   procedural parity work; Period39 owns driver-level mixed TLAS and Metal
   procedural/custom-intersection completion.
+- Period 36 owns the portable synchronization and logical queue API contract.
+  Driver-level Vulkan timeline submit, Metal shared-event submit, and physical
+  multi-queue validation remain Period44 evidence requirements before broad
+  parity claims.
 - Periods 36 through 44 own the remaining production parity buckets: sync,
   queues, memory, residency, resource-table scale, pipeline persistence, ray
   tracing completeness, advanced geometry, external interop, edge semantics,

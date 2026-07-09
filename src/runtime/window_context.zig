@@ -1167,6 +1167,79 @@ pub const ExternalSynchronizationDescriptor = struct {
     }
 };
 
+pub const FenceWaitOperation = struct {
+    fence: *Fence,
+    descriptor: core.FenceWaitDescriptor = .{},
+};
+
+pub const FenceSignalOperation = struct {
+    fence: *Fence,
+    descriptor: core.FenceSignalDescriptor = .{},
+};
+
+pub const EventWaitOperation = struct {
+    event: *Event,
+    descriptor: core.EventWaitDescriptor = .{},
+};
+
+pub const EventSignalOperation = struct {
+    event: *Event,
+    descriptor: core.EventSignalDescriptor = .{},
+};
+
+pub const SynchronizationDescriptor = struct {
+    wait_fences: []const FenceWaitOperation = &.{},
+    signal_fences: []const FenceSignalOperation = &.{},
+    wait_events: []const EventWaitOperation = &.{},
+    signal_events: []const EventSignalOperation = &.{},
+
+    pub fn isEmpty(self: SynchronizationDescriptor) bool {
+        return self.wait_fences.len == 0 and
+            self.signal_fences.len == 0 and
+            self.wait_events.len == 0 and
+            self.signal_events.len == 0;
+    }
+
+    pub fn validate(self: SynchronizationDescriptor, backend: core.Backend) !void {
+        for (self.wait_fences) |operation| {
+            assertObjectAlive(operation.fence.alive, "fence");
+            try expectSameBackend(backend, operation.fence.backend);
+            try operation.descriptor.validate(operation.fence.descriptor_value);
+        }
+        for (self.signal_fences) |operation| {
+            assertObjectAlive(operation.fence.alive, "fence");
+            try expectSameBackend(backend, operation.fence.backend);
+            try operation.descriptor.validate(operation.fence.descriptor_value);
+        }
+        for (self.wait_events) |operation| {
+            assertObjectAlive(operation.event.alive, "event");
+            try expectSameBackend(backend, operation.event.backend);
+        }
+        for (self.signal_events) |operation| {
+            assertObjectAlive(operation.event.alive, "event");
+            try expectSameBackend(backend, operation.event.backend);
+        }
+    }
+
+    fn waitBeforeSubmit(self: SynchronizationDescriptor) !void {
+        for (self.wait_fences) |operation| {
+            try operation.fence.wait(operation.descriptor);
+        }
+        for (self.wait_events) |operation| {
+            try operation.event.wait(operation.descriptor);
+        }
+    }
+
+    fn signalAfterSubmit(self: SynchronizationDescriptor) !void {
+        for (self.signal_fences) |operation| {
+            try operation.fence.signal(operation.descriptor);
+        }
+        for (self.signal_events) |operation| {
+            try operation.event.signal(operation.descriptor);
+        }
+    }
+};
+
 pub const ExternalTexture = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
@@ -3739,6 +3812,16 @@ pub const CommandBuffer = struct {
         try self.commit();
     }
 
+    pub fn commitWithSynchronization(
+        self: *CommandBuffer,
+        descriptor: SynchronizationDescriptor,
+    ) !void {
+        try descriptor.validate(self.backend);
+        try descriptor.waitBeforeSubmit();
+        try self.commit();
+        try descriptor.signalAfterSubmit();
+    }
+
     pub fn selectedBackend(self: CommandBuffer) core.Backend {
         return self.backend;
     }
@@ -5204,6 +5287,10 @@ pub const Device = struct {
         return self.tracker.diagnosticsSnapshot();
     }
 
+    pub fn syncCapabilities(self: Device) core.SyncCapabilities {
+        return core.SyncCapabilities.fromFeatures(self.features());
+    }
+
     pub fn writeCaptureName(
         self: Device,
         descriptor: core.CaptureNameDescriptor,
@@ -5288,13 +5375,7 @@ pub const Device = struct {
     }
 
     pub fn queueCapabilities(self: Device) core.QueueCapabilities {
-        _ = self;
-        return .{
-            .graphics = true,
-            .compute = true,
-            .transfer = true,
-            .present = true,
-        };
+        return core.QueueCapabilities.fromFeatures(self.features());
     }
 
     pub fn presentModeSupport(self: Device) core.PresentModeSupport {
@@ -5306,15 +5387,19 @@ pub const Device = struct {
     }
 
     pub fn queueWithDescriptor(self: *Device, descriptor: core.QueueDescriptor) !Queue {
-        const device_features = self.features();
-        try descriptor.validate(device_features, self.queueCapabilities());
+        const plan = try self.planQueue(descriptor);
         var queue_view = self.queue();
         queue_view.label_value = descriptor.label;
-        queue_view.kind_value = if (descriptor.kind == .graphics or !device_features.multi_queue)
-            .graphics
-        else
-            descriptor.kind;
+        queue_view.kind_value = plan.resolved;
         return queue_view;
+    }
+
+    pub fn planQueue(self: Device, descriptor: core.QueueDescriptor) core.CommandEncodingError!core.QueueSelectionPlan {
+        return try core.QueueSelectionPlan.fromDescriptor(
+            descriptor,
+            self.features(),
+            self.queueCapabilities(),
+        );
     }
 
     pub fn makeSurfaceCollection(self: Device) core.SurfaceCollection {
@@ -5925,6 +6010,11 @@ pub const WindowContext = struct {
     pub fn queueCapabilities(self: *WindowContext) core.QueueCapabilities {
         var device_view = self.device();
         return device_view.queueCapabilities();
+    }
+
+    pub fn syncCapabilities(self: *WindowContext) core.SyncCapabilities {
+        const device_view = self.device();
+        return device_view.syncCapabilities();
     }
 
     pub fn presentModeSupport(self: *WindowContext) core.PresentModeSupport {
@@ -8198,6 +8288,15 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.QueueKind.graphics, descriptor_queue.kind());
     try std.testing.expectEqual(core.QueueKind.graphics, fallback_compute_queue.kind());
     try std.testing.expect(context.queueCapabilities().compute);
+    try std.testing.expect(context.syncCapabilities().fences);
+    try std.testing.expect(context.syncCapabilities().events);
+    const fallback_plan = try device.planQueue(.{
+        .kind = .compute,
+        .allow_fallback = true,
+    });
+    try std.testing.expectEqual(core.QueueKind.compute, fallback_plan.requested);
+    try std.testing.expectEqual(core.QueueKind.graphics, fallback_plan.resolved);
+    try std.testing.expect(fallback_plan.fallback_to_graphics);
     try std.testing.expectError(core.CommandEncodingError.UnsupportedMultiQueue, device.queueWithDescriptor(.{
         .kind = .compute,
         .allow_fallback = false,
@@ -8571,6 +8670,75 @@ test "runtime fences and events track lifecycle state" {
     try std.testing.expectError(core.CommandEncodingError.UnsupportedSharedEvents, device.makeEvent(.{
         .shared = true,
     }));
+}
+
+test "runtime command buffer synchronization waits before submit and signals after submit" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.timeline_fences = true;
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = report,
+    };
+
+    var wait_fence = try device.makeFence(.{ .label = "wait fence" });
+    defer wait_fence.deinit();
+    var signal_fence = try device.makeFence(.{ .label = "signal fence" });
+    defer signal_fence.deinit();
+    var timeline = try device.makeFence(.{
+        .label = "timeline",
+        .kind = .timeline,
+        .initial_value = 2,
+    });
+    defer timeline.deinit();
+    var event = try device.makeEvent(.{ .label = "signal event" });
+    defer event.deinit();
+
+    var blocked = CommandBuffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+    };
+    const blocked_waits = [_]FenceWaitOperation{.{
+        .fence = &wait_fence,
+    }};
+    try std.testing.expectError(core.CommandEncodingError.FenceWaitTimeout, blocked.commitWithSynchronization(.{
+        .wait_fences = blocked_waits[0..],
+    }));
+    try std.testing.expect(blocked.alive);
+
+    try wait_fence.signal(.{});
+    var command_buffer = CommandBuffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+    };
+    const waits = [_]FenceWaitOperation{.{
+        .fence = &wait_fence,
+    }};
+    const signals = [_]FenceSignalOperation{
+        .{ .fence = &signal_fence },
+        .{ .fence = &timeline, .descriptor = .{ .value = 5 } },
+    };
+    const event_signals = [_]EventSignalOperation{.{
+        .event = &event,
+    }};
+    try command_buffer.commitWithSynchronization(.{
+        .wait_fences = waits[0..],
+        .signal_fences = signals[0..],
+        .signal_events = event_signals[0..],
+    });
+
+    try std.testing.expect(!command_buffer.alive);
+    try std.testing.expect(signal_fence.isSignaled(1));
+    try std.testing.expect(timeline.isSignaled(5));
+    try std.testing.expect(event.isSignaled());
 }
 
 test "runtime query sets support encoder writes and readback" {

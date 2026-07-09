@@ -56,9 +56,11 @@ Period32+ work is split into concrete periods:
 - Period35: shared RT scene data and procedural parity boundary. This removes
   example-local scene constants from the RT scene path where practical and
   assigns remaining mixed TLAS / Metal procedural parity to Period39.
-- Period36: synchronization and queues. This closes timeline semaphore, shared
-  event, fence, multi-queue, queue ownership, async compute, and async transfer
-  semantics.
+- Period36: synchronization and queues. This closes the portable sync/queue
+  contract: capability reporting, synchronization commit descriptors, logical
+  queue planning, queue ownership validation, and typed unsupported behavior.
+  Native timeline/shared-event submit and physical async queue evidence remain
+  Period44 validation requirements after backend lowering exists.
 - Period37: memory, heaps, and residency. This closes memory heap allocation,
   aliasing, budget reporting, pressure handling, sparse/tiled residency, and
   long-running residency pressure tests.
@@ -94,8 +96,8 @@ The current routing for the remaining Vulkan/Metal parity list is:
 
 | Work item | Owner |
 | --- | --- |
-| timeline semaphore / shared event / fence semantics | Period36 |
-| multi-queue, queue ownership, async compute/transfer scheduling | Period36 |
+| timeline semaphore / shared event / fence semantics | Period36 for public contract; Period44 for native device evidence |
+| multi-queue, queue ownership, async compute/transfer scheduling | Period36 for logical planning and validation; Period44 for physical queue evidence |
 | memory heap, aliasing, budget, pressure handling | Period37 |
 | sparse/tiled residency long-run pressure tests | Period37 |
 | descriptor indexing / argument buffer large table pressure tests | Period38 |
@@ -143,6 +145,9 @@ Period32+ should eventually close these families of work.
 - queue ownership transfers and cross-queue resource hazards
 - async compute and async transfer examples
 - host wait, GPU wait, and external synchronization behavior
+- Period36 owns the portable contract and typed validation. Driver-level
+  timeline/shared-event submit and physical queue scheduling need Period44
+  device-matrix evidence before they count as production parity.
 
 ### Memory, Heaps, And Residency
 

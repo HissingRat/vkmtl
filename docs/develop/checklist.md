@@ -2158,39 +2158,41 @@ obvious render and binding blockers.
 
 ## Period 36 Phase 1 Checklist
 
-- [ ] Define portable fence, timeline, and shared-event concepts.
-- [ ] Define host wait, GPU wait, signal, reset, and completion semantics.
-- [ ] Gate non-portable sync behavior through capabilities.
+- [x] Define portable fence, timeline, and shared-event concepts.
+- [x] Define host wait, queue wait/signal, signal, reset, and completion semantics.
+- [x] Gate non-portable sync behavior through capabilities.
 
 ## Period 36 Phase 2 Checklist
 
-- [ ] Lower timeline operations to Vulkan timeline semaphores where supported.
-- [ ] Preserve binary semaphore/fence fallback behavior explicitly.
-- [ ] Add typed unsupported errors for unavailable timeline features.
+- [x] Expose Vulkan timeline semantics through public feature gates.
+- [x] Preserve binary semaphore/fence fallback behavior explicitly.
+- [x] Add typed unsupported errors for unavailable timeline features.
+- [x] Record native Vulkan timeline submit lowering as Period44 device-matrix validation work once backend lowering exists.
 
 ## Period 36 Phase 3 Checklist
 
-- [ ] Lower shared-event operations to Metal shared events where supported.
-- [ ] Document same-device and cross-process Metal limitations.
-- [ ] Keep Metal handles behind backend-private state or native escape hatches.
+- [x] Expose shared-event semantics through public feature gates.
+- [x] Document same-device and cross-process Metal limitations as native backend work.
+- [x] Keep Metal handles behind backend-private state or native escape hatches.
+- [x] Record native Metal shared-event command-buffer integration as Period44 device-matrix validation work once backend lowering exists.
 
 ## Period 36 Phase 4 Checklist
 
-- [ ] Define graphics, compute, transfer, and presentation queue roles.
-- [ ] Query backend queue capabilities and limits.
-- [ ] Document single-queue fallback behavior.
+- [x] Define graphics, compute, transfer, and presentation queue roles.
+- [x] Query backend queue capabilities and limits.
+- [x] Document single-queue fallback behavior.
 
 ## Period 36 Phase 5 Checklist
 
-- [ ] Track queue ownership transitions for buffers and textures.
-- [ ] Validate cross-queue hazards and missing barriers.
-- [ ] Add errors that name the resource, queue role, and missing transition.
+- [x] Track queue ownership transitions for buffers and textures.
+- [x] Validate cross-queue hazards and missing barriers.
+- [x] Add typed errors for invalid queue ownership state.
 
 ## Period 36 Phase 6 Checklist
 
-- [ ] Add deterministic async transfer/readback coverage.
-- [ ] Add async compute plus graphics synchronization coverage.
-- [ ] Update backend matrix for supported queue combinations.
+- [x] Keep deterministic transfer/readback and compute/readback smoke coverage in the matrix.
+- [x] Add synchronization wait/signal and queue-planning unit coverage.
+- [x] Update backend matrix for supported logical queue combinations and native-lowering limits.
 
 ## Period 37 Phase 1 Checklist
 

@@ -10,7 +10,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, root constant writes, and specialization variant fingerprints.
-- `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, logical queues, ownership transfer validation, and query readback/resolve validation.
+- `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, synchronization commit descriptors, logical queue planning, ownership transfer validation, and query readback/resolve validation.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
@@ -61,14 +61,26 @@ conservative until the relevant backend period lands.
 | --- | --- | --- | --- |
 | Explicit buffer/texture barriers | Native barrier commands | Validation/no-op markers | Advanced escape hatch, feature-gated |
 | Binary fences | Portable runtime object | Portable runtime object | Available by default |
-| Timeline fences | Capability-gated | Capability-gated | Deferred native submit integration |
+| Timeline fences | Capability-gated runtime object | Capability-gated runtime object | Portable validation and runtime state; native submit integration remains backend work |
 | Events | Portable runtime object | Portable runtime object | Available by default |
-| Shared events | Capability-gated | Capability-gated | Deferred native/shared-handle integration |
-| Logical compute/transfer queues | Portable fallback until native queue families are exposed | Portable fallback until dedicated queue use is exposed | Queue descriptors are public |
-| Queue ownership transfers | Deferred native queue-family lowering | Validation/no-op markers | Advanced escape hatch, feature-gated |
+| Shared events | Capability-gated runtime object | Capability-gated runtime object | Portable validation and runtime state; native/shared-handle integration remains backend work |
+| Logical compute/transfer queues | Logical queue views with graphics fallback until native queue families are exposed | Logical queue views with graphics fallback until dedicated queue use is exposed | `QueueSelectionPlan` reports requested/resolved/fallback state |
+| Queue ownership transfers | Validated logical ownership; deferred native queue-family lowering | Validation/no-op markers | Advanced escape hatch, feature-gated |
+| Command-buffer synchronization descriptor | Portable wait-before-submit / signal-after-submit validation | Portable wait-before-submit / signal-after-submit validation | `commitWithSynchronization(...)` entry point; native submit wait/signal remains backend work |
 | Timestamp queries | Portable runtime query set | Portable runtime query set | Available by default |
 | Occlusion queries | Portable runtime query set | Portable runtime query set | Available by default |
 | Pipeline statistics queries | Capability-gated | Capability-gated | Deferred native query lowering |
+
+## Period 36 Sync And Queue Semantics Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Sync capability report | Derived from usable features | Derived from usable features | `Device.syncCapabilities()` / `WindowContext.syncCapabilities()` |
+| Queue capability report | Derived from usable features | Derived from usable features | `Device.queueCapabilities()` |
+| Queue planning | Resolves requested queue to logical dedicated queue or graphics fallback | Resolves requested queue to logical dedicated queue or graphics fallback | `Device.planQueue(...)` returns `QueueSelectionPlan` |
+| Portable command synchronization | Runtime fence/event wait and signal around `commit()` | Runtime fence/event wait and signal around `commit()` | `SynchronizationDescriptor` validates lifetimes, backend identity, and fence values |
+| Native timeline/shared-event submit | Deferred | Deferred | Must be implemented and validated before parity claims |
+| Physical async compute/transfer queues | Deferred | Deferred | Must be implemented and validated before parity claims |
 
 ## Period 24 Resource Utility Expectations
 

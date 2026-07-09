@@ -352,13 +352,17 @@ assigned to Period39 instead of hidden in the example.
 
 Tracked in `docs/develop/period36/`.
 
-- [ ] Timeline semaphore / shared event / fence semantics.
-- [ ] Multi-queue roles for graphics, compute, transfer, and presentation.
-- [ ] Queue ownership and cross-queue hazard tracking.
-- [ ] Async compute and async transfer validation examples.
+- [x] Portable timeline fence / shared event / fence semantics and feature gates.
+- [x] Multi-queue roles for graphics, compute, transfer, and presentation.
+- [x] Queue ownership and cross-queue hazard tracking.
+- [x] Deterministic sync/queue validation coverage.
+- [x] Record native timeline/shared-event submit and physical multi-queue
+  validation as Period44 evidence work.
 
-Expected result: vkmtl can schedule cross-queue work where supported and report
-typed unsupported or missing-barrier errors where it cannot.
+Expected result: vkmtl exposes portable synchronization and logical queue
+planning, validates ownership hazards, and reports typed unsupported or
+missing-transition errors. Driver-level native submit and physical multi-queue
+claims require Period44 device-matrix evidence.
 
 ## Wave 18: Memory, Heaps, And Residency
 

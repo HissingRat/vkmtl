@@ -37,6 +37,9 @@ examples, and long-running soak tests for resource churn.
 
 - Add long-running presentation, shader, resource, and residency churn runs.
 - Record memory pressure, queue sync, and device-loss behavior.
+- Validate native timeline semaphore submit, Metal shared-event submit, and
+  physical async compute/transfer queue behavior on supported hosts once the
+  backend lowering exists.
 - Keep soak failures actionable and scoped.
 
 ### Phase 5: Release Readiness And Parity Report
