@@ -66,9 +66,11 @@ Period32+ work is split into concrete periods:
   contract. Native heap-backed resources, native sparse/tiled page binding, and
   GPU pressure soak require backend lowering plus Period44 device evidence.
 - Period38: resource-table scale and pipeline persistence. This closes
-  descriptor indexing, Metal argument buffer pressure, update-after-bind
-  semantics, Vulkan pipeline cache/library persistence, Metal binary archives,
-  and cache invalidation rules.
+  descriptor indexing and Metal argument-buffer pressure planning,
+  update-after-bind semantics, and shader / pipeline artifact invalidation
+  rules. Native Vulkan pipeline cache/library persistence, Metal binary
+  archives, and GPU-scale table pressure evidence remain Period44 validation
+  work after backend lowering exists.
 - Period39: ray tracing completeness. This closes ray query, acceleration
   structure update/refit/compaction, large instance sets, and complex SBT
   layouts beyond the Period35 scene.
@@ -101,8 +103,8 @@ The current routing for the remaining Vulkan/Metal parity list is:
 | multi-queue, queue ownership, async compute/transfer scheduling | Period36 for logical planning and validation; Period44 for physical queue evidence |
 | memory heap, aliasing, budget, pressure handling | Period37 for public contract; Period44 for native device evidence |
 | sparse/tiled residency long-run pressure tests | Period37 for deterministic churn planning; Period44 for GPU soak evidence |
-| descriptor indexing / argument buffer large table pressure tests | Period38 |
-| pipeline library / binary archive / cache production persistence | Period38 |
+| descriptor indexing / argument buffer large table pressure tests | Period38 for portable planning; Period44 for GPU-scale device evidence |
+| pipeline library / binary archive / cache production persistence | Period38 for compatibility contract; Period44 for native persistence evidence |
 | ray query, AS update/compaction, instances, procedural parity, complex SBT | Period39, with current procedural scene parity closed first in Period35 |
 | tessellation and mesh/task shader real lowering and draw paths | Period40 |
 | external memory / texture / sync platform interop matrix | Period41 |

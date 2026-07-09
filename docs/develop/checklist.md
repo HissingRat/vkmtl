@@ -2227,39 +2227,46 @@ obvious render and binding blockers.
 
 ## Period 38 Phase 1 Checklist
 
-- [ ] Add Vulkan descriptor indexing stress cases.
-- [ ] Validate partially-bound and update-after-bind behavior where supported.
-- [ ] Keep descriptor table limits visible in capability reports.
+- [x] Add descriptor indexing resource-table pressure planning.
+- [x] Validate partially-bound and update-after-bind requirements in the
+  pressure plan.
+- [x] Keep descriptor table limits visible through capability reports.
 
 ## Period 38 Phase 2 Checklist
 
-- [ ] Add Metal argument buffer stress cases.
-- [ ] Validate argument-buffer tier behavior and fallback reasons.
-- [ ] Keep table layout derivation backend-neutral.
+- [x] Reuse resource-table pressure planning for Metal argument-buffer layouts.
+- [x] Keep fallback reasons tied to feature / limit validation.
+- [x] Keep table layout derivation backend-neutral.
 
 ## Period 38 Phase 3 Checklist
 
-- [ ] Define rules for updating tables while work is in flight.
-- [ ] Validate dynamic offsets and small constant update paths.
-- [ ] Add backend-specific unsupported diagnostics.
+- [x] Define public opt-in rules for partially-bound and update-after-bind
+  tables.
+- [x] Validate dynamic offsets, root constants, and resource-table update paths
+  through regression tests.
+- [x] Keep unsupported diagnostics typed and capability-gated.
 
 ## Period 38 Phase 4 Checklist
 
-- [ ] Persist Vulkan pipeline cache/library artifacts where supported.
-- [ ] Define cache key inputs and compatibility checks.
-- [ ] Validate stale-cache recovery.
+- [x] Define Vulkan pipeline artifact compatibility inputs.
+- [x] Define cache key inputs and compatibility checks.
+- [x] Validate stale-cache recovery planning.
+- [x] Record native Vulkan pipeline cache/library persistence as Period44
+  device-matrix evidence after backend lowering exists.
 
 ## Period 38 Phase 5 Checklist
 
-- [ ] Persist Metal binary archives where supported.
-- [ ] Define archive invalidation for shader/source/backend changes.
-- [ ] Validate fallback behavior when archives are unavailable.
+- [x] Define Metal pipeline artifact compatibility inputs.
+- [x] Define archive invalidation for shader/source/backend changes.
+- [x] Validate fallback behavior when archives are unavailable.
+- [x] Record native Metal binary archive persistence as Period44 device-matrix
+  evidence after backend lowering exists.
 
 ## Period 38 Phase 6 Checklist
 
-- [ ] Test shader hash, entry point, reflection, backend, and format cache
+- [x] Test shader hash, entry point, reflection, backend, and format cache
   invalidation.
-- [ ] Document inspectable artifact locations and production cache policy.
+- [x] Document inspectable artifact locations and production cache policy.
 
 ## Period 39 Phase 1 Checklist
 

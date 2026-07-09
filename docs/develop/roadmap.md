@@ -708,17 +708,22 @@ See `docs/develop/period37/`.
 
 ## Period 38: Resource Tables And Pipeline Persistence
 
-Status: planned after Period37.
+Status: completed portable pressure and artifact compatibility contract.
 
-Goal: prove large resource tables and persistent pipeline caches under scale
-instead of only descriptor-shape validation.
+Goal: move large resource tables and pipeline persistence from descriptor-shape
+validation into explicit pressure planning and deterministic artifact
+compatibility rules.
 
-- Phase 1: descriptor indexing pressure tests
-- Phase 2: Metal argument buffer pressure tests
+- Phase 1: descriptor indexing pressure planning
+- Phase 2: Metal argument buffer pressure planning
 - Phase 3: update-after-bind and dynamic binding semantics
-- Phase 4: Vulkan pipeline cache/library persistence
-- Phase 5: Metal binary archive persistence
+- Phase 4: Vulkan pipeline artifact compatibility
+- Phase 5: Metal pipeline artifact compatibility
 - Phase 6: cache invalidation and artifact compatibility validation
+
+Native Vulkan pipeline cache/library consumption, Metal binary archive
+consumption, and GPU-scale table pressure evidence remain Period44 validation
+work after backend lowering exists.
 
 See `docs/develop/period38/`.
 

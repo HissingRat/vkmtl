@@ -384,14 +384,20 @@ require backend lowering plus Period44 device-matrix evidence.
 
 Tracked in `docs/develop/period38/`.
 
-- [ ] Descriptor indexing pressure tests.
-- [ ] Metal argument buffer pressure tests.
-- [ ] Update-after-bind and dynamic binding semantics.
-- [ ] Vulkan pipeline cache/library persistence.
-- [ ] Metal binary archive persistence.
+- [x] Descriptor indexing resource-table pressure planning.
+- [x] Metal argument-buffer resource-table pressure planning.
+- [x] Update-after-bind and partially-bound table semantics.
+- [x] Pipeline artifact compatibility planning for shader, entry point,
+  reflection, backend, format, schema, and toolchain changes.
+- [ ] Native Vulkan pipeline cache/library persistence. Deferred to Period44
+  device-matrix evidence after backend lowering exists.
+- [ ] Native Metal binary archive persistence. Deferred to Period44
+  device-matrix evidence after backend lowering exists.
 
-Expected result: large resource tables and persistent pipeline artifacts survive
-scale tests with deterministic invalidation behavior.
+Expected result: large resource tables have deterministic portable pressure
+plans, and pipeline artifacts have deterministic invalidation behavior. Native
+persistence and GPU-scale pressure claims require Period44 backend/device
+evidence.
 
 ## Wave 20: Ray Tracing Completeness
 

@@ -1303,6 +1303,84 @@ pub const RuntimeCachePlan = struct {
     }
 };
 
+pub const PipelineArtifactCompatibility = enum {
+    compatible,
+    missing,
+    stale_schema,
+    backend_mismatch,
+    shader_hash_mismatch,
+    entry_point_mismatch,
+    reflection_mismatch,
+    format_mismatch,
+    toolchain_mismatch,
+};
+
+pub const PipelineArtifactManifestDescriptor = struct {
+    schema_version: u32 = runtime_cache_schema_version,
+    backend: Backend,
+    shader_hash: []const u8,
+    entry_points_hash: []const u8,
+    reflection_hash: []const u8,
+    format_hash: []const u8,
+    toolchain_id: []const u8,
+
+    pub fn validate(self: PipelineArtifactManifestDescriptor) ObjectCacheError!void {
+        if (self.shader_hash.len == 0) return ObjectCacheError.EmptyObjectCacheSourceHash;
+        if (self.entry_points_hash.len == 0) return ObjectCacheError.EmptyObjectCacheEntryPoint;
+        if (self.reflection_hash.len == 0) return ObjectCacheError.EmptyObjectCacheKey;
+        if (self.format_hash.len == 0) return ObjectCacheError.EmptyObjectCacheKey;
+        if (self.toolchain_id.len == 0) return ObjectCacheError.EmptyObjectCacheOptionsHash;
+    }
+
+    pub fn compatibilityWith(
+        self: PipelineArtifactManifestDescriptor,
+        existing: ?PipelineArtifactManifestDescriptor,
+    ) ObjectCacheError!PipelineArtifactCompatibility {
+        try self.validate();
+        const previous = existing orelse return .missing;
+        try previous.validate();
+        if (previous.schema_version != self.schema_version) return .stale_schema;
+        if (previous.backend != self.backend) return .backend_mismatch;
+        if (!std.mem.eql(u8, previous.shader_hash, self.shader_hash)) return .shader_hash_mismatch;
+        if (!std.mem.eql(u8, previous.entry_points_hash, self.entry_points_hash)) return .entry_point_mismatch;
+        if (!std.mem.eql(u8, previous.reflection_hash, self.reflection_hash)) return .reflection_mismatch;
+        if (!std.mem.eql(u8, previous.format_hash, self.format_hash)) return .format_mismatch;
+        if (!std.mem.eql(u8, previous.toolchain_id, self.toolchain_id)) return .toolchain_mismatch;
+        return .compatible;
+    }
+};
+
+pub const PipelineArtifactCachePlanDescriptor = struct {
+    artifact_dir: []const u8,
+    manifest: PipelineArtifactManifestDescriptor,
+    existing_manifest: ?PipelineArtifactManifestDescriptor = null,
+    read_only: bool = false,
+
+    pub fn validate(self: PipelineArtifactCachePlanDescriptor) ObjectCacheError!void {
+        if (self.artifact_dir.len == 0) return ObjectCacheError.EmptyObjectCacheKey;
+        try self.manifest.validate();
+        if (self.existing_manifest) |existing| try existing.validate();
+    }
+};
+
+pub const PipelineArtifactCachePlan = struct {
+    artifact_dir: []const u8,
+    compatibility: PipelineArtifactCompatibility,
+    should_rebuild: bool,
+    should_persist: bool,
+
+    pub fn fromDescriptor(descriptor: PipelineArtifactCachePlanDescriptor) ObjectCacheError!PipelineArtifactCachePlan {
+        try descriptor.validate();
+        const compatibility = try descriptor.manifest.compatibilityWith(descriptor.existing_manifest);
+        return .{
+            .artifact_dir = descriptor.artifact_dir,
+            .compatibility = compatibility,
+            .should_rebuild = compatibility != .compatible,
+            .should_persist = compatibility != .compatible and !descriptor.read_only,
+        };
+    }
+};
+
 pub const DebugLabelTarget = enum {
     resource,
     command_buffer,
@@ -6446,6 +6524,103 @@ pub const DescriptorIndexingLayoutDescriptor = struct {
             }
         }
     }
+
+    pub fn totalDescriptorCount(self: DescriptorIndexingLayoutDescriptor) u32 {
+        var count: u32 = 0;
+        for (self.ranges) |range| count +|= range.descriptor_count;
+        return count;
+    }
+
+    pub fn resourceDescriptorCount(self: DescriptorIndexingLayoutDescriptor, resource: BindingResourceKind) u32 {
+        var count: u32 = 0;
+        for (self.ranges) |range| {
+            if (range.resource == resource) count +|= range.descriptor_count;
+        }
+        return count;
+    }
+
+    pub fn partiallyBoundRangeCount(self: DescriptorIndexingLayoutDescriptor) usize {
+        var count: usize = 0;
+        for (self.ranges) |range| {
+            if (range.partially_bound) count += 1;
+        }
+        return count;
+    }
+
+    pub fn updateAfterBindRangeCount(self: DescriptorIndexingLayoutDescriptor) usize {
+        var count: usize = 0;
+        for (self.ranges) |range| {
+            if (range.update_after_bind) count += 1;
+        }
+        return count;
+    }
+};
+
+pub const ResourceTablePressureDescriptor = struct {
+    layout: DescriptorIndexingLayoutDescriptor,
+    expected_bound_descriptors: ?u32 = null,
+    expected_updates_per_frame: u32 = 0,
+    frames_in_flight: u32 = 1,
+    allow_partially_bound: bool = false,
+    allow_update_after_bind: bool = false,
+
+    pub fn plan(self: ResourceTablePressureDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!ResourceTablePressurePlan {
+        try self.layout.validate(features, limits);
+        if (self.frames_in_flight == 0) return AdvancedFeatureError.InvalidDescriptorIndexingCount;
+        const total = self.layout.totalDescriptorCount();
+        const expected_bound = self.expected_bound_descriptors orelse total;
+        if (expected_bound > total) return AdvancedFeatureError.InvalidDescriptorIndexingCount;
+        const partially_bound_ranges = self.layout.partiallyBoundRangeCount();
+        const update_after_bind_ranges = self.layout.updateAfterBindRangeCount();
+        return .{
+            .model = self.layout.model,
+            .range_count = self.layout.ranges.len,
+            .total_descriptors = total,
+            .expected_bound_descriptors = expected_bound,
+            .expected_unbound_descriptors = total - expected_bound,
+            .sampled_texture_descriptors = self.layout.resourceDescriptorCount(.sampled_texture),
+            .storage_texture_descriptors = self.layout.resourceDescriptorCount(.storage_texture),
+            .buffer_descriptors = self.layout.resourceDescriptorCount(.uniform_buffer) +|
+                self.layout.resourceDescriptorCount(.storage_buffer),
+            .sampler_descriptors = self.layout.resourceDescriptorCount(.sampler) +|
+                self.layout.resourceDescriptorCount(.compare_sampler),
+            .partially_bound_ranges = partially_bound_ranges,
+            .update_after_bind_ranges = update_after_bind_ranges,
+            .requires_partially_bound = partially_bound_ranges != 0,
+            .requires_update_after_bind = update_after_bind_ranges != 0,
+            .allow_partially_bound = self.allow_partially_bound,
+            .allow_update_after_bind = self.allow_update_after_bind,
+            .expected_updates_per_frame = self.expected_updates_per_frame,
+            .frames_in_flight = self.frames_in_flight,
+            .worst_case_updates_in_flight = @as(u64, self.expected_updates_per_frame) *| @as(u64, self.frames_in_flight),
+        };
+    }
+};
+
+pub const ResourceTablePressurePlan = struct {
+    model: AdvancedBindingModel,
+    range_count: usize = 0,
+    total_descriptors: u32 = 0,
+    expected_bound_descriptors: u32 = 0,
+    expected_unbound_descriptors: u32 = 0,
+    sampled_texture_descriptors: u32 = 0,
+    storage_texture_descriptors: u32 = 0,
+    buffer_descriptors: u32 = 0,
+    sampler_descriptors: u32 = 0,
+    partially_bound_ranges: usize = 0,
+    update_after_bind_ranges: usize = 0,
+    requires_partially_bound: bool = false,
+    requires_update_after_bind: bool = false,
+    allow_partially_bound: bool = false,
+    allow_update_after_bind: bool = false,
+    expected_updates_per_frame: u32 = 0,
+    frames_in_flight: u32 = 1,
+    worst_case_updates_in_flight: u64 = 0,
+
+    pub fn canCreateTable(self: ResourceTablePressurePlan) bool {
+        return (!self.requires_partially_bound or self.allow_partially_bound) and
+            (!self.requires_update_after_bind or self.allow_update_after_bind);
+    }
 };
 
 pub const ResourceTableSlot = struct {
@@ -8850,6 +9025,112 @@ test "runtime cache manifests plan compatibility and stale entries" {
     try std.testing.expect(std.mem.endsWith(u8, plan.manifest_path, "vkmtl-cache-manifest.json"));
 }
 
+test "pipeline artifact cache plans compatibility and rebuild policy" {
+    const manifest = PipelineArtifactManifestDescriptor{
+        .backend = .vulkan,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-v2026.12.2",
+    };
+
+    try std.testing.expectEqual(PipelineArtifactCompatibility.missing, try manifest.compatibilityWith(null));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.compatible, try manifest.compatibilityWith(manifest));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.stale_schema, try manifest.compatibilityWith(.{
+        .schema_version = runtime_cache_schema_version + 1,
+        .backend = .vulkan,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.backend_mismatch, try manifest.compatibilityWith(.{
+        .backend = .metal,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.shader_hash_mismatch, try manifest.compatibilityWith(.{
+        .backend = .vulkan,
+        .shader_hash = "shader-b",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.entry_point_mismatch, try manifest.compatibilityWith(.{
+        .backend = .vulkan,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "cs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.reflection_mismatch, try manifest.compatibilityWith(.{
+        .backend = .vulkan,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-b",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.format_mismatch, try manifest.compatibilityWith(.{
+        .backend = .vulkan,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-b",
+        .toolchain_id = "slang-v2026.12.2",
+    }));
+    try std.testing.expectEqual(PipelineArtifactCompatibility.toolchain_mismatch, try manifest.compatibilityWith(.{
+        .backend = .vulkan,
+        .shader_hash = "shader-a",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection-a",
+        .format_hash = "color-depth-a",
+        .toolchain_id = "slang-next",
+    }));
+
+    const compatible_plan = try PipelineArtifactCachePlan.fromDescriptor(.{
+        .artifact_dir = "zig-out/shaders/rainbow_cube",
+        .manifest = manifest,
+        .existing_manifest = manifest,
+    });
+    try std.testing.expectEqual(PipelineArtifactCompatibility.compatible, compatible_plan.compatibility);
+    try std.testing.expect(!compatible_plan.should_rebuild);
+    try std.testing.expect(!compatible_plan.should_persist);
+
+    const stale_plan = try PipelineArtifactCachePlan.fromDescriptor(.{
+        .artifact_dir = "zig-out/shaders/rainbow_cube",
+        .manifest = manifest,
+        .existing_manifest = .{
+            .backend = .vulkan,
+            .shader_hash = "shader-a",
+            .entry_points_hash = "vs-fs",
+            .reflection_hash = "reflection-a",
+            .format_hash = "color-depth-b",
+            .toolchain_id = "slang-v2026.12.2",
+        },
+    });
+    try std.testing.expectEqual(PipelineArtifactCompatibility.format_mismatch, stale_plan.compatibility);
+    try std.testing.expect(stale_plan.should_rebuild);
+    try std.testing.expect(stale_plan.should_persist);
+
+    const read_only_plan = try PipelineArtifactCachePlan.fromDescriptor(.{
+        .artifact_dir = "zig-out/shaders/rainbow_cube",
+        .manifest = manifest,
+        .existing_manifest = null,
+        .read_only = true,
+    });
+    try std.testing.expectEqual(PipelineArtifactCompatibility.missing, read_only_plan.compatibility);
+    try std.testing.expect(read_only_plan.should_rebuild);
+    try std.testing.expect(!read_only_plan.should_persist);
+}
+
 test "render pipeline descriptor validates shader stages and color targets" {
     const vertex_module = ShaderModuleDescriptor{
         .source = .{ .slang = "[shader(\"vertex\")] float4 vs_main() : SV_Position { return 0; }" },
@@ -9336,6 +9617,79 @@ test "descriptor indexing layout validates bindless edge cases" {
     }).validate(features, limits));
 
     try std.testing.expectError(AdvancedFeatureError.MissingDescriptorIndexingRange, (DescriptorIndexingLayoutDescriptor{}).validate(features, limits));
+}
+
+test "resource table pressure descriptor summarizes bindless table scale" {
+    const ranges = [_]DescriptorIndexingRange{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 1024,
+            .partially_bound = true,
+        },
+        .{
+            .binding = 1,
+            .resource = .storage_buffer,
+            .visibility = .{ .compute = true },
+            .descriptor_count = 64,
+            .update_after_bind = true,
+        },
+        .{
+            .binding = 2,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 8,
+        },
+    };
+    const layout = DescriptorIndexingLayoutDescriptor{
+        .model = .descriptor_indexing,
+        .ranges = ranges[0..],
+    };
+    const features = DeviceFeatures{
+        .descriptor_indexing = true,
+    };
+    const limits = DeviceLimits{
+        .max_bindless_descriptors_per_range = 2048,
+        .max_bindless_ranges_per_layout = 4,
+    };
+
+    const plan = try (ResourceTablePressureDescriptor{
+        .layout = layout,
+        .expected_bound_descriptors = 256,
+        .expected_updates_per_frame = 12,
+        .frames_in_flight = 3,
+        .allow_partially_bound = true,
+        .allow_update_after_bind = true,
+    }).plan(features, limits);
+    try std.testing.expectEqual(AdvancedBindingModel.descriptor_indexing, plan.model);
+    try std.testing.expectEqual(@as(usize, 3), plan.range_count);
+    try std.testing.expectEqual(@as(u32, 1096), plan.total_descriptors);
+    try std.testing.expectEqual(@as(u32, 256), plan.expected_bound_descriptors);
+    try std.testing.expectEqual(@as(u32, 840), plan.expected_unbound_descriptors);
+    try std.testing.expectEqual(@as(u32, 1024), plan.sampled_texture_descriptors);
+    try std.testing.expectEqual(@as(u32, 64), plan.buffer_descriptors);
+    try std.testing.expectEqual(@as(u32, 8), plan.sampler_descriptors);
+    try std.testing.expectEqual(@as(usize, 1), plan.partially_bound_ranges);
+    try std.testing.expectEqual(@as(usize, 1), plan.update_after_bind_ranges);
+    try std.testing.expect(plan.requires_partially_bound);
+    try std.testing.expect(plan.requires_update_after_bind);
+    try std.testing.expectEqual(@as(u64, 36), plan.worst_case_updates_in_flight);
+    try std.testing.expect(plan.canCreateTable());
+
+    const blocked_plan = try (ResourceTablePressureDescriptor{
+        .layout = layout,
+    }).plan(features, limits);
+    try std.testing.expect(!blocked_plan.canCreateTable());
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidDescriptorIndexingCount, (ResourceTablePressureDescriptor{
+        .layout = layout,
+        .expected_bound_descriptors = 1097,
+    }).plan(features, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidDescriptorIndexingCount, (ResourceTablePressureDescriptor{
+        .layout = layout,
+        .frames_in_flight = 0,
+    }).plan(features, limits));
 }
 
 test "resource table slots validate against descriptor ranges" {

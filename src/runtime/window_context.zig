@@ -4939,6 +4939,10 @@ pub const Device = struct {
         try descriptor.validate(self.features(), self.limits());
     }
 
+    pub fn planResourceTablePressure(self: Device, descriptor: core.ResourceTablePressureDescriptor) core.AdvancedFeatureError!core.ResourceTablePressurePlan {
+        return try descriptor.plan(self.features(), self.limits());
+    }
+
     pub fn validateSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5270,6 +5274,11 @@ pub const Device = struct {
     pub fn planRuntimeCache(self: Device, descriptor: core.RuntimeCachePlanDescriptor) !core.RuntimeCachePlan {
         if (descriptor.manifest.backend != self.backend) return core.ObjectCacheError.InvalidObjectCacheKey;
         return try core.RuntimeCachePlan.fromDescriptor(self.allocator, descriptor);
+    }
+
+    pub fn planPipelineArtifactCache(self: Device, descriptor: core.PipelineArtifactCachePlanDescriptor) core.ObjectCacheError!core.PipelineArtifactCachePlan {
+        if (descriptor.manifest.backend != self.backend) return core.ObjectCacheError.InvalidObjectCacheKey;
+        return try core.PipelineArtifactCachePlan.fromDescriptor(descriptor);
     }
 
     pub fn planBackendParitySemantics(
@@ -5997,6 +6006,11 @@ pub const WindowContext = struct {
         return try device_view.planRuntimeCache(descriptor);
     }
 
+    pub fn planPipelineArtifactCache(self: *WindowContext, descriptor: core.PipelineArtifactCachePlanDescriptor) core.ObjectCacheError!core.PipelineArtifactCachePlan {
+        const device_view = self.device();
+        return try device_view.planPipelineArtifactCache(descriptor);
+    }
+
     pub fn device(self: *WindowContext) Device {
         return .{
             .allocator = self.allocator,
@@ -6178,6 +6192,11 @@ pub const WindowContext = struct {
     pub fn makeAdvancedBindGroupLayout(self: *WindowContext, descriptor: core.DescriptorIndexingLayoutDescriptor) !AdvancedBindGroupLayout {
         var device_view = self.device();
         return try device_view.makeAdvancedBindGroupLayout(descriptor);
+    }
+
+    pub fn planResourceTablePressure(self: *WindowContext, descriptor: core.ResourceTablePressureDescriptor) core.AdvancedFeatureError!core.ResourceTablePressurePlan {
+        const device_view = self.device();
+        return try device_view.planResourceTablePressure(descriptor);
     }
 
     pub fn makeResourceTable(self: *WindowContext, descriptor: ResourceTableDescriptor) !ResourceTable {
@@ -7886,6 +7905,68 @@ test "runtime plans persistent cache manifests through device" {
     }));
 }
 
+test "runtime plans pipeline artifact cache compatibility through device" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.vulkan),
+    };
+
+    const manifest = core.PipelineArtifactManifestDescriptor{
+        .backend = .vulkan,
+        .shader_hash = "shader",
+        .entry_points_hash = "vs-fs",
+        .reflection_hash = "reflection",
+        .format_hash = "format",
+        .toolchain_id = "slang",
+    };
+    const plan = try device.planPipelineArtifactCache(.{
+        .artifact_dir = "zig-out/shaders/rainbow_cube",
+        .manifest = manifest,
+        .existing_manifest = null,
+    });
+    try std.testing.expectEqual(core.PipelineArtifactCompatibility.missing, plan.compatibility);
+    try std.testing.expect(plan.should_rebuild);
+    try std.testing.expect(plan.should_persist);
+
+    const stale_plan = try device.planPipelineArtifactCache(.{
+        .artifact_dir = "zig-out/shaders/rainbow_cube",
+        .manifest = manifest,
+        .existing_manifest = .{
+            .backend = .vulkan,
+            .shader_hash = "shader",
+            .entry_points_hash = "cs",
+            .reflection_hash = "reflection",
+            .format_hash = "format",
+            .toolchain_id = "slang",
+        },
+        .read_only = true,
+    });
+    try std.testing.expectEqual(core.PipelineArtifactCompatibility.entry_point_mismatch, stale_plan.compatibility);
+    try std.testing.expect(stale_plan.should_rebuild);
+    try std.testing.expect(!stale_plan.should_persist);
+
+    try std.testing.expectError(core.ObjectCacheError.InvalidObjectCacheKey, device.planPipelineArtifactCache(.{
+        .artifact_dir = "zig-out/shaders/rainbow_cube",
+        .manifest = .{
+            .backend = .metal,
+            .shader_hash = "shader",
+            .entry_points_hash = "vs-fs",
+            .reflection_hash = "reflection",
+            .format_hash = "format",
+            .toolchain_id = "slang",
+        },
+    }));
+}
+
 test "runtime advanced bind group layout snapshots descriptor ranges" {
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
@@ -7935,6 +8016,69 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
     try std.testing.expect(!layout.usesPartiallyBoundRanges());
     try std.testing.expect(!layout.usesUpdateAfterBindRanges());
     try std.testing.expectEqual(@as(usize, 1), tracker.advanced_bind_group_layouts);
+}
+
+test "runtime plans resource table pressure through device limits" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.descriptor_indexing = true;
+    report.limits.max_bindless_descriptors_per_range = 64;
+    report.limits.max_bindless_ranges_per_layout = 2;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan adapter",
+        },
+        .capability_report = report,
+    };
+
+    const ranges = [_]core.DescriptorIndexingRange{
+        .{
+            .binding = 0,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 32,
+            .partially_bound = true,
+        },
+        .{
+            .binding = 1,
+            .resource = .sampler,
+            .visibility = .{ .fragment = true },
+            .descriptor_count = 4,
+        },
+    };
+    const plan = try device.planResourceTablePressure(.{
+        .layout = .{
+            .model = .descriptor_indexing,
+            .ranges = ranges[0..],
+        },
+        .expected_bound_descriptors = 12,
+        .expected_updates_per_frame = 5,
+        .frames_in_flight = 2,
+        .allow_partially_bound = true,
+    });
+    try std.testing.expectEqual(@as(u32, 36), plan.total_descriptors);
+    try std.testing.expectEqual(@as(u32, 24), plan.expected_unbound_descriptors);
+    try std.testing.expectEqual(@as(u64, 10), plan.worst_case_updates_in_flight);
+    try std.testing.expect(plan.canCreateTable());
+
+    try std.testing.expectError(core.AdvancedFeatureError.InvalidDescriptorIndexingCount, device.planResourceTablePressure(.{
+        .layout = .{
+            .model = .descriptor_indexing,
+            .ranges = &.{.{
+                .binding = 0,
+                .resource = .sampled_texture,
+                .visibility = .{ .fragment = true },
+                .descriptor_count = 65,
+            }},
+        },
+    }));
 }
 
 test "runtime resource table updates clear and validate slots" {

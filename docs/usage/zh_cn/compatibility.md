@@ -43,6 +43,9 @@ argument buffer。两者通过 `DescriptorIndexingLayoutDescriptor`、
 `AdvancedBindGroupLayout` 和 `ResourceTable` 表达。当所选后端声明所需 feature 时，
 resource table 可以 update、clear，并通过 render / compute encoder 绑定。
 
+大型 table 压力通过 `Device.planResourceTablePressure(...)` 规划。Plan 会在分配前明确
+partially-bound 和 update-after-bind 要求；真实 GPU 压力证据仍属于后端 / 设备矩阵验证。
+
 Root constants 会在 pipeline 声明兼容 `root_constant_layout` 后下沉到 Vulkan push constants 和
 Metal `set*Bytes`。
 
@@ -67,3 +70,7 @@ structure、pipeline 和 shader table 细节上差异很大。
 
 Driver-level pipeline cache 和 Metal binary archive 使用显式 cache identity descriptor。它们和
 Period 8 object-cache diagnostics 是分开的层。
+Shader / pipeline artifact compatibility 通过 `Device.planPipelineArtifactCache(...)` 规划；
+当 shader hash、entry point、reflection、format、backend、schema 或 toolchain identity
+变化时会确定性失效。Native `VkPipelineCache`、pipeline library 和 `MTLBinaryArchive`
+持久化仍是 backend work。

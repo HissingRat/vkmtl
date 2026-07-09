@@ -1,58 +1,74 @@
 # Period 38: Resource Tables And Pipeline Persistence
 
-Status: planned after Period37.
+Status: completed as a portable planning and validation slice.
 
-Goal: prove large resource tables and persistent pipeline caches under scale
-instead of only descriptor-shape validation.
+Goal: move large resource tables and pipeline artifact persistence from
+descriptor-shape validation into explicit pressure and compatibility contracts.
 
 ## Expected Result
 
-After Period38, descriptor indexing and Metal argument buffers should survive
-large table pressure tests, update-after-bind semantics should be documented and
-validated, and pipeline/cache artifacts should persist across runs with clear
-invalidation rules.
+After Period38, descriptor indexing and Metal argument-buffer style layouts can
+be summarized as resource-table pressure plans, update-after-bind and
+partially-bound requirements are visible before table creation, and shader /
+pipeline artifacts have deterministic compatibility checks for stale or
+backend-mismatched cache entries.
+
+This period does not claim production native persistence yet. Vulkan
+`VkPipelineCache` / pipeline-library consumption, Metal `MTLBinaryArchive`
+consumption, and GPU-scale table pressure evidence remain Period44 device-matrix
+work once the corresponding backend lowering exists.
 
 ## Phase Plan
 
-### Phase 1: Descriptor Indexing Pressure Tests
+### Phase 1: Descriptor Indexing Pressure Planning
 
-- Add Vulkan descriptor indexing stress cases with large sampled-texture and
-  buffer tables.
-- Validate partially-bound and update-after-bind behavior where supported.
-- Keep limits visible through capability reports.
+- Added `ResourceTablePressureDescriptor` and `ResourceTablePressurePlan`.
+- Summarize descriptor indexing table size, per-resource descriptor counts,
+  expected bound/unbound descriptors, update pressure, and frames in flight.
+- Validate descriptor table limits through existing capability reports.
 
-### Phase 2: Metal Argument Buffer Pressure Tests
+### Phase 2: Metal Argument Buffer Pressure Planning
 
-- Add Metal argument buffer stress cases with equivalent resource tables.
-- Validate argument-buffer tier behavior and fallback reasons.
-- Keep table layout derivation backend-neutral.
+- Reuse the same `ResourceTablePressureDescriptor` for Metal argument-buffer
+  layouts.
+- Keep the pressure plan backend-neutral while the selected
+  `AdvancedBindingModel` records whether the layout maps toward Vulkan
+  descriptor indexing or Metal argument buffers.
+- Leave real GPU argument-buffer stress evidence to Period44.
 
 ### Phase 3: Update-After-Bind And Dynamic Binding Semantics
 
-- Define public rules for updating tables while work is in flight.
-- Validate dynamic offsets and small constant update paths.
-- Add backend-specific unsupported diagnostics.
+- Resource-table pressure plans expose whether a layout requires
+  partially-bound or update-after-bind behavior.
+- `ResourceTablePressurePlan.canCreateTable()` reports whether the caller opted
+  into the required semantics.
+- Existing dynamic offsets, root constants, and resource-table runtime tests
+  remain the command-binding regression surface.
 
-### Phase 4: Vulkan Pipeline Cache And Library Persistence
+### Phase 4: Vulkan Pipeline Artifact Compatibility
 
-- Persist Vulkan pipeline cache/library artifacts where supported.
-- Define cache key inputs and compatibility checks.
-- Validate stale-cache recovery.
+- Added `PipelineArtifactManifestDescriptor`.
+- Defined compatibility inputs: backend, shader hash, entry-point hash,
+  reflection hash, format hash, schema version, and toolchain id.
+- Vulkan native pipeline-cache/library consumption remains backend work.
 
-### Phase 5: Metal Binary Archive Persistence
+### Phase 5: Metal Pipeline Artifact Compatibility
 
-- Persist Metal binary archives where supported.
-- Define archive invalidation for shader/source/backend changes.
-- Validate fallback behavior when archives are unavailable.
+- The same manifest and compatibility plan applies to Metal MSL / reflection
+  artifacts and future binary archive metadata.
+- Metal native binary archive consumption remains backend work.
 
 ### Phase 6: Cache Compatibility Validation
 
-- Add tests for shader hash, entry point, reflection, backend, and format
-  changes invalidating cached artifacts.
-- Document inspectable artifact locations and production cache policy.
+- Added tests for shader hash, entry point, reflection, backend, format,
+  schema, and toolchain changes.
+- Added `PipelineArtifactCachePlanDescriptor` and
+  `PipelineArtifactCachePlan` to report whether a cache entry should rebuild
+  and whether it may be persisted.
 
 ## Acceptance
 
-- Large resource-table tests pass or report precise unsupported features.
-- Pipeline/cache artifacts persist across runs where supported.
-- Cache invalidation behavior is deterministic and documented.
+- Resource-table pressure planning passes or reports precise unsupported
+  features.
+- Pipeline artifact compatibility behavior is deterministic and documented.
+- Native cache persistence and GPU pressure evidence are routed to Period44.

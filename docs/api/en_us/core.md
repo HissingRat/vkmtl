@@ -437,6 +437,14 @@ binding through `setResourceTable(...)`. Ordinary `BindGroup` remains the
 portable path; resource tables are the advanced descriptor-indexing /
 argument-buffer path.
 
+`ResourceTablePressureDescriptor` and
+`Device.planResourceTablePressure(...)` summarize large table pressure before
+allocation. The returned `ResourceTablePressurePlan` reports total descriptors,
+per-resource descriptor counts, expected bound/unbound descriptors,
+partially-bound and update-after-bind requirements, and worst-case updates in
+flight. `canCreateTable()` tells whether the caller opted into the required
+table semantics.
+
 The first resource classes are uniform buffers, storage buffers, storage
 textures, sampled textures, samplers, and compare samplers. Layout entries also
 carry `array_count` and `dynamic_offset` metadata. The descriptor layer
@@ -730,6 +738,15 @@ future disk cache invalidation can be explicit.
 and returns `DriverPipelineCachePlan`, including whether the path already exists
 and whether shutdown should store a new blob. Pipeline creation does not consume
 native driver cache objects yet.
+
+Pipeline artifact compatibility is represented by
+`PipelineArtifactManifestDescriptor` and `PipelineArtifactCachePlanDescriptor`.
+`Device.planPipelineArtifactCache(...)` classifies cache entries as compatible,
+missing, stale schema, backend mismatch, shader hash mismatch, entry point
+mismatch, reflection mismatch, format mismatch, or toolchain mismatch. This is
+the portable invalidation contract for generated SPIR-V, MSL, and reflection
+artifacts; native `VkPipelineCache`, pipeline-library, and `MTLBinaryArchive`
+consumption remains backend work.
 
 ## Stability Diagnostics
 

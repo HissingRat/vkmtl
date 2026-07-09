@@ -465,7 +465,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test",
-        .expectation = "dynamic buffer array offsets, resource tables, root constants, and shader specialization regressions pass",
+        .expectation = "dynamic buffer array offsets, resource tables, resource-table pressure plans, root constants, and shader specialization regressions pass",
     },
     .{
         .name = "sync_query_regression",
@@ -497,7 +497,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test && zig build run-stability-plan -- --iterations 120",
-        .expectation = "object-cache diagnostics, runtime cache planning, runtime diagnostics, and stability planning stay deterministic",
+        .expectation = "object-cache diagnostics, runtime cache planning, pipeline artifact compatibility, runtime diagnostics, and stability planning stay deterministic",
     },
     .{
         .name = "advanced_resource_geometry_regression",
@@ -972,6 +972,7 @@ pub const ProductionHardeningFeature = enum {
     driver_cache_planning,
     native_driver_cache_lowering,
     runtime_cache_manifest_planning,
+    pipeline_artifact_compatibility_planning,
     runtime_cache_manifest_io,
     runtime_diagnostics_snapshot,
     capture_name_helpers,
@@ -1032,6 +1033,13 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
         .vulkan_status = .portable_runtime,
         .metal_status = .portable_runtime,
         .validation = "runtime cache manifests classify missing, stale, backend, source, and toolchain mismatches",
+    },
+    .{
+        .feature = .pipeline_artifact_compatibility_planning,
+        .public_api = "PipelineArtifactCachePlanDescriptor and Device.planPipelineArtifactCache",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "pipeline artifact manifests classify stale schema, backend, shader, entry point, reflection, format, and toolchain mismatches",
     },
     .{
         .feature = .runtime_cache_manifest_io,

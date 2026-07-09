@@ -51,6 +51,11 @@ toward Metal argument buffers. Both are represented by
 render/compute encoders when the selected backend advertises the required
 feature.
 
+Large table pressure is planned through
+`Device.planResourceTablePressure(...)`. The plan makes partially-bound and
+update-after-bind requirements explicit before allocation, while native GPU
+stress evidence remains part of the backend/device validation matrix.
+
 Root constants lower to Vulkan push constants and Metal `set*Bytes` calls after
 a pipeline declares a compatible `root_constant_layout`.
 
@@ -80,3 +85,8 @@ details.
 
 Driver-level pipeline caches and Metal binary archives use explicit cache
 identity descriptors. They are separate from Period 8 object-cache diagnostics.
+Shader / pipeline artifact compatibility is planned with
+`Device.planPipelineArtifactCache(...)`, which invalidates cached artifacts when
+shader hashes, entry points, reflection, formats, backend, schema, or toolchain
+identity changes. Native `VkPipelineCache`, pipeline-library, and
+`MTLBinaryArchive` persistence remains backend work.

@@ -9,11 +9,11 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `windows_vulkan`: `zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan`
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
-- `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, root constant writes, and specialization variant fingerprints.
+- `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, synchronization commit descriptors, logical queue planning, ownership transfer validation, and query readback/resolve validation.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
-- `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
+- `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation lowering plans, and mesh/task lowering plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, Metal mapping, native advanced closure, and Period 29 routing.
@@ -131,6 +131,17 @@ conservative until the relevant backend period lands.
 | Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
 | Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
 | GPU-backed soak loops | Deferred | Deferred | Period 32+ validation matrix native long-run validation |
+
+## Period 38 Resource Table And Pipeline Artifact Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Resource-table pressure planning | Portable descriptor-indexing pressure summary | Portable argument-buffer pressure summary | `Device.planResourceTablePressure(...)` |
+| Partially-bound table requirements | Capability / opt-in validation | Capability / opt-in validation | `ResourceTablePressurePlan.canCreateTable()` |
+| Update-after-bind table requirements | Capability / opt-in validation | Capability / opt-in validation | `ResourceTablePressurePlan.canCreateTable()` plus runtime table update tests |
+| Pipeline artifact compatibility | Shader, entry point, reflection, format, schema, backend, and toolchain compatibility plan | Same compatibility plan for MSL / reflection artifacts | `Device.planPipelineArtifactCache(...)` |
+| Native pipeline cache/library persistence | Deferred | N/A | Period44 device-matrix evidence after backend lowering exists |
+| Native binary archive persistence | N/A | Deferred | Period44 device-matrix evidence after backend lowering exists |
 
 ## Period 27 Advanced Resource And Geometry Expectations
 
