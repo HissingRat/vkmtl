@@ -29,37 +29,7 @@ pub fn main() !void {
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
 
-    var device = context.device();
     var swapchain = context.swapchain();
-
-    var texture = try device.makeTexture(.{
-        .format = .rgba8_unorm,
-        .width = 2,
-        .height = 2,
-        .usage = .{ .shader_read = true },
-    });
-    defer texture.deinit();
-
-    // Resource smoke only: this upload is not visible until vkmtl has a
-    // public blit or draw path that presents texture contents.
-    const pixels = [_]u8{
-        0xff, 0x00, 0x00, 0xff,
-        0x00, 0xff, 0x00, 0xff,
-        0x00, 0x00, 0xff, 0xff,
-        0xff, 0xff, 0xff, 0xff,
-    };
-    try texture.replaceAll2D(.{
-        .bytes = pixels[0..],
-    });
-
-    var texture_view = try texture.makeTextureView(.{});
-    defer texture_view.deinit();
-
-    var sampler = try device.makeSamplerState(.{
-        .min_filter = .linear,
-        .mag_filter = .linear,
-    });
-    defer sampler.deinit();
 
     while (!glfw.windowShouldClose(window)) {
         const extent = common.framebufferExtent(window);

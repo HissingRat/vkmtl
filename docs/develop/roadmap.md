@@ -674,11 +674,153 @@ function tables.
 
 See `docs/develop/period35/`.
 
+## Period 36: Sync And Queue Semantics
+
+Status: planned after Period35.
+
+Goal: make synchronization and multi-queue behavior explicit enough for real
+async compute, async transfer, and cross-queue presentation workloads.
+
+- Phase 1: synchronization object contract
+- Phase 2: Vulkan timeline semaphore and fence lowering
+- Phase 3: Metal shared event and fence lowering
+- Phase 4: queue families and queue roles
+- Phase 5: queue ownership and hazard tracking
+- Phase 6: async compute/transfer examples and validation
+
+See `docs/develop/period36/`.
+
+## Period 37: Memory, Heaps, And Residency
+
+Status: planned after Period36.
+
+Goal: add production memory behavior: heap-backed allocation, aliasing,
+memory-budget reporting, pressure handling, and real sparse/tiled residency
+stress coverage.
+
+- Phase 1: heap and allocator contract
+- Phase 2: aliasing and transient resource validation
+- Phase 3: memory budget and pressure reporting
+- Phase 4: native sparse/tiled residency updates
+- Phase 5: long-running residency and churn pressure tests
+
+See `docs/develop/period37/`.
+
+## Period 38: Resource Tables And Pipeline Persistence
+
+Status: planned after Period37.
+
+Goal: prove large resource tables and persistent pipeline caches under scale
+instead of only descriptor-shape validation.
+
+- Phase 1: descriptor indexing pressure tests
+- Phase 2: Metal argument buffer pressure tests
+- Phase 3: update-after-bind and dynamic binding semantics
+- Phase 4: Vulkan pipeline cache/library persistence
+- Phase 5: Metal binary archive persistence
+- Phase 6: cache invalidation and artifact compatibility validation
+
+See `docs/develop/period38/`.
+
+## Period 39: Ray Tracing Completeness
+
+Status: planned after Period38.
+
+Goal: move ray tracing beyond the Period35 scene into the broader feature set:
+ray query, acceleration-structure updates, compaction, many-instance TLAS, and
+complex shader binding table layouts.
+
+- Phase 1: AS update, refit, and compaction contract
+- Phase 2: many-instance TLAS and instance metadata
+- Phase 3: ray query where supported
+- Phase 4: complex SBT layouts and callable shader records
+- Phase 5: RT stress examples and multi-device validation
+
+See `docs/develop/period39/`.
+
+## Period 40: Advanced Geometry Draw Paths
+
+Status: planned after Period39.
+
+Goal: turn tessellation and mesh/task shader support from descriptor/lowering
+probes into real draw paths with backend-native execution where supported.
+
+- Phase 1: tessellation public pipeline contract
+- Phase 2: Vulkan tessellation draw path
+- Phase 3: Metal tessellation draw path or precise unsupported contract
+- Phase 4: Vulkan mesh/task shader draw path
+- Phase 5: Metal object/mesh equivalent path or precise unsupported contract
+- Phase 6: advanced geometry examples and validation
+
+See `docs/develop/period40/`.
+
+## Period 41: External Interop Matrix
+
+Status: planned after Period40.
+
+Goal: make external memory, external textures, and external synchronization
+usable through an explicit platform matrix instead of descriptor-only probes.
+
+- Phase 1: interop capability matrix
+- Phase 2: Vulkan external memory/image/semaphore import
+- Phase 3: Metal shared texture/event import
+- Phase 4: external texture presentation and sampling examples
+- Phase 5: external synchronization validation
+- Phase 6: safety, lifetime, and platform documentation
+
+See `docs/develop/period41/`.
+
+## Period 42: Format, Copy, Layout, And Attachment Edge Semantics
+
+Status: planned after Period41.
+
+Goal: close the edge cases that decide whether vkmtl behaves like a serious
+graphics abstraction: format capabilities, layout/state transitions,
+depth-stencil behavior, MSAA resolve/copy, mips, layers, and slices.
+
+- Phase 1: format capability matrix
+- Phase 2: copy and blit edge semantics
+- Phase 3: resource state/layout transition validation
+- Phase 4: depth-stencil copy, resolve, and readback semantics
+- Phase 5: MSAA, mip, layer, and slice regression coverage
+
+See `docs/develop/period42/`.
+
+## Period 43: Profiling, Capture, And Debug Markers
+
+Status: planned after Period42.
+
+Goal: make vkmtl debuggable in native tools by providing stable labels,
+markers, capture scopes, timestamps, and issue-report diagnostics.
+
+- Phase 1: debug label and marker contract
+- Phase 2: Vulkan debug utils integration
+- Phase 3: Metal debug groups and capture integration
+- Phase 4: timestamp/query/profiling support
+- Phase 5: diagnostics output for issue reports
+
+See `docs/develop/period43/`.
+
+## Period 44: CI, Device Matrix, And Soak Validation
+
+Status: planned after Period43.
+
+Goal: turn the parity work into something trustworthy by validating examples,
+feature gates, screenshots, readbacks, and long-running workloads across a
+documented backend/device matrix.
+
+- Phase 1: CI job matrix and feature reporting
+- Phase 2: Metal and Vulkan smoke hosts
+- Phase 3: screenshot/pixel regression harness
+- Phase 4: GPU soak and resource churn tests
+- Phase 5: release readiness and parity report
+
+See `docs/develop/period44/`.
+
 ## Period 32+: Full Parity And Production Coverage
 
-Status: long-tail target. Period 33 and Period 34 are the first concrete
-Period32+ ray tracing periods; later Period32+ work should continue from their
-results instead of staying as vague parity notes.
+Status: long-tail target. Period 33 through Period 44 split the broad target
+into concrete follow-up periods.
 
 Goal: complete the long-tail parity, platform, diagnostics, validation,
 interop, and pressure-test work required before vkmtl can reasonably claim broad
@@ -700,8 +842,10 @@ See `docs/develop/period32+/target.md`.
   validates it through the full native `ray_traced_scene` example.
 - Period 35 owns shared RT scene data and Metal procedural/custom-intersection
   parity.
-- Later Period32+ work remains the long-tail parity bucket for production
-  behavior, pressure tests, interop, queues, residency, and edge semantics.
+- Periods 36 through 44 own the remaining production parity buckets: sync,
+  queues, memory, residency, resource-table scale, pipeline persistence, ray
+  tracing completeness, advanced geometry, external interop, edge semantics,
+  profiling, capture, debug markers, CI, and device-matrix validation.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced

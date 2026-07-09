@@ -19,9 +19,6 @@ const VulkanRuntimeOptions = struct {
 
 const shader_source_paths = [_][]const u8{
     "examples/triangle/shaders/triangle.slang",
-    "examples/uniform_buffer/shaders/uniform_buffer.slang",
-    "examples/sampled_texture/shaders/sampled_texture.slang",
-    "examples/depth_triangles/shaders/depth_triangles.slang",
     "examples/rainbow_cube/shaders/rainbow_cube.slang",
     "examples/msaa_triangle/shaders/msaa_triangle.slang",
     "examples/offscreen_texture/shaders/offscreen_texture.slang",
@@ -176,81 +173,6 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the vkmtl triangle example");
     run_step.dependOn(&triangle_cmd.step);
-
-    const uniform_buffer = b.addExecutable(.{
-        .name = "vkmtl-uniform-buffer",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/uniform_buffer/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-            .imports = &.{
-                .{ .name = "vkmtl", .module = vkmtl },
-                .{ .name = "zig_glfw", .module = zig_glfw },
-                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
-            },
-        }),
-    });
-    uniform_buffer.root_module.linkLibrary(glfw);
-    b.installArtifact(uniform_buffer);
-
-    const uniform_buffer_cmd = b.addRunArtifact(uniform_buffer);
-    uniform_buffer_cmd.step.dependOn(b.getInstallStep());
-    configureVulkanRuntimeForRun(b, uniform_buffer_cmd, target.result.os.tag, vulkan_runtime);
-    forwardRunArgs(b, uniform_buffer_cmd);
-
-    const uniform_buffer_step = b.step("run-uniform-buffer", "Run the vkmtl uniform-buffer example");
-    uniform_buffer_step.dependOn(&uniform_buffer_cmd.step);
-
-    const sampled_texture = b.addExecutable(.{
-        .name = "vkmtl-sampled-texture",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/sampled_texture/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-            .imports = &.{
-                .{ .name = "vkmtl", .module = vkmtl },
-                .{ .name = "zig_glfw", .module = zig_glfw },
-                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
-            },
-        }),
-    });
-    sampled_texture.root_module.linkLibrary(glfw);
-    b.installArtifact(sampled_texture);
-
-    const sampled_texture_cmd = b.addRunArtifact(sampled_texture);
-    sampled_texture_cmd.step.dependOn(b.getInstallStep());
-    configureVulkanRuntimeForRun(b, sampled_texture_cmd, target.result.os.tag, vulkan_runtime);
-    forwardRunArgs(b, sampled_texture_cmd);
-
-    const sampled_texture_step = b.step("run-sampled-texture", "Run the vkmtl sampled-texture example");
-    sampled_texture_step.dependOn(&sampled_texture_cmd.step);
-
-    const depth_triangles = b.addExecutable(.{
-        .name = "vkmtl-depth-triangles",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/depth_triangles/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-            .imports = &.{
-                .{ .name = "vkmtl", .module = vkmtl },
-                .{ .name = "zig_glfw", .module = zig_glfw },
-                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
-            },
-        }),
-    });
-    depth_triangles.root_module.linkLibrary(glfw);
-    b.installArtifact(depth_triangles);
-
-    const depth_triangles_cmd = b.addRunArtifact(depth_triangles);
-    depth_triangles_cmd.step.dependOn(b.getInstallStep());
-    configureVulkanRuntimeForRun(b, depth_triangles_cmd, target.result.os.tag, vulkan_runtime);
-    forwardRunArgs(b, depth_triangles_cmd);
-
-    const depth_triangles_step = b.step("run-depth-triangles", "Run the vkmtl depth-tested triangles example");
-    depth_triangles_step.dependOn(&depth_triangles_cmd.step);
 
     const offscreen_texture = b.addExecutable(.{
         .name = "vkmtl-offscreen-texture",

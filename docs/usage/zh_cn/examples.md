@@ -51,32 +51,6 @@ VKMTL_BACKEND=metal zig build run-triangle
 zig build run-clear-screen
 ```
 
-## Uniform Buffer
-
-`examples/uniform_buffer` 是第一个 shader-resource binding 示例。它创建 uniform buffer，包装成
-bind group，从 shader reflection 派生 bind group layout，并在 draw 前调用 `setBindGroup(...)`。
-
-```sh
-zig build run-uniform-buffer
-```
-
-## Sampled Texture
-
-`examples/sampled_texture` 上传一个小 RGBA texture，创建 texture view 和 sampler，把它们通过
-bind group 绑定，然后绘制 indexed quad。
-
-```sh
-zig build run-sampled-texture
-```
-
-## Depth Triangles
-
-`examples/depth_triangles` 是第一个 depth-tested 渲染示例，绘制两个重叠三角形验证 depth test。
-
-```sh
-zig build run-depth-triangles
-```
-
 ## Offscreen Texture
 
 `examples/offscreen_texture` 是第一个显式 render-target 示例。它先把彩色三角形渲染到 texture-backed
@@ -99,6 +73,8 @@ zig build run-msaa-triangle
 
 `examples/rainbow_cube` 是第一个整合 3D 示例：旋转 indexed cube、每面 vertex color、采样 rainbow
 texture、每帧 uniform buffer update，以及 current-drawable depth testing。
+它取代了早期拆开的 uniform-buffer、sampled-texture 和 depth-only 教学样例，作为常规
+render resource binding 的主线示例。
 
 ```sh
 zig build run-rainbow-cube

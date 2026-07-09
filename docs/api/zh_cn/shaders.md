@@ -8,9 +8,6 @@ Slang 是 vkmtl 唯一的 shader 源语言。
 
 ```text
 examples/triangle/shaders/triangle.slang
-examples/uniform_buffer/shaders/uniform_buffer.slang
-examples/sampled_texture/shaders/sampled_texture.slang
-examples/depth_triangles/shaders/depth_triangles.slang
 examples/offscreen_texture/shaders/offscreen_texture.slang
 examples/msaa_triangle/shaders/msaa_triangle.slang
 examples/rainbow_cube/shaders/rainbow_cube.slang

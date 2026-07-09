@@ -77,27 +77,6 @@ pub const examples = [_]ExampleEntry{
         .backend_expectation = "portable Vulkan or Metal rendering through public APIs",
     },
     .{
-        .name = "uniform_buffer",
-        .path = "examples/uniform_buffer",
-        .run_step = "run-uniform-buffer",
-        .kind = .render,
-        .backend_expectation = "uniform-buffer binding through reflection-derived layout",
-    },
-    .{
-        .name = "sampled_texture",
-        .path = "examples/sampled_texture",
-        .run_step = "run-sampled-texture",
-        .kind = .render,
-        .backend_expectation = "sampled texture and sampler binding through public APIs",
-    },
-    .{
-        .name = "depth_triangles",
-        .path = "examples/depth_triangles",
-        .run_step = "run-depth-triangles",
-        .kind = .render,
-        .backend_expectation = "depth attachment and depth pipeline state",
-    },
-    .{
         .name = "offscreen_texture",
         .path = "examples/offscreen_texture",
         .run_step = "run-offscreen-texture",
@@ -1526,7 +1505,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 18), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 15), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {

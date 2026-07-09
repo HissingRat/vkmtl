@@ -16,10 +16,11 @@ The first implementation slice is depth-only for the current drawable.
 - Defer stencil, MSAA, and resolve attachments until depth works on both
   backends.
 
-Status: this slice is implemented. `examples/depth_triangles` exercises
-`TextureFormat.depth32_float`, pipeline depth state, render pass depth
-attachments, Vulkan depth framebuffers, and Metal depth textures/depth-stencil
-state.
+Status: this slice is implemented. The original `examples/depth_triangles`
+teaching sample exercised `TextureFormat.depth32_float`, pipeline depth state,
+render pass depth attachments, Vulkan depth framebuffers, and Metal depth
+textures/depth-stencil state. That standalone example was retired after the
+gallery was tightened; current depth coverage lives in `examples/rainbow_cube`.
 
 The implicit current-drawable depth attachment keeps the public API usable for
 windowed examples without forcing a premature `TextureView` ownership shape

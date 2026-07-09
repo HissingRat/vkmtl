@@ -2111,6 +2111,337 @@ obvious render and binding blockers.
 - [x] Update backend completion and test matrices.
 - [x] Update usage/API docs for procedural RT support.
 
+## Period 35 Phase 1 Checklist
+
+- [ ] Define camera, material, light, primitive, and instance records.
+- [ ] Keep scene record layouts backend-neutral.
+- [ ] Replace example-local RT scene constants with buffers where practical.
+- [ ] Document layout compatibility for Vulkan and Metal.
+
+## Period 35 Phase 2 Checklist
+
+- [ ] Keep room walls as mesh geometry.
+- [ ] Keep spheres as procedural primitives.
+- [ ] Support mixed mesh/procedural BLAS inputs.
+- [ ] Validate TLAS instance metadata and material ids.
+
+## Period 35 Phase 3 Checklist
+
+- [ ] Add backend-private Metal intersection function table creation.
+- [ ] Bind procedural sphere intersection functions during dispatch.
+- [ ] Report precise unsupported reasons when Metal procedural RT is
+  unavailable.
+
+## Period 35 Phase 4 Checklist
+
+- [ ] Bind the same logical scene buffers on Vulkan and Metal.
+- [ ] Preserve public/backend boundaries for native RT tables and AS handles.
+- [ ] Document primitive id, instance id, and material lookup semantics.
+
+## Period 35 Phase 5 Checklist
+
+- [ ] Validate Vulkan and Metal visual parity for the reference-inspired scene.
+- [ ] Keep `zig build test` passing.
+- [ ] Keep `zig build` passing.
+- [ ] Record remaining quality gaps with concrete follow-up ownership.
+
+## Period 36 Phase 1 Checklist
+
+- [ ] Define portable fence, timeline, and shared-event concepts.
+- [ ] Define host wait, GPU wait, signal, reset, and completion semantics.
+- [ ] Gate non-portable sync behavior through capabilities.
+
+## Period 36 Phase 2 Checklist
+
+- [ ] Lower timeline operations to Vulkan timeline semaphores where supported.
+- [ ] Preserve binary semaphore/fence fallback behavior explicitly.
+- [ ] Add typed unsupported errors for unavailable timeline features.
+
+## Period 36 Phase 3 Checklist
+
+- [ ] Lower shared-event operations to Metal shared events where supported.
+- [ ] Document same-device and cross-process Metal limitations.
+- [ ] Keep Metal handles behind backend-private state or native escape hatches.
+
+## Period 36 Phase 4 Checklist
+
+- [ ] Define graphics, compute, transfer, and presentation queue roles.
+- [ ] Query backend queue capabilities and limits.
+- [ ] Document single-queue fallback behavior.
+
+## Period 36 Phase 5 Checklist
+
+- [ ] Track queue ownership transitions for buffers and textures.
+- [ ] Validate cross-queue hazards and missing barriers.
+- [ ] Add errors that name the resource, queue role, and missing transition.
+
+## Period 36 Phase 6 Checklist
+
+- [ ] Add deterministic async transfer/readback coverage.
+- [ ] Add async compute plus graphics synchronization coverage.
+- [ ] Update backend matrix for supported queue combinations.
+
+## Period 37 Phase 1 Checklist
+
+- [ ] Define heap descriptors and heap-backed resource ownership.
+- [ ] Map Vulkan device memory and Metal heap behavior through capabilities.
+- [ ] Preserve ordinary resource creation without explicit heaps.
+
+## Period 37 Phase 2 Checklist
+
+- [ ] Define aliasing eligibility for buffers and textures.
+- [ ] Validate aliasing lifetime, usage, and hazard requirements.
+- [ ] Add transient allocator diagnostics for frame overlap.
+
+## Period 37 Phase 3 Checklist
+
+- [ ] Query memory budget and heap pressure where available.
+- [ ] Provide fallback reports when native budget data is unavailable.
+- [ ] Add diagnostics suitable for pressure-test logs.
+
+## Period 37 Phase 4 Checklist
+
+- [ ] Lower sparse/tiled residency updates to native backend APIs where
+  supported.
+- [ ] Keep unsupported residency paths typed and capability-gated.
+- [ ] Validate page mapping descriptors against backend limits.
+
+## Period 37 Phase 5 Checklist
+
+- [ ] Add residency stress tests with commit/uncommit cycles.
+- [ ] Add heap and transient allocation churn tests.
+- [ ] Record memory pressure behavior in the backend test matrix.
+
+## Period 38 Phase 1 Checklist
+
+- [ ] Add Vulkan descriptor indexing stress cases.
+- [ ] Validate partially-bound and update-after-bind behavior where supported.
+- [ ] Keep descriptor table limits visible in capability reports.
+
+## Period 38 Phase 2 Checklist
+
+- [ ] Add Metal argument buffer stress cases.
+- [ ] Validate argument-buffer tier behavior and fallback reasons.
+- [ ] Keep table layout derivation backend-neutral.
+
+## Period 38 Phase 3 Checklist
+
+- [ ] Define rules for updating tables while work is in flight.
+- [ ] Validate dynamic offsets and small constant update paths.
+- [ ] Add backend-specific unsupported diagnostics.
+
+## Period 38 Phase 4 Checklist
+
+- [ ] Persist Vulkan pipeline cache/library artifacts where supported.
+- [ ] Define cache key inputs and compatibility checks.
+- [ ] Validate stale-cache recovery.
+
+## Period 38 Phase 5 Checklist
+
+- [ ] Persist Metal binary archives where supported.
+- [ ] Define archive invalidation for shader/source/backend changes.
+- [ ] Validate fallback behavior when archives are unavailable.
+
+## Period 38 Phase 6 Checklist
+
+- [ ] Test shader hash, entry point, reflection, backend, and format cache
+  invalidation.
+- [ ] Document inspectable artifact locations and production cache policy.
+
+## Period 39 Phase 1 Checklist
+
+- [ ] Define AS update, refit, and compaction descriptors.
+- [ ] Map Vulkan and Metal support through feature gates.
+- [ ] Preserve existing build-only AS paths.
+
+## Period 39 Phase 2 Checklist
+
+- [ ] Add many-instance TLAS stress coverage.
+- [ ] Validate transforms, masks, custom indices, and material metadata.
+- [ ] Keep instance buffer layout backend-neutral.
+
+## Period 39 Phase 3 Checklist
+
+- [ ] Define shader and pipeline requirements for ray query.
+- [ ] Lower to Vulkan ray query where supported.
+- [ ] Document Metal support or unsupported behavior precisely.
+
+## Period 39 Phase 4 Checklist
+
+- [ ] Support larger miss/hit group layouts.
+- [ ] Add callable shader records where supported.
+- [ ] Validate SBT alignment and stride limits under stress.
+
+## Period 39 Phase 5 Checklist
+
+- [ ] Add deterministic RT stress cases beyond the reference scene.
+- [ ] Validate AS maintenance and SBT stress on supported devices.
+- [ ] Update device matrix with RT feature coverage.
+
+## Period 40 Phase 1 Checklist
+
+- [ ] Define tessellation shader stage and pipeline descriptors.
+- [ ] Define patch topology, factor buffers, and validation rules.
+- [ ] Preserve non-tessellated render pipelines.
+
+## Period 40 Phase 2 Checklist
+
+- [ ] Lower tessellation stages to Vulkan pipeline state.
+- [ ] Encode patch draws through public command APIs.
+- [ ] Add visible tessellation example output.
+
+## Period 40 Phase 3 Checklist
+
+- [ ] Lower to Metal tessellation where supported.
+- [ ] Define factor-buffer ownership and encoding.
+- [ ] Report precise unsupported reasons where unavailable.
+
+## Period 40 Phase 4 Checklist
+
+- [ ] Lower mesh/task descriptors to Vulkan mesh shader pipelines.
+- [ ] Encode mesh dispatch/draw commands.
+- [ ] Add visible mesh shader example output.
+
+## Period 40 Phase 5 Checklist
+
+- [ ] Map to Metal object/mesh style capabilities where available.
+- [ ] Keep naming and public API backend-neutral.
+- [ ] Report precise unsupported reasons where unavailable.
+
+## Period 40 Phase 6 Checklist
+
+- [ ] Convert advanced geometry examples from probes to visible output.
+- [ ] Add backend matrix entries for supported and unsupported paths.
+- [ ] Keep examples using public vkmtl APIs only.
+
+## Period 41 Phase 1 Checklist
+
+- [ ] List supported Vulkan handle types by platform.
+- [ ] List supported Metal shared texture/event paths by platform.
+- [ ] Distinguish portable, capability-gated, and native-only lanes.
+
+## Period 41 Phase 2 Checklist
+
+- [ ] Implement Vulkan external memory/image import where supported.
+- [ ] Implement Vulkan external semaphore wait/signal where supported.
+- [ ] Validate handle ownership and lifetime.
+
+## Period 41 Phase 3 Checklist
+
+- [ ] Implement Metal shared texture/event import where supported.
+- [ ] Define process/device compatibility constraints.
+- [ ] Preserve native objects behind explicit interop wrappers.
+
+## Period 41 Phase 4 Checklist
+
+- [ ] Turn `examples/external_texture` into a real interop sample where
+  supported.
+- [ ] Validate external sampling, copy, and presentation usage.
+
+## Period 41 Phase 5 Checklist
+
+- [ ] Add examples/tests for external wait/signal paths.
+- [ ] Validate ordering across imported objects and vkmtl submission.
+- [ ] Report unsupported platform combinations precisely.
+
+## Period 41 Phase 6 Checklist
+
+- [ ] Document imported object ownership.
+- [ ] Document cross-process and cross-API caveats.
+- [ ] Add issue-report diagnostics for failed imports.
+
+## Period 42 Phase 1 Checklist
+
+- [ ] Expand format capability queries for sampling, storage, render target,
+  copy, depth/stencil, blend, and presentation usage.
+- [ ] Add docs for backend-specific format limitations.
+
+## Period 42 Phase 2 Checklist
+
+- [ ] Validate buffer/texture copy alignment and row-pitch rules.
+- [ ] Validate mip, layer, and slice partial copies.
+- [ ] Define blit/filtering behavior where supported.
+
+## Period 42 Phase 3 Checklist
+
+- [ ] Tighten resource usage transition tracking.
+- [ ] Validate implicit and explicit barriers across queues and passes.
+- [ ] Keep Vulkan layouts and Metal state hidden behind public states.
+
+## Period 42 Phase 4 Checklist
+
+- [ ] Define depth and stencil copy/readback support.
+- [ ] Define depth resolve and stencil resolve behavior where supported.
+- [ ] Add focused tests for unsupported combinations.
+
+## Period 42 Phase 5 Checklist
+
+- [ ] Add MSAA resolve/copy/readback regression cases.
+- [ ] Add mip/layer/slice texture view and copy cases.
+- [ ] Add format reinterpretation validation where supported.
+
+## Period 43 Phase 1 Checklist
+
+- [ ] Define label lifetime and naming rules for public objects.
+- [ ] Define command encoder marker scopes.
+- [ ] Keep labels optional and low overhead.
+
+## Period 43 Phase 2 Checklist
+
+- [ ] Lower object labels and command markers to Vulkan debug utils where
+  available.
+- [ ] Validate marker nesting and command buffer boundaries.
+
+## Period 43 Phase 3 Checklist
+
+- [ ] Lower labels and command groups to Metal debug APIs.
+- [ ] Add opt-in Metal capture scope helpers where practical.
+- [ ] Preserve capture integration behind public diagnostics APIs.
+
+## Period 43 Phase 4 Checklist
+
+- [ ] Add timestamp/query APIs where supported.
+- [ ] Define fallback behavior when profiling queries are unavailable.
+- [ ] Add simple profiling examples or tools.
+
+## Period 43 Phase 5 Checklist
+
+- [ ] Expand capability dump and diagnostics output.
+- [ ] Include backend object names, feature gates, and failing operations.
+- [ ] Document recommended issue-report bundle contents.
+
+## Period 44 Phase 1 Checklist
+
+- [ ] Define host OS, target OS, backend, and device classes.
+- [ ] Record unsupported features as expected matrix outcomes.
+- [ ] Keep capability dump output attached to failures.
+
+## Period 44 Phase 2 Checklist
+
+- [ ] Add or document at least one Metal smoke host.
+- [ ] Add or document at least one Vulkan smoke host.
+- [ ] Separate local-only GPU runs from ordinary CPU-only CI.
+
+## Period 44 Phase 3 Checklist
+
+- [ ] Add screenshot or pixel readback checks for representative examples.
+- [ ] Track expected tolerances for Vulkan/Metal differences.
+- [ ] Keep visual tests deterministic where possible.
+
+## Period 44 Phase 4 Checklist
+
+- [ ] Add long-running presentation, shader, resource, and residency churn
+  runs.
+- [ ] Record memory pressure, queue sync, and device-loss behavior.
+- [ ] Keep soak failures actionable and scoped.
+
+## Period 44 Phase 5 Checklist
+
+- [ ] Produce a backend capability/parity report from current test data.
+- [ ] Document known unsupported items and native escape hatch requirements.
+- [ ] Decide whether the voxel-world pressure test can move from deferred to
+  active.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

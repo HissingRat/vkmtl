@@ -68,84 +68,6 @@ Run it with:
 zig build run-clear-screen
 ```
 
-## Uniform Buffer
-
-`examples/uniform_buffer` is the first shader-resource binding sample. It
-creates a uniform buffer through `Device.makeBuffer`, wraps it in a bind
-group, derives the matching bind group layout from shader reflection, and
-records `setBindGroup(...)` before drawing.
-
-Run it with:
-
-```sh
-zig build run-uniform-buffer
-```
-
-The example embeds its Slang source beside the example at:
-
-```text
-examples/uniform_buffer/shaders/uniform_buffer.slang
-```
-
-## Sampled Texture
-
-`examples/sampled_texture` is the first visible texture binding sample. It
-uploads a small RGBA texture with `texture.replaceAll2D(...)`, creates a texture
-view and sampler, binds both through a bind group, and draws an indexed quad
-through the public command API.
-
-Run it with:
-
-```sh
-zig build run-sampled-texture
-```
-
-The render pipeline attaches runtime-generated reflection JSON and derives both
-the single-buffer vertex descriptor and the sampled texture/sampler bind group
-layout from it before backend pipeline creation.
-
-The Slang source lives beside the example:
-
-```text
-examples/sampled_texture/shaders/sampled_texture.slang
-```
-
-## Depth Triangles
-
-`examples/depth_triangles` is the first depth-tested rendering sample. It draws
-two overlapping triangles through the public command API, with the nearer
-triangle submitted before the farther triangle so depth testing is visible.
-
-Run it with:
-
-```sh
-zig build run-depth-triangles
-```
-
-The pipeline enables:
-
-```zig
-.depth_stencil = .{
-    .format = .depth32_float,
-    .depth_compare_function = .less_equal,
-    .depth_write_enabled = true,
-},
-```
-
-The render pass requests the current-drawable depth attachment:
-
-```zig
-.depth_attachment = .{
-    .clear_depth = 1.0,
-},
-```
-
-The Slang source lives beside the example:
-
-```text
-examples/depth_triangles/shaders/depth_triangles.slang
-```
-
 ## Offscreen Texture
 
 `examples/offscreen_texture` is the first explicit render-target sample. It
@@ -223,6 +145,8 @@ examples/msaa_triangle/shaders/msaa_triangle.slang
 `examples/rainbow_cube` is the first integrated 3D sample. It draws a rotating
 indexed cube with per-face vertex colors, a sampled rainbow texture, a per-frame
 uniform buffer update, and current-drawable depth testing.
+It now replaces the earlier split-out uniform-buffer, sampled-texture, and
+depth-only teaching samples as the main render resource-binding example.
 
 Run it with:
 

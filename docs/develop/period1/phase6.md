@@ -106,10 +106,14 @@ and command flow should still stay Metal-inspired.
 
 ## Phase 6 Examples
 
-Phase 6 closes with two public examples:
+Phase 6 originally closed with two public examples:
 
 - `examples/uniform_buffer` binds a uniform buffer at group 0, binding 0.
 - `examples/sampled_texture` binds a sampled texture at group 0, binding 0 and
   a sampler at group 0, binding 1.
+
+Those standalone teaching examples were retired after the first vertical slice
+stabilized. The current gallery covers the same binding paths through
+`examples/rainbow_cube`.
 
 The next roadmap slice is Phase 7: depth, MSAA, and render targets.

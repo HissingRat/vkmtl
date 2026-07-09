@@ -330,6 +330,131 @@ sphere/custom-intersection geometry for spheres and prints
 `driver_pixels=visible_vulkan_procedural_rt_scene`. Metal keeps the Period33
 mesh path until Period35 closes procedural function-table parity.
 
+## Wave 16: RT Scene Data And Metal Procedural Parity
+
+Tracked in `docs/develop/period35/`.
+
+- [ ] Move RT camera, light, material, primitive, and instance data into shared
+  scene buffers where practical.
+- [ ] Keep mixed mesh room geometry and procedural sphere geometry in one scene
+  assembly model.
+- [ ] Create and bind Metal procedural function tables.
+- [ ] Validate Vulkan/Metal visual parity for the reference-inspired scene.
+
+Expected result: `examples/ray_traced_scene` uses the same logical scene data
+on Vulkan and Metal, with Metal procedural/custom-intersection parity closed or
+precisely feature-gated.
+
+## Wave 17: Sync And Queue Semantics
+
+Tracked in `docs/develop/period36/`.
+
+- [ ] Timeline semaphore / shared event / fence semantics.
+- [ ] Multi-queue roles for graphics, compute, transfer, and presentation.
+- [ ] Queue ownership and cross-queue hazard tracking.
+- [ ] Async compute and async transfer validation examples.
+
+Expected result: vkmtl can schedule cross-queue work where supported and report
+typed unsupported or missing-barrier errors where it cannot.
+
+## Wave 18: Memory, Heaps, And Residency
+
+Tracked in `docs/develop/period37/`.
+
+- [ ] Heap-backed resources and allocator ownership.
+- [ ] Aliasing and transient allocation validation.
+- [ ] Memory budget and pressure reporting.
+- [ ] Native sparse/tiled residency updates and long-run pressure tests.
+
+Expected result: vkmtl can execute heap/residency workloads on supported
+backends and provide useful memory-pressure diagnostics.
+
+## Wave 19: Resource Tables And Pipeline Persistence
+
+Tracked in `docs/develop/period38/`.
+
+- [ ] Descriptor indexing pressure tests.
+- [ ] Metal argument buffer pressure tests.
+- [ ] Update-after-bind and dynamic binding semantics.
+- [ ] Vulkan pipeline cache/library persistence.
+- [ ] Metal binary archive persistence.
+
+Expected result: large resource tables and persistent pipeline artifacts survive
+scale tests with deterministic invalidation behavior.
+
+## Wave 20: Ray Tracing Completeness
+
+Tracked in `docs/develop/period39/`.
+
+- [ ] AS update/refit/compaction.
+- [ ] Many-instance TLAS metadata.
+- [ ] Ray query where supported.
+- [ ] Complex SBT layouts and callable records.
+
+Expected result: RT moves beyond the reference scene into common engine-scale
+maintenance and dispatch patterns.
+
+## Wave 21: Advanced Geometry Draw Paths
+
+Tracked in `docs/develop/period40/`.
+
+- [ ] Tessellation draw paths.
+- [ ] Vulkan mesh/task shader draw paths.
+- [ ] Metal object/mesh equivalent paths or precise unsupported contracts.
+- [ ] Visible advanced-geometry examples.
+
+Expected result: tessellation and mesh/task examples become real rendering
+examples instead of descriptor/lowering probes.
+
+## Wave 22: External Interop Matrix
+
+Tracked in `docs/develop/period41/`.
+
+- [ ] Vulkan external memory/image/semaphore import.
+- [ ] Metal shared texture/event import.
+- [ ] External texture sampling/presentation examples.
+- [ ] Platform lifetime and safety docs.
+
+Expected result: external interop has real platform-specific paths, not only
+descriptor wrappers.
+
+## Wave 23: Format, Copy, Layout, And Attachment Edge Semantics
+
+Tracked in `docs/develop/period42/`.
+
+- [ ] Format capability matrix.
+- [ ] Copy/blit edge semantics.
+- [ ] Resource state/layout transition validation.
+- [ ] Depth-stencil and MSAA copy/resolve/readback behavior.
+
+Expected result: vkmtl has tested edge semantics for formats, copies,
+attachments, mips, layers, and slices across Vulkan and Metal.
+
+## Wave 24: Profiling, Capture, And Debug Markers
+
+Tracked in `docs/develop/period43/`.
+
+- [ ] Debug labels and command markers.
+- [ ] Vulkan debug utils integration.
+- [ ] Metal debug groups and capture integration.
+- [ ] Timestamp/query/profiling support.
+
+Expected result: vkmtl objects and command streams are inspectable in native
+debuggers and profiling tools.
+
+## Wave 25: CI, Device Matrix, And Soak Validation
+
+Tracked in `docs/develop/period44/`.
+
+- [ ] CI job matrix and feature reporting.
+- [ ] Metal and Vulkan smoke hosts.
+- [ ] Screenshot/pixel regression harness.
+- [ ] GPU soak and resource churn tests.
+- [ ] Release readiness and parity report.
+
+Expected result: vkmtl can make evidence-backed parity claims against a
+documented device matrix.
+
 ## Slice Checklist
 
 Before starting a backend-completion slice:

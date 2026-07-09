@@ -2,9 +2,9 @@
 
 Status: target document. Period 31 and Period 32 are split out as concrete
 driver-execution periods for the first Metal and Vulkan ray traced scenes.
-Period 33 and Period 34 are the first concrete follow-up periods for the full
-native RT scene and procedural/custom-intersection coverage. Later Period32+
-work should continue from those results.
+Period 33 through Period 44 split the broad follow-up work into concrete
+periods. Period 33 through Period 35 close the current native RT scene arc.
+Period 36 through Period 44 close the remaining production parity buckets.
 
 Goal: move vkmtl from "first Metal and Vulkan ray traced scenes are visible on
 supported devices" to "most Vulkan and Metal workloads have either a portable
@@ -14,8 +14,9 @@ the native API escape hatch is required."
 Period 30 closed backend-private runtime records. Period 31 targets Metal ray
 tracing pixels. Period 32 targets the first Vulkan native ray tracing output
 path. Period 33 targets the full native mesh RT scene. Period 34 targets
-procedural sphere/custom-intersection execution. Later Period32+ work owns the
-long tail: semantic parity, platform coverage, pressure testing, production
+procedural sphere/custom-intersection execution. Period 35 targets shared RT
+scene data and Metal procedural parity. Periods 36 through 44 own the long
+tail: semantic parity, platform coverage, pressure testing, production
 behavior, and deeper ray tracing coverage.
 
 ## Expected Baseline After Period 32
@@ -39,9 +40,9 @@ After that, Period32+ should continue with broader ray tracing completeness,
 GPU-backed soak loops, Vulkan/Metal semantic parity, external interop, resource
 residency, and production coverage.
 
-## First Concrete Follow-Up Periods
+## Concrete Follow-Up Periods
 
-The first Period32+ work is already split into concrete periods:
+Period32+ work is split into concrete periods:
 
 - Period33: full native mesh RT scene. This turns the first Metal/Vulkan RT
   paths into a real room/sphere scene using triangle geometry, BLAS objects from
@@ -51,10 +52,59 @@ The first Period32+ work is already split into concrete periods:
   mesh sphere approximation with Vulkan AABB/intersection shader paths and
   Metal procedural/intersection-function-table paths, then validates the full
   native scene again.
+- Period35: shared RT scene data and Metal procedural parity. This removes
+  example-local scene constants from the RT scene path where practical and
+  closes Metal procedural/custom-intersection parity.
+- Period36: synchronization and queues. This closes timeline semaphore, shared
+  event, fence, multi-queue, queue ownership, async compute, and async transfer
+  semantics.
+- Period37: memory, heaps, and residency. This closes memory heap allocation,
+  aliasing, budget reporting, pressure handling, sparse/tiled residency, and
+  long-running residency pressure tests.
+- Period38: resource-table scale and pipeline persistence. This closes
+  descriptor indexing, Metal argument buffer pressure, update-after-bind
+  semantics, Vulkan pipeline cache/library persistence, Metal binary archives,
+  and cache invalidation rules.
+- Period39: ray tracing completeness. This closes ray query, acceleration
+  structure update/refit/compaction, large instance sets, and complex SBT
+  layouts beyond the Period35 scene.
+- Period40: advanced geometry draw paths. This turns tessellation and
+  mesh/task shader support from descriptor probes into backend-native draw
+  paths where supported.
+- Period41: external interop matrix. This closes external memory, texture, and
+  synchronization interop across Vulkan, Metal, and platform-specific handle
+  types.
+- Period42: edge semantics. This closes format/copy/layout/depth-stencil/MSAA
+  behavior and the long tail of mips, layers, slices, and view reinterpretation.
+- Period43: profiling, capture, and debug markers. This closes native debug
+  labels, capture scopes, timestamp/query support, profiling, and issue-report
+  diagnostics.
+- Period44: CI, device matrix, and soak validation. This validates the parity
+  work across supported backends and devices with smoke runs, screenshots,
+  pixels, readbacks, and long-running churn tests.
 
-Later Period32+ periods should not absorb these two goals unless their docs are
-explicitly rewritten. If native RT scene work is being discussed, check Period33
-and Period34 first.
+Later work should not absorb these goals unless their docs are explicitly
+rewritten. If a topic already appears above, start from that period instead of
+adding another vague target.
+
+## User-Listed Parity Item Routing
+
+The current routing for the remaining Vulkan/Metal parity list is:
+
+| Work item | Owner |
+| --- | --- |
+| timeline semaphore / shared event / fence semantics | Period36 |
+| multi-queue, queue ownership, async compute/transfer scheduling | Period36 |
+| memory heap, aliasing, budget, pressure handling | Period37 |
+| sparse/tiled residency long-run pressure tests | Period37 |
+| descriptor indexing / argument buffer large table pressure tests | Period38 |
+| pipeline library / binary archive / cache production persistence | Period38 |
+| ray query, AS update/compaction, instances, procedural parity, complex SBT | Period39, with current procedural scene parity closed first in Period35 |
+| tessellation and mesh/task shader real lowering and draw paths | Period40 |
+| external memory / texture / sync platform interop matrix | Period41 |
+| format/copy/layout/depth-stencil/MSAA edge semantics | Period42 |
+| profiling, capture, debug marker native experience | Period43 |
+| multi-platform CI and device matrix validation | Period44 |
 
 ## Coverage Target
 
