@@ -156,6 +156,7 @@ pub const TessellationFactorFormat = core.TessellationFactorFormat;
 pub const TessellationFactorBufferDescriptor = core.TessellationFactorBufferDescriptor;
 pub const TessellationPatchDrawDescriptor = core.TessellationPatchDrawDescriptor;
 pub const TessellationDrawPlan = core.TessellationDrawPlan;
+pub const VulkanTessellationDrawLowering = core.VulkanTessellationDrawLowering;
 pub const MeshPipelineDescriptor = core.MeshPipelineDescriptor;
 pub const VulkanMeshPipelineLowering = core.VulkanMeshPipelineLowering;
 pub const MetalMeshPipelineLowering = core.MetalMeshPipelineLowering;

@@ -1,6 +1,6 @@
 # Period 40: Advanced Geometry Draw Paths
 
-Status: Phase 1 complete.
+Status: Phase 2 contract work complete.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
 probes into real draw paths with backend-native execution where supported.
@@ -36,6 +36,18 @@ Phase 1 result:
 - Lower tessellation stages to Vulkan pipeline state.
 - Encode patch draws through public command APIs.
 - Add visible tessellation example output.
+
+Phase 2 result:
+
+- `VulkanTessellationDrawLowering` converts a validated neutral patch draw
+  plan into Vulkan-style patch-list draw metadata: patch control points,
+  vertex count, instance count, first vertex, and first instance.
+- `Device.planVulkanTessellationPatchDraw(...)` exposes this path without
+  leaking Vulkan handles or `vulkan-zig` types into the public API.
+- Visible Vulkan tessellation output still requires the native render pipeline
+  hook that consumes tessellation shader artifacts and the draw lowering in the
+  backend command encoder. That remains the executable rendering gap for
+  Phase 6 / Period44 device-matrix validation.
 
 ### Phase 3: Metal Tessellation Draw Path Or Unsupported Contract
 

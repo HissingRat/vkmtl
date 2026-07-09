@@ -2306,9 +2306,9 @@ obvious render and binding blockers.
 
 ## Period 40 Phase 2 Checklist
 
-- [ ] Lower tessellation stages to Vulkan pipeline state.
-- [ ] Encode patch draws through public command APIs.
-- [ ] Add visible tessellation example output.
+- [x] Lower tessellation stages to Vulkan draw metadata.
+- [x] Encode patch draw parameters through public planning APIs.
+- [ ] Add visible tessellation example output after native pipeline hooks land.
 
 ## Period 40 Phase 3 Checklist
 

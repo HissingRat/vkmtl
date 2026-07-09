@@ -2944,7 +2944,41 @@ pub const TessellationDrawPlan = struct {
     pub fn hasFactorBuffer(self: TessellationDrawPlan) bool {
         return self.factor_buffer != null;
     }
+
+    pub fn vulkanLowering(self: TessellationDrawPlan) AdvancedFeatureError!VulkanTessellationDrawLowering {
+        const lowering = switch (self.lowering) {
+            .vulkan => |vulkan| vulkan,
+            .metal => return AdvancedFeatureError.UnsupportedTessellation,
+        };
+        return try VulkanTessellationDrawLowering.fromPlan(self, lowering);
+    }
 };
+
+pub const VulkanTessellationDrawLowering = struct {
+    topology: TessellationPatchTopology = .patch_list,
+    patch_control_points: u32,
+    draw_vertex_count: u32,
+    draw_instance_count: u32,
+    first_vertex: u32,
+    first_instance: u32,
+
+    pub fn fromPlan(plan: TessellationDrawPlan, lowering: VulkanTessellationLowering) AdvancedFeatureError!VulkanTessellationDrawLowering {
+        return .{
+            .topology = plan.topology,
+            .patch_control_points = lowering.patch_control_points,
+            .draw_vertex_count = try patchDrawVertexCount(plan.patch_count, lowering.patch_control_points),
+            .draw_instance_count = plan.instance_count,
+            .first_vertex = try patchDrawVertexCount(plan.base_patch, lowering.patch_control_points),
+            .first_instance = plan.base_instance,
+        };
+    }
+};
+
+fn patchDrawVertexCount(patch_count: u32, patch_control_points: u32) AdvancedFeatureError!u32 {
+    const result = @as(u64, patch_count) * @as(u64, patch_control_points);
+    if (result > std.math.maxInt(u32)) return AdvancedFeatureError.InvalidTessellationPatchDraw;
+    return @intCast(result);
+}
 
 pub const MeshPipelineDescriptor = struct {
     label: ?[]const u8 = null,
@@ -11721,6 +11755,39 @@ test "tessellation patch draw plan validates stage entries and factor buffers" {
         .patch_count = 2,
         .factor_buffer = .{ .byte_offset = 2 },
     }).validate(.{ .tessellation = true }, .{ .max_tessellation_control_points = 32 }));
+}
+
+test "Vulkan tessellation draw lowering resolves patch-list draw parameters" {
+    const plan = try TessellationDrawPlan.fromDescriptor(.vulkan, .{
+        .tessellation = .{
+            .control_point_count = 4,
+            .domain = .quad,
+            .has_control_stage = true,
+            .has_evaluation_stage = true,
+        },
+        .patch_count = 6,
+        .instance_count = 3,
+        .base_patch = 2,
+        .base_instance = 5,
+    }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 32 });
+
+    const lowering = try plan.vulkanLowering();
+    try std.testing.expectEqual(TessellationPatchTopology.patch_list, lowering.topology);
+    try std.testing.expectEqual(@as(u32, 4), lowering.patch_control_points);
+    try std.testing.expectEqual(@as(u32, 24), lowering.draw_vertex_count);
+    try std.testing.expectEqual(@as(u32, 3), lowering.draw_instance_count);
+    try std.testing.expectEqual(@as(u32, 8), lowering.first_vertex);
+    try std.testing.expectEqual(@as(u32, 5), lowering.first_instance);
+
+    const overflow_plan = try TessellationDrawPlan.fromDescriptor(.vulkan, .{
+        .tessellation = .{
+            .control_point_count = 32,
+            .has_control_stage = true,
+            .has_evaluation_stage = true,
+        },
+        .patch_count = std.math.maxInt(u32),
+    }, .{ .tessellation = true }, .{ .max_tessellation_control_points = 32 });
+    try std.testing.expectError(AdvancedFeatureError.InvalidTessellationPatchDraw, overflow_plan.vulkanLowering());
 }
 
 test "Vulkan mesh pipeline lowering preserves optional task stage" {

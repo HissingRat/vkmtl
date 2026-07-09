@@ -5036,6 +5036,12 @@ pub const Device = struct {
         );
     }
 
+    pub fn planVulkanTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.VulkanTessellationDrawLowering {
+        if (self.backend != .vulkan) return core.AdvancedFeatureError.UnsupportedTessellation;
+        const plan = try self.planTessellationPatchDraw(descriptor);
+        return try plan.vulkanLowering();
+    }
+
     pub fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -7322,6 +7328,38 @@ test "runtime device plans tessellation patch draws from native capabilities" {
     try std.testing.expectEqual(@as(u32, 3), plan.patchControlPoints());
     try std.testing.expectEqual(@as(u64, 16), plan.total_patches);
     try std.testing.expect(!plan.requiresFactorBuffer());
+}
+
+test "runtime device plans Vulkan tessellation patch draw lowering" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.native_features.tessellation = true;
+    report.limits.max_tessellation_control_points = 32;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test vulkan tessellation draw adapter",
+        },
+        .capability_report = report,
+    };
+
+    const lowering = try device.planVulkanTessellationPatchDraw(.{
+        .tessellation = .{
+            .control_point_count = 4,
+            .has_control_stage = true,
+            .has_evaluation_stage = true,
+        },
+        .patch_count = 7,
+        .base_patch = 1,
+    });
+    try std.testing.expectEqual(@as(u32, 28), lowering.draw_vertex_count);
+    try std.testing.expectEqual(@as(u32, 4), lowering.first_vertex);
 }
 
 test "runtime device plans mesh lowering from native capabilities" {
