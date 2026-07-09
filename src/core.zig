@@ -119,6 +119,8 @@ pub const DeviceFeatures = struct {
     sparse_buffers: bool = false,
     sparse_textures: bool = false,
     tiled_textures: bool = false,
+    memory_budget: bool = false,
+    memory_pressure: bool = false,
     external_memory: bool = false,
     external_textures: bool = false,
     external_semaphores: bool = false,
@@ -449,6 +451,9 @@ pub const TransientAllocationDiagnostics = struct {
     resource_count: usize = 0,
     aliasable_pairs: usize = 0,
     requested_units: u64 = 0,
+    peak_live_units: u64 = 0,
+    aliasing_savings_units: u64 = 0,
+    max_alignment: u64 = 1,
 
     pub fn analyze(resources: []const TransientResourceDescriptor) error{InvalidResourceBarrierRange}!TransientAllocationDiagnostics {
         var result = TransientAllocationDiagnostics{
@@ -459,12 +464,15 @@ pub const TransientAllocationDiagnostics = struct {
             result.requested_units = std.math.add(u64, result.requested_units, transientResourceUnits(resource)) catch {
                 return error.InvalidResourceBarrierRange;
             };
+            result.max_alignment = @max(result.max_alignment, resource.alignment);
             for (resources[i + 1 ..]) |other| {
                 if (TransientResourceDescriptor.canAlias(resource, other)) {
                     result.aliasable_pairs += 1;
                 }
             }
         }
+        result.peak_live_units = try transientPeakLiveUnits(resources);
+        result.aliasing_savings_units = result.requested_units - result.peak_live_units;
         return result;
     }
 };
@@ -478,6 +486,124 @@ fn transientResourceUnits(resource: TransientResourceDescriptor) u64 {
 
 fn lifetimesOverlap(a: TransientResourceDescriptor, b: TransientResourceDescriptor) bool {
     return a.first_use <= b.last_use and b.first_use <= a.last_use;
+}
+
+fn transientPeakLiveUnits(resources: []const TransientResourceDescriptor) error{InvalidResourceBarrierRange}!u64 {
+    var peak: u64 = 0;
+    for (resources) |probe| {
+        var live: u64 = 0;
+        for (resources) |resource| {
+            if (resource.first_use <= probe.first_use and probe.first_use <= resource.last_use) {
+                live = std.math.add(u64, live, transientResourceUnits(resource)) catch {
+                    return error.InvalidResourceBarrierRange;
+                };
+            }
+        }
+        peak = @max(peak, live);
+    }
+    return peak;
+}
+
+pub const MemoryBudgetSource = enum {
+    native,
+    fallback,
+};
+
+pub const MemoryPressureStatus = enum {
+    unknown,
+    nominal,
+    warning,
+    critical,
+    over_budget,
+};
+
+pub const MemoryBudgetDescriptor = struct {
+    budget_bytes: ?u64 = null,
+    explicit_usage_bytes: u64 = 0,
+    heap_reserved_bytes: u64 = 0,
+    transient_peak_bytes: u64 = 0,
+    sparse_resident_bytes: u64 = 0,
+    warning_threshold_percent: u8 = 80,
+    critical_threshold_percent: u8 = 95,
+    native_budget_available: bool = false,
+
+    pub fn validate(self: MemoryBudgetDescriptor) MemoryBudgetError!void {
+        if (self.warning_threshold_percent == 0 or self.warning_threshold_percent > 100) {
+            return MemoryBudgetError.InvalidMemoryBudgetThreshold;
+        }
+        if (self.critical_threshold_percent == 0 or self.critical_threshold_percent > 100) {
+            return MemoryBudgetError.InvalidMemoryBudgetThreshold;
+        }
+        if (self.warning_threshold_percent > self.critical_threshold_percent) {
+            return MemoryBudgetError.InvalidMemoryBudgetThreshold;
+        }
+    }
+
+    pub fn report(self: MemoryBudgetDescriptor) MemoryBudgetError!MemoryBudgetReport {
+        try self.validate();
+        const used_bytes = try self.totalUsedBytes();
+        const source: MemoryBudgetSource = if (self.native_budget_available) .native else .fallback;
+        const budget = self.budget_bytes;
+        const available_bytes: ?u64 = if (budget) |value|
+            if (used_bytes >= value) 0 else value - used_bytes
+        else
+            null;
+        const usage_basis_points: ?u32 = if (budget) |value| blk: {
+            if (value == 0) break :blk null;
+            const scaled = (@as(u128, used_bytes) * 10_000) / @as(u128, value);
+            break :blk @intCast(@min(scaled, std.math.maxInt(u32)));
+        } else null;
+        return .{
+            .source = source,
+            .budget_bytes = budget,
+            .used_bytes = used_bytes,
+            .available_bytes = available_bytes,
+            .usage_basis_points = usage_basis_points,
+            .pressure = memoryPressureFromUsage(
+                budget,
+                used_bytes,
+                self.warning_threshold_percent,
+                self.critical_threshold_percent,
+            ),
+        };
+    }
+
+    fn totalUsedBytes(self: MemoryBudgetDescriptor) MemoryBudgetError!u64 {
+        var total = self.explicit_usage_bytes;
+        total = std.math.add(u64, total, self.heap_reserved_bytes) catch return MemoryBudgetError.MemoryBudgetOverflow;
+        total = std.math.add(u64, total, self.transient_peak_bytes) catch return MemoryBudgetError.MemoryBudgetOverflow;
+        total = std.math.add(u64, total, self.sparse_resident_bytes) catch return MemoryBudgetError.MemoryBudgetOverflow;
+        return total;
+    }
+};
+
+pub const MemoryBudgetReport = struct {
+    source: MemoryBudgetSource = .fallback,
+    budget_bytes: ?u64 = null,
+    used_bytes: u64 = 0,
+    available_bytes: ?u64 = null,
+    usage_basis_points: ?u32 = null,
+    pressure: MemoryPressureStatus = .unknown,
+};
+
+pub const MemoryBudgetError = error{
+    InvalidMemoryBudgetThreshold,
+    MemoryBudgetOverflow,
+};
+
+fn memoryPressureFromUsage(
+    budget_bytes: ?u64,
+    used_bytes: u64,
+    warning_threshold_percent: u8,
+    critical_threshold_percent: u8,
+) MemoryPressureStatus {
+    const budget = budget_bytes orelse return .unknown;
+    if (budget == 0) return .unknown;
+    if (used_bytes > budget) return .over_budget;
+    const usage_percent = (@as(u128, used_bytes) * 100) / @as(u128, budget);
+    if (usage_percent >= critical_threshold_percent) return .critical;
+    if (usage_percent >= warning_threshold_percent) return .warning;
+    return .nominal;
 }
 
 pub const BufferBarrierDescriptor = struct {
@@ -5465,6 +5591,50 @@ pub const SparseMappingCommitDescriptor = struct {
     }
 };
 
+pub const SparseResidencyChurnPlan = struct {
+    iterations: u32 = 0,
+    commit_regions_per_iteration: usize = 0,
+    evict_regions_per_iteration: usize = 0,
+    total_commit_regions: u64 = 0,
+    total_evict_regions: u64 = 0,
+    peak_buffer_bytes: u64 = 0,
+    peak_texture_pages: u64 = 0,
+    total_buffer_bytes_touched: u64 = 0,
+    total_texture_pages_touched: u64 = 0,
+    has_evictions: bool = false,
+};
+
+pub const SparseResidencyChurnDescriptor = struct {
+    iterations: u32 = 1,
+    commit: SparseMappingCommitDescriptor,
+    evict: SparseMappingCommitDescriptor,
+
+    pub fn validate(self: SparseResidencyChurnDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (self.iterations == 0) return AdvancedFeatureError.InvalidSparseRegion;
+        try self.commit.validate(features, limits);
+        try self.evict.validate(features, limits);
+    }
+
+    pub fn plan(self: SparseResidencyChurnDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!SparseResidencyChurnPlan {
+        try self.validate(features, limits);
+        const commit_plan = try self.commit.plan(features, limits);
+        const evict_plan = try self.evict.plan(features, limits);
+        const iterations: u64 = self.iterations;
+        return .{
+            .iterations = self.iterations,
+            .commit_regions_per_iteration = commit_plan.total_regions,
+            .evict_regions_per_iteration = evict_plan.total_regions,
+            .total_commit_regions = @as(u64, commit_plan.total_regions) *| iterations,
+            .total_evict_regions = @as(u64, evict_plan.total_regions) *| iterations,
+            .peak_buffer_bytes = commit_plan.buffer_bytes,
+            .peak_texture_pages = commit_plan.texture_pages,
+            .total_buffer_bytes_touched = (commit_plan.buffer_bytes +| evict_plan.buffer_bytes) *| iterations,
+            .total_texture_pages_touched = (commit_plan.texture_pages +| evict_plan.texture_pages) *| iterations,
+            .has_evictions = evict_plan.hasEvictions(),
+        };
+    }
+};
+
 pub const SparseResidencyDiagnostics = struct {
     buffer_regions: usize = 0,
     texture_regions: usize = 0,
@@ -5507,6 +5677,21 @@ pub const SparseResidencyMap = struct {
     pub fn apply(self: *SparseResidencyMap, descriptor: SparseMappingCommitDescriptor) AdvancedFeatureError!void {
         for (descriptor.buffers) |mapping| try self.applyBuffer(mapping);
         for (descriptor.textures) |mapping| try self.applyTexture(mapping);
+    }
+
+    pub fn runChurn(
+        self: *SparseResidencyMap,
+        descriptor: SparseResidencyChurnDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!SparseResidencyChurnPlan {
+        const plan = try descriptor.plan(features, limits);
+        var i: u32 = 0;
+        while (i < descriptor.iterations) : (i += 1) {
+            try self.apply(descriptor.commit);
+            try self.apply(descriptor.evict);
+        }
+        return plan;
     }
 
     fn applyBuffer(self: *SparseResidencyMap, mapping: SparseBufferMappingDescriptor) AdvancedFeatureError!void {
@@ -5995,14 +6180,91 @@ pub const HeapAllocationInfo = struct {
     offset: u64,
     size: u64,
     alignment: u64,
+
+    pub fn validateWithin(self: HeapAllocationInfo, heap: HeapDescriptor) HeapError!void {
+        if (self.size == 0) return HeapError.InvalidHeapSize;
+        if (self.alignment == 0) return HeapError.InvalidHeapAlignment;
+        if (!isAlignedU64(self.offset, self.alignment)) return HeapError.InvalidHeapAlignment;
+        const end_offset = std.math.add(u64, self.offset, self.size) catch return HeapError.HeapOutOfMemory;
+        if (end_offset > heap.size) return HeapError.HeapOutOfMemory;
+    }
+
+    pub fn end(self: HeapAllocationInfo) HeapError!u64 {
+        return std.math.add(u64, self.offset, self.size) catch return HeapError.HeapOutOfMemory;
+    }
+
+    pub fn overlaps(a: HeapAllocationInfo, b: HeapAllocationInfo) bool {
+        const a_end = a.end() catch return false;
+        const b_end = b.end() catch return false;
+        return a.offset < b_end and b.offset < a_end;
+    }
+};
+
+pub const HeapAliasingReason = enum {
+    eligible,
+    no_memory_overlap,
+    lifetime_overlap,
+};
+
+pub const HeapAliasingPlan = struct {
+    eligible: bool = false,
+    reason: HeapAliasingReason = .no_memory_overlap,
+    overlapping_bytes: u64 = 0,
+};
+
+pub const HeapAliasingDescriptor = struct {
+    first: HeapAllocationInfo,
+    second: HeapAllocationInfo,
+    first_use: u64 = 0,
+    first_last_use: u64 = 0,
+    second_use: u64 = 0,
+    second_last_use: u64 = 0,
+
+    pub fn plan(self: HeapAliasingDescriptor, heap: HeapDescriptor) HeapError!HeapAliasingPlan {
+        try self.first.validateWithin(heap);
+        try self.second.validateWithin(heap);
+        if (self.first_last_use < self.first_use or self.second_last_use < self.second_use) {
+            return HeapError.InvalidHeapLifetime;
+        }
+        const overlap = heapAllocationOverlapBytes(self.first, self.second);
+        if (overlap == 0) {
+            return .{
+                .eligible = false,
+                .reason = .no_memory_overlap,
+            };
+        }
+        const lifetime_overlap = self.first_use <= self.second_last_use and self.second_use <= self.first_last_use;
+        if (lifetime_overlap) {
+            return .{
+                .eligible = false,
+                .reason = .lifetime_overlap,
+                .overlapping_bytes = overlap,
+            };
+        }
+        return .{
+            .eligible = true,
+            .reason = .eligible,
+            .overlapping_bytes = overlap,
+        };
+    }
 };
 
 pub const HeapError = error{
     InvalidHeapSize,
     InvalidHeapAlignment,
+    InvalidHeapLifetime,
     UnsupportedHeaps,
     HeapOutOfMemory,
 };
+
+fn heapAllocationOverlapBytes(a: HeapAllocationInfo, b: HeapAllocationInfo) u64 {
+    const a_end = a.end() catch return 0;
+    const b_end = b.end() catch return 0;
+    const start = @max(a.offset, b.offset);
+    const end_value = @min(a_end, b_end);
+    if (end_value <= start) return 0;
+    return end_value - start;
+}
 
 pub const ShaderVisibility = struct {
     vertex: bool = false,
@@ -7611,6 +7873,9 @@ test "resource usage state records portable hazards" {
     try std.testing.expectEqual(@as(usize, 2), transient_diagnostics.resource_count);
     try std.testing.expectEqual(@as(usize, 1), transient_diagnostics.aliasable_pairs);
     try std.testing.expectEqual(@as(u64, 5120), transient_diagnostics.requested_units);
+    try std.testing.expectEqual(@as(u64, 4096), transient_diagnostics.peak_live_units);
+    try std.testing.expectEqual(@as(u64, 1024), transient_diagnostics.aliasing_savings_units);
+    try std.testing.expectEqual(@as(u64, 256), transient_diagnostics.max_alignment);
     try std.testing.expect(!TransientResourceDescriptor.canAlias(existing, .{
         .kind = .buffer,
         .size = 1024,
@@ -7624,6 +7889,24 @@ test "resource usage state records portable hazards" {
         .first_use = 3,
         .last_use = 4,
     }));
+
+    const budget_report = try (MemoryBudgetDescriptor{
+        .budget_bytes = 10 * 1024,
+        .explicit_usage_bytes = 5 * 1024,
+        .heap_reserved_bytes = 2 * 1024,
+        .transient_peak_bytes = 1024,
+        .warning_threshold_percent = 70,
+        .critical_threshold_percent = 90,
+    }).report();
+    try std.testing.expectEqual(MemoryBudgetSource.fallback, budget_report.source);
+    try std.testing.expectEqual(@as(u64, 8 * 1024), budget_report.used_bytes);
+    try std.testing.expectEqual(@as(u64, 2 * 1024), budget_report.available_bytes.?);
+    try std.testing.expectEqual(MemoryPressureStatus.warning, budget_report.pressure);
+    try std.testing.expectEqual(@as(u32, 8000), budget_report.usage_basis_points.?);
+    try std.testing.expectError(MemoryBudgetError.InvalidMemoryBudgetThreshold, (MemoryBudgetDescriptor{
+        .warning_threshold_percent = 95,
+        .critical_threshold_percent = 90,
+    }).report());
 
     try (BufferBarrierDescriptor{
         .before = .copy_destination,
@@ -10313,6 +10596,44 @@ test "sparse residency map tracks commits and rejects overlaps" {
     }).plan(.{ .sparse_buffers = true }, .{ .sparse_buffer_page_size = 4096 });
     try std.testing.expect(eviction_plan.hasEvictions());
 
+    var churn_map = SparseResidencyMap.init(std.testing.allocator);
+    defer churn_map.deinit();
+    const churn_descriptor = SparseResidencyChurnDescriptor{
+        .iterations = 3,
+        .commit = .{
+            .buffers = &.{buffer_region},
+            .textures = &.{texture_region},
+        },
+        .evict = .{
+            .buffers = &.{.{
+                .offset = 0,
+                .size = 4096,
+                .page_size = 4096,
+                .residency = .evicted,
+            }},
+            .textures = &.{.{
+                .region = .{ .size = .{ .width = 64, .height = 64, .depth = 1 } },
+                .page_extent = .{ .width = 64, .height = 64, .depth = 1 },
+                .residency = .evicted,
+            }},
+        },
+    };
+    const churn_plan = try churn_map.runChurn(churn_descriptor, .{ .sparse_buffers = true, .sparse_textures = true }, .{
+        .sparse_buffer_page_size = 4096,
+        .sparse_texture_page_width = 64,
+        .sparse_texture_page_height = 64,
+        .sparse_texture_page_depth = 1,
+        .max_sparse_regions_per_commit = 4,
+    });
+    try std.testing.expectEqual(@as(u32, 3), churn_plan.iterations);
+    try std.testing.expectEqual(@as(u64, 6), churn_plan.total_commit_regions);
+    try std.testing.expectEqual(@as(u64, 6), churn_plan.total_evict_regions);
+    try std.testing.expectEqual(@as(u64, 4096), churn_plan.peak_buffer_bytes);
+    try std.testing.expectEqual(@as(u64, 1), churn_plan.peak_texture_pages);
+    try std.testing.expect(churn_plan.has_evictions);
+    try std.testing.expectEqual(@as(usize, 0), churn_map.diagnostics().buffer_regions);
+    try std.testing.expectEqual(@as(usize, 0), churn_map.diagnostics().texture_regions);
+
     try std.testing.expectError(AdvancedFeatureError.InvalidSparseRegion, map.apply(.{ .buffers = &.{.{
         .offset = 0,
         .size = 4096,
@@ -10866,6 +11187,37 @@ test "heap descriptor is gated by device features" {
     try std.testing.expectError(HeapError.HeapOutOfMemory, (HeapAllocationDescriptor{
         .size = 8192,
     }).validate(heap));
+    const aliasing_plan = try (HeapAliasingDescriptor{
+        .first = .{ .offset = 0, .size = 1024, .alignment = 256 },
+        .second = .{ .offset = 0, .size = 512, .alignment = 256 },
+        .first_use = 0,
+        .first_last_use = 1,
+        .second_use = 2,
+        .second_last_use = 3,
+    }).plan(heap);
+    try std.testing.expect(aliasing_plan.eligible);
+    try std.testing.expectEqual(HeapAliasingReason.eligible, aliasing_plan.reason);
+    try std.testing.expectEqual(@as(u64, 512), aliasing_plan.overlapping_bytes);
+    const lifetime_overlap = try (HeapAliasingDescriptor{
+        .first = .{ .offset = 0, .size = 1024, .alignment = 256 },
+        .second = .{ .offset = 0, .size = 512, .alignment = 256 },
+        .first_use = 0,
+        .first_last_use = 2,
+        .second_use = 2,
+        .second_last_use = 3,
+    }).plan(heap);
+    try std.testing.expect(!lifetime_overlap.eligible);
+    try std.testing.expectEqual(HeapAliasingReason.lifetime_overlap, lifetime_overlap.reason);
+    const no_overlap = try (HeapAliasingDescriptor{
+        .first = .{ .offset = 0, .size = 512, .alignment = 256 },
+        .second = .{ .offset = 1024, .size = 512, .alignment = 256 },
+        .first_use = 0,
+        .first_last_use = 1,
+        .second_use = 2,
+        .second_last_use = 3,
+    }).plan(heap);
+    try std.testing.expect(!no_overlap.eligible);
+    try std.testing.expectEqual(HeapAliasingReason.no_memory_overlap, no_overlap.reason);
 }
 
 test "bind group layout descriptor validates resource bindings" {
@@ -11698,6 +12050,8 @@ test "default device features separate period23 defaults from escape hatches" {
         try std.testing.expect(!features.dedicated_compute_queue);
         try std.testing.expect(!features.dedicated_transfer_queue);
         try std.testing.expect(!features.queue_ownership_transfer);
+        try std.testing.expect(!features.memory_budget);
+        try std.testing.expect(!features.memory_pressure);
         try std.testing.expect(!features.pipeline_statistics_queries);
     }
 }

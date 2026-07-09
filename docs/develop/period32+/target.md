@@ -61,9 +61,10 @@ Period32+ work is split into concrete periods:
   queue planning, queue ownership validation, and typed unsupported behavior.
   Native timeline/shared-event submit and physical async queue evidence remain
   Period44 validation requirements after backend lowering exists.
-- Period37: memory, heaps, and residency. This closes memory heap allocation,
-  aliasing, budget reporting, pressure handling, sparse/tiled residency, and
-  long-running residency pressure tests.
+- Period37: memory, heaps, and residency. This closes the portable heap,
+  aliasing, budget/pressure, transient diagnostics, and sparse residency churn
+  contract. Native heap-backed resources, native sparse/tiled page binding, and
+  GPU pressure soak require backend lowering plus Period44 device evidence.
 - Period38: resource-table scale and pipeline persistence. This closes
   descriptor indexing, Metal argument buffer pressure, update-after-bind
   semantics, Vulkan pipeline cache/library persistence, Metal binary archives,
@@ -98,8 +99,8 @@ The current routing for the remaining Vulkan/Metal parity list is:
 | --- | --- |
 | timeline semaphore / shared event / fence semantics | Period36 for public contract; Period44 for native device evidence |
 | multi-queue, queue ownership, async compute/transfer scheduling | Period36 for logical planning and validation; Period44 for physical queue evidence |
-| memory heap, aliasing, budget, pressure handling | Period37 |
-| sparse/tiled residency long-run pressure tests | Period37 |
+| memory heap, aliasing, budget, pressure handling | Period37 for public contract; Period44 for native device evidence |
+| sparse/tiled residency long-run pressure tests | Period37 for deterministic churn planning; Period44 for GPU soak evidence |
 | descriptor indexing / argument buffer large table pressure tests | Period38 |
 | pipeline library / binary archive / cache production persistence | Period38 |
 | ray query, AS update/compaction, instances, procedural parity, complex SBT | Period39, with current procedural scene parity closed first in Period35 |

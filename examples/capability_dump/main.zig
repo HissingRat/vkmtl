@@ -70,6 +70,8 @@ fn dumpFeatureSet(features: vkmtl.DeviceFeatures) void {
     std.debug.print("  argument buffers: {}\n", .{features.argument_buffers});
     std.debug.print("  sparse buffers: {}\n", .{features.sparse_buffers});
     std.debug.print("  sparse textures: {}\n", .{features.sparse_textures});
+    std.debug.print("  memory budget: {}\n", .{features.memory_budget});
+    std.debug.print("  memory pressure: {}\n", .{features.memory_pressure});
     std.debug.print("  external textures: {}\n", .{features.external_textures});
     std.debug.print("  tessellation: {}\n", .{features.tessellation});
     std.debug.print("  mesh shaders: {}\n", .{features.mesh_shaders});

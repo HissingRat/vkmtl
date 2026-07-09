@@ -113,9 +113,16 @@ sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建。固定 bord
 `clamp_to_border` 时也会下沉到 Vulkan 和 Metal sampler 创建；custom border color 暂不覆盖。
 
 `HeapDescriptor` 定义显式 heap planning。`Device.makeHeap(...)` 由 `DeviceFeatures.heaps`
-gate，返回的 runtime `Heap` 可以通过 `reserve(...)` 追踪 aligned reservation。默认资源创建仍由
-vkmtl 内部管理 memory；native Vulkan `VkDeviceMemory` suballocation 和 Metal `MTLHeap`
-backed buffer/texture creation 是后续 backend work。
+gate，返回的 runtime `Heap` 可以通过 `reserve(...)` 追踪 aligned reservation。
+`HeapAliasingDescriptor` 和 `Heap.aliasingPlan(...)` 会校验两个 placed allocation 是否共享
+memory range 且 lifetime 不重叠，这是后续 heap-backed resource aliasing 的 portable contract。
+默认资源创建仍由 vkmtl 内部管理 memory；native Vulkan `VkDeviceMemory` suballocation 和 Metal
+`MTLHeap` backed buffer/texture creation 是后续 backend work。
+
+Memory diagnostics 使用 `MemoryBudgetDescriptor` 和 `Device.memoryBudgetReport(...)`。
+Report 会区分 native / fallback source，汇总 explicit usage、heap reservation、transient peak bytes
+和 sparse residency bytes，并把 pressure 分类为 unknown、nominal、warning、critical 或 over-budget。
+在 backend 还没有 native budget query 之前，这条路径是 fallback diagnostics。
 
 Sparse/tiled resource shape 由 `SparseBufferMappingDescriptor`、
 `SparseTextureMappingDescriptor` 和 `SparseMappingCommitDescriptor` 表示。它们会在
@@ -127,6 +134,9 @@ Native residency management 仍是 future backend work。Period 27 新增
 native page size、texture page grid、page count 和 backend mapping。
 `SparseMappingCommitPlan` 和 `Device.planSparseMappingCommit(...)` 会汇总 residency update batch
 里的 commit/evict 数量、buffer bytes 和 texture pages。
+`SparseResidencyChurnDescriptor`、`SparseResidencyMap.runChurn(...)` 和
+`Device.planSparseResidencyChurn(...)` 提供重复 commit/evict cycle 的确定性 pressure diagnostics，
+用于 native page binding 完成前的长期 residency/churn 规划。
 
 External interop shape 由 `ExternalHandleDescriptor`、`ExternalMemoryDescriptor`、
 `ExternalBufferDescriptor`、`ExternalTextureDescriptor` 和 `ExternalSemaphoreDescriptor`

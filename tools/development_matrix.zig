@@ -505,7 +505,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test",
-        .expectation = "sparse/tiled planning, residency plans, tessellation lowering, and mesh/task lowering regressions pass",
+        .expectation = "sparse/tiled planning, residency commit/churn plans, tessellation lowering, and mesh/task lowering regressions pass",
     },
     .{
         .name = "advanced_geometry_feature_gates",
@@ -704,8 +704,10 @@ pub const ResourceUtilityFeature = enum {
     fixed_sampler_border_colors,
     custom_sampler_border_colors,
     heap_planning,
+    heap_aliasing_planning,
     native_heap_backed_resources,
     transient_allocation_diagnostics,
+    memory_budget_pressure_reporting,
 };
 
 pub const ResourceUtilityMatrixEntry = struct {
@@ -792,6 +794,13 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .validation = "heap planning validates feature gates, capacity, alignment, and reservation offsets",
     },
     .{
+        .feature = .heap_aliasing_planning,
+        .public_api = "HeapAliasingDescriptor and Heap.aliasingPlan",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "heap aliasing plans validate allocation ranges, lifetimes, and reusable overlap",
+    },
+    .{
         .feature = .native_heap_backed_resources,
         .public_api = "Heap",
         .vulkan_status = .deferred_native_lowering,
@@ -804,7 +813,14 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "TransientAllocationDiagnostics",
         .vulkan_status = .portable_runtime,
         .metal_status = .portable_runtime,
-        .validation = "transient diagnostics count resources, requested units, and aliasable pairs",
+        .validation = "transient diagnostics count resources, requested units, aliasable pairs, peak live units, and aliasing savings",
+    },
+    .{
+        .feature = .memory_budget_pressure_reporting,
+        .public_api = "MemoryBudgetDescriptor and Device.memoryBudgetReport",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "memory budget reports classify nominal/warning/critical/over-budget pressure with native/fallback source metadata",
     },
 };
 
@@ -1069,6 +1085,7 @@ pub const AdvancedResourceGeometryFeature = enum {
     sparse_buffer_planning,
     sparse_texture_planning,
     sparse_mapping_commit_planning,
+    sparse_residency_churn_planning,
     native_sparse_page_binding,
     tessellation_lowering_planning,
     native_tessellation_pipeline,
@@ -1114,6 +1131,13 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .vulkan_status = .portable_runtime,
         .metal_status = .portable_runtime,
         .validation = "commit plans summarize commit/evict counts, buffer bytes, and texture pages",
+    },
+    .{
+        .feature = .sparse_residency_churn_planning,
+        .public_api = "SparseResidencyChurnDescriptor, SparseResidencyMap.runChurn, and Device.planSparseResidencyChurn",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "residency churn plans summarize repeated commit/evict cycles and deterministic peak resident pressure",
     },
     .{
         .feature = .native_sparse_page_binding,
@@ -1414,7 +1438,7 @@ pub const validation_cases = [_]ValidationCase{
         .name = "advanced_resource_geometry",
         .kind = .advanced_resource_geometry,
         .test_location = "src/core.zig and src/runtime/window_context.zig Period 27 tests",
-        .expectation = "sparse/tiled resource planning, residency plans, tessellation lowering, and mesh/task lowering stay capability-gated",
+        .expectation = "sparse/tiled resource planning, residency commit/churn plans, tessellation lowering, and mesh/task lowering stay capability-gated",
     },
     .{
         .name = "ray_tracing_native_parity",

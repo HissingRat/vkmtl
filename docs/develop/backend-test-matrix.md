@@ -11,10 +11,10 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, synchronization commit descriptors, logical queue planning, ownership transfer validation, and query readback/resolve validation.
-- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, and transient diagnostics.
+- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
-- `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit plans, tessellation lowering plans, and mesh/task lowering plans.
+- `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation lowering plans, and mesh/task lowering plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, Metal mapping, native advanced closure, and Period 29 routing.
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-scene`
@@ -95,8 +95,10 @@ conservative until the relevant backend period lands.
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
 | Custom sampler border colors | Deferred | Deferred | Period 32+ validation matrix parity decision |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
+| Heap aliasing planning | Portable runtime object | Portable runtime object | `HeapAliasingDescriptor` validates overlapping ranges and lifetimes |
 | Native heap-backed resources | Deferred | Deferred | Period 32+ driver parity plan native integration |
-| Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Public diagnostics helper |
+| Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Reports requested units, peak live units, max alignment, aliasable pairs, and savings |
+| Memory budget/pressure report | Fallback runtime report until native query is wired | Fallback runtime report until native query is wired | `Device.memoryBudgetReport(...)` classifies pressure and source |
 
 ## Period 25 Platform And Interop Expectations
 
@@ -137,6 +139,7 @@ conservative until the relevant backend period lands.
 | Sparse buffer planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseBufferLowering(...)` |
 | Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseTextureLowering(...)` |
 | Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `Device.planSparseMappingCommit(...)` |
+| Residency churn planning | Runtime commit/evict cycle summary | Runtime commit/evict cycle summary | `Device.planSparseResidencyChurn(...)` and `SparseResidencyMap.runChurn(...)` |
 | Native sparse/tiled page binding | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Tessellation lowering planning | Runtime patch metadata plan | Runtime factor-buffer requirement plan | `Device.planTessellationLowering(...)` |
 | Native tessellation pipeline | Deferred | Deferred | Period 32+ driver parity plan native integration |
@@ -162,3 +165,15 @@ conservative until the relevant backend period lands.
 | Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make first ray traced scenes pixel-producing; Period33/34 own the full mesh/procedural scene examples |
 | Full native RT mesh scene | Mesh build-input path implemented and superseded by Period34 procedural scene for the Vulkan example | Visible Metal full mesh scene | Period33 uses user mesh buffers for `ray_traced_scene`; Vulkan mesh validation happened before the Period34 procedural replacement |
 | Procedural RT geometry and custom intersection | AABB build-input lowering, intersection SPIR-V precompile, procedural hit groups, SBT records, and procedural `ray_traced_scene` marker implemented; supported-device visual validation pending | Pixel-producing scene path uses shared scene data; driver-level procedural/intersection-function-table execution is Period39 | Period34 closes the Vulkan procedural path; Period35 adds shared scene data; Period39 owns mixed TLAS and Metal procedural parity |
+
+## Period 37 Memory, Heaps, And Residency Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Heap reservation | Portable runtime reservation object | Portable runtime reservation object | `Device.makeHeap(...)` and `Heap.reserve(...)` |
+| Heap aliasing | Portable aliasing plan | Portable aliasing plan | `Heap.aliasingPlan(...)` validates range/lifetime compatibility |
+| Memory budget report | Fallback report until native budget query is wired | Fallback report until native budget query is wired | `MemoryBudgetReport` records source and pressure |
+| Transient pressure diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Peak live units and aliasing savings are deterministic |
+| Sparse residency churn | Portable plan/map execution | Portable plan/map execution | Repeated commit/evict cycles are deterministic |
+| Native heap-backed resources | Deferred | Deferred | Requires backend lowering and Period44 device evidence |
+| Native sparse/tiled page binding | Deferred | Deferred | Requires backend lowering and Period44 device evidence |

@@ -692,17 +692,17 @@ See `docs/develop/period36/`.
 
 ## Period 37: Memory, Heaps, And Residency
 
-Status: planned after Period36.
+Status: implemented portable memory/residency contract after Period36.
 
-Goal: add production memory behavior: heap-backed allocation, aliasing,
-memory-budget reporting, pressure handling, and real sparse/tiled residency
-stress coverage.
+Goal: add production memory behavior at the public contract layer:
+heap-reservation and aliasing plans, memory-budget reporting, pressure
+diagnostics, and deterministic sparse/tiled residency churn planning.
 
 - Phase 1: heap and allocator contract
 - Phase 2: aliasing and transient resource validation
 - Phase 3: memory budget and pressure reporting
-- Phase 4: native sparse/tiled residency updates
-- Phase 5: long-running residency and churn pressure tests
+- Phase 4: sparse/tiled residency churn planning
+- Phase 5: deterministic residency and allocation churn validation
 
 See `docs/develop/period37/`.
 
@@ -847,6 +847,10 @@ See `docs/develop/period32+/target.md`.
   Driver-level Vulkan timeline submit, Metal shared-event submit, and physical
   multi-queue validation remain Period44 evidence requirements before broad
   parity claims.
+- Period 37 owns the portable memory, heap aliasing, budget/pressure, and
+  sparse residency churn contracts. Native heap-backed resources and native
+  sparse/tiled page binding remain Period44 evidence requirements after backend
+  lowering exists.
 - Periods 36 through 44 own the remaining production parity buckets: sync,
   queues, memory, residency, resource-table scale, pipeline persistence, ray
   tracing completeness, advanced geometry, external interop, edge semantics,

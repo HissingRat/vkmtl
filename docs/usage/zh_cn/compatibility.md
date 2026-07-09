@@ -34,6 +34,10 @@ runtime object 和 command entry point；sparse resource、external texture inte
 tessellation、mesh shader、ray tracing 和 driver-level pipeline cache 仍然保持 gated，直到
 native backend work 完成。
 
+Heap、memory-budget、transient-allocation 和 sparse-residency API 目前提供 portable planning
+与 diagnostics。Native heap-backed buffer/texture creation 和 native sparse/tiled page binding
+仍是后续 backend work。
+
 Descriptor indexing 映射到 Vulkan descriptor indexing，argument buffer 映射到 Metal
 argument buffer。两者通过 `DescriptorIndexingLayoutDescriptor`、
 `AdvancedBindGroupLayout` 和 `ResourceTable` 表达。当所选后端声明所需 feature 时，

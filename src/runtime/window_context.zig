@@ -1622,6 +1622,11 @@ pub const Heap = struct {
             .alignment = allocation.alignment,
         };
     }
+
+    pub fn aliasingPlan(self: Heap, aliasing_descriptor: core.HeapAliasingDescriptor) core.HeapError!core.HeapAliasingPlan {
+        assertObjectAlive(self.alive, "heap");
+        return try aliasing_descriptor.plan(self.descriptor_value);
+    }
 };
 
 const BackendPrivateAccelerationStructureHandle = struct {
@@ -4942,6 +4947,10 @@ pub const Device = struct {
         return try descriptor.plan(self.nativeFeatures(), self.limits());
     }
 
+    pub fn planSparseResidencyChurn(self: Device, descriptor: core.SparseResidencyChurnDescriptor) core.AdvancedFeatureError!core.SparseResidencyChurnPlan {
+        return try descriptor.plan(self.nativeFeatures(), self.limits());
+    }
+
     pub fn validateSparseBufferDescriptor(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -5355,6 +5364,12 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
         };
+    }
+
+    pub fn memoryBudgetReport(self: Device, descriptor: core.MemoryBudgetDescriptor) core.MemoryBudgetError!core.MemoryBudgetReport {
+        var resolved = descriptor;
+        resolved.native_budget_available = resolved.native_budget_available or self.nativeFeatures().memory_budget;
+        return try resolved.report();
     }
 
     pub fn transientAllocationDiagnostics(
@@ -6120,6 +6135,11 @@ pub const WindowContext = struct {
     pub fn makeHeap(self: *WindowContext, descriptor: core.HeapDescriptor) !Heap {
         var device_view = self.device();
         return try device_view.makeHeap(descriptor);
+    }
+
+    pub fn memoryBudgetReport(self: *WindowContext, descriptor: core.MemoryBudgetDescriptor) core.MemoryBudgetError!core.MemoryBudgetReport {
+        const device_view = self.device();
+        return try device_view.memoryBudgetReport(descriptor);
     }
 
     pub fn transientAllocationDiagnostics(
@@ -7096,6 +7116,23 @@ test "runtime device plans sparse mapping commits from native capabilities" {
     try std.testing.expectEqual(@as(usize, 1), plan.total_regions);
     try std.testing.expectEqual(@as(usize, 1), plan.buffer_commits);
     try std.testing.expectEqual(@as(u64, 8192), plan.buffer_bytes);
+
+    const churn = try device.planSparseResidencyChurn(.{
+        .iterations = 2,
+        .commit = descriptor,
+        .evict = .{
+            .buffers = &.{.{
+                .offset = 0,
+                .size = 8192,
+                .residency = .evicted,
+            }},
+        },
+    });
+    try std.testing.expectEqual(@as(u32, 2), churn.iterations);
+    try std.testing.expectEqual(@as(u64, 2), churn.total_commit_regions);
+    try std.testing.expectEqual(@as(u64, 2), churn.total_evict_regions);
+    try std.testing.expectEqual(@as(u64, 8192), churn.peak_buffer_bytes);
+    try std.testing.expect(churn.has_evictions);
 }
 
 test "runtime device plans tessellation lowering from native capabilities" {
@@ -8882,6 +8919,30 @@ test "runtime heaps track aligned reservations and diagnostics" {
     try std.testing.expectError(core.HeapError.HeapOutOfMemory, heap.reserve(.{
         .size = 4096,
     }));
+    const aliasing = try heap.aliasingPlan(.{
+        .first = first,
+        .second = .{
+            .offset = first.offset,
+            .size = 64,
+            .alignment = 64,
+        },
+        .first_use = 0,
+        .first_last_use = 1,
+        .second_use = 2,
+        .second_last_use = 3,
+    });
+    try std.testing.expect(aliasing.eligible);
+    try std.testing.expectEqual(core.HeapAliasingReason.eligible, aliasing.reason);
+
+    const budget = try device.memoryBudgetReport(.{
+        .budget_bytes = 4096,
+        .heap_reserved_bytes = heap.reservedBytes(),
+        .transient_peak_bytes = 1024,
+        .warning_threshold_percent = 25,
+        .critical_threshold_percent = 80,
+    });
+    try std.testing.expectEqual(core.MemoryBudgetSource.fallback, budget.source);
+    try std.testing.expectEqual(core.MemoryPressureStatus.warning, budget.pressure);
 
     const resources = [_]core.TransientResourceDescriptor{
         .{
@@ -8902,6 +8963,8 @@ test "runtime heaps track aligned reservations and diagnostics" {
     const diagnostics = try device.transientAllocationDiagnostics(resources[0..]);
     try std.testing.expectEqual(@as(usize, 2), diagnostics.resource_count);
     try std.testing.expectEqual(@as(usize, 1), diagnostics.aliasable_pairs);
+    try std.testing.expectEqual(@as(u64, 1024), diagnostics.peak_live_units);
+    try std.testing.expectEqual(@as(u64, 512), diagnostics.aliasing_savings_units);
 }
 
 test "runtime bind group materialization validates resources against layout" {

@@ -139,9 +139,19 @@ colors remain out of scope.
 
 `HeapDescriptor` defines explicit heap planning. `Device.makeHeap(...)` is
 feature-gated by `DeviceFeatures.heaps` and returns a runtime `Heap` that tracks
-aligned reservations through `reserve(...)`. Default resource creation still
-owns memory internally; native Vulkan `VkDeviceMemory` suballocation and Metal
+aligned reservations through `reserve(...)`. `HeapAliasingDescriptor` and
+`Heap.aliasingPlan(...)` validate whether two placed allocations overlap in
+memory while their lifetimes do not overlap, which is the portable contract for
+future heap-backed resource aliasing. Default resource creation still owns
+memory internally; native Vulkan `VkDeviceMemory` suballocation and Metal
 `MTLHeap`-backed buffer/texture creation are future backend work.
+
+Memory diagnostics use `MemoryBudgetDescriptor` and
+`Device.memoryBudgetReport(...)`. The report distinguishes native and fallback
+sources, totals explicit usage, heap reservations, transient peak bytes, and
+sparse residency bytes, and classifies pressure as unknown, nominal, warning,
+critical, or over-budget. Until backends provide native budget queries, reports
+remain fallback diagnostics.
 
 Sparse and tiled resource shapes are represented by
 `SparseBufferMappingDescriptor`, `SparseTextureMappingDescriptor`, and
@@ -156,6 +166,9 @@ native page size, texture page grids, page counts, and backend mapping before
 runtime sparse object creation is enabled. `SparseMappingCommitPlan` and
 `Device.planSparseMappingCommit(...)` summarize commit/evict counts, buffer
 bytes, and texture pages for residency update batches.
+`SparseResidencyChurnDescriptor`, `SparseResidencyMap.runChurn(...)`, and
+`Device.planSparseResidencyChurn(...)` provide deterministic repeated
+commit/evict pressure diagnostics before native page binding is available.
 
 External interop shapes are represented by `ExternalHandleDescriptor`,
 `ExternalMemoryDescriptor`, `ExternalBufferDescriptor`,

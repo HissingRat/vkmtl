@@ -368,13 +368,17 @@ claims require Period44 device-matrix evidence.
 
 Tracked in `docs/develop/period37/`.
 
-- [ ] Heap-backed resources and allocator ownership.
-- [ ] Aliasing and transient allocation validation.
-- [ ] Memory budget and pressure reporting.
-- [ ] Native sparse/tiled residency updates and long-run pressure tests.
+- [x] Heap reservation and allocator ownership vocabulary.
+- [x] Aliasing and transient allocation validation.
+- [x] Memory budget and pressure reporting.
+- [x] Sparse/tiled residency churn planning and deterministic map execution.
+- [x] Record native heap-backed resources, native sparse/tiled page binding, and
+  GPU memory-pressure soak as Period44 evidence work after backend lowering
+  exists.
 
-Expected result: vkmtl can execute heap/residency workloads on supported
-backends and provide useful memory-pressure diagnostics.
+Expected result: vkmtl exposes portable heap, aliasing, memory-pressure, and
+residency-churn diagnostics. Native heap and sparse/tiled execution claims
+require backend lowering plus Period44 device-matrix evidence.
 
 ## Wave 19: Resource Tables And Pipeline Persistence
 

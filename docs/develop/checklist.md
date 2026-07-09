@@ -2196,34 +2196,34 @@ obvious render and binding blockers.
 
 ## Period 37 Phase 1 Checklist
 
-- [ ] Define heap descriptors and heap-backed resource ownership.
-- [ ] Map Vulkan device memory and Metal heap behavior through capabilities.
-- [ ] Preserve ordinary resource creation without explicit heaps.
+- [x] Define heap descriptors and heap-backed resource ownership vocabulary.
+- [x] Map Vulkan device memory and Metal heap behavior through capabilities without exposing native handles.
+- [x] Preserve ordinary resource creation without explicit heaps.
 
 ## Period 37 Phase 2 Checklist
 
-- [ ] Define aliasing eligibility for buffers and textures.
-- [ ] Validate aliasing lifetime, usage, and hazard requirements.
-- [ ] Add transient allocator diagnostics for frame overlap.
+- [x] Define aliasing eligibility for placed heap allocations.
+- [x] Validate aliasing lifetime, range, alignment, and hazard requirements.
+- [x] Add transient allocator diagnostics for frame overlap and aliasing savings.
 
 ## Period 37 Phase 3 Checklist
 
-- [ ] Query memory budget and heap pressure where available.
-- [ ] Provide fallback reports when native budget data is unavailable.
-- [ ] Add diagnostics suitable for pressure-test logs.
+- [x] Define memory budget and heap pressure reports with native/fallback source metadata.
+- [x] Provide fallback reports when native budget data is unavailable.
+- [x] Add diagnostics suitable for pressure-test logs.
 
 ## Period 37 Phase 4 Checklist
 
-- [ ] Lower sparse/tiled residency updates to native backend APIs where
-  supported.
-- [ ] Keep unsupported residency paths typed and capability-gated.
-- [ ] Validate page mapping descriptors against backend limits.
+- [x] Add sparse/tiled residency churn planning and deterministic map execution.
+- [x] Keep unsupported native residency paths typed and capability-gated.
+- [x] Validate page mapping descriptors against backend limits.
+- [x] Record native Vulkan sparse binding and Metal tiled/sparse page binding as Period44 device-matrix validation work once backend lowering exists.
 
 ## Period 37 Phase 5 Checklist
 
-- [ ] Add residency stress tests with commit/uncommit cycles.
-- [ ] Add heap and transient allocation churn tests.
-- [ ] Record memory pressure behavior in the backend test matrix.
+- [x] Add residency stress tests with commit/uncommit cycles.
+- [x] Add heap and transient allocation churn tests.
+- [x] Record memory pressure behavior in the backend test matrix.
 
 ## Period 38 Phase 1 Checklist
 

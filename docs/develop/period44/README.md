@@ -40,6 +40,9 @@ examples, and long-running soak tests for resource churn.
 - Validate native timeline semaphore submit, Metal shared-event submit, and
   physical async compute/transfer queue behavior on supported hosts once the
   backend lowering exists.
+- Validate native heap-backed resources, native sparse/tiled page binding, and
+  GPU memory-pressure behavior on supported hosts once the backend lowering
+  exists.
 - Keep soak failures actionable and scoped.
 
 ### Phase 5: Release Readiness And Parity Report

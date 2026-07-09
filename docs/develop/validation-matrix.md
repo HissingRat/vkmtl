@@ -25,8 +25,8 @@ Current cases:
 - `query_readback`: timestamp and occlusion query sets validate availability,
   type, range, readback, and resolve paths before native work.
 - `resource_utilities`: mipmap generation, fill fallback selection, texture
-  copy compatibility, sampler border colors, heap planning, and transient
-  diagnostics keep typed validation.
+  copy compatibility, sampler border colors, heap planning, heap aliasing,
+  memory-pressure reports, and transient diagnostics keep typed validation.
 - `platform_interop`: surface registries, present-mode diagnostics, external
   memory/buffer/texture wrappers, external sync wrappers, and native insertion
   gates keep typed validation.
@@ -34,7 +34,8 @@ Current cases:
   stability planning, and Vulkan fallback diagnostics keep deterministic
   validation.
 - `advanced_resource_geometry`: sparse/tiled resource planning, residency
-  plans, tessellation lowering, and mesh/task lowering stay capability-gated.
+  commit/churn plans, tessellation lowering, and mesh/task lowering stay
+  capability-gated.
 - `ray_tracing_native_parity`: ray tracing planning, Metal mapping, native
   advanced closure, and future Period 29 assignments stay explicit.
 

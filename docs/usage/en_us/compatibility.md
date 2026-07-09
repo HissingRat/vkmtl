@@ -40,6 +40,10 @@ external texture interop, tessellation, mesh shaders, ray tracing, and
 driver-level pipeline caches remain gated until their native backend work is
 complete.
 
+Heap, memory-budget, transient-allocation, and sparse-residency APIs currently
+provide portable planning and diagnostics. Native heap-backed buffer/texture
+creation and native sparse/tiled page binding remain backend work.
+
 Descriptor indexing maps toward Vulkan descriptor indexing. Argument buffers map
 toward Metal argument buffers. Both are represented by
 `DescriptorIndexingLayoutDescriptor`, `AdvancedBindGroupLayout`, and
