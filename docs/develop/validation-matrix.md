@@ -28,8 +28,8 @@ Current cases:
   copy compatibility, sampler border colors, heap planning, heap aliasing,
   memory-pressure reports, and transient diagnostics keep typed validation.
 - `platform_interop`: surface registries, present-mode diagnostics, external
-  memory/buffer/texture wrappers, external sync wrappers, and native insertion
-  gates keep typed validation.
+  interop capability matrices, memory/buffer/texture wrappers, external sync
+  wrappers, and native insertion gates keep typed validation.
 - `production_hardening`: cache planning, runtime diagnostics, capture names,
   stability planning, and Vulkan fallback diagnostics keep deterministic
   validation.

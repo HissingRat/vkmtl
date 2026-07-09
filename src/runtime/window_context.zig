@@ -5001,6 +5001,19 @@ pub const Device = struct {
         try descriptor.validate(self.backend, self.features());
     }
 
+    pub fn externalInteropCapabilityMatrix(self: Device) core.ExternalInteropCapabilityMatrix {
+        return self.externalInteropCapabilityMatrixForPlatform(core.ExternalInteropPlatform.native());
+    }
+
+    pub fn externalInteropCapabilityMatrixForPlatform(self: Device, platform: core.ExternalInteropPlatform) core.ExternalInteropCapabilityMatrix {
+        return core.externalInteropCapabilityMatrix(
+            self.backend,
+            platform,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
     pub fn validateNativeCommandInsertionDescriptor(self: Device, descriptor: core.NativeCommandInsertionDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features());
     }
@@ -8827,6 +8840,9 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     report.features.external_memory = true;
     report.features.external_textures = true;
     report.features.external_semaphores = true;
+    report.native_features.external_memory = true;
+    report.native_features.external_textures = true;
+    report.native_features.external_semaphores = true;
 
     var device = Device{
         .allocator = std.testing.allocator,
@@ -8839,6 +8855,11 @@ test "runtime external texture wrapper validates and tracks lifetime" {
         },
         .capability_report = report,
     };
+
+    const interop_matrix = device.externalInteropCapabilityMatrixForPlatform(.macos);
+    try std.testing.expect(interop_matrix.supportsPortableWrapper(.texture));
+    try std.testing.expect(interop_matrix.supports(.texture, .iosurface));
+    try std.testing.expect(interop_matrix.supports(.event, .metal_shared_event));
 
     var memory = try device.makeExternalMemory(.{
         .label = "external memory",

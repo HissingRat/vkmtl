@@ -182,6 +182,7 @@ Period32+ should eventually close these families of work.
 
 ### External Interop And Platform Coverage
 
+- external interop capability matrices
 - external memory, external textures, and external synchronization objects
 - platform texture sharing for UI, media, and engine integration
 - Metal shared events and Vulkan external semaphores

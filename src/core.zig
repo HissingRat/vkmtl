@@ -5983,6 +5983,210 @@ pub const ExternalHandleKind = enum {
     }
 };
 
+pub const ExternalInteropPlatform = enum {
+    macos,
+    ios,
+    linux,
+    windows,
+    unknown,
+
+    pub fn native() ExternalInteropPlatform {
+        return switch (builtin.os.tag) {
+            .macos => .macos,
+            .ios => .ios,
+            .linux => .linux,
+            .windows => .windows,
+            else => .unknown,
+        };
+    }
+};
+
+pub const ExternalInteropResourceKind = enum {
+    memory,
+    buffer,
+    texture,
+    semaphore,
+    event,
+};
+
+pub const ExternalInteropLane = enum {
+    portable,
+    capability_gated,
+    native_only,
+    unsupported,
+};
+
+pub const ExternalInteropFeatureGate = enum {
+    external_memory,
+    external_textures,
+    external_semaphores,
+
+    pub fn enabled(self: ExternalInteropFeatureGate, features: DeviceFeatures) bool {
+        return switch (self) {
+            .external_memory => features.external_memory,
+            .external_textures => features.external_textures,
+            .external_semaphores => features.external_semaphores,
+        };
+    }
+};
+
+pub const ExternalInteropCapabilityEntry = struct {
+    resource: ExternalInteropResourceKind,
+    handle_kind: ?ExternalHandleKind = null,
+    lane: ExternalInteropLane,
+    feature_gate: ?ExternalInteropFeatureGate = null,
+
+    pub fn isPortableWrapper(self: ExternalInteropCapabilityEntry) bool {
+        return self.lane == .portable and self.handle_kind == null;
+    }
+
+    pub fn requiresFeature(self: ExternalInteropCapabilityEntry) bool {
+        return self.feature_gate != null;
+    }
+
+    pub fn featureEnabled(self: ExternalInteropCapabilityEntry, features: DeviceFeatures) bool {
+        return if (self.feature_gate) |gate| gate.enabled(features) else true;
+    }
+};
+
+pub const ExternalInteropCapabilityMatrix = struct {
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+    entries: []const ExternalInteropCapabilityEntry,
+
+    pub fn find(
+        self: ExternalInteropCapabilityMatrix,
+        resource: ExternalInteropResourceKind,
+        handle_kind: ?ExternalHandleKind,
+    ) ?ExternalInteropCapabilityEntry {
+        for (self.entries) |entry| {
+            if (entry.resource == resource and entry.handle_kind == handle_kind) return entry;
+        }
+        return null;
+    }
+
+    pub fn supports(
+        self: ExternalInteropCapabilityMatrix,
+        resource: ExternalInteropResourceKind,
+        handle_kind: ExternalHandleKind,
+    ) bool {
+        const entry = self.find(resource, handle_kind) orelse return false;
+        return self.entryEnabled(entry);
+    }
+
+    pub fn supportsPortableWrapper(self: ExternalInteropCapabilityMatrix, resource: ExternalInteropResourceKind) bool {
+        const entry = self.find(resource, null) orelse return false;
+        return self.entryEnabled(entry);
+    }
+
+    pub fn entryEnabled(self: ExternalInteropCapabilityMatrix, entry: ExternalInteropCapabilityEntry) bool {
+        return switch (entry.lane) {
+            .portable => entry.featureEnabled(self.usable_features),
+            .capability_gated, .native_only => entry.featureEnabled(self.native_features),
+            .unsupported => false,
+        };
+    }
+
+    pub fn countEnabled(self: ExternalInteropCapabilityMatrix) usize {
+        var count: usize = 0;
+        for (self.entries) |entry| {
+            if (self.entryEnabled(entry)) count += 1;
+        }
+        return count;
+    }
+};
+
+pub fn externalInteropCapabilityMatrix(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+) ExternalInteropCapabilityMatrix {
+    return .{
+        .backend = backend,
+        .platform = platform,
+        .usable_features = usable_features,
+        .native_features = native_features,
+        .entries = externalInteropCapabilityEntries(backend, platform),
+    };
+}
+
+pub fn externalInteropCapabilityEntries(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+) []const ExternalInteropCapabilityEntry {
+    return switch (backend) {
+        .vulkan => switch (platform) {
+            .linux => vulkan_linux_external_interop_entries[0..],
+            .windows => vulkan_windows_external_interop_entries[0..],
+            .macos => vulkan_macos_external_interop_entries[0..],
+            .ios, .unknown => external_interop_unsupported_entries[0..],
+        },
+        .metal => switch (platform) {
+            .macos => metal_macos_external_interop_entries[0..],
+            .ios => metal_ios_external_interop_entries[0..],
+            .linux, .windows, .unknown => external_interop_unsupported_entries[0..],
+        },
+    };
+}
+
+const portable_external_interop_entries = [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .memory, .lane = .portable, .feature_gate = .external_memory },
+    .{ .resource = .buffer, .lane = .portable, .feature_gate = .external_memory },
+    .{ .resource = .texture, .lane = .portable, .feature_gate = .external_textures },
+    .{ .resource = .semaphore, .lane = .portable, .feature_gate = .external_semaphores },
+    .{ .resource = .event, .lane = .portable, .feature_gate = .external_semaphores },
+};
+
+const vulkan_native_object_entries = [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .memory, .handle_kind = .vulkan_memory, .lane = .native_only, .feature_gate = .external_memory },
+    .{ .resource = .buffer, .handle_kind = .vulkan_memory, .lane = .native_only, .feature_gate = .external_memory },
+    .{ .resource = .texture, .handle_kind = .vulkan_image, .lane = .native_only, .feature_gate = .external_textures },
+    .{ .resource = .semaphore, .handle_kind = .vulkan_semaphore, .lane = .native_only, .feature_gate = .external_semaphores },
+};
+
+const vulkan_linux_external_interop_entries = portable_external_interop_entries ++ [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .memory, .handle_kind = .opaque_fd, .lane = .capability_gated, .feature_gate = .external_memory },
+    .{ .resource = .buffer, .handle_kind = .opaque_fd, .lane = .capability_gated, .feature_gate = .external_memory },
+    .{ .resource = .texture, .handle_kind = .opaque_fd, .lane = .capability_gated, .feature_gate = .external_textures },
+    .{ .resource = .semaphore, .handle_kind = .opaque_fd, .lane = .capability_gated, .feature_gate = .external_semaphores },
+} ++ vulkan_native_object_entries;
+
+const vulkan_windows_external_interop_entries = portable_external_interop_entries ++ [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .memory, .handle_kind = .win32_handle, .lane = .capability_gated, .feature_gate = .external_memory },
+    .{ .resource = .buffer, .handle_kind = .win32_handle, .lane = .capability_gated, .feature_gate = .external_memory },
+    .{ .resource = .texture, .handle_kind = .win32_handle, .lane = .capability_gated, .feature_gate = .external_textures },
+    .{ .resource = .semaphore, .handle_kind = .win32_handle, .lane = .capability_gated, .feature_gate = .external_semaphores },
+} ++ vulkan_native_object_entries;
+
+const vulkan_macos_external_interop_entries = portable_external_interop_entries ++ vulkan_native_object_entries;
+
+const metal_native_object_entries = [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .memory, .handle_kind = .metal_buffer, .lane = .native_only, .feature_gate = .external_memory },
+    .{ .resource = .buffer, .handle_kind = .metal_buffer, .lane = .native_only, .feature_gate = .external_memory },
+    .{ .resource = .texture, .handle_kind = .metal_texture, .lane = .native_only, .feature_gate = .external_textures },
+    .{ .resource = .semaphore, .handle_kind = .metal_shared_event, .lane = .capability_gated, .feature_gate = .external_semaphores },
+    .{ .resource = .event, .handle_kind = .metal_shared_event, .lane = .capability_gated, .feature_gate = .external_semaphores },
+};
+
+const metal_macos_external_interop_entries = portable_external_interop_entries ++ [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .texture, .handle_kind = .iosurface, .lane = .capability_gated, .feature_gate = .external_textures },
+} ++ metal_native_object_entries;
+
+const metal_ios_external_interop_entries = portable_external_interop_entries ++ [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .texture, .handle_kind = .iosurface, .lane = .capability_gated, .feature_gate = .external_textures },
+} ++ metal_native_object_entries;
+
+const external_interop_unsupported_entries = [_]ExternalInteropCapabilityEntry{
+    .{ .resource = .memory, .lane = .unsupported },
+    .{ .resource = .buffer, .lane = .unsupported },
+    .{ .resource = .texture, .lane = .unsupported },
+    .{ .resource = .semaphore, .lane = .unsupported },
+    .{ .resource = .event, .lane = .unsupported },
+};
+
 pub const ExternalResourceOwnership = enum {
     borrowed,
     transferred,
@@ -11527,6 +11731,37 @@ test "external texture descriptors validate backend and feature gates" {
         .handle = .{ .kind = .vulkan_semaphore, .value = 1 },
         .timeline = true,
     }).validate(.vulkan, .{ .external_semaphores = true });
+}
+
+test "external interop capability matrix classifies platform handle lanes" {
+    const no_features = DeviceFeatures{};
+    const external_features = DeviceFeatures{
+        .external_memory = true,
+        .external_textures = true,
+        .external_semaphores = true,
+    };
+
+    const linux_vulkan = externalInteropCapabilityMatrix(.vulkan, .linux, no_features, external_features);
+    try std.testing.expect(!linux_vulkan.supportsPortableWrapper(.memory));
+    try std.testing.expect(linux_vulkan.supports(.memory, .opaque_fd));
+    try std.testing.expect(linux_vulkan.supports(.texture, .vulkan_image));
+    try std.testing.expect(!linux_vulkan.supports(.texture, .win32_handle));
+    try std.testing.expectEqual(ExternalInteropLane.capability_gated, linux_vulkan.find(.memory, .opaque_fd).?.lane);
+    try std.testing.expectEqual(ExternalInteropLane.native_only, linux_vulkan.find(.texture, .vulkan_image).?.lane);
+
+    const windows_vulkan = externalInteropCapabilityMatrix(.vulkan, .windows, no_features, external_features);
+    try std.testing.expect(windows_vulkan.supports(.semaphore, .win32_handle));
+    try std.testing.expect(!windows_vulkan.supports(.semaphore, .opaque_fd));
+
+    const macos_metal = externalInteropCapabilityMatrix(.metal, .macos, external_features, external_features);
+    try std.testing.expect(macos_metal.supportsPortableWrapper(.texture));
+    try std.testing.expect(macos_metal.supports(.texture, .iosurface));
+    try std.testing.expect(macos_metal.supports(.event, .metal_shared_event));
+    try std.testing.expectEqual(ExternalInteropLane.native_only, macos_metal.find(.buffer, .metal_buffer).?.lane);
+
+    const unsupported = externalInteropCapabilityMatrix(.metal, .linux, external_features, external_features);
+    try std.testing.expectEqual(@as(usize, 0), unsupported.countEnabled());
+    try std.testing.expectEqual(ExternalInteropLane.unsupported, unsupported.find(.texture, null).?.lane);
 }
 
 test "native command insertion descriptors are explicit and gated" {

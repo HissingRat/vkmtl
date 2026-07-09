@@ -1,6 +1,6 @@
 # Period 41: External Interop Matrix
 
-Status: planned after Period40.
+Status: Phase 1 complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
@@ -18,6 +18,18 @@ validation examples for shared textures and synchronization.
 - List supported Vulkan handle types by platform.
 - List supported Metal shared texture/event paths by platform.
 - Distinguish portable, capability-gated, and native-only lanes.
+
+Phase 1 result:
+
+- `ExternalInteropCapabilityMatrix` reports the selected backend, platform,
+  usable feature gates, native feature gates, and static capability entries.
+- Vulkan entries distinguish Linux `opaque_fd`, Windows `win32_handle`, and
+  backend-native Vulkan object handles.
+- Metal entries distinguish Apple `IOSurface`, Metal buffer/texture objects,
+  and Metal shared events on macOS/iOS.
+- Each entry is classified as `portable`, `capability_gated`, `native_only`,
+  or `unsupported`, so diagnostics can describe why an import path is missing
+  before native import code runs.
 
 ### Phase 2: Vulkan External Memory/Image/Semaphore Import
 

@@ -108,6 +108,7 @@ conservative until the relevant backend period lands.
 | Native multi-surface presentation | Deferred | Deferred | Period 32+ driver parity plan native escape hatch |
 | Present-mode resolution | Portable runtime fallback | Portable runtime fallback | `PresentModeSupport` and `FramePacingDiagnostics` |
 | Native present-mode query | Deferred | Deferred | Period 32+ driver parity plan platform query |
+| External interop capability matrix | Platform handle matrix | Platform handle matrix | `Device.externalInteropCapabilityMatrix(...)` classifies portable, capability-gated, native-only, and unsupported lanes |
 | External memory / buffer wrappers | Portable runtime wrappers | Portable runtime wrappers | Feature-gated descriptors and lifetime tracking |
 | Native external memory import | Deferred | Deferred | Period 32+ driver parity plan native import |
 | External texture wrapper | Portable runtime wrapper | Portable runtime wrapper | `ExternalTexture` wrapper |

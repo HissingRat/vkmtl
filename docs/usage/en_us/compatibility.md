@@ -70,7 +70,8 @@ intent only.
 External memory, buffer, texture, semaphore, and shared-event interop use
 explicit platform/backend handle descriptors. Runtime wrappers validate
 ownership and backend compatibility, while native import and wait/signal
-lowering remain advanced feature-gated work.
+lowering remain advanced feature-gated work. `ExternalInteropCapabilityMatrix`
+classifies handle support by backend/platform before import is attempted.
 
 Tessellation is represented by `TessellationDescriptor` and remains an optional
 render pipeline extension, not a default portable render path.

@@ -303,8 +303,9 @@ dependencies.
 validation and the runtime `ExternalTexture` wrapper. Period 25 also exposes
 `ExternalMemory`, `ExternalBuffer`, `ExternalSemaphore`, `ExternalEvent`, and
 `ExternalSynchronizationDescriptor` for advanced interop validation. The
-example prints a clear unsupported-feature message until the selected backend
-exposes external texture import.
+example can use `Device.externalInteropCapabilityMatrix(...)` to explain which
+handle kinds are portable wrappers, capability-gated native imports, native-only
+objects, or unsupported on the selected backend/platform.
 
 Run it with:
 

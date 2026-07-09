@@ -2336,9 +2336,9 @@ obvious render and binding blockers.
 
 ## Period 41 Phase 1 Checklist
 
-- [ ] List supported Vulkan handle types by platform.
-- [ ] List supported Metal shared texture/event paths by platform.
-- [ ] Distinguish portable, capability-gated, and native-only lanes.
+- [x] List supported Vulkan handle types by platform.
+- [x] List supported Metal shared texture/event paths by platform.
+- [x] Distinguish portable, capability-gated, and native-only lanes.
 
 ## Period 41 Phase 2 Checklist
 

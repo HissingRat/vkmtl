@@ -150,6 +150,10 @@ wrapper 包括 `ExternalSemaphore` 和 `ExternalEvent`，分别由
 `CommandBuffer.commitWithExternalSynchronization(...)`，在 native wait/signal lowering
 完成前先做 portable backend/lifetime validation。Native handle import/export 仍是显式
 future backend work。
+`ExternalInteropCapabilityMatrix`、`ExternalInteropCapabilityEntry` 和
+`Device.externalInteropCapabilityMatrix(...)` 会按 backend/platform 列出可用 handle kind，
+并把路径分成 `portable`、`capability_gated`、`native_only` 或 `unsupported`。这用于在
+native import 代码运行前生成清晰诊断。
 
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、

@@ -33,6 +33,16 @@ pub fn main() !void {
         .vulkan => .vulkan_image,
         .metal => .metal_texture,
     };
+    const interop_matrix = device.externalInteropCapabilityMatrix();
+    if (interop_matrix.find(.texture, handle_kind)) |entry| {
+        std.debug.print("external texture capability: backend={s}, platform={s}, handle={s}, lane={s}, enabled={}\n", .{
+            @tagName(device.selectedBackend()),
+            @tagName(interop_matrix.platform),
+            @tagName(handle_kind),
+            @tagName(entry.lane),
+            interop_matrix.entryEnabled(entry),
+        });
+    }
 
     var texture = device.makeExternalTexture(.{
         .label = "example external texture",

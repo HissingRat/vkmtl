@@ -183,6 +183,11 @@ External synchronization wrappers include `ExternalSemaphore` and
 passed to `CommandBuffer.commitWithExternalSynchronization(...)` for portable
 backend/lifetime validation before native wait/signal lowering exists.
 Native handle import/export remains explicit future backend work.
+`ExternalInteropCapabilityMatrix`, `ExternalInteropCapabilityEntry`, and
+`Device.externalInteropCapabilityMatrix(...)` list handle kinds by
+backend/platform and classify each path as `portable`, `capability_gated`,
+`native_only`, or `unsupported`. This gives diagnostics a stable source before
+native import code runs.
 
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and

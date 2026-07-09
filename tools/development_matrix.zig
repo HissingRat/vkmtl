@@ -141,7 +141,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/external_texture",
         .run_step = "run-external-texture",
         .kind = .render,
-        .backend_expectation = "external texture descriptor validation and wrapper feature gate",
+        .backend_expectation = "external texture capability matrix, descriptor validation, and wrapper feature gate",
     },
     .{
         .name = "streaming_texture",
@@ -838,6 +838,7 @@ pub const PlatformInteropFeature = enum {
     native_multi_surface,
     present_mode_resolution,
     native_present_mode_query,
+    external_interop_capability_matrix,
     external_memory_and_buffer_wrappers,
     native_external_memory_import,
     external_texture_wrapper,
@@ -894,6 +895,13 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
         .metal_status = .deferred_native_lowering,
         .deferred_to = "Period 32+ driver parity plan",
         .validation = "surface-specific native present-mode/display-sync support remains conservative",
+    },
+    .{
+        .feature = .external_interop_capability_matrix,
+        .public_api = "ExternalInteropCapabilityMatrix and Device.externalInteropCapabilityMatrix",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "external handle support is classified by backend, platform, resource, handle kind, and interop lane",
     },
     .{
         .feature = .external_memory_and_buffer_wrappers,

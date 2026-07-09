@@ -436,6 +436,7 @@ Tracked in `docs/develop/period41/`.
 - [ ] Metal shared texture/event import.
 - [ ] External texture sampling/presentation examples.
 - [ ] Platform lifetime and safety docs.
+- [x] External interop capability matrix.
 
 Expected result: external interop has real platform-specific paths, not only
 descriptor wrappers.

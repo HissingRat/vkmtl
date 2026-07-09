@@ -58,6 +58,7 @@ Sparse buffer/texture 未来映射到 Vulkan sparse resource 和 Metal tiled/spa
 External memory、buffer、texture、semaphore 和 shared-event interop 使用显式
 platform/backend handle descriptor。Runtime wrapper 会校验 ownership 和 backend
 compatibility；native import 和 wait/signal lowering 仍是高级 feature-gated work。
+`ExternalInteropCapabilityMatrix` 会在 import 前按 backend/platform 分类 handle support。
 
 Tessellation 由 `TessellationDescriptor` 表示，仍然是 optional render pipeline extension，不是默认
 portable render path。`TessellationPatchDrawDescriptor` 可以生成 Vulkan / Metal 的 public
