@@ -302,6 +302,9 @@ Update/refit 需要 `DeviceFeatures.acceleration_structure_update` 或
 `Device.planTopLevelAccelerationStructureLayout(...)` 用 backend-neutral 方式描述 TLAS
 instance metadata：transform、mask、custom index、SBT record offset、material index、
 triangle instance、procedural AABB instance，以及 mixed geometry 要求。
+`RayQueryDescriptor`、`RayQueryPlan` 和 `Device.planRayQuery(...)` 描述 Vulkan ray query
+shader requirements。vkmtl 目前会把 Metal ray query 报成 unsupported，因为 Metal 在这个
+抽象层没有直接等价的 shader feature。
 `RayTracingPipelineLowering` 和
 `Device.planRayTracingPipelineLowering(...)` 会通过 native feature report 暴露 Vulkan shader
 group count 或 Metal function-table metadata，先于 executable ray tracing pipeline 接入。

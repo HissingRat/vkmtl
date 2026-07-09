@@ -5275,6 +5275,15 @@ pub const Device = struct {
         );
     }
 
+    pub fn planRayQuery(self: Device, descriptor: core.RayQueryDescriptor) core.AdvancedFeatureError!core.RayQueryPlan {
+        return try core.RayQueryPlan.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+            self.limits(),
+        );
+    }
+
     pub fn validateDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -6047,6 +6056,11 @@ pub const WindowContext = struct {
     ) core.AdvancedFeatureError!core.TopLevelAccelerationStructureLayoutPlan {
         const device_view = self.device();
         return try device_view.planTopLevelAccelerationStructureLayout(descriptor);
+    }
+
+    pub fn planRayQuery(self: *WindowContext, descriptor: core.RayQueryDescriptor) core.AdvancedFeatureError!core.RayQueryPlan {
+        const device_view = self.device();
+        return try device_view.planRayQuery(descriptor);
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -7865,6 +7879,49 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
             },
         }),
     );
+}
+
+test "runtime device plans ray query support from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.native_features.ray_tracing = true;
+    report.native_features.ray_query = true;
+    report.limits.max_ray_tracing_recursion_depth = 4;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test ray query adapter",
+        },
+        .capability_report = report,
+    };
+
+    const plan = try device.planRayQuery(.{
+        .shader_stage = .fragment,
+        .max_traversal_depth = 2,
+    });
+    try std.testing.expectEqual(core.Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(core.RayQueryLoweringMode.vulkan_ray_query, plan.lowering);
+    try std.testing.expectEqual(core.ShaderStage.fragment, plan.shader_stage);
+    try std.testing.expectEqual(@as(u32, 2), plan.max_traversal_depth);
+
+    const metal_device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal ray query adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, metal_device.planRayQuery(.{}));
 }
 
 test "runtime plans driver pipeline caches from native feature reports" {

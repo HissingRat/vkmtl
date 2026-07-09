@@ -2282,9 +2282,9 @@ obvious render and binding blockers.
 
 ## Period 39 Phase 3 Checklist
 
-- [ ] Define shader and pipeline requirements for ray query.
-- [ ] Lower to Vulkan ray query where supported.
-- [ ] Document Metal support or unsupported behavior precisely.
+- [x] Define shader and pipeline requirements for ray query.
+- [x] Lower to Vulkan ray query where supported.
+- [x] Document Metal support or unsupported behavior precisely.
 
 ## Period 39 Phase 4 Checklist
 

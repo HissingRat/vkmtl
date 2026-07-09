@@ -43,9 +43,12 @@ larger SBT layouts.
 
 ### Phase 3: Ray Query Where Supported
 
-- Define shader and pipeline requirements for ray query.
-- Lower to Vulkan ray query where supported.
-- Document Metal support or unsupported behavior precisely.
+- Done. `RayQueryDescriptor` defines shader-stage, traversal-depth,
+  procedural, and candidate-intersection requirements.
+- Done. `RayQueryPlan` lowers to Vulkan ray query when the selected native
+  feature report exposes `ray_query`.
+- Done. Metal ray query currently reports typed unsupported behavior because
+  there is no direct portable equivalent in this abstraction layer.
 
 ### Phase 4: Complex SBT Layouts And Callable Records
 

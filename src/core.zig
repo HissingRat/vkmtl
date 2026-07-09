@@ -3758,6 +3758,64 @@ pub const RayDispatchPlan = struct {
     }
 };
 
+pub const RayQueryLoweringMode = enum {
+    vulkan_ray_query,
+};
+
+pub const RayQueryDescriptor = struct {
+    shader_stage: ShaderStage = .compute,
+    max_traversal_depth: u32 = 1,
+    uses_procedural_geometry: bool = false,
+    uses_candidate_intersection: bool = false,
+
+    pub fn validate(self: RayQueryDescriptor, backend: Backend, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (backend != .vulkan) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (!features.ray_tracing or !features.ray_query) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (self.max_traversal_depth == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        if (limits.max_ray_tracing_recursion_depth != 0 and self.max_traversal_depth > limits.max_ray_tracing_recursion_depth) {
+            return AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        switch (self.shader_stage) {
+            .compute, .fragment => {},
+            else => return AdvancedFeatureError.InvalidRayTracingPipeline,
+        }
+        if (self.uses_procedural_geometry and !features.ray_tracing_procedural_geometry) {
+            return AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry;
+        }
+        if (self.uses_candidate_intersection and !features.ray_tracing_custom_intersection) {
+            return AdvancedFeatureError.UnsupportedRayTracingCustomIntersection;
+        }
+    }
+};
+
+pub const RayQueryPlan = struct {
+    backend: Backend,
+    lowering: RayQueryLoweringMode,
+    shader_stage: ShaderStage,
+    max_traversal_depth: u32,
+    requires_acceleration_structure: bool = true,
+    requires_ray_query: bool = true,
+    requires_procedural_geometry: bool = false,
+    requires_custom_intersection: bool = false,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: RayQueryDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!RayQueryPlan {
+        try descriptor.validate(backend, features, limits);
+        return .{
+            .backend = backend,
+            .lowering = .vulkan_ray_query,
+            .shader_stage = descriptor.shader_stage,
+            .max_traversal_depth = descriptor.max_traversal_depth,
+            .requires_procedural_geometry = descriptor.uses_procedural_geometry,
+            .requires_custom_intersection = descriptor.uses_candidate_intersection,
+        };
+    }
+};
+
 pub const DepthBiasDescriptor = struct {
     enabled: bool = false,
     constant: f32 = 0,
@@ -11741,6 +11799,47 @@ test "ray dispatch plan combines sbt layout and dimensions" {
     try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, (RayDispatchDescriptor{
         .width = 0,
     }).validate(.{ .ray_tracing = true }));
+}
+
+test "ray query plan gates Vulkan support and shader requirements" {
+    const features = DeviceFeatures{
+        .ray_tracing = true,
+        .ray_query = true,
+        .ray_tracing_procedural_geometry = true,
+        .ray_tracing_custom_intersection = true,
+    };
+    const limits = DeviceLimits{
+        .max_ray_tracing_recursion_depth = 4,
+    };
+
+    const plan = try RayQueryPlan.fromDescriptor(.vulkan, .{
+        .shader_stage = .compute,
+        .max_traversal_depth = 2,
+        .uses_procedural_geometry = true,
+        .uses_candidate_intersection = true,
+    }, features, limits);
+    try std.testing.expectEqual(Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(RayQueryLoweringMode.vulkan_ray_query, plan.lowering);
+    try std.testing.expectEqual(ShaderStage.compute, plan.shader_stage);
+    try std.testing.expectEqual(@as(u32, 2), plan.max_traversal_depth);
+    try std.testing.expect(plan.requires_acceleration_structure);
+    try std.testing.expect(plan.requires_procedural_geometry);
+    try std.testing.expect(plan.requires_custom_intersection);
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracing, RayQueryPlan.fromDescriptor(.metal, .{}, features, limits));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracing, RayQueryPlan.fromDescriptor(.vulkan, .{}, .{ .ray_tracing = true }, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, RayQueryPlan.fromDescriptor(.vulkan, .{
+        .max_traversal_depth = 5,
+    }, features, limits));
+    try std.testing.expectError(AdvancedFeatureError.InvalidRayTracingPipeline, RayQueryPlan.fromDescriptor(.vulkan, .{
+        .shader_stage = .vertex,
+    }, features, limits));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry, RayQueryPlan.fromDescriptor(.vulkan, .{
+        .uses_procedural_geometry = true,
+    }, .{
+        .ray_tracing = true,
+        .ray_query = true,
+    }, limits));
 }
 
 test "ray tracing descriptors reject missing groups and invalid limits" {

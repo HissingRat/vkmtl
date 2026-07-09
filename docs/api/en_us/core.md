@@ -367,6 +367,10 @@ separate destination AS.
 TLAS instance metadata: transforms, masks, custom indices, SBT record offsets,
 material indices, triangle instances, procedural AABB instances, and mixed
 geometry requirements.
+`RayQueryDescriptor`, `RayQueryPlan`, and `Device.planRayQuery(...)` describe
+Vulkan ray-query shader requirements. vkmtl currently reports Metal ray query
+as unsupported because Metal has no direct equivalent shader feature in this
+abstraction layer.
 `RayTracingPipelineLowering` and `Device.planRayTracingPipelineLowering(...)`
 expose Vulkan shader-group counts or Metal function-table metadata from native
 feature reports before executable ray tracing pipelines are enabled.
