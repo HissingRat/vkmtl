@@ -2324,9 +2324,9 @@ obvious render and binding blockers.
 
 ## Period 40 Phase 5 Checklist
 
-- [ ] Map to Metal object/mesh style capabilities where available.
-- [ ] Keep naming and public API backend-neutral.
-- [ ] Report precise unsupported reasons where unavailable.
+- [x] Map to Metal object/mesh style capabilities where available.
+- [x] Keep naming and public API backend-neutral.
+- [x] Report precise unsupported reasons where unavailable.
 
 ## Period 40 Phase 6 Checklist
 

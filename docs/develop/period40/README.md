@@ -1,6 +1,6 @@
 # Period 40: Advanced Geometry Draw Paths
 
-Status: Phase 4 contract work complete.
+Status: Phase 5 contract work complete.
 
 Goal: turn tessellation and mesh/task shader support from descriptor/lowering
 probes into real draw paths with backend-native execution where supported.
@@ -88,6 +88,15 @@ Phase 4 result:
 - Map to Metal object/mesh style capabilities where available.
 - Keep naming and public API backend-neutral.
 - Report precise unsupported reasons where unavailable.
+
+Phase 5 result:
+
+- `MetalMeshDispatchLowering` maps the public mesh/task model to Metal
+  mesh/object metadata.
+- `Device.planMetalMeshDispatch(...)` keeps the entry point names, threadgroup
+  counts, and object-stage metadata behind backend-neutral public descriptors.
+- Backend mismatches and unavailable mesh support return typed
+  `UnsupportedMeshShaders` / `UnsupportedTaskShaders` errors.
 
 ### Phase 6: Advanced Geometry Examples And Validation
 

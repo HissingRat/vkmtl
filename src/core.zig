@@ -3206,6 +3206,14 @@ pub const MeshDispatchPlan = struct {
         };
         return VulkanMeshDispatchLowering.fromPlan(self, lowering);
     }
+
+    pub fn metalLowering(self: MeshDispatchPlan) AdvancedFeatureError!MetalMeshDispatchLowering {
+        const lowering = switch (self.lowering) {
+            .vulkan => return AdvancedFeatureError.UnsupportedMeshShaders,
+            .metal => |metal| metal,
+        };
+        return MetalMeshDispatchLowering.fromPlan(self, lowering);
+    }
 };
 
 pub const VulkanMeshDispatchLowering = struct {
@@ -3233,6 +3241,34 @@ pub const VulkanMeshDispatchLowering = struct {
 
     pub fn hasTaskStage(self: VulkanMeshDispatchLowering) bool {
         return self.task_entry_point != null;
+    }
+};
+
+pub const MetalMeshDispatchLowering = struct {
+    mesh_entry_point: []const u8,
+    object_entry_point: ?[]const u8,
+    mesh_threads_per_threadgroup: u32,
+    object_threads_per_threadgroup: u32,
+    group_count_x: u32,
+    group_count_y: u32,
+    group_count_z: u32,
+    total_threadgroups: u64,
+
+    pub fn fromPlan(plan: MeshDispatchPlan, lowering: MetalMeshPipelineLowering) MetalMeshDispatchLowering {
+        return .{
+            .mesh_entry_point = lowering.mesh_entry_point,
+            .object_entry_point = lowering.object_entry_point,
+            .mesh_threads_per_threadgroup = lowering.mesh_threads_per_threadgroup,
+            .object_threads_per_threadgroup = lowering.object_threads_per_threadgroup,
+            .group_count_x = plan.threadgroup_count_x,
+            .group_count_y = plan.threadgroup_count_y,
+            .group_count_z = plan.threadgroup_count_z,
+            .total_threadgroups = plan.total_threadgroups,
+        };
+    }
+
+    pub fn hasObjectStage(self: MetalMeshDispatchLowering) bool {
+        return self.object_entry_point != null;
     }
 };
 
@@ -12035,6 +12071,38 @@ test "Vulkan mesh dispatch lowering records draw mesh task metadata" {
         .pipeline = .{ .mesh_entry_point = "mesh_main" },
         .threadgroup_count_x = 0,
     }).validate(.{ .mesh_shaders = true }, .{ .max_mesh_threads_per_threadgroup = 128 }));
+}
+
+test "Metal mesh dispatch lowering maps task metadata to object stage" {
+    const plan = try MeshDispatchPlan.fromDescriptor(.metal, .{
+        .pipeline = .{
+            .mesh_entry_point = "mesh_main",
+            .task_entry_point = "object_main",
+            .mesh_threads_per_threadgroup = 32,
+            .task_threads_per_threadgroup = 8,
+        },
+        .threadgroup_count_x = 2,
+        .threadgroup_count_y = 3,
+        .threadgroup_count_z = 4,
+    }, .{ .mesh_shaders = true, .task_shaders = true }, .{
+        .max_mesh_threads_per_threadgroup = 64,
+        .max_task_threads_per_threadgroup = 16,
+    });
+
+    const lowering = try plan.metalLowering();
+    try std.testing.expectEqualStrings("mesh_main", lowering.mesh_entry_point);
+    try std.testing.expectEqualStrings("object_main", lowering.object_entry_point.?);
+    try std.testing.expectEqual(@as(u32, 8), lowering.object_threads_per_threadgroup);
+    try std.testing.expectEqual(@as(u32, 2), lowering.group_count_x);
+    try std.testing.expectEqual(@as(u32, 3), lowering.group_count_y);
+    try std.testing.expectEqual(@as(u32, 4), lowering.group_count_z);
+    try std.testing.expectEqual(@as(u64, 24), lowering.total_threadgroups);
+    try std.testing.expect(lowering.hasObjectStage());
+
+    const vulkan_plan = try MeshDispatchPlan.fromDescriptor(.vulkan, .{
+        .pipeline = .{ .mesh_entry_point = "mesh_main" },
+    }, .{ .mesh_shaders = true }, .{ .max_mesh_threads_per_threadgroup = 64 });
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedMeshShaders, vulkan_plan.metalLowering());
 }
 
 test "advanced geometry shader stages are classified for Slang reflection" {

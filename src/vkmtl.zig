@@ -166,6 +166,7 @@ pub const MeshPipelineLowering = core.MeshPipelineLowering;
 pub const MeshDispatchDescriptor = core.MeshDispatchDescriptor;
 pub const MeshDispatchPlan = core.MeshDispatchPlan;
 pub const VulkanMeshDispatchLowering = core.VulkanMeshDispatchLowering;
+pub const MetalMeshDispatchLowering = core.MetalMeshDispatchLowering;
 pub const AccelerationStructureKind = core.AccelerationStructureKind;
 pub const AccelerationStructureDescriptor = core.AccelerationStructureDescriptor;
 pub const AccelerationStructureBuildSizes = core.AccelerationStructureBuildSizes;

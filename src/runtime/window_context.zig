@@ -5080,6 +5080,12 @@ pub const Device = struct {
         return try plan.vulkanLowering();
     }
 
+    pub fn planMetalMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.MetalMeshDispatchLowering {
+        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedMeshShaders;
+        const plan = try self.planMeshDispatch(descriptor);
+        return try plan.metalLowering();
+    }
+
     pub fn validateAccelerationStructureDescriptor(self: Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features());
     }
@@ -7493,6 +7499,46 @@ test "runtime device plans Vulkan mesh dispatch from native capabilities" {
     try std.testing.expectEqual(@as(u32, 5), lowering.group_count_x);
     try std.testing.expectEqual(@as(u32, 2), lowering.group_count_y);
     try std.testing.expectEqual(@as(u64, 10), lowering.total_threadgroups);
+}
+
+test "runtime device plans Metal mesh dispatch from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.metal);
+    report.features.mesh_shaders = false;
+    report.features.task_shaders = false;
+    report.native_features.mesh_shaders = true;
+    report.native_features.task_shaders = true;
+    report.limits.max_mesh_threads_per_threadgroup = 64;
+    report.limits.max_task_threads_per_threadgroup = 16;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal mesh dispatch adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.MeshDispatchDescriptor{
+        .pipeline = .{
+            .mesh_entry_point = "mesh_main",
+            .task_entry_point = "object_main",
+            .mesh_threads_per_threadgroup = 32,
+            .task_threads_per_threadgroup = 8,
+        },
+        .threadgroup_count_x = 3,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedMeshShaders, device.validateMeshDispatchDescriptor(descriptor));
+
+    const lowering = try device.planMetalMeshDispatch(descriptor);
+    try std.testing.expectEqualStrings("object_main", lowering.object_entry_point.?);
+    try std.testing.expectEqual(@as(u32, 3), lowering.group_count_x);
+    try std.testing.expectEqual(@as(u64, 3), lowering.total_threadgroups);
 }
 
 test "runtime device plans acceleration structure builds from native capabilities" {
