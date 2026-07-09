@@ -16,7 +16,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation lowering plans, and mesh/task lowering plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
-- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, Metal mapping, native advanced closure, and Period 29 routing.
+- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, and Period 29 routing.
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-scene`
 
 ## Optional Rows
@@ -176,6 +176,17 @@ conservative until the relevant backend period lands.
 | Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make first ray traced scenes pixel-producing; Period33/34 own the full mesh/procedural scene examples |
 | Full native RT mesh scene | Mesh build-input path implemented and superseded by Period34 procedural scene for the Vulkan example | Visible Metal full mesh scene | Period33 uses user mesh buffers for `ray_traced_scene`; Vulkan mesh validation happened before the Period34 procedural replacement |
 | Procedural RT geometry and custom intersection | AABB build-input lowering, intersection SPIR-V precompile, procedural hit groups, SBT records, and procedural `ray_traced_scene` marker implemented; supported-device visual validation pending | Pixel-producing scene path uses shared scene data; driver-level procedural/intersection-function-table execution is Period39 | Period34 closes the Vulkan procedural path; Period35 adds shared scene data; Period39 owns mixed TLAS and Metal procedural parity |
+
+## Period 39 Ray Tracing Completeness Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| AS maintenance | Update/refit/compaction planning from native features | Update/refit/compaction planning from native features | `Device.planAccelerationStructureMaintenance(...)` |
+| Many-instance TLAS metadata | Backend-neutral instance layout plan | Backend-neutral instance layout plan | `Device.planTopLevelAccelerationStructureLayout(...)` |
+| Ray query | Vulkan ray query planning | Typed unsupported | `Device.planRayQuery(...)` |
+| Complex SBT and callable records | Complex SBT record/range planning | Complex SBT record/range planning | `Device.planComplexShaderBindingTable(...)` |
+| RT stress planning | Deterministic stress plan | Deterministic stress plan without ray query | `Device.planRayTracingStress(...)` |
+| Native GPU stress evidence | Deferred | Deferred | Period44 device-matrix runs |
 
 ## Period 37 Memory, Heaps, And Residency Expectations
 

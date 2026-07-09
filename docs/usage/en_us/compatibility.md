@@ -82,6 +82,12 @@ features.
 Ray tracing descriptors are isolated from the normal render pipeline because
 Vulkan and Metal differ in acceleration structure, pipeline, and shader table
 details.
+Ray tracing completeness APIs now include AS maintenance planning, TLAS
+instance metadata planning, Vulkan ray query planning, complex SBT planning,
+and deterministic RT stress planning. Metal ray query is reported as
+unsupported because there is no direct equivalent shader feature in this layer.
+Native GPU stress evidence remains part of the backend/device validation
+matrix.
 
 Driver-level pipeline caches and Metal binary archives use explicit cache
 identity descriptors. They are separate from Period 8 object-cache diagnostics.

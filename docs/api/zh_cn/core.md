@@ -316,6 +316,10 @@ ray tracing 差异通过 `MetalRayTracingMappingDescriptor`、`MetalRayTracingMa
 `Device.planComplexShaderBindingTable(...)` 会校验更大的 miss/hit/callable record layout、
 hit-group range、procedural hit range、SBT total record limit，以及 callable shader feature
 要求。
+`RayTracingStressDescriptor`、`RayTracingStressPlan` 和
+`Device.planRayTracingStress(...)` 会把 AS maintenance、TLAS instance metadata、complex
+SBT layout、可选 ray query、dispatch dimensions 和 iteration count 合成一个确定性的 stress
+plan。
 
 Period 29 新增这些 advanced path 的公开 runtime contract：
 `AccelerationStructure` / `Device.makeAccelerationStructure(...)`、

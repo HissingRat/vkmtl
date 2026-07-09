@@ -3914,6 +3914,96 @@ pub const RayQueryPlan = struct {
     }
 };
 
+pub const RayTracingStressDescriptor = struct {
+    iterations: u32 = 1,
+    tlas_layout: ?TopLevelAccelerationStructureLayoutDescriptor = null,
+    maintenance_operations: []const AccelerationStructureMaintenanceDescriptor = &.{},
+    complex_sbt: ?ComplexShaderBindingTableDescriptor = null,
+    ray_query: ?RayQueryDescriptor = null,
+    dispatch: ?RayDispatchDescriptor = null,
+
+    pub fn validate(self: RayTracingStressDescriptor, backend: Backend, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+        if (self.iterations == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        if (self.tlas_layout == null and
+            self.maintenance_operations.len == 0 and
+            self.complex_sbt == null and
+            self.ray_query == null and
+            self.dispatch == null)
+        {
+            return AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        if (self.tlas_layout) |layout| try layout.validate(features, limits);
+        for (self.maintenance_operations) |operation| try operation.validate(features);
+        if (self.complex_sbt) |sbt| try sbt.validate(features, limits);
+        if (self.ray_query) |query| try query.validate(backend, features, limits);
+        if (self.dispatch) |dispatch| {
+            const sbt = self.complex_sbt orelse return AdvancedFeatureError.InvalidShaderBindingTable;
+            _ = try RayDispatchPlan.fromDescriptors(sbt.table, dispatch, features, limits);
+        }
+    }
+};
+
+pub const RayTracingStressPlan = struct {
+    backend: Backend,
+    iterations: u32,
+    tlas_instances: u32 = 0,
+    procedural_instances: u32 = 0,
+    maintenance_operations: u32 = 0,
+    compaction_operations: u32 = 0,
+    complex_sbt_records: u32 = 0,
+    callable_records: u32 = 0,
+    ray_query_enabled: bool = false,
+    dispatch_rays_per_iteration: u64 = 0,
+    total_validation_items: u32 = 0,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: RayTracingStressDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) AdvancedFeatureError!RayTracingStressPlan {
+        try descriptor.validate(backend, features, limits);
+        var plan = RayTracingStressPlan{
+            .backend = backend,
+            .iterations = descriptor.iterations,
+        };
+        if (descriptor.tlas_layout) |layout| {
+            const tlas_plan = try layout.plan(backend, features, limits);
+            plan.tlas_instances = tlas_plan.instance_count;
+            plan.procedural_instances = tlas_plan.procedural_instances;
+            plan.total_validation_items += 1;
+        }
+        for (descriptor.maintenance_operations) |operation| {
+            const maintenance = try AccelerationStructureMaintenancePlan.fromDescriptor(backend, operation, features);
+            plan.maintenance_operations += 1;
+            if (maintenance.isCompaction()) plan.compaction_operations += 1;
+        }
+        plan.total_validation_items += @intCast(descriptor.maintenance_operations.len);
+        if (descriptor.complex_sbt) |sbt| {
+            const sbt_plan = try ComplexShaderBindingTablePlan.fromDescriptor(sbt, features, limits);
+            plan.complex_sbt_records = sbt_plan.total_records;
+            plan.callable_records = sbt_plan.callable_records;
+            plan.total_validation_items += 1;
+        }
+        if (descriptor.ray_query) |query| {
+            _ = try RayQueryPlan.fromDescriptor(backend, query, features, limits);
+            plan.ray_query_enabled = true;
+            plan.total_validation_items += 1;
+        }
+        if (descriptor.dispatch) |dispatch| {
+            const sbt = descriptor.complex_sbt orelse return AdvancedFeatureError.InvalidShaderBindingTable;
+            const dispatch_plan = try RayDispatchPlan.fromDescriptors(sbt.table, dispatch, features, limits);
+            plan.dispatch_rays_per_iteration = dispatch_plan.total_rays;
+            plan.total_validation_items += 1;
+        }
+        return plan;
+    }
+
+    pub fn totalDispatchRays(self: RayTracingStressPlan) u64 {
+        return @as(u64, self.iterations) *| self.dispatch_rays_per_iteration;
+    }
+};
+
 pub const DepthBiasDescriptor = struct {
     enabled: bool = false,
     constant: f32 = 0,
@@ -12004,6 +12094,99 @@ test "ray query plan gates Vulkan support and shader requirements" {
         .ray_tracing = true,
         .ray_query = true,
     }, limits));
+}
+
+test "ray tracing stress plan combines maintenance tlas sbt query and dispatch" {
+    const instances = [_]TopLevelAccelerationStructureInstanceDescriptor{
+        .{ .geometry_kind = .triangles, .material_index = 1 },
+        .{ .geometry_kind = .aabbs, .shader_binding_table_record_offset = 1 },
+    };
+    const maintenance = [_]AccelerationStructureMaintenanceDescriptor{
+        .{
+            .acceleration_structure = .{
+                .kind = .bottom_level,
+                .primitive_count = 8,
+                .allow_update = true,
+            },
+            .operation = .update,
+        },
+        .{
+            .acceleration_structure = .{
+                .kind = .bottom_level,
+                .primitive_count = 8,
+            },
+            .operation = .compact,
+            .source_result_size = 4096,
+            .compacted_size_hint = 2048,
+        },
+    };
+    const hit_ranges = [_]ShaderBindingTableHitGroupRangeDescriptor{
+        .{ .first_record = 0, .record_count = 1 },
+        .{ .hit_group_kind = .procedural, .first_record = 1, .record_count = 1 },
+    };
+    const features = DeviceFeatures{
+        .acceleration_structures = true,
+        .acceleration_structure_update = true,
+        .acceleration_structure_refit = true,
+        .acceleration_structure_compaction = true,
+        .ray_tracing = true,
+        .ray_query = true,
+        .ray_tracing_procedural_geometry = true,
+        .ray_tracing_custom_intersection = true,
+        .ray_tracing_callable_shaders = true,
+    };
+    const limits = DeviceLimits{
+        .max_acceleration_structure_instances = 16,
+        .max_shader_binding_table_records = 16,
+        .shader_binding_table_alignment = 64,
+        .max_ray_tracing_recursion_depth = 4,
+    };
+    const plan = try RayTracingStressPlan.fromDescriptor(.vulkan, .{
+        .iterations = 3,
+        .tlas_layout = .{
+            .instances = instances[0..],
+            .allow_mixed_geometry = true,
+            .material_table_entries = 4,
+        },
+        .maintenance_operations = maintenance[0..],
+        .complex_sbt = .{
+            .table = .{
+                .stride = 64,
+                .ray_generation_count = 1,
+                .miss_count = 1,
+                .hit_count = 2,
+                .callable_count = 1,
+            },
+            .hit_group_ranges = hit_ranges[0..],
+        },
+        .ray_query = .{
+            .shader_stage = .compute,
+            .max_traversal_depth = 2,
+        },
+        .dispatch = .{
+            .width = 16,
+            .height = 8,
+        },
+    }, features, limits);
+    try std.testing.expectEqual(Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(@as(u32, 3), plan.iterations);
+    try std.testing.expectEqual(@as(u32, 2), plan.tlas_instances);
+    try std.testing.expectEqual(@as(u32, 1), plan.procedural_instances);
+    try std.testing.expectEqual(@as(u32, 2), plan.maintenance_operations);
+    try std.testing.expectEqual(@as(u32, 1), plan.compaction_operations);
+    try std.testing.expectEqual(@as(u32, 5), plan.complex_sbt_records);
+    try std.testing.expectEqual(@as(u32, 1), plan.callable_records);
+    try std.testing.expect(plan.ray_query_enabled);
+    try std.testing.expectEqual(@as(u64, 128), plan.dispatch_rays_per_iteration);
+    try std.testing.expectEqual(@as(u64, 384), plan.totalDispatchRays());
+    try std.testing.expectEqual(@as(u32, 6), plan.total_validation_items);
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidShaderBindingTable, RayTracingStressPlan.fromDescriptor(.vulkan, .{
+        .dispatch = .{ .width = 1 },
+    }, features, limits));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedRayTracing, RayTracingStressPlan.fromDescriptor(.metal, .{
+        .ray_query = .{},
+    }, features, limits));
 }
 
 test "ray tracing descriptors reject missing groups and invalid limits" {

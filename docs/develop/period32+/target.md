@@ -71,9 +71,11 @@ Period32+ work is split into concrete periods:
   rules. Native Vulkan pipeline cache/library persistence, Metal binary
   archives, and GPU-scale table pressure evidence remain Period44 validation
   work after backend lowering exists.
-- Period39: ray tracing completeness. This closes ray query, acceleration
-  structure update/refit/compaction, large instance sets, and complex SBT
-  layouts beyond the Period35 scene.
+- Period39: ray tracing completeness. This closes portable planning and
+  validation contracts for ray query, acceleration structure
+  update/refit/compaction, large instance sets, complex SBT layouts, and RT
+  stress plans beyond the Period35 scene. Native GPU stress evidence remains
+  Period44 work.
 - Period40: advanced geometry draw paths. This turns tessellation and
   mesh/task shader support from descriptor probes into backend-native draw
   paths where supported.
@@ -105,7 +107,7 @@ The current routing for the remaining Vulkan/Metal parity list is:
 | sparse/tiled residency long-run pressure tests | Period37 for deterministic churn planning; Period44 for GPU soak evidence |
 | descriptor indexing / argument buffer large table pressure tests | Period38 for portable planning; Period44 for GPU-scale device evidence |
 | pipeline library / binary archive / cache production persistence | Period38 for compatibility contract; Period44 for native persistence evidence |
-| ray query, AS update/compaction, instances, procedural parity, complex SBT | Period39, with current procedural scene parity closed first in Period35 |
+| ray query, AS update/compaction, instances, procedural parity, complex SBT | Period39 for portable planning; Period44 for native GPU/device evidence |
 | tessellation and mesh/task shader real lowering and draw paths | Period40 |
 | external memory / texture / sync platform interop matrix | Period41 |
 | format/copy/layout/depth-stencil/MSAA edge semantics | Period42 |

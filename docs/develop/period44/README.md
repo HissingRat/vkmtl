@@ -47,6 +47,9 @@ examples, and long-running soak tests for resource churn.
   update-after-bind pressure, Vulkan pipeline cache/library persistence, and
   Metal binary archive persistence on supported hosts once the backend lowering
   exists.
+- Validate native RT stress runs for AS maintenance, many-instance TLAS,
+  complex SBT, Vulkan ray query, and Metal procedural intersection-table paths
+  on supported hosts once backend lowering exists.
 - Keep soak failures actionable and scoped.
 
 ### Phase 5: Release Readiness And Parity Report

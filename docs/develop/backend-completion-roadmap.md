@@ -403,13 +403,15 @@ evidence.
 
 Tracked in `docs/develop/period39/`.
 
-- [ ] AS update/refit/compaction.
-- [ ] Many-instance TLAS metadata.
-- [ ] Ray query where supported.
-- [ ] Complex SBT layouts and callable records.
+- [x] AS update/refit/compaction planning.
+- [x] Many-instance TLAS metadata planning.
+- [x] Ray query where supported.
+- [x] Complex SBT layouts and callable records.
+- [x] Deterministic RT stress planning.
 
 Expected result: RT moves beyond the reference scene into common engine-scale
-maintenance and dispatch patterns.
+maintenance and dispatch patterns. Native GPU stress evidence remains Period44
+device-matrix work.
 
 ## Wave 21: Advanced Geometry Draw Paths
 

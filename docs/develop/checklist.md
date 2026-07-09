@@ -2294,9 +2294,9 @@ obvious render and binding blockers.
 
 ## Period 39 Phase 5 Checklist
 
-- [ ] Add deterministic RT stress cases beyond the reference scene.
-- [ ] Validate AS maintenance and SBT stress on supported devices.
-- [ ] Update device matrix with RT feature coverage.
+- [x] Add deterministic RT stress cases beyond the reference scene.
+- [x] Validate AS maintenance and SBT stress planning on supported devices.
+- [x] Update device matrix with RT feature coverage.
 
 ## Period 40 Phase 1 Checklist
 

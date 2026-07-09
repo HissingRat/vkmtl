@@ -384,6 +384,10 @@ tracing differences are explicit through `MetalRayTracingMappingDescriptor`,
 `Device.planComplexShaderBindingTable(...)` validate larger miss/hit/callable
 record layouts, hit-group ranges, procedural hit ranges, total SBT record
 limits, and callable shader feature requirements.
+`RayTracingStressDescriptor`, `RayTracingStressPlan`, and
+`Device.planRayTracingStress(...)` combine AS maintenance, TLAS instance
+metadata, complex SBT layout, optional ray query, dispatch dimensions, and
+iteration count into one deterministic stress plan.
 
 Period 29 adds public runtime contracts for those advanced paths:
 `AccelerationStructure` and `Device.makeAccelerationStructure(...)`,

@@ -41,6 +41,9 @@ Current cases:
   capability-gated.
 - `ray_tracing_native_parity`: ray tracing planning, Metal mapping, native
   advanced closure, and future Period 29 assignments stay explicit.
+- `ray_tracing_completeness`: AS maintenance, many-instance TLAS metadata, ray
+  query support, complex SBT layout, callable records, and RT stress plans stay
+  capability-gated and deterministic.
 
 The matrix is intentionally tied to unit-test names until backend CI can run
 the same cases through native Vulkan and Metal devices.

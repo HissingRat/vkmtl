@@ -67,6 +67,10 @@ path 都被视为 backend-gated advanced feature。
 
 Ray tracing descriptor 和普通 render pipeline 隔离，因为 Vulkan 和 Metal 在 acceleration
 structure、pipeline 和 shader table 细节上差异很大。
+Ray tracing completeness API 现在包括 AS maintenance planning、TLAS instance metadata
+planning、Vulkan ray query planning、complex SBT planning 和 deterministic RT stress
+planning。Metal ray query 会报告 unsupported，因为这一层没有直接等价的 Metal shader
+feature。Native GPU stress evidence 仍属于 backend / device validation matrix。
 
 Driver-level pipeline cache 和 Metal binary archive 使用显式 cache identity descriptor。它们和
 Period 8 object-cache diagnostics 是分开的层。

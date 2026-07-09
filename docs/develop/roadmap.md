@@ -729,7 +729,7 @@ See `docs/develop/period38/`.
 
 ## Period 39: Ray Tracing Completeness
 
-Status: planned after Period38.
+Status: completed portable RT completeness contract.
 
 Goal: move ray tracing beyond the Period35 scene into the broader feature set:
 ray query, acceleration-structure updates, compaction, many-instance TLAS, and
@@ -740,6 +740,9 @@ complex shader binding table layouts.
 - Phase 3: ray query where supported
 - Phase 4: complex SBT layouts and callable shader records
 - Phase 5: RT stress examples and multi-device validation
+
+Period39 completes deterministic planning, validation, and public API contracts
+for these features. Native GPU/device stress evidence remains Period44 work.
 
 See `docs/develop/period39/`.
 

@@ -1,6 +1,6 @@
 # Period 39: Ray Tracing Completeness
 
-Status: in progress.
+Status: completed portable RT completeness contract.
 
 Goal: move ray tracing beyond the Period35 shared-scene-data slice into the
 broader feature set: mixed mesh/procedural TLAS dispatch, Metal procedural
@@ -61,14 +61,19 @@ larger SBT layouts.
 
 ### Phase 5: RT Stress Examples And Validation
 
-- Add deterministic RT stress cases beyond the reference scene.
-- Validate AS update/compaction and SBT stress on supported devices.
-- Update device matrix with RT feature coverage.
+- Done. `RayTracingStressDescriptor` and `RayTracingStressPlan` combine AS
+  maintenance, TLAS metadata, complex SBT layout, optional ray query, dispatch
+  dimensions, and iteration count into deterministic validation data.
+- Done. AS maintenance and SBT stress are covered by unit tests and device
+  planning APIs. Native GPU stress evidence remains Period44 work on supported
+  devices.
+- Done. Device and validation matrices include Period39 RT coverage.
 
 ## Acceptance
 
 - RT maintenance APIs are capability-gated and typed.
-- Many-instance TLAS and complex SBT examples run where supported.
+- Many-instance TLAS and complex SBT planning APIs are backend-neutral and
+  tested.
 - Unsupported RT features report actionable blockers.
-- The Period35 deferred mixed TLAS / Metal procedural table work is either
-  driver-backed on supported devices or blocked by precise capability reports.
+- Mixed TLAS and procedural-table requirements are explicit public data; native
+  driver evidence remains tied to feature reports and Period44 device runs.
