@@ -247,7 +247,14 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.sparse_textures = capabilities.sparse_textures != 0;
     result.tiled_textures = capabilities.sparse_textures != 0;
     result.acceleration_structures = capabilities.ray_tracing != 0;
+    result.acceleration_structure_update = capabilities.ray_tracing != 0;
+    result.acceleration_structure_refit = capabilities.ray_tracing != 0;
+    result.acceleration_structure_compaction = capabilities.ray_tracing != 0;
     result.ray_tracing = capabilities.ray_tracing != 0;
+    result.ray_query = false;
+    result.ray_tracing_procedural_geometry = capabilities.ray_tracing != 0;
+    result.ray_tracing_custom_intersection = capabilities.ray_tracing != 0;
+    result.ray_tracing_callable_shaders = false;
     result.metal_binary_archive = capabilities.binary_archive != 0;
     return result;
 }

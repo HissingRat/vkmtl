@@ -2270,9 +2270,9 @@ obvious render and binding blockers.
 
 ## Period 39 Phase 1 Checklist
 
-- [ ] Define AS update, refit, and compaction descriptors.
-- [ ] Map Vulkan and Metal support through feature gates.
-- [ ] Preserve existing build-only AS paths.
+- [x] Define AS update, refit, and compaction descriptors.
+- [x] Map Vulkan and Metal support through feature gates.
+- [x] Preserve existing build-only AS paths.
 
 ## Period 39 Phase 2 Checklist
 

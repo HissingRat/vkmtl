@@ -353,6 +353,14 @@ alignment behind `DeviceFeatures.acceleration_structures` and
 `Device.planAccelerationStructureBuild(...)` so applications can inspect
 geometry counts, build/update mode, result size, scratch size, and compaction
 intent before native acceleration-structure objects are executable.
+Period 39 adds `AccelerationStructureMaintenanceDescriptor`,
+`AccelerationStructureMaintenancePlan`, and
+`Device.planAccelerationStructureMaintenance(...)` for update, refit, and
+compaction planning. Update/refit require
+`DeviceFeatures.acceleration_structure_update` or
+`DeviceFeatures.acceleration_structure_refit` plus an update-capable AS;
+compaction requires `DeviceFeatures.acceleration_structure_compaction` and a
+separate destination AS.
 `RayTracingPipelineLowering` and `Device.planRayTracingPipelineLowering(...)`
 expose Vulkan shader-group counts or Metal function-table metadata from native
 feature reports before executable ray tracing pipelines are enabled.

@@ -97,9 +97,14 @@ pub const DeviceFeatures = struct {
     mesh_shaders: bool = false,
     task_shaders: bool = false,
     acceleration_structures: bool = false,
+    acceleration_structure_update: bool = false,
+    acceleration_structure_refit: bool = false,
+    acceleration_structure_compaction: bool = false,
     ray_tracing: bool = false,
+    ray_query: bool = false,
     ray_tracing_procedural_geometry: bool = false,
     ray_tracing_custom_intersection: bool = false,
+    ray_tracing_callable_shaders: bool = false,
     driver_pipeline_cache: bool = false,
     metal_binary_archive: bool = false,
     vertex_instance_step_rate: bool = false,
@@ -180,6 +185,8 @@ pub const DeviceLimits = struct {
     max_task_threads_per_threadgroup: u32 = 0,
     max_ray_tracing_recursion_depth: u32 = 0,
     shader_binding_table_alignment: u64 = 0,
+    max_acceleration_structure_instances: u32 = 0,
+    max_shader_binding_table_records: u32 = 0,
     max_driver_cache_identity_bytes: u32 = 0,
     sparse_buffer_page_size: u64 = 0,
     sparse_texture_page_width: u32 = 0,
@@ -3144,6 +3151,93 @@ pub const AccelerationStructureBuildPlan = struct {
 
     pub fn requiresUpdateSource(self: AccelerationStructureBuildPlan) bool {
         return self.mode == .update;
+    }
+};
+
+pub const AccelerationStructureMaintenanceOperation = enum {
+    update,
+    refit,
+    compact,
+};
+
+pub const AccelerationStructureMaintenanceDescriptor = struct {
+    acceleration_structure: AccelerationStructureDescriptor,
+    operation: AccelerationStructureMaintenanceOperation,
+    scratch_alignment: u64 = 256,
+    source_result_size: u64 = 0,
+    compacted_size_hint: ?u64 = null,
+
+    pub fn validate(self: AccelerationStructureMaintenanceDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
+        try self.acceleration_structure.validate(features);
+        if (self.scratch_alignment == 0 or !isAlignedU64(self.scratch_alignment, 8)) {
+            return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        }
+        switch (self.operation) {
+            .update => {
+                if (!features.acceleration_structure_update) return AdvancedFeatureError.UnsupportedAccelerationStructures;
+                if (!self.acceleration_structure.allow_update) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+            },
+            .refit => {
+                if (!features.acceleration_structure_refit) return AdvancedFeatureError.UnsupportedAccelerationStructures;
+                if (!self.acceleration_structure.allow_update) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+            },
+            .compact => {
+                if (!features.acceleration_structure_compaction) return AdvancedFeatureError.UnsupportedAccelerationStructures;
+                if (self.compacted_size_hint) |hint| {
+                    const source_size = self.resolvedSourceResultSize();
+                    if (hint == 0 or hint > source_size) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+                }
+            },
+        }
+    }
+
+    pub fn resolvedSourceResultSize(self: AccelerationStructureMaintenanceDescriptor) u64 {
+        if (self.source_result_size != 0) return self.source_result_size;
+        return estimateAccelerationStructureBuildSizes(self.acceleration_structure).result_size;
+    }
+};
+
+pub const AccelerationStructureMaintenancePlan = struct {
+    backend: Backend,
+    kind: AccelerationStructureKind,
+    operation: AccelerationStructureMaintenanceOperation,
+    primitive_count: u32,
+    scratch_size: u64 = 0,
+    source_result_size: u64 = 0,
+    compacted_size_upper_bound: u64 = 0,
+    requires_source_as: bool = true,
+    requires_destination_as: bool = false,
+    requires_allow_update: bool = false,
+
+    pub fn fromDescriptor(
+        backend: Backend,
+        descriptor: AccelerationStructureMaintenanceDescriptor,
+        features: DeviceFeatures,
+    ) AdvancedFeatureError!AccelerationStructureMaintenancePlan {
+        try descriptor.validate(features);
+        const sizes = estimateAccelerationStructureBuildSizes(descriptor.acceleration_structure);
+        const source_size = descriptor.resolvedSourceResultSize();
+        return .{
+            .backend = backend,
+            .kind = descriptor.acceleration_structure.kind,
+            .operation = descriptor.operation,
+            .primitive_count = descriptor.acceleration_structure.primitive_count,
+            .scratch_size = switch (descriptor.operation) {
+                .update, .refit => alignForwardU64(sizes.update_scratch_size, descriptor.scratch_alignment),
+                .compact => 0,
+            },
+            .source_result_size = source_size,
+            .compacted_size_upper_bound = switch (descriptor.operation) {
+                .compact => descriptor.compacted_size_hint orelse source_size,
+                else => 0,
+            },
+            .requires_destination_as = descriptor.operation == .compact,
+            .requires_allow_update = descriptor.operation == .update or descriptor.operation == .refit,
+        };
+    }
+
+    pub fn isCompaction(self: AccelerationStructureMaintenancePlan) bool {
+        return self.operation == .compact;
     }
 };
 
@@ -11173,6 +11267,73 @@ test "acceleration structure build plans validate geometry and scratch requireme
         },
         .mode = .update,
     }).validate(.{ .acceleration_structures = true }));
+}
+
+test "acceleration structure maintenance plans update refit and compaction" {
+    const descriptor = AccelerationStructureDescriptor{
+        .kind = .bottom_level,
+        .primitive_count = 8,
+        .allow_update = true,
+    };
+    const features = DeviceFeatures{
+        .acceleration_structures = true,
+        .acceleration_structure_update = true,
+        .acceleration_structure_refit = true,
+        .acceleration_structure_compaction = true,
+    };
+
+    const update_plan = try AccelerationStructureMaintenancePlan.fromDescriptor(.vulkan, .{
+        .acceleration_structure = descriptor,
+        .operation = .update,
+        .scratch_alignment = 512,
+    }, features);
+    try std.testing.expectEqual(Backend.vulkan, update_plan.backend);
+    try std.testing.expectEqual(AccelerationStructureMaintenanceOperation.update, update_plan.operation);
+    try std.testing.expect(update_plan.requires_allow_update);
+    try std.testing.expect(!update_plan.requires_destination_as);
+    try std.testing.expect(isAlignedU64(update_plan.scratch_size, 512));
+
+    const refit_plan = try AccelerationStructureMaintenancePlan.fromDescriptor(.metal, .{
+        .acceleration_structure = descriptor,
+        .operation = .refit,
+    }, features);
+    try std.testing.expectEqual(Backend.metal, refit_plan.backend);
+    try std.testing.expectEqual(AccelerationStructureMaintenanceOperation.refit, refit_plan.operation);
+    try std.testing.expect(refit_plan.scratch_size > 0);
+
+    const compact_plan = try AccelerationStructureMaintenancePlan.fromDescriptor(.vulkan, .{
+        .acceleration_structure = descriptor,
+        .operation = .compact,
+        .source_result_size = 8192,
+        .compacted_size_hint = 4096,
+    }, features);
+    try std.testing.expect(compact_plan.isCompaction());
+    try std.testing.expect(compact_plan.requires_destination_as);
+    try std.testing.expectEqual(@as(u64, 8192), compact_plan.source_result_size);
+    try std.testing.expectEqual(@as(u64, 4096), compact_plan.compacted_size_upper_bound);
+    try std.testing.expectEqual(@as(u64, 0), compact_plan.scratch_size);
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureMaintenanceDescriptor{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 1,
+        },
+        .operation = .update,
+    }).validate(features));
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedAccelerationStructures, (AccelerationStructureMaintenanceDescriptor{
+        .acceleration_structure = descriptor,
+        .operation = .compact,
+    }).validate(.{
+        .acceleration_structures = true,
+        .acceleration_structure_update = true,
+        .acceleration_structure_refit = true,
+    }));
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureMaintenanceDescriptor{
+        .acceleration_structure = descriptor,
+        .operation = .compact,
+        .source_result_size = 1024,
+        .compacted_size_hint = 2048,
+    }).validate(features));
 }
 
 test "acceleration structure mesh geometry descriptors validate buffer ranges" {

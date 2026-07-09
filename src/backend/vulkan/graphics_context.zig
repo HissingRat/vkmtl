@@ -358,9 +358,14 @@ fn queryNativeFeatures(
     result.mesh_shaders = extensions.mesh_shader;
     result.task_shaders = extensions.mesh_shader;
     result.acceleration_structures = ray_tracing.supported;
+    result.acceleration_structure_update = ray_tracing.supported;
+    result.acceleration_structure_refit = ray_tracing.supported;
+    result.acceleration_structure_compaction = ray_tracing.supported;
     result.ray_tracing = ray_tracing.supported;
+    result.ray_query = ray_tracing.supported;
     result.ray_tracing_procedural_geometry = ray_tracing.supported;
     result.ray_tracing_custom_intersection = ray_tracing.supported;
+    result.ray_tracing_callable_shaders = ray_tracing.supported;
     result.driver_pipeline_cache = true;
     return result;
 }

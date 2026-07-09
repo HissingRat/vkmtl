@@ -5075,6 +5075,17 @@ pub const Device = struct {
         return plan;
     }
 
+    pub fn planAccelerationStructureMaintenance(
+        self: Device,
+        descriptor: core.AccelerationStructureMaintenanceDescriptor,
+    ) core.AdvancedFeatureError!core.AccelerationStructureMaintenancePlan {
+        return try core.AccelerationStructureMaintenancePlan.fromDescriptor(
+            self.backend,
+            descriptor,
+            self.nativeFeatures(),
+        );
+    }
+
     pub fn makeAccelerationStructure(self: *Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!AccelerationStructure {
         try descriptor.validate(self.nativeFeatures());
         var sizes = core.estimateAccelerationStructureBuildSizes(descriptor);
@@ -6009,6 +6020,14 @@ pub const WindowContext = struct {
     pub fn planPipelineArtifactCache(self: *WindowContext, descriptor: core.PipelineArtifactCachePlanDescriptor) core.ObjectCacheError!core.PipelineArtifactCachePlan {
         const device_view = self.device();
         return try device_view.planPipelineArtifactCache(descriptor);
+    }
+
+    pub fn planAccelerationStructureMaintenance(
+        self: *WindowContext,
+        descriptor: core.AccelerationStructureMaintenanceDescriptor,
+    ) core.AdvancedFeatureError!core.AccelerationStructureMaintenancePlan {
+        const device_view = self.device();
+        return try device_view.planAccelerationStructureMaintenance(descriptor);
     }
 
     pub fn device(self: *WindowContext) Device {
@@ -7268,6 +7287,57 @@ test "runtime device plans acceleration structure builds from native capabilitie
     try std.testing.expectEqual(core.AccelerationStructureBuildMode.update, plan.mode);
     try std.testing.expectEqual(@as(u32, 2), plan.primitive_count);
     try std.testing.expect(plan.update_scratch_size > 0);
+}
+
+test "runtime device plans acceleration structure maintenance from native capabilities" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.acceleration_structures = false;
+    report.native_features.acceleration_structures = true;
+    report.native_features.acceleration_structure_update = true;
+    report.native_features.acceleration_structure_refit = true;
+    report.native_features.acceleration_structure_compaction = true;
+
+    const device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test acceleration maintenance adapter",
+        },
+        .capability_report = report,
+    };
+
+    const descriptor = core.AccelerationStructureMaintenanceDescriptor{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 4,
+            .allow_update = true,
+        },
+        .operation = .refit,
+        .scratch_alignment = 512,
+    };
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedAccelerationStructures, device.validateAccelerationStructureDescriptor(descriptor.acceleration_structure));
+
+    const plan = try device.planAccelerationStructureMaintenance(descriptor);
+    try std.testing.expectEqual(core.Backend.vulkan, plan.backend);
+    try std.testing.expectEqual(core.AccelerationStructureMaintenanceOperation.refit, plan.operation);
+    try std.testing.expectEqual(@as(u32, 4), plan.primitive_count);
+    try std.testing.expect(plan.requires_allow_update);
+    try std.testing.expect(plan.scratch_size > 0);
+
+    const compact_plan = try device.planAccelerationStructureMaintenance(.{
+        .acceleration_structure = descriptor.acceleration_structure,
+        .operation = .compact,
+        .source_result_size = 4096,
+        .compacted_size_hint = 2048,
+    });
+    try std.testing.expect(compact_plan.isCompaction());
+    try std.testing.expect(compact_plan.requires_destination_as);
+    try std.testing.expectEqual(@as(u64, 2048), compact_plan.compacted_size_upper_bound);
 }
 
 test "runtime encodes acceleration structure build resources from native capabilities" {

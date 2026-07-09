@@ -1,6 +1,6 @@
 # Period 39: Ray Tracing Completeness
 
-Status: planned after Period38.
+Status: in progress.
 
 Goal: move ray tracing beyond the Period35 shared-scene-data slice into the
 broader feature set: mixed mesh/procedural TLAS dispatch, Metal procedural
@@ -20,9 +20,12 @@ larger SBT layouts.
 
 ### Phase 1: AS Update, Refit, And Compaction Contract
 
-- Define update, refit, and compaction descriptors.
-- Map Vulkan and Metal support levels through feature gates.
-- Preserve existing build-only AS paths.
+- Done. `AccelerationStructureMaintenanceDescriptor` and
+  `AccelerationStructureMaintenancePlan` define update, refit, and compaction
+  planning.
+- Done. Vulkan and Metal native feature reports expose fine-grained gates for
+  update, refit, and compaction while usable features remain conservative.
+- Done. Existing build-only AS paths are unchanged.
 
 ### Phase 2: Many-Instance TLAS And Instance Metadata
 
