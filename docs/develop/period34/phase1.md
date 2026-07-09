@@ -17,4 +17,4 @@ mesh scene from Period33.
 - vkmtl can distinguish mesh scene success from procedural scene success.
 - Unsupported procedural paths return typed errors before command submission.
 - Docs say that Period34 closes Vulkan procedural sphere parity and routes
-  Metal procedural parity to Period35.
+  Metal procedural parity to Period39.

@@ -8,10 +8,10 @@ intersections.
 - [x] Replace tessellated sphere mesh BLAS objects with procedural sphere
   geometry where supported.
 - [ ] Keep room walls as mesh geometry alongside procedural spheres. Deferred
-  to Period35 Phase 2.
+  to Period39 Phase 2.
 - [ ] Preserve reflection/refraction/material behavior from the reference
-  visual target as closely as the current shaders allow. Ongoing visual parity
-  polish is Period35 Phase 5.
+  visual target as closely as the current shaders allow. Ongoing RT stress and
+  visual parity polish is Period39 Phase 5.
 - [x] Present procedural native RT output in the window.
 - [x] Print procedural-scene success markers.
 

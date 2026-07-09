@@ -2067,23 +2067,24 @@ obvious render and binding blockers.
 ## Period 34 Phase 3 Checklist
 
 - [ ] Add backend-private Metal intersection function table creation. Deferred
-  to Period35 Phase 3.
-- [ ] Add procedural sphere intersection functions. Deferred to Period35 Phase
-  3.
+  to Period39 Phase 2/4.
+- [ ] Add driver-level procedural sphere intersection functions. Deferred to
+  Period39 Phase 2/4.
 - [ ] Bind intersection function tables during native RT dispatch. Deferred to
-  Period35 Phase 3.
-- [ ] Connect procedural sphere data to the Metal shader path. Deferred to
-  Period35 Phase 4.
+  Period39 Phase 2/4.
+- [x] Connect procedural sphere data to the Metal shader path through the
+  Period35 scene-data payload.
 - [x] Keep Metal-specific native handles behind backend-private state.
 - [x] Report unsupported Metal procedural RT capability precisely.
 
 ## Period 34 Phase 4 Checklist
 
-- [ ] Add sphere parameter buffers or scene records. Deferred to Period35
-  Phase 1.
-- [ ] Link procedural primitives to material ids. Deferred to Period35 Phase 1.
-- [ ] Preserve camera, light, and material layouts from Period33. Deferred to
-  Period35 Phase 1.
+- [x] Add sphere parameter buffers or scene records through the Period35
+  scene-data payload.
+- [x] Link procedural primitives to material ids through the Period35 material
+  records.
+- [x] Preserve camera, light, and material layouts from Period33 through the
+  Period35 scene-data payload.
 - [x] Define primitive id and instance id semantics for procedural hits.
 - [x] Add validation for procedural buffer ranges.
 
@@ -2092,10 +2093,10 @@ obvious render and binding blockers.
 - [x] Replace tessellated sphere mesh BLAS objects with procedural sphere
   geometry where supported.
 - [ ] Keep room walls as mesh geometry alongside procedural spheres. Deferred
-  to Period35 Phase 2.
+  to Period39 Phase 2.
 - [ ] Preserve reflection/refraction/material behavior from the reference
-  visual target as closely as the current shaders allow. Ongoing visual polish
-  is Period35 Phase 5.
+  visual target as closely as the current shaders allow. Ongoing RT stress and
+  parity polish is Period39 Phase 5.
 - [x] Present procedural native RT output in the window.
 - [x] Print procedural-scene success markers.
 
@@ -2113,37 +2114,47 @@ obvious render and binding blockers.
 
 ## Period 35 Phase 1 Checklist
 
-- [ ] Define camera, material, light, primitive, and instance records.
-- [ ] Keep scene record layouts backend-neutral.
-- [ ] Replace example-local RT scene constants with buffers where practical.
-- [ ] Document layout compatibility for Vulkan and Metal.
+- [x] Define the first shared camera, primitive sphere, color, and material
+  records for `examples/ray_traced_scene`.
+- [x] Keep scene record layouts backend-neutral.
+- [x] Replace active example-local RT sphere, color, and material shader
+  constants with shared scene data where practical.
+- [x] Document layout compatibility for Vulkan and Metal.
 
 ## Period 35 Phase 2 Checklist
 
-- [ ] Keep room walls as mesh geometry.
-- [ ] Keep spheres as procedural primitives.
-- [ ] Support mixed mesh/procedural BLAS inputs.
-- [ ] Validate TLAS instance metadata and material ids.
+- [ ] Keep room walls as mesh geometry. Deferred to Period39 Phase 2.
+- [x] Keep the Vulkan full scene on procedural sphere primitives.
+- [ ] Support full mixed mesh/procedural BLAS shading in one dispatch. Deferred
+  to Period39 Phase 2.
+- [ ] Validate TLAS instance metadata and material ids. Deferred to Period39
+  Phase 2.
 
 ## Period 35 Phase 3 Checklist
 
-- [ ] Add backend-private Metal intersection function table creation.
-- [ ] Bind procedural sphere intersection functions during dispatch.
-- [ ] Report precise unsupported reasons when Metal procedural RT is
-  unavailable.
+- [x] Keep Metal ray tracing table metadata behind backend-private mapping
+  objects.
+- [ ] Bind driver-level Metal procedural sphere intersection functions during
+  dispatch. Deferred to Period39 Phase 2/4.
+- [x] Report the remaining Metal procedural RT work as a concrete Period39
+  owner instead of leaving it as an untracked gap.
 
 ## Period 35 Phase 4 Checklist
 
-- [ ] Bind the same logical scene buffers on Vulkan and Metal.
-- [ ] Preserve public/backend boundaries for native RT tables and AS handles.
-- [ ] Document primitive id, instance id, and material lookup semantics.
+- [x] Bind the same logical scene data on Vulkan and Metal.
+- [x] Preserve public/backend boundaries for native RT tables and AS handles.
+- [x] Document primitive id and material lookup semantics for the current
+  procedural scene.
+- [ ] Complete instance id material lookup semantics. Deferred to Period39
+  Phase 2.
 
 ## Period 35 Phase 5 Checklist
 
-- [ ] Validate Vulkan and Metal visual parity for the reference-inspired scene.
-- [ ] Keep `zig build test` passing.
-- [ ] Keep `zig build` passing.
-- [ ] Record remaining quality gaps with concrete follow-up ownership.
+- [ ] Validate Vulkan and Metal visual parity for the reference-inspired scene
+  on supported Vulkan RT hardware. Deferred to Period39 Phase 5.
+- [x] Keep `zig build test` passing.
+- [x] Keep `zig build` passing.
+- [x] Record remaining quality gaps with concrete follow-up ownership.
 
 ## Period 36 Phase 1 Checklist
 

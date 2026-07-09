@@ -15,9 +15,10 @@ Period 30 closed backend-private runtime records. Period 31 targets Metal ray
 tracing pixels. Period 32 targets the first Vulkan native ray tracing output
 path. Period 33 targets the full native mesh RT scene. Period 34 targets
 procedural sphere/custom-intersection execution. Period 35 targets shared RT
-scene data and Metal procedural parity. Periods 36 through 44 own the long
-tail: semantic parity, platform coverage, pressure testing, production
-behavior, and deeper ray tracing coverage.
+scene data and procedural parity ownership. Period39 owns mixed TLAS and
+driver-level Metal procedural parity. Periods 36 through 44 own the long tail:
+semantic parity, platform coverage, pressure testing, production behavior, and
+deeper ray tracing coverage.
 
 ## Expected Baseline After Period 32
 
@@ -50,11 +51,11 @@ Period32+ work is split into concrete periods:
   native dispatch/present on supported backends.
 - Period34: procedural RT geometry and custom intersection. This replaces the
   mesh sphere approximation with Vulkan AABB/intersection shader paths and
-  Metal procedural/intersection-function-table paths, then validates the full
-  native scene again.
-- Period35: shared RT scene data and Metal procedural parity. This removes
+  routes driver-level Metal procedural/intersection-function-table paths to the
+  RT completeness period.
+- Period35: shared RT scene data and procedural parity boundary. This removes
   example-local scene constants from the RT scene path where practical and
-  closes Metal procedural/custom-intersection parity.
+  assigns remaining mixed TLAS / Metal procedural parity to Period39.
 - Period36: synchronization and queues. This closes timeline semaphore, shared
   event, fence, multi-queue, queue ownership, async compute, and async transfer
   semantics.

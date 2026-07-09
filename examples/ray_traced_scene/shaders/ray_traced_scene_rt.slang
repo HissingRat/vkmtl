@@ -9,8 +9,15 @@ struct RayPayload {
     uint did_hit;
 };
 
-struct RayTraceUniforms {
+static const uint scene_object_count = 10;
+
+struct RayTraceSceneData {
     float4 params;
+    float4 camera;
+    float4 viewport;
+    float4 spheres[10];
+    float4 colors[10];
+    float4 materials[10];
 };
 
 struct SphereHitAttributes {
@@ -24,7 +31,7 @@ RaytracingAccelerationStructure scene : register(t0, space0);
 RWTexture2D<float4> output_texture : register(u1, space0);
 
 [[vk::binding(2, 0)]]
-ConstantBuffer<RayTraceUniforms> uniforms : register(b2, space0);
+ConstantBuffer<RayTraceSceneData> scene_data : register(b2, space0);
 
 static const int iterations = 5;
 static const float max_dist = 1000.0;
@@ -32,54 +39,19 @@ static const float3 ambient_light = float3(1.0, 1.0, 1.0);
 static const float eps = 0.001;
 
 float4 baseSphere(uint index) {
-    if (index == 0) return float4(0.0, 0.0, -1.5, 0.1);
-    if (index == 1) return float4(0.0, 0.25, -1.5, 0.1);
-    if (index == 2) return float4(0.0, -0.7, -1.5, 0.3);
-    if (index == 3) return float4(0.0, -0.1, -1.5, 0.3);
-    if (index == 4) return float4(0.0, -0.1, -1.5, 0.15);
-    if (index == 5) return float4(1001.0, 0.0, 0.0, 1000.0);
-    if (index == 6) return float4(-1001.0, 0.0, 0.0, 1000.0);
-    if (index == 7) return float4(0.0, 1001.0, 0.0, 1000.0);
-    if (index == 8) return float4(0.0, -1001.0, 0.0, 1000.0);
-    return float4(0.0, 0.0, -1002.0, 1000.0);
+    return scene_data.spheres[min(index, scene_object_count - 1)];
 }
 
 float4 baseColor(uint index) {
-    if (index == 0) return float4(1.0, 0.8, 0.0, -1.0);
-    if (index == 1) return float4(0.0, 0.0, 1.0, -1.0);
-    if (index == 2) return float4(1.0, 1.0, 1.0, 1.0);
-    if (index == 3) return float4(1.0, 1.0, 1.0, 1.0);
-    if (index == 4) return float4(1.0, 0.0, 0.0, 1.0);
-    if (index == 5) return float4(0.0, 1.0, 0.0, 0.7);
-    if (index == 6) return float4(1.0, 0.0, 0.0, 0.7);
-    if (index == 7) return float4(1.0, 1.0, 1.0, 0.7);
-    if (index == 8) return float4(1.0, 1.0, 1.0, 0.7);
-    return float4(1.0, 1.0, 1.0, 0.7);
+    return scene_data.colors[min(index, scene_object_count - 1)];
 }
 
 float2 baseMaterial(uint index) {
-    if (index == 0) return float2(0.0, 0.0);
-    if (index == 1) return float2(0.0, 0.0);
-    if (index == 2) return float2(1.0, 0.0);
-    if (index == 3) return float2(0.1, 0.8);
-    if (index == 4) return float2(0.1, 0.8);
-    if (index == 5) return float2(0.0, 0.0);
-    if (index == 6) return float2(0.0, 0.0);
-    if (index == 7) return float2(0.1, 0.0);
-    if (index == 8) return float2(0.1, 0.0);
-    return float2(0.1, 0.0);
+    return scene_data.materials[min(index, scene_object_count - 1)].xy;
 }
 
 float4 sceneSphere(uint index, float time_seconds) {
-    float4 sphere = baseSphere(index);
-    if (index == 0) {
-        sphere.x += sin(time_seconds) * 0.4;
-        sphere.z += cos(time_seconds) * 0.4;
-    } else if (index == 1) {
-        sphere.x += sin(time_seconds) * -0.3;
-        sphere.z += cos(time_seconds) * -0.3;
-    }
-    return sphere;
+    return baseSphere(index);
 }
 
 uint objectIndexFromPrimitive(uint primitive) {
@@ -250,9 +222,9 @@ void raygen() {
     float2 p = float2(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0);
     p.x *= float(size.x) / max(float(size.y), 1.0);
 
-    const float3 ray_origin = float3(0.0, 0.0, -0.2);
+    const float3 ray_origin = scene_data.camera.xyz;
     const float3 ray_direction = normalize(float3(p.x, p.y, -1.0));
-    const float time_seconds = uniforms.params.x;
+    const float time_seconds = scene_data.params.x;
     const float3 color = clamp(traceColor(ray_origin, ray_direction, time_seconds), float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0));
     output_texture[pixel] = float4(color, 1.0);
 }
@@ -281,7 +253,7 @@ void any_hit(inout RayPayload payload, SphereHitAttributes attributes) {
 [shader("intersection")]
 void intersect_sphere() {
     const uint object_index = objectIndexFromPrimitive(PrimitiveIndex());
-    const float4 sphere = sceneSphere(object_index, uniforms.params.x);
+    const float4 sphere = sceneSphere(object_index, scene_data.params.x);
 
     float hit_t;
     float3 normal;
@@ -295,7 +267,7 @@ void intersect_sphere() {
 [shader("closesthit")]
 void closest_hit(inout RayPayload payload, SphereHitAttributes attributes) {
     const uint object_index = objectIndexFromPrimitive(PrimitiveIndex());
-    payload.sphere = sceneSphere(object_index, uniforms.params.x);
+    payload.sphere = sceneSphere(object_index, scene_data.params.x);
     payload.color = baseColor(object_index);
     payload.material = baseMaterial(object_index);
     payload.distance = RayTCurrent();

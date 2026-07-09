@@ -15,6 +15,7 @@ const small_sphere_segments: u32 = 48;
 const large_sphere_rings: u32 = 36;
 const large_sphere_segments: u32 = 72;
 const procedural_sphere_count: u32 = 10;
+const scene_object_count: u32 = 10;
 
 const RtVertex = extern struct {
     x: f32,
@@ -31,8 +32,13 @@ const RtAabb = extern struct {
     max_z: f32,
 };
 
-const VulkanRayTraceUniforms = extern struct {
+const RtSceneData = extern struct {
     params: [4]f32,
+    camera: [4]f32,
+    viewport: [4]f32,
+    spheres: [scene_object_count][4]f32,
+    colors: [scene_object_count][4]f32,
+    materials: [scene_object_count][4]f32,
 };
 
 pub fn main(_: std.process.Init.Minimal) !void {
@@ -341,17 +347,15 @@ pub fn main(_: std.process.Init.Minimal) !void {
 
             if (output_view) |*view| {
                 var frame_command_buffer = try queue.makeCommandBuffer();
-                const uniforms = VulkanRayTraceUniforms{
-                    .params = .{ scene_time_seconds, 0.0, 0.0, 0.0 },
-                };
-                const uniform_bytes = std.mem.asBytes(&uniforms);
+                const scene_data = makeSceneData(scene_time_seconds);
+                const scene_data_bytes = std.mem.asBytes(&scene_data);
                 const dispatch_plan = frame_command_buffer.dispatchRaysToDrawable(
                     &pipeline_state,
                     &shader_binding_table,
                     .{
                         .width = extent.width,
                         .height = extent.height,
-                        .inline_data = uniform_bytes[0..],
+                        .inline_data = scene_data_bytes[0..],
                         .inline_data_binding = 2,
                     },
                     .{
@@ -446,15 +450,16 @@ pub fn main(_: std.process.Init.Minimal) !void {
             if (output_view) |*view| {
                 var frame_command_buffer = try queue.makeCommandBuffer();
                 const scene_time_seconds = currentSceneTime(scene_time_start);
-                const time_bytes = std.mem.asBytes(&scene_time_seconds);
+                const scene_data = makeSceneData(scene_time_seconds);
+                const scene_data_bytes = std.mem.asBytes(&scene_data);
                 const dispatch_plan = frame_command_buffer.dispatchRaysToDrawable(
                     &pipeline_state,
                     &shader_binding_table,
                     .{
                         .width = extent.width,
                         .height = extent.height,
-                        .inline_data = time_bytes[0..],
-                        .inline_data_binding = 1,
+                        .inline_data = scene_data_bytes[0..],
+                        .inline_data_binding = 2,
                     },
                     .{
                         .acceleration_structure = &acceleration_structure,
@@ -509,14 +514,30 @@ fn currentSceneTime(start_seconds: f64) f32 {
     return native_scene_time + @as(f32, @floatCast(glfw.timeSeconds() - start_seconds));
 }
 
-fn rebuildReferenceMesh(allocator: std.mem.Allocator, vertices: *std.ArrayList(RtVertex), time_seconds: f32) !void {
-    vertices.clearRetainingCapacity();
-    try buildReferenceMesh(allocator, vertices, time_seconds);
+fn makeSceneData(time_seconds: f32) RtSceneData {
+    var data = RtSceneData{
+        .params = .{ time_seconds, @floatFromInt(scene_object_count), 0.0, 0.0 },
+        .camera = .{ 0.0, 0.0, -0.2, 0.0 },
+        .viewport = .{ 0.0, 0.0, 0.0, 0.0 },
+        .spheres = undefined,
+        .colors = undefined,
+        .materials = undefined,
+    };
+
+    var index: u32 = 0;
+    while (index < scene_object_count) : (index += 1) {
+        const slot: usize = @intCast(index);
+        data.spheres[slot] = vector4ToArray(referenceSphere(index, time_seconds));
+        data.colors[slot] = vector4ToArray(referenceColor(index));
+        data.materials[slot] = materialToArray(referenceMaterial(index));
+    }
+
+    return data;
 }
 
 fn buildReferenceMesh(allocator: std.mem.Allocator, vertices: *std.ArrayList(RtVertex), time_seconds: f32) !void {
     var index: u32 = 0;
-    while (index < 10) : (index += 1) {
+    while (index < scene_object_count) : (index += 1) {
         const sphere = referenceSphere(index, time_seconds);
         const rings: u32 = if (sphere[3] >= 0.3) large_sphere_rings else small_sphere_rings;
         const segments: u32 = if (sphere[3] >= 0.3) large_sphere_segments else small_sphere_segments;
@@ -549,6 +570,38 @@ fn referenceSphere(index: u32, time_seconds: f32) @Vector(4, f32) {
         sphere[2] += @cos(time_seconds) * -0.3;
     }
     return sphere;
+}
+
+fn referenceColor(index: u32) @Vector(4, f32) {
+    return switch (index) {
+        0 => .{ 1.0, 0.8, 0.0, -1.0 },
+        1 => .{ 0.0, 0.0, 1.0, -1.0 },
+        2 => .{ 1.0, 1.0, 1.0, 1.0 },
+        3 => .{ 1.0, 1.0, 1.0, 1.0 },
+        4 => .{ 1.0, 0.0, 0.0, 1.0 },
+        5 => .{ 0.0, 1.0, 0.0, 0.7 },
+        6 => .{ 1.0, 0.0, 0.0, 0.7 },
+        7 => .{ 1.0, 1.0, 1.0, 0.7 },
+        8 => .{ 1.0, 1.0, 1.0, 0.7 },
+        else => .{ 1.0, 1.0, 1.0, 0.7 },
+    };
+}
+
+fn referenceMaterial(index: u32) @Vector(2, f32) {
+    return switch (index) {
+        0, 1, 5, 6 => .{ 0.0, 0.0 },
+        2 => .{ 1.0, 0.0 },
+        3, 4 => .{ 0.1, 0.8 },
+        else => .{ 0.1, 0.0 },
+    };
+}
+
+fn vector4ToArray(value: @Vector(4, f32)) [4]f32 {
+    return .{ value[0], value[1], value[2], value[3] };
+}
+
+fn materialToArray(value: @Vector(2, f32)) [4]f32 {
+    return .{ value[0], value[1], 0.0, 0.0 };
 }
 
 fn buildProceduralSphereAabbs() [procedural_sphere_count]RtAabb {

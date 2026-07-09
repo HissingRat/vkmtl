@@ -1,7 +1,7 @@
 # Period 34: Procedural RT Geometry And Custom Intersection
 
 Status: Vulkan procedural path implemented; Metal procedural parity deferred to
-Period35.
+Period39.
 
 Goal: extend the native ray tracing backends from mesh-only scene rendering to
 procedural sphere/custom intersection support, then use the full native
@@ -11,8 +11,8 @@ Period33 renders the reference scene with triangle meshes. Period34 replaces
 the Vulkan tessellated sphere approximation with procedural geometry:
 
 - Vulkan: AABB geometry plus intersection shaders.
-- Metal: keeps the Period33 native mesh/intersector path for now; procedural
-  primitive support plus intersection function tables are Period35.
+- Metal: keeps the pixel-producing scene path for now; driver-level procedural
+  primitive support plus intersection function tables are Period39.
 
 The goal is not just to expose descriptors. The goal is to make the reference
 scene render through native procedural/custom-intersection paths.
@@ -34,13 +34,13 @@ Current implementation status:
 - the Vulkan `ray_traced_scene` path now builds procedural sphere AABBs and
   prints `driver_pixels=visible_vulkan_procedural_rt_scene`
 - Metal intersection function tables and procedural primitive execution are
-  not implemented yet and are routed to Period35
+  not implemented yet and are routed to Period39
 
 ## Hard Acceptance Target
 
 After Period34, `examples/ray_traced_scene` should have a Vulkan native RT mode
 that uses procedural spheres/custom intersections instead of tessellated sphere
-meshes. Metal remains on the Period33 native mesh path until Period35.
+meshes. Metal procedural function-table parity remains a Period39 item.
 
 Supported backends must:
 
@@ -48,7 +48,7 @@ Supported backends must:
 - bind custom intersection shader/function resources
 - model the reference room and visible spheres as procedural/AABB/custom-
   intersection primitives on Vulkan
-- leave mixed mesh-room plus procedural-sphere assembly to Period35
+- leave mixed mesh-room plus procedural-sphere assembly to Period39
 - shade the same camera/material/light scene data from Period33
 - present the full scene in the window
 - print a success marker that identifies procedural native RT output
@@ -70,7 +70,7 @@ Out of scope:
 
 - Metal intersection function table execution
 - Metal procedural primitive lowering
-- shared camera/material/light/primitive buffers
+- shared scene payloads after the Period35 slice
 - denoising or temporal accumulation
 - ray query examples unless directly required by the procedural scene
 - arbitrary user-defined procedural primitive libraries
@@ -101,7 +101,7 @@ See `phase2.md`.
 - Keep Metal RT constructs backend-private until the portable shader model is
   ready.
 
-Deferred to Period35 Phase 3. See `phase3.md`.
+Deferred to Period39 Phase 2/4. See `phase3.md`.
 
 ### Phase 4: Shared Procedural Scene Data
 
@@ -115,7 +115,7 @@ See `phase4.md`.
 
 - Replace tessellated sphere meshes with procedural sphere primitives.
 - Render the reference-style room with procedural primitives on Vulkan.
-- Route mixed mesh-room plus procedural-sphere assembly to Period35.
+- Route mixed mesh-room plus procedural-sphere assembly to Period39.
 - Render the full reference scene using native custom intersections.
 
 See `phase5.md`.
@@ -130,10 +130,10 @@ See `phase6.md`.
 
 ## Deferred Beyond Period 34
 
-- Metal intersection function table execution: Period35 Phase 3.
-- shared RT scene data buffers: Period35 Phases 1-4.
-- arbitrary procedural primitive authoring API: Period35+.
-- ray query examples: Period35+.
-- compaction/update/refit stress tests: Period35+.
-- large SBT and function-table pressure tests: Period35+.
+- Metal intersection function table execution: Period39 Phase 2/4.
+- shared RT scene data buffers: completed by Period35.
+- arbitrary procedural primitive authoring API: Period39+.
+- ray query examples: Period39 Phase 3.
+- compaction/update/refit stress tests: Period39 Phase 1.
+- large SBT and function-table pressure tests: Period39 Phase 4/5.
 - long-running GPU soak coverage: Period35+.

@@ -317,33 +317,36 @@ Tracked in `docs/develop/period34/`.
 - [x] Add backend resource plumbing for Vulkan AABB build input.
 - [x] Lower Vulkan intersection shader groups.
 - [ ] Create and bind Metal intersection function tables for procedural
-  sphere intersections. Deferred to Period35 Phase 3.
-- [ ] Share procedural sphere, material, light, camera, and instance scene data
-  between Vulkan and Metal paths. Deferred to Period35 Phases 1-4.
+  sphere intersections. Deferred to Period39 Phase 2/4.
+- [x] Share procedural sphere, material, and camera scene data between Vulkan
+  and Metal paths through the Period35 scene-data payload.
 - [x] Replace tessellated sphere meshes with procedural sphere geometry in the
   full native `ray_traced_scene` acceptance example.
 - [ ] Validate visible procedural output or exact unsupported reasons on
-  supported Vulkan RT runtimes. Metal procedural validation is Period35.
+  supported Vulkan RT runtimes. Metal procedural validation is Period39.
 
 Expected result: the Vulkan full native ray traced scene uses procedural
 sphere/custom-intersection geometry for spheres and prints
-`driver_pixels=visible_vulkan_procedural_rt_scene`. Metal keeps the Period33
-mesh path until Period35 closes procedural function-table parity.
+`driver_pixels=visible_vulkan_procedural_rt_scene`. Metal keeps the
+pixel-producing scene path while driver-level procedural function-table parity
+is tracked by Period39.
 
 ## Wave 16: RT Scene Data And Metal Procedural Parity
 
 Tracked in `docs/develop/period35/`.
 
-- [ ] Move RT camera, light, material, primitive, and instance data into shared
-  scene buffers where practical.
+- [x] Move RT frame, camera, material, and primitive sphere data into shared
+  scene payloads where practical.
 - [ ] Keep mixed mesh room geometry and procedural sphere geometry in one scene
-  assembly model.
-- [ ] Create and bind Metal procedural function tables.
-- [ ] Validate Vulkan/Metal visual parity for the reference-inspired scene.
+  assembly model. Deferred to Period39 Phase 2.
+- [ ] Create and bind driver-level Metal procedural function tables. Deferred
+  to Period39 Phase 2/4.
+- [ ] Validate Vulkan/Metal visual parity for the reference-inspired scene on
+  supported Vulkan RT hardware. Deferred to Period39 Phase 5.
 
 Expected result: `examples/ray_traced_scene` uses the same logical scene data
-on Vulkan and Metal, with Metal procedural/custom-intersection parity closed or
-precisely feature-gated.
+on Vulkan and Metal, with remaining Metal procedural/custom-intersection parity
+assigned to Period39 instead of hidden in the example.
 
 ## Wave 17: Sync And Queue Semantics
 

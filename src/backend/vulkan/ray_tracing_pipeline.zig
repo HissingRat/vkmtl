@@ -166,7 +166,7 @@ pub fn init(
         .p_set_layouts = &set_layouts,
     }, @ptrCast(&descriptor_set));
 
-    var inline_data_bytes = [_]u8{0} ** 256;
+    var inline_data_bytes = [_]u8{0} ** 4096;
     var inline_data_buffer = try VulkanBuffer.init(gc, .{
         .label = "vkmtl ray tracing inline data",
         .length = inline_data_bytes.len,

@@ -2,16 +2,19 @@
 
 Status: planned after Period38.
 
-Goal: move ray tracing beyond the Period35 scene into the broader feature set:
-ray query, acceleration-structure updates, compaction, many-instance TLAS, and
-complex shader binding table layouts.
+Goal: move ray tracing beyond the Period35 shared-scene-data slice into the
+broader feature set: mixed mesh/procedural TLAS dispatch, Metal procedural
+intersection tables, ray query, acceleration-structure updates, compaction,
+many-instance TLAS, and complex shader binding table layouts.
 
 ## Expected Result
 
-After Period39, vkmtl should support the common native RT maintenance and scale
-paths needed by real engines: updating or refitting acceleration structures,
-compacting them where supported, building many-instance TLAS layouts, using ray
-query where available, and validating larger SBT layouts.
+After Period39, vkmtl should support the common native RT maintenance, parity,
+and scale paths needed by real engines: mixed triangle/procedural scenes,
+driver-level Metal procedural intersection functions, updating or refitting
+acceleration structures, compacting them where supported, building
+many-instance TLAS layouts, using ray query where available, and validating
+larger SBT layouts.
 
 ## Phase Plan
 
@@ -26,6 +29,10 @@ query where available, and validating larger SBT layouts.
 - Add stress coverage for many TLAS instances.
 - Validate transforms, masks, custom indices, and material lookup metadata.
 - Keep instance buffer layout backend-neutral.
+- Close the Period35 deferred mixed mesh/procedural scene path: room mesh
+  geometry and procedural sphere geometry in one logical dispatch.
+- Bind driver-level Metal procedural sphere intersection functions where
+  supported, and report typed unsupported reasons where unavailable.
 
 ### Phase 3: Ray Query Where Supported
 
@@ -38,6 +45,8 @@ query where available, and validating larger SBT layouts.
 - Support larger miss/hit group layouts.
 - Add callable shader records where the backend supports them.
 - Validate SBT alignment and stride limits under stress.
+- Validate hit group offsets for mixed triangle/procedural geometry, including
+  the Metal procedural function-table lowering path.
 
 ### Phase 5: RT Stress Examples And Validation
 
@@ -50,3 +59,5 @@ query where available, and validating larger SBT layouts.
 - RT maintenance APIs are capability-gated and typed.
 - Many-instance TLAS and complex SBT examples run where supported.
 - Unsupported RT features report actionable blockers.
+- The Period35 deferred mixed TLAS / Metal procedural table work is either
+  driver-backed on supported devices or blocked by precise capability reports.

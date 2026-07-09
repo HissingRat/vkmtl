@@ -1,411 +1,314 @@
 #include <metal_stdlib>
-
 #include <metal_raytracing>
 
 using namespace metal;
-
 using namespace raytracing;
 
-
-
 struct vkmtl_scene_hit {
-
     float4 sphere;
-
     float4 color;
-
     float2 material;
-
     float distance;
-
+    uint object_index;
+    uint did_hit;
 };
 
-
+struct vkmtl_scene_data {
+    float4 params;
+    float4 camera;
+    float4 viewport;
+    float4 spheres[10];
+    float4 colors[10];
+    float4 materials[10];
+};
 
 constant int vkmtl_iterations = 5;
-
+constant uint vkmtl_scene_object_count = 10;
+constant uint vkmtl_no_object = 0xffffffffu;
+constant uint vkmtl_ray_kind_surface = 0;
+constant uint vkmtl_ray_kind_shadow = 1;
 constant float vkmtl_max_dist = 1000.0f;
-
 constant float3 vkmtl_ambient_light = float3(1.0f);
-
 constant float vkmtl_eps = 0.001f;
 
-
-
-static inline float4 vkmtl_base_sphere(int index) {
-
-    if (index == 0) return float4(0.0f, 0.0f, -1.5f, 0.1f);
-
-    if (index == 1) return float4(0.0f, 0.25f, -1.5f, 0.1f);
-
-    if (index == 2) return float4(0.0f, -0.7f, -1.5f, 0.3f);
-
-    if (index == 3) return float4(0.0f, -0.1f, -1.5f, 0.3f);
-
-    if (index == 4) return float4(0.0f, -0.1f, -1.5f, 0.15f);
-
-    if (index == 5) return float4(1001.0f, 0.0f, 0.0f, 1000.0f);
-
-    if (index == 6) return float4(-1001.0f, 0.0f, 0.0f, 1000.0f);
-
-    if (index == 7) return float4(0.0f, 1001.0f, 0.0f, 1000.0f);
-
-    if (index == 8) return float4(0.0f, -1001.0f, 0.0f, 1000.0f);
-
-    return float4(0.0f, 0.0f, -1002.0f, 1000.0f);
-
+static inline uint vkmtl_clamp_object_index(uint index) {
+    return min(index, vkmtl_scene_object_count - 1u);
 }
 
-
-
-static inline float4 vkmtl_base_color(int index) {
-
-    if (index == 0) return float4(1.0f, 0.8f, 0.0f, -1.0f);
-
-    if (index == 1) return float4(0.0f, 0.0f, 1.0f, -1.0f);
-
-    if (index == 2) return float4(1.0f, 1.0f, 1.0f, 1.0f);
-
-    if (index == 3) return float4(1.0f, 1.0f, 1.0f, 1.0f);
-
-    if (index == 4) return float4(1.0f, 0.0f, 0.0f, 1.0f);
-
-    if (index == 5) return float4(0.0f, 1.0f, 0.0f, 0.7f);
-
-    if (index == 6) return float4(1.0f, 0.0f, 0.0f, 0.7f);
-
-    if (index == 7) return float4(1.0f, 1.0f, 1.0f, 0.7f);
-
-    if (index == 8) return float4(1.0f, 1.0f, 1.0f, 0.7f);
-
-    return float4(1.0f, 1.0f, 1.0f, 0.7f);
-
+static inline float4 vkmtl_base_sphere(uint index, constant vkmtl_scene_data &scene_data) {
+    return scene_data.spheres[vkmtl_clamp_object_index(index)];
 }
 
-
-
-static inline float2 vkmtl_base_material(int index) {
-
-    if (index == 0) return float2(0.0f, 0.0f);
-
-    if (index == 1) return float2(0.0f, 0.0f);
-
-    if (index == 2) return float2(1.0f, 0.0f);
-
-    if (index == 3) return float2(0.1f, 0.8f);
-
-    if (index == 4) return float2(0.1f, 0.8f);
-
-    if (index == 5) return float2(0.0f, 0.0f);
-
-    if (index == 6) return float2(0.0f, 0.0f);
-
-    if (index == 7) return float2(0.1f, 0.0f);
-
-    if (index == 8) return float2(0.1f, 0.0f);
-
-    return float2(0.1f, 0.0f);
-
+static inline float4 vkmtl_base_color(uint index, constant vkmtl_scene_data &scene_data) {
+    return scene_data.colors[vkmtl_clamp_object_index(index)];
 }
 
+static inline float2 vkmtl_base_material(uint index, constant vkmtl_scene_data &scene_data) {
+    return scene_data.materials[vkmtl_clamp_object_index(index)].xy;
+}
 
+static inline float4 vkmtl_scene_sphere(uint index, constant vkmtl_scene_data &scene_data) {
+    return vkmtl_base_sphere(index, scene_data);
+}
 
-static inline float4 vkmtl_scene_sphere(int index, float time_seconds) {
+static inline uint vkmtl_object_mask(uint object_index) {
+    return object_index < 32u ? (1u << object_index) : 0u;
+}
 
-    float4 sphere = vkmtl_base_sphere(index);
+static inline bool vkmtl_should_ignore(uint object_index, uint ignore_object_mask) {
+    return (ignore_object_mask & vkmtl_object_mask(object_index)) != 0u;
+}
 
-    if (index == 0) {
-
-        sphere.x += sin(time_seconds) * 0.4f;
-
-        sphere.z += cos(time_seconds) * 0.4f;
-
-    } else if (index == 1) {
-
-        sphere.x += sin(time_seconds) * -0.3f;
-
-        sphere.z += cos(time_seconds) * -0.3f;
-
+static inline bool vkmtl_intersect_sphere(
+    float3 ray_origin,
+    float3 ray_direction,
+    float4 sphere,
+    float min_t,
+    float max_t,
+    thread float &hit_t
+) {
+    const float3 center = sphere.xyz;
+    const float radius = sphere.w;
+    const float3 oc = ray_origin - center;
+    const float half_b = dot(oc, ray_direction);
+    const float c = dot(oc, oc) - radius * radius;
+    const float discriminant = half_b * half_b - c;
+    if (discriminant < 0.0f) {
+        hit_t = 0.0f;
+        return false;
     }
 
-    return sphere;
+    const float root = sqrt(discriminant);
+    float candidate = -half_b - root;
+    if (candidate <= min_t || candidate >= max_t) {
+        candidate = -half_b + root;
+    }
+    if (candidate <= min_t || candidate >= max_t) {
+        hit_t = 0.0f;
+        return false;
+    }
 
+    hit_t = candidate;
+    return true;
 }
 
-
-
-static inline bool vkmtl_intersect_sphere(float3 ray_origin, float3 ray_direction, float4 sphere, float max_t, thread float &hit_t) {
-
-    float3 offset = ray_origin - sphere.xyz;
-
-    float b = dot(offset, ray_direction);
-
-    float c = dot(offset, offset) - sphere.w * sphere.w;
-
-    hit_t = b * b - c;
-
-    if (hit_t <= 0.0f) return false;
-
-    hit_t = -b - sqrt(hit_t);
-
-    return hit_t > 0.0f && hit_t < max_t;
-
-}
-
-
-
-static inline void vkmtl_consider_sphere(thread vkmtl_scene_hit &hit, float3 ray_origin, float3 ray_direction, int index, float time_seconds) {
+static inline void vkmtl_consider_sphere(
+    thread vkmtl_scene_hit &hit,
+    float3 ray_origin,
+    float3 ray_direction,
+    uint object_index,
+    uint ignore_object_mask,
+    uint ray_kind,
+    constant vkmtl_scene_data &scene_data
+) {
+    if (vkmtl_should_ignore(object_index, ignore_object_mask)) {
+        return;
+    }
+    if (ray_kind == vkmtl_ray_kind_shadow && object_index < 2u) {
+        return;
+    }
 
     float t = 0.0f;
-
-    float4 sphere = vkmtl_scene_sphere(index, time_seconds);
-
-    if (vkmtl_intersect_sphere(ray_origin, ray_direction, sphere, hit.distance, t)) {
-
+    const float4 sphere = vkmtl_scene_sphere(object_index, scene_data);
+    if (vkmtl_intersect_sphere(ray_origin, ray_direction, sphere, vkmtl_eps, hit.distance, t)) {
         hit.sphere = sphere;
-
-        hit.color = vkmtl_base_color(index);
-
-        hit.material = vkmtl_base_material(index);
-
+        hit.color = vkmtl_base_color(object_index, scene_data);
+        hit.material = vkmtl_base_material(object_index, scene_data);
         hit.distance = t;
-
+        hit.object_index = object_index;
+        hit.did_hit = 1u;
     }
-
 }
 
-
-
-static inline vkmtl_scene_hit vkmtl_calc_inter(float3 ray_origin, float3 ray_direction, float time_seconds) {
-
+static inline vkmtl_scene_hit vkmtl_trace_scene(
+    float3 ray_origin,
+    float3 ray_direction,
+    float max_t,
+    uint ignore_object_mask,
+    uint ray_kind,
+    constant vkmtl_scene_data &scene_data
+) {
     vkmtl_scene_hit hit;
-
     hit.sphere = float4(0.0f);
-
     hit.color = float4(0.0f);
-
     hit.material = float2(0.0f);
+    hit.distance = max_t;
+    hit.object_index = vkmtl_no_object;
+    hit.did_hit = 0u;
 
-    hit.distance = vkmtl_max_dist;
-
-    for (int i = 0; i < 10; ++i) {
-
-        vkmtl_consider_sphere(hit, ray_origin, ray_direction, i, time_seconds);
-
+    for (uint i = 0u; i < vkmtl_scene_object_count; ++i) {
+        vkmtl_consider_sphere(hit, ray_origin, ray_direction, i, ignore_object_mask, ray_kind, scene_data);
     }
 
     return hit;
-
 }
 
-
-
-static inline bool vkmtl_in_shadow(float3 ray_origin, float3 ray_direction, float distance, float time_seconds) {
-
-    float t = 0.0f;
-
-    for (int i = 2; i < 9; ++i) {
-
-        if (vkmtl_intersect_sphere(ray_origin, ray_direction, vkmtl_scene_sphere(i, time_seconds), distance, t)) return true;
-
-    }
-
-    return false;
-
+static inline bool vkmtl_in_shadow(
+    float3 ray_origin,
+    float3 ray_direction,
+    float distance,
+    uint ignore_object_mask,
+    constant vkmtl_scene_data &scene_data
+) {
+    const vkmtl_scene_hit hit = vkmtl_trace_scene(
+        ray_origin,
+        ray_direction,
+        distance,
+        ignore_object_mask,
+        vkmtl_ray_kind_shadow,
+        scene_data
+    );
+    return hit.did_hit != 0u && hit.object_index >= 2u && hit.distance < distance;
 }
 
-
-
-static inline float3 vkmtl_calc_shade(float3 point, vkmtl_scene_hit hit, float3 normal, float time_seconds) {
-
+static inline float3 vkmtl_calc_shade(
+    float3 point,
+    vkmtl_scene_hit hit,
+    float3 normal,
+    constant vkmtl_scene_data &scene_data
+) {
     float3 color = float3(0.0f);
-
-    float3 ambient_color = vkmtl_ambient_light * (1.0f - hit.color.w) * hit.color.rgb;
-
-    float3 surface_color = hit.color.w * hit.color.rgb;
+    const float3 ambient_color = vkmtl_ambient_light * (1.0f - hit.color.w) * hit.color.rgb;
+    const float3 surface_color = hit.color.w * hit.color.rgb;
 
     if (hit.color.w > 0.0f) {
-
-        float3 light = vkmtl_scene_sphere(0, time_seconds).xyz - point;
-
+        float3 light = vkmtl_scene_sphere(0u, scene_data).xyz - point;
         float distance = length(light);
-
         light = normalize(light);
-
-        float3 light_color = vkmtl_base_color(0).rgb;
-
+        float3 light_color = vkmtl_base_color(0u, scene_data).rgb;
         float diffuse = clamp(dot(normal, light), 0.0f, 1.0f);
-
         color += (ambient_color * light_color + light_color * diffuse * surface_color) / (1.0f + distance * distance);
+        if (vkmtl_in_shadow(point, light, distance, vkmtl_object_mask(hit.object_index), scene_data)) {
+            color *= 0.7f;
+        }
 
-        if (vkmtl_in_shadow(point, light, distance, time_seconds)) color *= 0.7f;
-
-        light = vkmtl_scene_sphere(1, time_seconds).xyz - point;
-
+        light = vkmtl_scene_sphere(1u, scene_data).xyz - point;
         distance = length(light);
-
         light = normalize(light);
-
-        light_color = vkmtl_base_color(1).rgb;
-
+        light_color = vkmtl_base_color(1u, scene_data).rgb;
         diffuse = clamp(dot(normal, light), 0.0f, 1.0f);
-
         color += (ambient_color * light_color + light_color * diffuse * surface_color) / (1.0f + distance * distance);
-
-        if (vkmtl_in_shadow(point, light, distance, time_seconds)) color *= 0.7f;
-
+        if (vkmtl_in_shadow(point, light, distance, vkmtl_object_mask(hit.object_index), scene_data)) {
+            color *= 0.7f;
+        }
     } else {
-
         color = hit.color.rgb;
-
     }
 
     return color;
-
 }
-
-
 
 static inline float vkmtl_fresnel(float3 normal, float3 ray_direction, float r0) {
-
-    float ndotv = clamp(dot(normal, -ray_direction), 0.0f, 1.0f);
-
+    const float ndotv = clamp(dot(normal, -ray_direction), 0.0f, 1.0f);
     return r0 + (1.0f - r0) * pow(1.0f - ndotv, 5.0f);
-
 }
 
-
-
-static inline float3 vkmtl_get_reflection(float3 ray_origin, float3 ray_direction, float time_seconds) {
-
+static inline float3 vkmtl_get_reflection(
+    float3 ray_origin,
+    float3 ray_direction,
+    uint ignore_object_mask,
+    constant vkmtl_scene_data &scene_data
+) {
     float3 color = float3(0.0f);
-
-    vkmtl_scene_hit hit = vkmtl_calc_inter(ray_origin, ray_direction, time_seconds);
-
-    if (hit.distance < vkmtl_max_dist) {
-
-        float3 point = ray_origin + ray_direction * hit.distance;
-
-        float3 normal = normalize(point - hit.sphere.xyz);
-
-        color = vkmtl_calc_shade(point, hit, normal, time_seconds);
-
+    const vkmtl_scene_hit hit = vkmtl_trace_scene(
+        ray_origin,
+        ray_direction,
+        vkmtl_max_dist,
+        ignore_object_mask,
+        vkmtl_ray_kind_surface,
+        scene_data
+    );
+    if (hit.did_hit != 0u) {
+        const float3 point = ray_origin + ray_direction * hit.distance;
+        const float3 normal = normalize(point - hit.sphere.xyz);
+        color = vkmtl_calc_shade(point, hit, normal, scene_data);
     }
-
     return color;
-
 }
 
-
-
-static inline float3 vkmtl_trace_color(float3 ray_origin, float3 ray_direction, float time_seconds) {
-
+static inline float3 vkmtl_trace_color(
+    float3 ray_origin,
+    float3 ray_direction,
+    constant vkmtl_scene_data &scene_data
+) {
     float3 mask = float3(1.0f);
-
     float3 color = float3(0.0f);
+    uint ignore_object_mask = 0u;
 
     for (int i = 0; i < vkmtl_iterations; ++i) {
+        const uint active_ignore_mask = ignore_object_mask;
+        vkmtl_scene_hit hit = vkmtl_trace_scene(
+            ray_origin,
+            ray_direction,
+            vkmtl_max_dist,
+            active_ignore_mask,
+            vkmtl_ray_kind_surface,
+            scene_data
+        );
+        ignore_object_mask = 0u;
+        if (hit.did_hit == 0u) {
+            break;
+        }
 
-        vkmtl_scene_hit hit = vkmtl_calc_inter(ray_origin, ray_direction, time_seconds);
-
-        if (hit.distance >= vkmtl_max_dist) break;
-
-        float3 point = ray_origin + ray_direction * hit.distance;
-
-        float3 normal = normalize(point - hit.sphere.xyz);
-
-        float fresnel = max(vkmtl_fresnel(normal, ray_direction, hit.material.x), 0.0001f);
-
+        const float3 point = ray_origin + ray_direction * hit.distance;
+        const float3 normal = normalize(point - hit.sphere.xyz);
+        const float fresnel = max(vkmtl_fresnel(normal, ray_direction, hit.material.x), 0.0001f);
+        const uint next_ignore_mask = active_ignore_mask | vkmtl_object_mask(hit.object_index);
         mask *= fresnel;
 
         if (hit.material.y > 0.0f) {
-
             ray_origin = point - normal * vkmtl_eps;
-
-            float3 reflected = reflect(ray_direction, normal);
-
-            color += vkmtl_get_reflection(ray_origin, reflected, time_seconds) * mask;
-
+            const float3 reflected = reflect(ray_direction, normal);
+            color += vkmtl_get_reflection(ray_origin, reflected, next_ignore_mask, scene_data) * mask;
             mask = hit.color.rgb * (1.0f - fresnel) * (mask / fresnel);
 
-            float3 refracted = refract(ray_direction, normal, hit.material.y);
-
+            const float3 refracted = refract(ray_direction, normal, hit.material.y);
             ray_direction = dot(refracted, refracted) > 0.00001f ? normalize(refracted) : reflected;
-
+            ignore_object_mask = next_ignore_mask;
         } else if (hit.material.x > 0.0f) {
-
-            color += vkmtl_calc_shade(point, hit, normal, time_seconds) * (1.0f - fresnel) * mask / fresnel;
-
+            color += vkmtl_calc_shade(point, hit, normal, scene_data) * (1.0f - fresnel) * mask / fresnel;
             ray_origin = point + normal * vkmtl_eps;
-
             ray_direction = reflect(ray_direction, normal);
-
+            ignore_object_mask = next_ignore_mask;
         } else {
-
-            color += vkmtl_calc_shade(point, hit, normal, time_seconds) * mask / fresnel;
-
+            color += vkmtl_calc_shade(point, hit, normal, scene_data) * mask / fresnel;
             break;
-
         }
-
     }
 
     return color;
-
 }
 
-
-
 kernel void raygen(
-
     texture2d<float, access::write> output [[texture(0)]],
-
-    primitive_acceleration_structure accelerationStructure [[buffer(0)]],
-
-    constant float &time_seconds [[buffer(1)]],
-
-    uint2 tid [[thread_position_in_grid]]) {
-
+    primitive_acceleration_structure acceleration_structure [[buffer(0)]],
+    constant vkmtl_scene_data &scene_data [[buffer(2)]],
+    uint2 tid [[thread_position_in_grid]]
+) {
     const uint width = output.get_width();
-
     const uint height = output.get_height();
-
-    if (tid.x >= width || tid.y >= height) return;
-
-    float2 uv = (float2(tid) + 0.5f) / float2(width, height);
-
-    float2 p = float2(uv.x * 2.0f - 1.0f, (1.0f - uv.y) * 2.0f - 1.0f);
-
-    p.x *= float(width) / max(float(height), 1.0f);
-
-    float3 ray_origin = float3(0.0f, 0.0f, -0.2f);
-
-    float3 ray_direction = normalize(float3(p.x, p.y, -1.0f));
-
-    ray native_ray;
-
-    native_ray.origin = ray_origin;
-
-    native_ray.direction = ray_direction;
-
-    native_ray.min_distance = vkmtl_eps;
-
-    native_ray.max_distance = 100.0f;
-
-    intersector<triangle_data> native_intersector;
-
-    intersection_result<triangle_data> native_hit = native_intersector.intersect(native_ray, accelerationStructure);
-
-    float3 color = vkmtl_trace_color(ray_origin, ray_direction, time_seconds);
-
-    if (native_hit.type != intersection_type::triangle && all(color <= float3(0.0f))) {
-
-        color = float3(0.015f, 0.018f, 0.026f);
-
+    if (tid.x >= width || tid.y >= height) {
+        return;
     }
 
-    color = clamp(color, float3(0.0f), float3(1.0f));
+    const float2 uv = (float2(tid) + 0.5f) / float2(width, height);
+    float2 p = float2(uv.x * 2.0f - 1.0f, (1.0f - uv.y) * 2.0f - 1.0f);
+    p.x *= float(width) / max(float(height), 1.0f);
 
-    output.write(float4(color, 1.0f), tid);
+    const float3 ray_origin = scene_data.camera.xyz;
+    const float3 ray_direction = normalize(float3(p.x, p.y, -1.0f));
 
+    ray native_ray;
+    native_ray.origin = ray_origin;
+    native_ray.direction = ray_direction;
+    native_ray.min_distance = vkmtl_eps;
+    native_ray.max_distance = 100.0f;
+    intersector<triangle_data> native_intersector;
+    const intersection_result<triangle_data> native_hit = native_intersector.intersect(native_ray, acceleration_structure);
+
+    float3 color = vkmtl_trace_color(ray_origin, ray_direction, scene_data);
+    if (native_hit.type != intersection_type::triangle && all(color <= float3(0.0f))) {
+        color = float3(0.015f, 0.018f, 0.026f);
+    }
+    output.write(float4(clamp(color, float3(0.0f), float3(1.0f)), 1.0f), tid);
 }

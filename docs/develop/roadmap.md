@@ -646,7 +646,7 @@ procedural sphere/custom intersection support. The full `ray_traced_scene`
 example remains the acceptance example, and successful Vulkan output must use
 procedural/AABB/custom-intersection geometry for spheres rather than
 tessellated sphere meshes. Metal procedural function-table parity is routed to
-Period35.
+Period39.
 
 - Phase 1: procedural geometry contract
 - Phase 2: Vulkan AABB geometry and intersection shader
@@ -657,18 +657,18 @@ Period35.
 
 See `docs/develop/period34/`.
 
-## Period 35: RT Scene Data And Metal Procedural Parity
+## Period 35: RT Scene Data And Procedural Parity Boundary
 
-Status: planned after Period34.
+Status: implemented as the shared scene-data slice after Period34.
 
-Goal: replace example-local RT scene constants with shared scene buffers, keep
-mesh room geometry and procedural sphere geometry in one scene assembly model,
-and close Metal procedural/custom-intersection parity through backend-private
-function tables.
+Goal: replace example-local RT scene constants with shared scene data, keep
+backend-specific procedural RT machinery behind vkmtl abstractions, and assign
+the remaining driver-level mixed TLAS / Metal procedural-table work to the RT
+completeness period.
 
 - Phase 1: shared RT scene data layout
-- Phase 2: mixed mesh and procedural scene assembly
-- Phase 3: Metal procedural function tables
+- Phase 2: mixed mesh and procedural scene assembly ownership
+- Phase 3: Metal procedural function table ownership
 - Phase 4: cross-backend scene binding
 - Phase 5: visual parity and validation
 
@@ -840,8 +840,9 @@ See `docs/develop/period32+/target.md`.
   scene.
 - Period 34 adds Vulkan procedural sphere/custom intersection support and
   validates it through the full native `ray_traced_scene` example.
-- Period 35 owns shared RT scene data and Metal procedural/custom-intersection
-  parity.
+- Period 35 owns shared RT scene data and precise ownership for the remaining
+  procedural parity work; Period39 owns driver-level mixed TLAS and Metal
+  procedural/custom-intersection completion.
 - Periods 36 through 44 own the remaining production parity buckets: sync,
   queues, memory, residency, resource-table scale, pipeline persistence, ray
   tracing completeness, advanced geometry, external interop, edge semantics,
