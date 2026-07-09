@@ -1,5 +1,5 @@
 const std = @import("std");
-const core = @import("core.zig");
+const core = @import("vkmtl_core");
 
 pub const DevelopmentMatrixError = error{
     EmptyName,
@@ -1471,7 +1471,7 @@ pub const documentation_topics = [_]DocumentationTopic{
     .{
         .name = "configuration",
         .path = "docs/usage/en_us/configuration.md",
-        .expectation = "backend selection, Slang tool, Vulkan runtime, and shader cache configuration",
+        .expectation = "backend selection, Slang tool, Vulkan runtime, and shader artifact configuration",
     },
     .{
         .name = "examples",

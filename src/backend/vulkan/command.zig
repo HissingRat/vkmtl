@@ -229,34 +229,60 @@ pub const CommandBuffer = struct {
         scratch: *const VulkanBuffer,
         scratch_offset: u64,
         instance_source: ?*const VulkanAccelerationStructure,
+        instance_sources: []const *const VulkanAccelerationStructure,
+        geometries: []const VulkanAccelerationStructure.GeometryInput,
     ) core.AdvancedFeatureError!void {
         _ = plan;
         if (acceleration_structure.kind == .top_level) {
-            const source = instance_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-            try acceleration_structure.writeTopLevelInstance(source);
+            if (instance_sources.len != 0) {
+                try acceleration_structure.writeTopLevelInstances(instance_sources);
+            } else {
+                const source = instance_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                try acceleration_structure.writeTopLevelInstance(source);
+            }
         }
-        const geometry_address = try acceleration_structure.geometryAddress();
         const scratch_address = try acceleration_structure.scratchAddress(scratch, scratch_offset);
-        var geometry = acceleration_structure.buildGeometry(geometry_address);
+        var geometry_buffer: [32]vk.AccelerationStructureGeometryKHR = undefined;
+        var range_buffer: [32]vk.AccelerationStructureBuildRangeInfoKHR = undefined;
+        if (geometries.len > geometry_buffer.len) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+
+        const geometry_count: u32 = if (geometries.len != 0) @intCast(geometries.len) else 1;
+        if (geometries.len != 0) {
+            if (acceleration_structure.kind != .bottom_level) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            for (geometries, 0..) |geometry_input, i| {
+                geometry_buffer[i] = try VulkanAccelerationStructure.buildGeometryFromInput(geometry_input);
+                range_buffer[i] = VulkanAccelerationStructure.buildRangeFromInput(geometry_input);
+            }
+        } else {
+            const geometry_address = try acceleration_structure.geometryAddress();
+            geometry_buffer[0] = acceleration_structure.buildGeometry(geometry_address);
+            range_buffer[0] = acceleration_structure.buildRange();
+        }
+
         const build_info = vk.AccelerationStructureBuildGeometryInfoKHR{
             .type = acceleration_structure.structureType(),
             .flags = .{ .prefer_fast_trace_bit_khr = true },
             .mode = .build_khr,
             .dst_acceleration_structure = acceleration_structure.handle,
-            .geometry_count = 1,
-            .p_geometries = @ptrCast(&geometry),
+            .geometry_count = geometry_count,
+            .p_geometries = @ptrCast(&geometry_buffer),
             .scratch_data = .{ .device_address = scratch_address },
         };
-        var range = acceleration_structure.buildRange();
-        const range_ptrs = [_][*]const vk.AccelerationStructureBuildRangeInfoKHR{
-            @ptrCast(&range),
-        };
+        var range_ptrs_buffer: [32][*]const vk.AccelerationStructureBuildRangeInfoKHR = undefined;
+        for (0..geometry_count) |i| {
+            range_ptrs_buffer[i] = @ptrCast(&range_buffer[i]);
+        }
+        const range_ptrs = range_ptrs_buffer[0..geometry_count];
 
         self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         }) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-        self.gc.dev.cmdBuildAccelerationStructuresKHR(self.cmdbuf, &.{build_info}, &range_ptrs);
+        self.gc.dev.cmdBuildAccelerationStructuresKHR(self.cmdbuf, &.{build_info}, range_ptrs);
         self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         acceleration_structure.markBuilt();
     }
@@ -292,7 +318,7 @@ pub const CommandBuffer = struct {
         dispatch: core.RayDispatchDescriptor,
     ) core.AdvancedFeatureError!void {
         self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
-        try pipeline.updateDescriptorSet(top_level, output);
+        try pipeline.updateDescriptorSet(top_level, output, dispatch);
 
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
@@ -1607,7 +1633,9 @@ fn accessMaskForUsage(usage: core.ResourceUsageKind) vk.AccessFlags {
         .sampled_texture,
         .storage_texture_read,
         => .{ .shader_read_bit = true },
-        .acceleration_structure_read => .{ .acceleration_structure_read_bit_khr = true },
+        .acceleration_structure_read,
+        .acceleration_structure_build_input,
+        => .{ .acceleration_structure_read_bit_khr = true },
         .storage_buffer_write,
         .storage_texture_write,
         => .{ .shader_read_bit = true, .shader_write_bit = true },
@@ -1651,6 +1679,7 @@ fn stageMaskForUsage(usage: core.ResourceUsageKind) vk.PipelineStageFlags {
         => .{ .ray_tracing_shader_bit_khr = true },
         .acceleration_structure_write,
         .acceleration_structure_scratch,
+        .acceleration_structure_build_input,
         => .{ .acceleration_structure_build_bit_khr = true },
         .indirect_buffer => .{ .draw_indirect_bit = true },
         .render_attachment_read,
@@ -1690,6 +1719,7 @@ fn imageLayoutForUsage(format: core.TextureFormat, usage: core.ResourceUsageKind
         .acceleration_structure_read,
         .acceleration_structure_write,
         .acceleration_structure_scratch,
+        .acceleration_structure_build_input,
         .indirect_buffer,
         .shader_binding_table,
         => .general,

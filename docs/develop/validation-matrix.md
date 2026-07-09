@@ -1,7 +1,7 @@
 # Validation Matrix
 
 The authoritative validation case metadata lives in
-`src/development_matrix.zig`.
+`tools/development_matrix.zig`.
 
 Current cases:
 

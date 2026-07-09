@@ -12,20 +12,15 @@
 
 如果示例需要尚未公开的后端能力，应该先补 vkmtl 公开抽象，而不是绕进后端实现。
 
-当前 gallery metadata 记录在 `src/development_matrix.zig`，测试会用它校验名称、路径、
+当前 gallery metadata 记录在 `tools/development_matrix.zig`，测试会用它校验名称、路径、
 run step、确定性输出 marker 和后端预期不要和文档漂移。
 
 带 shader 的示例用 `@embedFile(...)` 嵌入 Slang source，通过 `Device.compileRenderShader(...)`
-或 `Device.compileComputeShader(...)` 解析构建期预编译产物，并把 reflection JSON 附到 pipeline
-stage。单 buffer 渲染示例从 reflection 派生 vertex descriptor，shader-resource 示例也从
-reflection 派生 bind group layout。
-
-runtime shader artifact cache 由 vkmtl 自动管理。示例把进程参数交给 `WindowContext`，所以用户可以
-直接传 vkmtl runtime 参数，示例代码不需要解析：
-
-```sh
-zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
-```
+或 `Device.compileComputeShader(...)` 解析构建期预编译 blob，并把内嵌 reflection JSON 附到
+pipeline stage。Ray tracing 示例使用 `Device.compileRayTracingShader(...)`，再由 compiled shader
+根据当前 backend 把 ray-generation / miss / hit shader blob 填入 pipeline descriptor。单
+buffer 渲染示例从 reflection 派生 vertex descriptor，shader-resource 示例也从 reflection
+派生 bind group layout。构建期可检查 artifact 位于 `zig-out/shaders/`。
 
 ## Triangle
 
@@ -186,7 +181,7 @@ zig build run-bindless-textures
 
 ## Compute Gallery
 
-Period 9 在 `src/development_matrix.zig` 里追踪更广的 compute gallery。当前状态：
+Period 9 在 `tools/development_matrix.zig` 里追踪更广的 compute gallery。当前状态：
 
 - implemented: `compute_readback`
 - planned: `image_filter`
@@ -275,11 +270,17 @@ zig build run-mesh-shader
 `examples/ray_traced_scene` 会验证 ray tracing runtime contract 和 Period 30 的
 backend-private runtime record：acceleration-structure 对象、scratch buffer validation、
 ray tracing pipeline state、shader binding table 创建、ray dispatch record，以及选择 Metal
-时的 Metal table metadata。在支持的 Metal 设备上，它现在会打开窗口，创建真实
-`MTLAccelerationStructure`，并通过 backend-private Metal intersector dispatch 显示 native
-ray traced triangle。首帧成功后会打印
-`driver_pixels=visible_metal_native_rt_output`。Period32 压实 Vulkan 的第一个出图 scene；
-更完整的 native ray tracing 覆盖是 Period32+ 工作。
+时的 Metal table metadata。这个示例只调用一次 `Device.compileRayTracingShader(...)`，然后由
+compiled shader 根据当前 backend 填充 `RayTracingPipelineDescriptor`。Vulkan 消费 Slang RT
+SPIR-V stages；Metal 通过同一个 vkmtl compiled-shader object 消费构建期预编译的 Metal
+ray-generation artifact。在支持的 Metal 设备上，它现在会打开窗口，创建真实
+`MTLAccelerationStructure`，使用用户侧 mesh vertex buffer 构建 full mesh RT scene，并通过
+backend-private Metal intersector dispatch 显示房间和多个球体。首帧成功后会打印
+`driver_pixels=visible_metal_full_mesh_rt_scene`。Vulkan 路径现在使用 procedural sphere AABB、
+Slang intersection SPIR-V、procedural hit group 和 native `vkCmdTraceRaysKHR` dispatch。
+在支持 Vulkan RT 的硬件上，它的成功 marker 是
+`driver_pixels=visible_vulkan_procedural_rt_scene`。Metal procedural function table parity
+和共享 RT scene buffer 被路由到 Period35。
 
 运行：
 

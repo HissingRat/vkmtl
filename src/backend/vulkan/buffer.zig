@@ -135,6 +135,10 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
         flags.storage_buffer_bit = true;
         flags.shader_device_address_bit = true;
     }
+    if (usage.acceleration_structure_build_input) {
+        flags.acceleration_structure_build_input_read_only_bit_khr = true;
+        flags.shader_device_address_bit = true;
+    }
     if (usage.shader_binding_table) {
         flags.shader_binding_table_bit_khr = true;
         flags.shader_device_address_bit = true;
@@ -148,7 +152,9 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
 }
 
 fn requiresDeviceAddress(usage: core.BufferUsage) bool {
-    return usage.acceleration_structure_scratch or usage.shader_binding_table;
+    return usage.acceleration_structure_scratch or
+        usage.acceleration_structure_build_input or
+        usage.shader_binding_table;
 }
 
 fn memoryFlags(descriptor: core.BufferDescriptor) vk.MemoryPropertyFlags {

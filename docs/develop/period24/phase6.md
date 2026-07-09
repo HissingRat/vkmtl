@@ -17,7 +17,7 @@ Phase 6 closes Period 24 with coverage and docs.
 
 ## Result
 
-- `src/development_matrix.zig` records the Period 24 resource utility matrix
+- `tools/development_matrix.zig` records the Period 24 resource utility matrix
   and `resource_utility_regression` row.
 - `docs/develop/backend-test-matrix.md` separates native, fallback, portable
   runtime, and deferred resource utility paths.

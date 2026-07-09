@@ -610,14 +610,75 @@ devices.
 - Phase 4: Vulkan ray tracing pipeline and SBT
 - Phase 5: Vulkan trace rays and direct output presentation
 - Phase 6: validation on supported Vulkan hardware
-- Phase 7: documentation and Period32+ routing
+- Phase 7: documentation and follow-up routing
 
 See `docs/develop/period32/`.
 
+## Period 33: Native RT Mesh Scene
+
+Status: planned after Period 32 validation/docs closure.
+
+Goal: expand the first native Metal and Vulkan RT smoke paths into a full
+native RT mesh scene. The reference `examples/ray_traced_scene` visual target
+should be rendered through native acceleration structures, native RT pipelines,
+native dispatch, and native presentation on supported backends.
+
+This period keeps spheres as triangle meshes. Procedural spheres and custom
+intersection are explicitly Period 34.
+
+- Phase 1: scene contract and reference target
+- Phase 2: public RT mesh geometry API
+- Phase 3: Vulkan mesh BLAS and TLAS
+- Phase 4: Metal mesh BLAS and TLAS
+- Phase 5: scene buffers and binding
+- Phase 6: full mesh ray traced scene example
+- Phase 7: validation and documentation
+
+See `docs/develop/period33/`.
+
+## Period 34: Procedural RT Geometry And Custom Intersection
+
+Status: Vulkan procedural path implemented; supported-hardware validation
+pending.
+
+Goal: replace the Vulkan mesh-sphere approximation from Period 33 with native
+procedural sphere/custom intersection support. The full `ray_traced_scene`
+example remains the acceptance example, and successful Vulkan output must use
+procedural/AABB/custom-intersection geometry for spheres rather than
+tessellated sphere meshes. Metal procedural function-table parity is routed to
+Period35.
+
+- Phase 1: procedural geometry contract
+- Phase 2: Vulkan AABB geometry and intersection shader
+- Phase 3: Metal intersection function table path
+- Phase 4: shared procedural scene data
+- Phase 5: full procedural ray traced scene
+- Phase 6: validation and backend matrix
+
+See `docs/develop/period34/`.
+
+## Period 35: RT Scene Data And Metal Procedural Parity
+
+Status: planned after Period34.
+
+Goal: replace example-local RT scene constants with shared scene buffers, keep
+mesh room geometry and procedural sphere geometry in one scene assembly model,
+and close Metal procedural/custom-intersection parity through backend-private
+function tables.
+
+- Phase 1: shared RT scene data layout
+- Phase 2: mixed mesh and procedural scene assembly
+- Phase 3: Metal procedural function tables
+- Phase 4: cross-backend scene binding
+- Phase 5: visual parity and validation
+
+See `docs/develop/period35/`.
+
 ## Period 32+: Full Parity And Production Coverage
 
-Status: target only after the Period32 Vulkan ray traced scene is visible or
-explicitly documented as unsupported on a given Vulkan runtime.
+Status: long-tail target. Period 33 and Period 34 are the first concrete
+Period32+ ray tracing periods; later Period32+ work should continue from their
+results instead of staying as vague parity notes.
 
 Goal: complete the long-tail parity, platform, diagnostics, validation,
 interop, and pressure-test work required before vkmtl can reasonably claim broad
@@ -630,11 +691,17 @@ See `docs/develop/period32+/target.md`.
 - Period 30 is complete as backend-private runtime record work. It does not
   claim driver-level ray tracing pixels or full native parity.
 - Period 31 has made the Metal ray traced scene visibly render in the window
-  through a native Metal RT command path.
+  through a first native Metal RT command path.
 - Period 32 follows Period31 and must present pixels produced by the Vulkan ray
   tracing shader on supported Vulkan ray tracing devices.
-- Period 32+ remains target-only for broad parity until the Period31 Metal
-  scene and Period32 Vulkan scene are handled.
+- Period 33 turns the first Metal/Vulkan RT paths into a full native mesh RT
+  scene.
+- Period 34 adds Vulkan procedural sphere/custom intersection support and
+  validates it through the full native `ray_traced_scene` example.
+- Period 35 owns shared RT scene data and Metal procedural/custom-intersection
+  parity.
+- Later Period32+ work remains the long-tail parity bucket for production
+  behavior, pressure tests, interop, queues, residency, and edge semantics.
 - Period 19 remains the voxel pressure-test target, but it is deferred until the
   backend completion work removes the obvious render and binding blockers.
 - Period 11 remains the long-term capability-query baseline for advanced

@@ -1,13 +1,6 @@
 const std = @import("std");
 const core = @import("../core.zig");
-const artifact_loader = @import("artifact.zig");
 const precompiled = @import("vkmtl_precompiled_shaders");
-
-const max_hash_file_bytes = 1024;
-
-pub const CompilerOptions = struct {
-    cache_dir: ?[]const u8 = null,
-};
 
 pub const RenderShaderOptions = struct {
     vertex_entry: []const u8 = "vs_main",
@@ -22,6 +15,8 @@ pub const RayTracingShaderOptions = struct {
     ray_generation_entry: []const u8 = "raygen",
     miss_entry: []const u8 = "miss",
     closest_hit_entry: []const u8 = "closest_hit",
+    any_hit_entry: []const u8 = "any_hit",
+    intersection_entry: []const u8 = "intersection_main",
 };
 
 pub const RenderShaderStages = struct {
@@ -31,23 +26,17 @@ pub const RenderShaderStages = struct {
 
 pub const CompiledRenderShader = struct {
     allocator: std.mem.Allocator,
-    vertex_spirv_path: []u8,
-    fragment_spirv_path: []u8,
-    vertex_msl_path: []u8,
-    fragment_msl_path: []u8,
-    vertex_reflection_path: []u8,
-    fragment_reflection_path: []u8,
+    vertex_spirv: []const u8,
+    fragment_spirv: []const u8,
+    vertex_msl: []const u8,
+    fragment_msl: []const u8,
+    vertex_reflection_json: []const u8,
+    fragment_reflection_json: []const u8,
     vertex_entry: []u8,
     fragment_entry: []u8,
 
     pub fn deinit(self: *CompiledRenderShader) void {
         const allocator = self.allocator;
-        allocator.free(self.vertex_spirv_path);
-        allocator.free(self.fragment_spirv_path);
-        allocator.free(self.vertex_msl_path);
-        allocator.free(self.fragment_msl_path);
-        allocator.free(self.vertex_reflection_path);
-        allocator.free(self.fragment_reflection_path);
         allocator.free(self.vertex_entry);
         allocator.free(self.fragment_entry);
         self.* = undefined;
@@ -58,7 +47,7 @@ pub const CompiledRenderShader = struct {
             .module = .{ .source = self.shaderSource(backend, .vertex) },
             .stage = .vertex,
             .entry_point = self.vertex_entry,
-            .reflection = .{ .artifact = .{ .path = self.vertex_reflection_path } },
+            .reflection = .{ .json = self.vertex_reflection_json },
         };
     }
 
@@ -67,7 +56,7 @@ pub const CompiledRenderShader = struct {
             .module = .{ .source = self.shaderSource(backend, .fragment) },
             .stage = .fragment,
             .entry_point = self.fragment_entry,
-            .reflection = .{ .artifact = .{ .path = self.fragment_reflection_path } },
+            .reflection = .{ .json = self.fragment_reflection_json },
         };
     }
 
@@ -84,31 +73,25 @@ pub const CompiledRenderShader = struct {
         stage: core.ShaderStage,
     ) core.ShaderSource {
         return switch (backend) {
-            .vulkan => .{ .artifact = .{
-                .path = switch (stage) {
-                    .vertex => self.vertex_spirv_path,
-                    .fragment => self.fragment_spirv_path,
-                    .compute,
-                    .tessellation_control,
-                    .tessellation_evaluation,
-                    .mesh,
-                    .task,
-                    => unreachable,
-                },
-                .language = .spirv,
+            .vulkan => .{ .spirv_bytes = switch (stage) {
+                .vertex => self.vertex_spirv,
+                .fragment => self.fragment_spirv,
+                .compute,
+                .tessellation_control,
+                .tessellation_evaluation,
+                .mesh,
+                .task,
+                => unreachable,
             } },
-            .metal => .{ .artifact = .{
-                .path = switch (stage) {
-                    .vertex => self.vertex_msl_path,
-                    .fragment => self.fragment_msl_path,
-                    .compute,
-                    .tessellation_control,
-                    .tessellation_evaluation,
-                    .mesh,
-                    .task,
-                    => unreachable,
-                },
-                .language = .msl,
+            .metal => .{ .msl = switch (stage) {
+                .vertex => self.vertex_msl,
+                .fragment => self.fragment_msl,
+                .compute,
+                .tessellation_control,
+                .tessellation_evaluation,
+                .mesh,
+                .task,
+                => unreachable,
             } },
         };
     }
@@ -116,16 +99,13 @@ pub const CompiledRenderShader = struct {
 
 pub const CompiledComputeShader = struct {
     allocator: std.mem.Allocator,
-    spirv_path: []u8,
-    msl_path: []u8,
-    reflection_path: []u8,
+    spirv: []const u8,
+    msl: []const u8,
+    reflection_json: []const u8,
     entry: []u8,
 
     pub fn deinit(self: *CompiledComputeShader) void {
         const allocator = self.allocator;
-        allocator.free(self.spirv_path);
-        allocator.free(self.msl_path);
-        allocator.free(self.reflection_path);
         allocator.free(self.entry);
         self.* = undefined;
     }
@@ -133,55 +113,69 @@ pub const CompiledComputeShader = struct {
     pub fn stageDescriptor(self: CompiledComputeShader, backend: core.Backend) core.ProgrammableStageDescriptor {
         return .{
             .module = .{ .source = switch (backend) {
-                .vulkan => .{ .artifact = .{ .path = self.spirv_path, .language = .spirv } },
-                .metal => .{ .artifact = .{ .path = self.msl_path, .language = .msl } },
+                .vulkan => .{ .spirv_bytes = self.spirv },
+                .metal => .{ .msl = self.msl },
             } },
             .stage = .compute,
             .entry_point = self.entry,
-            .reflection = .{ .artifact = .{ .path = self.reflection_path } },
+            .reflection = .{ .json = self.reflection_json },
         };
     }
 };
 
 pub const CompiledRayTracingShader = struct {
     allocator: std.mem.Allocator,
-    ray_generation_spirv_path: []u8,
-    miss_spirv_path: []u8,
-    closest_hit_spirv_path: []u8,
-    ray_generation_reflection_path: []u8,
-    miss_reflection_path: []u8,
-    closest_hit_reflection_path: []u8,
+    ray_generation_spirv: []const u8,
+    miss_spirv: []const u8,
+    closest_hit_spirv: []const u8,
+    any_hit_spirv: []const u8,
+    intersection_spirv: []const u8,
+    ray_generation_msl: []const u8,
+    ray_generation_reflection_json: []const u8,
+    miss_reflection_json: []const u8,
+    closest_hit_reflection_json: []const u8,
+    any_hit_reflection_json: []const u8,
+    intersection_reflection_json: []const u8,
     ray_generation_entry: []u8,
     miss_entry: []u8,
     closest_hit_entry: []u8,
+    any_hit_entry: []u8,
+    intersection_entry: []u8,
 
     pub fn deinit(self: *CompiledRayTracingShader) void {
         const allocator = self.allocator;
-        allocator.free(self.ray_generation_spirv_path);
-        allocator.free(self.miss_spirv_path);
-        allocator.free(self.closest_hit_spirv_path);
-        allocator.free(self.ray_generation_reflection_path);
-        allocator.free(self.miss_reflection_path);
-        allocator.free(self.closest_hit_reflection_path);
         allocator.free(self.ray_generation_entry);
         allocator.free(self.miss_entry);
         allocator.free(self.closest_hit_entry);
+        allocator.free(self.any_hit_entry);
+        allocator.free(self.intersection_entry);
         self.* = undefined;
     }
 
     pub fn rayGenerationModuleDescriptor(self: CompiledRayTracingShader) core.ShaderModuleDescriptor {
-        return self.moduleDescriptor(self.ray_generation_spirv_path);
+        return self.rayGenerationModuleDescriptorForBackend(.vulkan);
     }
 
     pub fn rayGenerationStageDescriptor(self: CompiledRayTracingShader) core.RayTracingShaderStageDescriptor {
+        return self.rayGenerationStageDescriptorForBackend(.vulkan);
+    }
+
+    pub fn rayGenerationModuleDescriptorForBackend(self: CompiledRayTracingShader, backend: core.Backend) core.ShaderModuleDescriptor {
+        return switch (backend) {
+            .vulkan => self.moduleDescriptor(self.ray_generation_spirv, .spirv),
+            .metal => self.moduleDescriptor(self.ray_generation_msl, .msl),
+        };
+    }
+
+    pub fn rayGenerationStageDescriptorForBackend(self: CompiledRayTracingShader, backend: core.Backend) core.RayTracingShaderStageDescriptor {
         return .{
-            .module = self.rayGenerationModuleDescriptor(),
+            .module = self.rayGenerationModuleDescriptorForBackend(backend),
             .entry_point = self.ray_generation_entry,
         };
     }
 
     pub fn missModuleDescriptor(self: CompiledRayTracingShader) core.ShaderModuleDescriptor {
-        return self.moduleDescriptor(self.miss_spirv_path);
+        return self.moduleDescriptor(self.miss_spirv, .spirv);
     }
 
     pub fn missStageDescriptor(self: CompiledRayTracingShader) core.RayTracingShaderStageDescriptor {
@@ -192,7 +186,7 @@ pub const CompiledRayTracingShader = struct {
     }
 
     pub fn closestHitModuleDescriptor(self: CompiledRayTracingShader) core.ShaderModuleDescriptor {
-        return self.moduleDescriptor(self.closest_hit_spirv_path);
+        return self.moduleDescriptor(self.closest_hit_spirv, .spirv);
     }
 
     pub fn closestHitStageDescriptor(self: CompiledRayTracingShader) core.RayTracingShaderStageDescriptor {
@@ -202,8 +196,60 @@ pub const CompiledRayTracingShader = struct {
         };
     }
 
-    fn moduleDescriptor(_: CompiledRayTracingShader, path: []const u8) core.ShaderModuleDescriptor {
-        return .{ .source = .{ .artifact = .{ .path = path, .language = .spirv } } };
+    pub fn anyHitModuleDescriptor(self: CompiledRayTracingShader) core.ShaderModuleDescriptor {
+        return self.moduleDescriptor(self.any_hit_spirv, .spirv);
+    }
+
+    pub fn anyHitStageDescriptor(self: CompiledRayTracingShader) core.RayTracingShaderStageDescriptor {
+        return .{
+            .module = self.anyHitModuleDescriptor(),
+            .entry_point = self.any_hit_entry,
+        };
+    }
+
+    pub fn intersectionModuleDescriptor(self: CompiledRayTracingShader) core.ShaderModuleDescriptor {
+        return self.moduleDescriptor(self.intersection_spirv, .spirv);
+    }
+
+    pub fn intersectionStageDescriptor(self: CompiledRayTracingShader) core.RayTracingShaderStageDescriptor {
+        return .{
+            .module = self.intersectionModuleDescriptor(),
+            .entry_point = self.intersection_entry,
+        };
+    }
+
+    pub fn applyToPipelineDescriptor(
+        self: CompiledRayTracingShader,
+        backend: core.Backend,
+        descriptor: *core.RayTracingPipelineDescriptor,
+    ) void {
+        descriptor.ray_generation = self.rayGenerationStageDescriptorForBackend(backend);
+        switch (backend) {
+            .vulkan => {
+                descriptor.miss = self.missStageDescriptor();
+                descriptor.closest_hit = self.closestHitStageDescriptor();
+                descriptor.any_hit = self.anyHitStageDescriptor();
+                descriptor.intersection = self.intersectionStageDescriptor();
+            },
+            .metal => {
+                descriptor.miss = null;
+                descriptor.closest_hit = null;
+                descriptor.any_hit = null;
+                descriptor.intersection = null;
+            },
+        }
+    }
+
+    fn moduleDescriptor(
+        _: CompiledRayTracingShader,
+        bytes: []const u8,
+        language: core.ShaderSourceLanguage,
+    ) core.ShaderModuleDescriptor {
+        return .{ .source = switch (language) {
+            .spirv => .{ .spirv_bytes = bytes },
+            .msl => .{ .msl = bytes },
+            .slang => unreachable,
+        } };
     }
 };
 
@@ -212,55 +258,16 @@ pub fn compileRenderShader(
     name: []const u8,
     source: []const u8,
     options: RenderShaderOptions,
-    compiler_options: CompilerOptions,
 ) !CompiledRenderShader {
     try validateShaderName(name);
 
-    const shader_dir = try shaderCacheDir(allocator, compiler_options.cache_dir, name);
-    defer allocator.free(shader_dir);
-
-    const source_path = try std.fs.path.join(allocator, &.{ shader_dir, "source.slang" });
-    defer allocator.free(source_path);
-    const hash_path = try std.fs.path.join(allocator, &.{ shader_dir, "hash" });
-    defer allocator.free(hash_path);
-
-    var result = CompiledRenderShader{
-        .allocator = allocator,
-        .vertex_spirv_path = try std.fs.path.join(allocator, &.{ shader_dir, "vert.spv" }),
-        .fragment_spirv_path = try std.fs.path.join(allocator, &.{ shader_dir, "frag.spv" }),
-        .vertex_msl_path = try std.fs.path.join(allocator, &.{ shader_dir, "vert.msl" }),
-        .fragment_msl_path = try std.fs.path.join(allocator, &.{ shader_dir, "frag.msl" }),
-        .vertex_reflection_path = try std.fs.path.join(allocator, &.{ shader_dir, "vert.reflect.json" }),
-        .fragment_reflection_path = try std.fs.path.join(allocator, &.{ shader_dir, "frag.reflect.json" }),
-        .vertex_entry = try allocator.dupe(u8, options.vertex_entry),
-        .fragment_entry = try allocator.dupe(u8, options.fragment_entry),
-    };
-    errdefer result.deinit();
-
     const source_hash = sourceHash(source);
-    if (try cacheHit(allocator, hash_path, source_hash, &.{
-        result.vertex_spirv_path,
-        result.fragment_spirv_path,
-        result.vertex_msl_path,
-        result.fragment_msl_path,
-        result.vertex_reflection_path,
-        result.fragment_reflection_path,
-    })) {
-        std.debug.print("using cached slang shader: {s}\n", .{name});
-        return result;
-    }
-
     if (try loadPrecompiledRenderShader(
         allocator,
         name,
-        shader_dir,
-        source_path,
-        hash_path,
-        source,
         source_hash,
         options,
-        result,
-    )) {
+    )) |result| {
         std.debug.print("using precompiled slang shader: {s}\n", .{name});
         return result;
     }
@@ -274,48 +281,16 @@ pub fn compileComputeShader(
     name: []const u8,
     source: []const u8,
     options: ComputeShaderOptions,
-    compiler_options: CompilerOptions,
 ) !CompiledComputeShader {
     try validateShaderName(name);
 
-    const shader_dir = try shaderCacheDir(allocator, compiler_options.cache_dir, name);
-    defer allocator.free(shader_dir);
-
-    const source_path = try std.fs.path.join(allocator, &.{ shader_dir, "source.slang" });
-    defer allocator.free(source_path);
-    const hash_path = try std.fs.path.join(allocator, &.{ shader_dir, "hash" });
-    defer allocator.free(hash_path);
-
-    var result = CompiledComputeShader{
-        .allocator = allocator,
-        .spirv_path = try std.fs.path.join(allocator, &.{ shader_dir, "compute.spv" }),
-        .msl_path = try std.fs.path.join(allocator, &.{ shader_dir, "compute.msl" }),
-        .reflection_path = try std.fs.path.join(allocator, &.{ shader_dir, "compute.reflect.json" }),
-        .entry = try allocator.dupe(u8, options.entry),
-    };
-    errdefer result.deinit();
-
     const source_hash = sourceHash(source);
-    if (try cacheHit(allocator, hash_path, source_hash, &.{
-        result.spirv_path,
-        result.msl_path,
-        result.reflection_path,
-    })) {
-        std.debug.print("using cached slang shader: {s}\n", .{name});
-        return result;
-    }
-
     if (try loadPrecompiledComputeShader(
         allocator,
         name,
-        shader_dir,
-        source_path,
-        hash_path,
-        source,
         source_hash,
         options,
-        result,
-    )) {
+    )) |result| {
         std.debug.print("using precompiled slang shader: {s}\n", .{name});
         return result;
     }
@@ -329,56 +304,16 @@ pub fn compileRayTracingShader(
     name: []const u8,
     source: []const u8,
     options: RayTracingShaderOptions,
-    compiler_options: CompilerOptions,
 ) !CompiledRayTracingShader {
     try validateShaderName(name);
 
-    const shader_dir = try shaderCacheDir(allocator, compiler_options.cache_dir, name);
-    defer allocator.free(shader_dir);
-
-    const source_path = try std.fs.path.join(allocator, &.{ shader_dir, "source.slang" });
-    defer allocator.free(source_path);
-    const hash_path = try std.fs.path.join(allocator, &.{ shader_dir, "hash" });
-    defer allocator.free(hash_path);
-
-    var result = CompiledRayTracingShader{
-        .allocator = allocator,
-        .ray_generation_spirv_path = try std.fs.path.join(allocator, &.{ shader_dir, "raygen.spv" }),
-        .miss_spirv_path = try std.fs.path.join(allocator, &.{ shader_dir, "miss.spv" }),
-        .closest_hit_spirv_path = try std.fs.path.join(allocator, &.{ shader_dir, "closest_hit.spv" }),
-        .ray_generation_reflection_path = try std.fs.path.join(allocator, &.{ shader_dir, "raygen.reflect.json" }),
-        .miss_reflection_path = try std.fs.path.join(allocator, &.{ shader_dir, "miss.reflect.json" }),
-        .closest_hit_reflection_path = try std.fs.path.join(allocator, &.{ shader_dir, "closest_hit.reflect.json" }),
-        .ray_generation_entry = try allocator.dupe(u8, options.ray_generation_entry),
-        .miss_entry = try allocator.dupe(u8, options.miss_entry),
-        .closest_hit_entry = try allocator.dupe(u8, options.closest_hit_entry),
-    };
-    errdefer result.deinit();
-
     const source_hash = sourceHash(source);
-    if (try cacheHit(allocator, hash_path, source_hash, &.{
-        result.ray_generation_spirv_path,
-        result.miss_spirv_path,
-        result.closest_hit_spirv_path,
-        result.ray_generation_reflection_path,
-        result.miss_reflection_path,
-        result.closest_hit_reflection_path,
-    })) {
-        std.debug.print("using cached slang shader: {s}\n", .{name});
-        return result;
-    }
-
     if (try loadPrecompiledRayTracingShader(
         allocator,
         name,
-        shader_dir,
-        source_path,
-        hash_path,
-        source,
         source_hash,
         options,
-        result,
-    )) {
+    )) |result| {
         std.debug.print("using precompiled slang shader: {s}\n", .{name});
         return result;
     }
@@ -391,153 +326,98 @@ const RayTracingCompileStage = enum {
     ray_generation,
     miss,
     closest_hit,
+    any_hit,
+    intersection,
 };
 
 fn loadPrecompiledRenderShader(
     allocator: std.mem.Allocator,
     name: []const u8,
-    shader_dir: []const u8,
-    source_path: []const u8,
-    hash_path: []const u8,
-    source: []const u8,
     source_hash: [64]u8,
     options: RenderShaderOptions,
-    result: CompiledRenderShader,
-) !bool {
+) !?CompiledRenderShader {
     for (precompiled.render_shaders) |blob| {
         if (!std.mem.eql(u8, blob.name, name)) continue;
         if (!std.mem.eql(u8, blob.vertex_entry, options.vertex_entry)) continue;
         if (!std.mem.eql(u8, blob.fragment_entry, options.fragment_entry)) continue;
         if (!std.mem.eql(u8, blob.source_hash, source_hash[0..])) continue;
 
-        try makeDirPath(allocator, shader_dir);
-        try writeFile(allocator, source_path, source);
-        try writeFile(allocator, result.vertex_spirv_path, blob.vertex_spirv);
-        try writeFile(allocator, result.fragment_spirv_path, blob.fragment_spirv);
-        try writeFile(allocator, result.vertex_msl_path, blob.vertex_msl);
-        try writeFile(allocator, result.fragment_msl_path, blob.fragment_msl);
-        try writeFile(allocator, result.vertex_reflection_path, blob.vertex_reflection);
-        try writeFile(allocator, result.fragment_reflection_path, blob.fragment_reflection);
-        try writeFile(allocator, hash_path, &source_hash);
-        return true;
+        return .{
+            .allocator = allocator,
+            .vertex_spirv = blob.vertex_spirv,
+            .fragment_spirv = blob.fragment_spirv,
+            .vertex_msl = blob.vertex_msl,
+            .fragment_msl = blob.fragment_msl,
+            .vertex_reflection_json = blob.vertex_reflection,
+            .fragment_reflection_json = blob.fragment_reflection,
+            .vertex_entry = try allocator.dupe(u8, options.vertex_entry),
+            .fragment_entry = try allocator.dupe(u8, options.fragment_entry),
+        };
     }
 
-    return false;
+    return null;
 }
 
 fn loadPrecompiledComputeShader(
     allocator: std.mem.Allocator,
     name: []const u8,
-    shader_dir: []const u8,
-    source_path: []const u8,
-    hash_path: []const u8,
-    source: []const u8,
     source_hash: [64]u8,
     options: ComputeShaderOptions,
-    result: CompiledComputeShader,
-) !bool {
+) !?CompiledComputeShader {
     for (precompiled.compute_shaders) |blob| {
         if (!std.mem.eql(u8, blob.name, name)) continue;
         if (!std.mem.eql(u8, blob.entry, options.entry)) continue;
         if (!std.mem.eql(u8, blob.source_hash, source_hash[0..])) continue;
 
-        try makeDirPath(allocator, shader_dir);
-        try writeFile(allocator, source_path, source);
-        try writeFile(allocator, result.spirv_path, blob.spirv);
-        try writeFile(allocator, result.msl_path, blob.msl);
-        try writeFile(allocator, result.reflection_path, blob.reflection);
-        try writeFile(allocator, hash_path, &source_hash);
-        return true;
+        return .{
+            .allocator = allocator,
+            .spirv = blob.spirv,
+            .msl = blob.msl,
+            .reflection_json = blob.reflection,
+            .entry = try allocator.dupe(u8, options.entry),
+        };
     }
 
-    return false;
+    return null;
 }
 
 fn loadPrecompiledRayTracingShader(
     allocator: std.mem.Allocator,
     name: []const u8,
-    shader_dir: []const u8,
-    source_path: []const u8,
-    hash_path: []const u8,
-    source: []const u8,
     source_hash: [64]u8,
     options: RayTracingShaderOptions,
-    result: CompiledRayTracingShader,
-) !bool {
+) !?CompiledRayTracingShader {
     for (precompiled.ray_tracing_shaders) |blob| {
         if (!std.mem.eql(u8, blob.name, name)) continue;
         if (!std.mem.eql(u8, blob.ray_generation_entry, options.ray_generation_entry)) continue;
         if (!std.mem.eql(u8, blob.miss_entry, options.miss_entry)) continue;
         if (!std.mem.eql(u8, blob.closest_hit_entry, options.closest_hit_entry)) continue;
+        if (!std.mem.eql(u8, blob.any_hit_entry, options.any_hit_entry)) continue;
+        if (!std.mem.eql(u8, blob.intersection_entry, options.intersection_entry)) continue;
         if (!std.mem.eql(u8, blob.source_hash, source_hash[0..])) continue;
 
-        try makeDirPath(allocator, shader_dir);
-        try writeFile(allocator, source_path, source);
-        try writeFile(allocator, result.ray_generation_spirv_path, blob.ray_generation_spirv);
-        try writeFile(allocator, result.miss_spirv_path, blob.miss_spirv);
-        try writeFile(allocator, result.closest_hit_spirv_path, blob.closest_hit_spirv);
-        try writeFile(allocator, result.ray_generation_reflection_path, blob.ray_generation_reflection);
-        try writeFile(allocator, result.miss_reflection_path, blob.miss_reflection);
-        try writeFile(allocator, result.closest_hit_reflection_path, blob.closest_hit_reflection);
-        try writeFile(allocator, hash_path, &source_hash);
-        return true;
+        return .{
+            .allocator = allocator,
+            .ray_generation_spirv = blob.ray_generation_spirv,
+            .miss_spirv = blob.miss_spirv,
+            .closest_hit_spirv = blob.closest_hit_spirv,
+            .any_hit_spirv = blob.any_hit_spirv,
+            .intersection_spirv = blob.intersection_spirv,
+            .ray_generation_msl = blob.ray_generation_msl,
+            .ray_generation_reflection_json = blob.ray_generation_reflection,
+            .miss_reflection_json = blob.miss_reflection,
+            .closest_hit_reflection_json = blob.closest_hit_reflection,
+            .any_hit_reflection_json = blob.any_hit_reflection,
+            .intersection_reflection_json = blob.intersection_reflection,
+            .ray_generation_entry = try allocator.dupe(u8, options.ray_generation_entry),
+            .miss_entry = try allocator.dupe(u8, options.miss_entry),
+            .closest_hit_entry = try allocator.dupe(u8, options.closest_hit_entry),
+            .any_hit_entry = try allocator.dupe(u8, options.any_hit_entry),
+            .intersection_entry = try allocator.dupe(u8, options.intersection_entry),
+        };
     }
 
-    return false;
-}
-
-fn makeDirPath(allocator: std.mem.Allocator, path: []const u8) !void {
-    _ = allocator;
-    std.Io.Dir.createDirPath(.cwd(), std.Options.debug_io, path) catch return error.CacheDirectoryCreateFailed;
-}
-
-fn writeFile(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !void {
-    _ = allocator;
-    std.Io.Dir.writeFile(.cwd(), std.Options.debug_io, .{
-        .sub_path = path,
-        .data = bytes,
-    }) catch return error.CacheFileWriteFailed;
-}
-
-fn cacheHit(
-    allocator: std.mem.Allocator,
-    hash_path: []const u8,
-    expected_hash: [64]u8,
-    artifact_paths: []const []const u8,
-) !bool {
-    const hash_bytes = artifact_loader.readFileBytes(allocator, hash_path, max_hash_file_bytes) catch return false;
-    defer allocator.free(hash_bytes);
-    if (hash_bytes.len < expected_hash.len) return false;
-    if (!std.mem.eql(u8, hash_bytes[0..expected_hash.len], expected_hash[0..])) return false;
-
-    for (artifact_paths) |path| {
-        if (!fileExists(allocator, path)) return false;
-    }
-    return true;
-}
-
-fn fileExists(allocator: std.mem.Allocator, path: []const u8) bool {
-    _ = allocator;
-    std.Io.Dir.access(.cwd(), std.Options.debug_io, path, .{}) catch return false;
-    return true;
-}
-
-fn shaderCacheDir(
-    allocator: std.mem.Allocator,
-    configured_cache_dir: ?[]const u8,
-    shader_name: []const u8,
-) ![]u8 {
-    if (configured_cache_dir) |cache_dir| {
-        return try std.fs.path.join(allocator, &.{ cache_dir, shader_name });
-    }
-
-    const exe_dir = try executableDir(allocator);
-    defer allocator.free(exe_dir);
-    return try std.fs.path.join(allocator, &.{ exe_dir, "vkmtl-cache", shader_name });
-}
-
-fn executableDir(allocator: std.mem.Allocator) ![]u8 {
-    return try std.process.executableDirPathAlloc(std.Options.debug_io, allocator);
+    return null;
 }
 
 fn sourceHash(source: []const u8) [64]u8 {
@@ -982,6 +862,8 @@ fn rayTracingStageName(stage: RayTracingCompileStage) []const u8 {
         .ray_generation => "ray_generation",
         .miss => "miss",
         .closest_hit => "closest_hit",
+        .any_hit => "any_hit",
+        .intersection => "intersection",
     };
 }
 
@@ -997,7 +879,51 @@ fn bindingKindName(kind: core.BindingResourceKind) []const u8 {
 }
 
 test "runtime reflection parser reads rainbow cube shader shape" {
-    const source = @embedFile("../../examples/rainbow_cube/shaders/rainbow_cube.slang");
+    const source =
+        \\struct VertexInput
+        \\{
+        \\    float3 position : POSITION0;
+        \\    float2 uv : TEXCOORD0;
+        \\    float3 color : COLOR0;
+        \\};
+        \\
+        \\struct VertexOutput
+        \\{
+        \\    float4 position : SV_Position;
+        \\    float2 uv : TEXCOORD0;
+        \\    float3 color : COLOR0;
+        \\};
+        \\
+        \\struct Uniforms
+        \\{
+        \\    float4 transform_row0;
+        \\};
+        \\
+        \\[[vk::binding(0, 0)]]
+        \\ConstantBuffer<Uniforms> uniforms : register(b0, space0);
+        \\
+        \\[[vk::binding(1, 0)]]
+        \\Texture2D<float4> sampled_texture : register(t1, space0);
+        \\
+        \\[[vk::binding(2, 0)]]
+        \\SamplerState linear_sampler : register(s2, space0);
+        \\
+        \\[shader("vertex")]
+        \\VertexOutput vs_main(VertexInput input)
+        \\{
+        \\    VertexOutput output;
+        \\    output.position = float4(input.position, 1.0);
+        \\    output.uv = input.uv;
+        \\    output.color = input.color;
+        \\    return output;
+        \\}
+        \\
+        \\[shader("fragment")]
+        \\float4 fs_main(VertexOutput input) : SV_Target0
+        \\{
+        \\    return sampled_texture.Sample(linear_sampler, input.uv) * float4(input.color, 1.0);
+        \\}
+    ;
     var model = try ReflectionModel.parse(std.testing.allocator, source);
     defer model.deinit(std.testing.allocator);
 
@@ -1020,7 +946,22 @@ test "runtime reflection parser reads rainbow cube shader shape" {
 }
 
 test "runtime reflection parser reads compute shader shape" {
-    const source = @embedFile("../../examples/compute_readback/shaders/compute_readback.slang");
+    const source =
+        \\[[vk::binding(0, 0)]]
+        \\[[vk::image_format("rgba8")]]
+        \\RWTexture2D<float4> output_texture : register(u0, space0);
+        \\
+        \\[[vk::binding(1, 0)]]
+        \\RWStructuredBuffer<uint> output_values : register(u1, space0);
+        \\
+        \\[shader("compute")]
+        \\[numthreads(4, 1, 1)]
+        \\void cs_main(uint3 dispatch_id: SV_DispatchThreadID)
+        \\{
+        \\    output_values[dispatch_id.x] = dispatch_id.x;
+        \\    output_texture[dispatch_id.xy] = float4(1.0, 0.0, 0.0, 1.0);
+        \\}
+    ;
     var model = try ReflectionModel.parse(std.testing.allocator, source);
     defer model.deinit(std.testing.allocator);
 
@@ -1041,12 +982,12 @@ test "compiled render shader exposes paired stage descriptors" {
     const allocator = std.testing.allocator;
     var shader = CompiledRenderShader{
         .allocator = allocator,
-        .vertex_spirv_path = try allocator.dupe(u8, "cache/demo/vert.spv"),
-        .fragment_spirv_path = try allocator.dupe(u8, "cache/demo/frag.spv"),
-        .vertex_msl_path = try allocator.dupe(u8, "cache/demo/vert.msl"),
-        .fragment_msl_path = try allocator.dupe(u8, "cache/demo/frag.msl"),
-        .vertex_reflection_path = try allocator.dupe(u8, "cache/demo/vert.reflect.json"),
-        .fragment_reflection_path = try allocator.dupe(u8, "cache/demo/frag.reflect.json"),
+        .vertex_spirv = "vertex-spv",
+        .fragment_spirv = "fragment-spv",
+        .vertex_msl = "vertex-msl",
+        .fragment_msl = "fragment-msl",
+        .vertex_reflection_json = "vertex-reflection",
+        .fragment_reflection_json = "fragment-reflection",
         .vertex_entry = try allocator.dupe(u8, "vs_main"),
         .fragment_entry = try allocator.dupe(u8, "fs_main"),
     };
@@ -1055,25 +996,50 @@ test "compiled render shader exposes paired stage descriptors" {
     const stages = shader.stageDescriptors(.metal);
     try std.testing.expectEqual(core.ShaderStage.vertex, stages.vertex.stage);
     try std.testing.expectEqual(core.ShaderStage.fragment, stages.fragment.stage);
-    try expectArtifact(stages.vertex.module.source, .msl, "cache/demo/vert.msl");
-    try expectArtifact(stages.fragment.module.source, .msl, "cache/demo/frag.msl");
-    try expectReflectionArtifact(stages.vertex.reflection, "cache/demo/vert.reflect.json");
-    try expectReflectionArtifact(stages.fragment.reflection, "cache/demo/frag.reflect.json");
+    try expectShaderSourceBytes(stages.vertex.module.source, .msl, "vertex-msl");
+    try expectShaderSourceBytes(stages.fragment.module.source, .msl, "fragment-msl");
+    try expectReflectionJson(stages.vertex.reflection, "vertex-reflection");
+    try expectReflectionJson(stages.fragment.reflection, "fragment-reflection");
 }
 
-test "runtime shader cache file helpers are shell independent" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
+test "compiled ray tracing shader exposes backend-specific ray generation stage" {
     const allocator = std.testing.allocator;
-    const dir_path = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/vkmtl-cache/demo", .{tmp.sub_path});
-    defer allocator.free(dir_path);
-    const file_path = try std.fs.path.join(allocator, &.{ dir_path, "hash" });
-    defer allocator.free(file_path);
+    var shader = CompiledRayTracingShader{
+        .allocator = allocator,
+        .ray_generation_spirv = "raygen-spv",
+        .miss_spirv = "miss-spv",
+        .closest_hit_spirv = "closest-hit-spv",
+        .any_hit_spirv = "any-hit-spv",
+        .intersection_spirv = "intersection-spv",
+        .ray_generation_msl = "raygen-msl",
+        .ray_generation_reflection_json = "raygen-reflection",
+        .miss_reflection_json = "miss-reflection",
+        .closest_hit_reflection_json = "closest-hit-reflection",
+        .any_hit_reflection_json = "any-hit-reflection",
+        .intersection_reflection_json = "intersection-reflection",
+        .ray_generation_entry = try allocator.dupe(u8, "raygen"),
+        .miss_entry = try allocator.dupe(u8, "miss"),
+        .closest_hit_entry = try allocator.dupe(u8, "closest_hit"),
+        .any_hit_entry = try allocator.dupe(u8, "any_hit"),
+        .intersection_entry = try allocator.dupe(u8, "intersection_main"),
+    };
+    defer shader.deinit();
 
-    try makeDirPath(allocator, dir_path);
-    try writeFile(allocator, file_path, "cache-ok");
-    try std.testing.expect(fileExists(allocator, file_path));
+    var metal_pipeline = core.RayTracingPipelineDescriptor{};
+    shader.applyToPipelineDescriptor(.metal, &metal_pipeline);
+    try std.testing.expect(metal_pipeline.ray_generation != null);
+    try std.testing.expect(metal_pipeline.miss == null);
+    try std.testing.expect(metal_pipeline.closest_hit == null);
+    try std.testing.expect(metal_pipeline.any_hit == null);
+    try expectShaderSourceBytes(metal_pipeline.ray_generation.?.module.source, .msl, "raygen-msl");
+
+    var vulkan_pipeline = core.RayTracingPipelineDescriptor{};
+    shader.applyToPipelineDescriptor(.vulkan, &vulkan_pipeline);
+    try expectShaderSourceBytes(vulkan_pipeline.ray_generation.?.module.source, .spirv, "raygen-spv");
+    try expectShaderSourceBytes(vulkan_pipeline.miss.?.module.source, .spirv, "miss-spv");
+    try expectShaderSourceBytes(vulkan_pipeline.closest_hit.?.module.source, .spirv, "closest-hit-spv");
+    try expectShaderSourceBytes(vulkan_pipeline.any_hit.?.module.source, .spirv, "any-hit-spv");
+    try expectShaderSourceBytes(vulkan_pipeline.intersection.?.module.source, .spirv, "intersection-spv");
 }
 
 fn expectVertexField(
@@ -1100,26 +1066,30 @@ fn expectResource(
     try std.testing.expectEqual(expected_kind, actual.kind);
 }
 
-fn expectArtifact(
+fn expectShaderSourceBytes(
     source: core.ShaderSource,
     language: core.ShaderSourceLanguage,
-    path: []const u8,
+    bytes: []const u8,
 ) !void {
     switch (source) {
-        .artifact => |artifact| {
-            try std.testing.expectEqual(language, artifact.language);
-            try std.testing.expectEqualStrings(path, artifact.path);
-        },
+        .spirv_bytes => |actual| if (language == .spirv)
+            try std.testing.expectEqualStrings(bytes, actual)
+        else
+            return error.UnexpectedShaderSource,
+        .msl => |actual| if (language == .msl)
+            try std.testing.expectEqualStrings(bytes, actual)
+        else
+            return error.UnexpectedShaderSource,
         else => return error.UnexpectedShaderSource,
     }
 }
 
-fn expectReflectionArtifact(
-    source: core.ShaderReflectionSource,
-    path: []const u8,
+fn expectReflectionJson(
+    source: ?core.ShaderReflectionSource,
+    bytes: []const u8,
 ) !void {
-    switch (source) {
-        .artifact => |artifact| try std.testing.expectEqualStrings(path, artifact.path),
+    switch (source orelse return error.UnexpectedShaderReflectionSource) {
+        .json => |actual| try std.testing.expectEqualStrings(bytes, actual),
         else => return error.UnexpectedShaderReflectionSource,
     }
 }

@@ -12,7 +12,7 @@ with public API boundaries.
 
 ## Current Limits
 
-- `src/development_matrix.zig` records the current gallery metadata and is
+- `tools/development_matrix.zig` records the current gallery metadata and is
   validated by `zig build test`.
 - Deterministic, non-window examples must declare their success output marker.
 - Period 9 organizes existing examples and planned cases. New rendering

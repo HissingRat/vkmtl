@@ -188,6 +188,15 @@ pub fn makeAccelerationStructure(self: *VulkanClearScreen, descriptor: core.Acce
     return try VulkanAccelerationStructure.init(self.gc, descriptor);
 }
 
+pub fn accelerationStructureBuildSizes(
+    self: *VulkanClearScreen,
+    descriptor: core.AccelerationStructureDescriptor,
+) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
+    return VulkanAccelerationStructure.queryBuildSizes(self.gc, descriptor) catch {
+        return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
+    };
+}
+
 pub fn makeShaderModule(self: *VulkanClearScreen, descriptor: core.ShaderModuleDescriptor) !VulkanShaderModule {
     return try VulkanShaderModule.init(self.gc, self.allocator, descriptor);
 }

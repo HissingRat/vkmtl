@@ -25,7 +25,7 @@ Phase 6 turns parity into a maintained product artifact.
 ## Result
 
 - Added an authoritative ray tracing/native parity matrix in
-  `src/development_matrix.zig`.
+  `tools/development_matrix.zig`.
 - Added Period 29 as the executable native backend follow-up period.
 - Routed native acceleration-structure builds, native ray tracing pipelines,
   native SBT/dispatch commands, Metal ray tracing execution, native advanced

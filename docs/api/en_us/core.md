@@ -223,21 +223,17 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 Compute shaders use `compileComputeShader(...)` and
 `CompiledComputeShader.stageDescriptor(...)`.
 
-Runtime does not spawn `slangc`. On a cache miss, vkmtl restores SPIR-V, MSL,
-and reflection JSON from build-time precompiled blobs embedded in the
-executable. By default, the cache lives under `vkmtl-cache` beside the
-executable. If callers set `WindowContextOptions.process_args = init.args`,
-vkmtl automatically parses `--cache-dir <path>` or `--cache-dir=<path>`.
-Application code does not need to parse that argument itself.
-
-Precedence is: explicit `WindowContextOptions.shader_cache_dir` > `--cache-dir`
-runtime argument > default `vkmtl-cache`.
+Runtime does not spawn `slangc`, and it does not write shader artifacts to
+disk. vkmtl resolves SPIR-V, MSL, and reflection JSON directly from build-time
+precompiled blobs embedded in the executable. Inspectable build artifacts are
+installed under `zig-out/shaders/<shader-name>/`.
 
 Persistent runtime cache planning uses `RuntimeCacheManifestDescriptor`,
 `RuntimeCachePlanDescriptor`, and `RuntimeCachePlan`. The manifest records
 schema version, backend, and source hash. Plans classify existing metadata as
-compatible, missing, stale, backend-mismatched, or source-mismatched while
-keeping the existing shader artifact files inspectable.
+compatible, missing, stale, backend-mismatched, or source-mismatched. This
+object/runtime cache planning is an advanced resource-cache facility; it is not
+used for runtime shader compilation or shader artifact export.
 
 Programmable stages can optionally attach reflection data with
 `ProgrammableStageDescriptor.reflection`. Runtime pipeline creation validates
@@ -361,7 +357,37 @@ dispatch records, Metal table metadata, advanced-inventory routing, and parity
 diagnostics. Driver-level ray tracing pixels and broader native parity are
 split after Period30: Period31 now has the first Metal visible ray traced scene
 through a backend-private Metal command path, Period32 owns the first Vulkan
-pixel-producing ray traced scene, and Period32+ owns broader native coverage.
+pixel-producing ray traced scene, Period33 owns the full native mesh ray traced
+scene, Period34 owns the Vulkan procedural sphere / custom intersection path,
+and Period35 owns shared scene data plus Metal procedural parity.
+
+Period33 adds public acceleration-structure build-input plumbing. Mesh AS
+builds can pass `AccelerationStructureGeometryResources.triangles` with a
+vertex buffer, optional index buffer, `AccelerationStructureVertexFormat`,
+`AccelerationStructureIndexType`, offsets, strides, and primitive counts.
+Buffers used this way must be created with
+`BufferUsage.acceleration_structure_build_input`. The same runtime shape also
+has `AccelerationStructureGeometryResources.aabbs`; AABB descriptor and buffer
+validation feed the Period34 Vulkan procedural sphere path.
+
+Period34 starts the procedural RT contract with
+`RayTracingHitGroupKind.procedural`,
+`RayTracingPipelineDescriptor.intersection`,
+`DeviceFeatures.ray_tracing_procedural_geometry`, and
+`DeviceFeatures.ray_tracing_custom_intersection`. These fields are descriptor
+validation gates today: unsupported procedural/custom-intersection usage fails
+before command submission. Vulkan now materializes intersection shader stages,
+procedural hit groups, SBT records, and the procedural `ray_traced_scene`
+acceptance path. Metal intersection function table execution is Period35.
+
+`Device.compileRayTracingShader(...)` returns a `CompiledRayTracingShader`.
+Use `CompiledRayTracingShader.applyToPipelineDescriptor(backend, &descriptor)`
+to attach the backend-specific ray tracing artifacts to a
+`RayTracingPipelineDescriptor`. Vulkan currently receives Slang-generated
+SPIR-V ray-generation, miss, closest-hit, any-hit, and intersection stages.
+Metal receives the build-time precompiled Metal ray-generation artifact through
+the same compiled shader object; direct Slang HLSL-RT-to-Metal-RT lowering is
+still a compiler backend parity item rather than an example-side branch.
 
 ## Bindings
 

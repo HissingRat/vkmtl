@@ -161,16 +161,31 @@ pub const CommandBuffer = struct {
         scratch: *MetalBuffer,
         scratch_offset: u64,
         instance_source: ?*const MetalAccelerationStructure,
+        instance_sources: []const *const MetalAccelerationStructure,
+        geometries: []const MetalAccelerationStructure.GeometryInput,
     ) core.AdvancedFeatureError!void {
         const native_scratch_offset = std.math.cast(usize, scratch_offset) orelse {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         };
+        if (geometries.len != 0) {
+            if (geometries.len != 1 or acceleration_structure.kind() != .bottom_level) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            switch (geometries[0]) {
+                .triangles => |triangles| try acceleration_structure.setTriangleGeometry(triangles),
+                .aabbs, .instances => return core.AdvancedFeatureError.UnsupportedAccelerationStructures,
+            }
+        }
+        const selected_instance_source = if (instance_sources.len != 0)
+            instance_sources[0]
+        else
+            instance_source;
         try checkAccelerationStructureCommand(metal.vkmtl_metal_command_buffer_build_acceleration_structure(
             self.handle,
             acceleration_structure.handle,
             scratch.handle,
             native_scratch_offset,
-            if (instance_source) |source| source.handle else null,
+            if (selected_instance_source) |source| source.handle else null,
         ));
     }
 
@@ -186,6 +201,9 @@ pub const CommandBuffer = struct {
             acceleration_structure.handle,
             descriptor.width,
             descriptor.height,
+            if (descriptor.inline_data.len == 0) null else descriptor.inline_data.ptr,
+            descriptor.inline_data.len,
+            descriptor.inline_data_binding,
         ));
     }
 };

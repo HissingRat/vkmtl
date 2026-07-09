@@ -2,8 +2,9 @@
 
 Status: target document. Period 31 and Period 32 are split out as concrete
 driver-execution periods for the first Metal and Vulkan ray traced scenes.
-Broader parity periods should be planned after both paths are visible or after a
-platform is explicitly documented as unsupported.
+Period 33 and Period 34 are the first concrete follow-up periods for the full
+native RT scene and procedural/custom-intersection coverage. Later Period32+
+work should continue from those results.
 
 Goal: move vkmtl from "first Metal and Vulkan ray traced scenes are visible on
 supported devices" to "most Vulkan and Metal workloads have either a portable
@@ -12,8 +13,10 @@ the native API escape hatch is required."
 
 Period 30 closed backend-private runtime records. Period 31 targets Metal ray
 tracing pixels. Period 32 targets the first Vulkan native ray tracing output
-path. Period 32+ owns the long tail: semantic parity, platform coverage,
-pressure testing, production behavior, and deeper ray tracing coverage.
+path. Period 33 targets the full native mesh RT scene. Period 34 targets
+procedural sphere/custom-intersection execution. Later Period32+ work owns the
+long tail: semantic parity, platform coverage, pressure testing, production
+behavior, and deeper ray tracing coverage.
 
 ## Expected Baseline After Period 32
 
@@ -22,7 +25,7 @@ Period32+ assumes:
 - common buffer, texture, sampler, pipeline, render, compute, transfer, and
   presentation paths are usable through public vkmtl APIs
 - runtime Slang shader declaration, build-time precompiled artifacts,
-  reflection, bind groups, pipeline creation, and shader caches are connected
+  reflection, bind groups, and pipeline creation are connected
   to real backend objects
 - Period31 has made the Metal ray traced scene visible on supported Metal
   devices
@@ -35,6 +38,23 @@ Period32+ assumes:
 After that, Period32+ should continue with broader ray tracing completeness,
 GPU-backed soak loops, Vulkan/Metal semantic parity, external interop, resource
 residency, and production coverage.
+
+## First Concrete Follow-Up Periods
+
+The first Period32+ work is already split into concrete periods:
+
+- Period33: full native mesh RT scene. This turns the first Metal/Vulkan RT
+  paths into a real room/sphere scene using triangle geometry, BLAS objects from
+  user vertex/index buffers, multi-instance TLAS data, shared scene buffers, and
+  native dispatch/present on supported backends.
+- Period34: procedural RT geometry and custom intersection. This replaces the
+  mesh sphere approximation with Vulkan AABB/intersection shader paths and
+  Metal procedural/intersection-function-table paths, then validates the full
+  native scene again.
+
+Later Period32+ periods should not absorb these two goals unless their docs are
+explicitly rewritten. If native RT scene work is being discussed, check Period33
+and Period34 first.
 
 ## Coverage Target
 
@@ -56,12 +76,14 @@ Period32+ should eventually close these families of work.
 ### Ray Tracing Completeness
 
 - acceleration structure compaction, update, and refit paths
-- top-level acceleration structures with many instances
+- top-level acceleration structures with many instances after the Period33
+  scene baseline
 - instance masks, transforms, and multi-level scene layouts
 - ray query where supported
-- procedural geometry and custom intersection paths where supported
+- procedural geometry and custom intersection paths beyond the Period34 sphere
+  target
 - callable shaders and larger SBT layouts
-- ray tracing examples beyond the first triangles
+- ray tracing examples beyond the Period33/34 full scene targets
 
 ### Synchronization And Queues
 
@@ -82,7 +104,7 @@ Period32+ should eventually close these families of work.
 ### Shader, Pipeline, And Geometry Coverage
 
 - production-grade pipeline libraries, binary archives, and persistent caches
-- specialization variants and shader cache invalidation behavior
+- specialization variants and pipeline cache invalidation behavior
 - tessellation lowering where supported
 - mesh/task or object/mesh shader paths where supported
 - shader diagnostics that point back to embedded Slang source and entry points
@@ -157,6 +179,9 @@ Each concrete period should:
 - update public API docs if the user-facing contract changes
 - avoid rewriting completed historical period docs unless the documented fact is
   wrong
+
+Period33 and Period34 are already assigned. New concrete periods should start
+after them unless they are explicitly correcting those scopes.
 
 ## Non-Goals Before Period 32 Is Done
 

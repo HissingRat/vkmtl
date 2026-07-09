@@ -98,6 +98,8 @@ pub const DeviceFeatures = struct {
     task_shaders: bool = false,
     acceleration_structures: bool = false,
     ray_tracing: bool = false,
+    ray_tracing_procedural_geometry: bool = false,
+    ray_tracing_custom_intersection: bool = false,
     driver_pipeline_cache: bool = false,
     metal_binary_archive: bool = false,
     vertex_instance_step_rate: bool = false,
@@ -298,6 +300,7 @@ pub const ResourceUsageKind = enum {
     acceleration_structure_read,
     acceleration_structure_write,
     acceleration_structure_scratch,
+    acceleration_structure_build_input,
     sampled_texture,
     indirect_buffer,
     shader_binding_table,
@@ -316,6 +319,7 @@ pub const ResourceUsageKind = enum {
             .uniform_buffer,
             .storage_buffer_read,
             .acceleration_structure_read,
+            .acceleration_structure_build_input,
             .sampled_texture,
             .indirect_buffer,
             .shader_binding_table,
@@ -800,6 +804,8 @@ pub const AdvancedFeatureError = error{
     InvalidMeshThreadgroupSize,
     UnsupportedAccelerationStructures,
     UnsupportedRayTracing,
+    UnsupportedRayTracingProceduralGeometry,
+    UnsupportedRayTracingCustomIntersection,
     InvalidAccelerationStructureDescriptor,
     InvalidAccelerationStructureResources,
     InvalidRayTracingPipeline,
@@ -1156,7 +1162,7 @@ pub const StabilityRunPlan = struct {
     iterations: u32,
     resize_events: u64,
     resources_created: u64,
-    shader_cache_cycles: u64,
+    shader_artifact_cycles: u64,
     upload_readback_cycles: u64,
     upload_bytes: u64,
     vulkan_unaligned_fill_fallback_checks: u64,
@@ -1179,11 +1185,11 @@ pub const StabilityRunDescriptor = struct {
     iterations: u32,
     resource_churn: bool = true,
     presentation_resize: bool = true,
-    shader_cache_warm_cold: bool = true,
+    shader_artifact_warm_cold: bool = true,
     upload_readback: bool = true,
     vulkan_unaligned_fill_fallback: bool = true,
     resize_interval: u32 = 60,
-    shader_cache_interval: u32 = 30,
+    shader_artifact_interval: u32 = 30,
     upload_readback_interval: u32 = 1,
     resources_per_iteration: u32 = 4,
     upload_bytes_per_iteration: u64 = 4096,
@@ -1192,7 +1198,7 @@ pub const StabilityRunDescriptor = struct {
     pub fn validate(self: StabilityRunDescriptor) StabilityRunError!void {
         if (self.iterations == 0) return StabilityRunError.InvalidDrawCount;
         if (self.presentation_resize and self.resize_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
-        if (self.shader_cache_warm_cold and self.shader_cache_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
+        if (self.shader_artifact_warm_cold and self.shader_artifact_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
         if (self.upload_readback and self.upload_readback_interval == 0) return StabilityRunError.InvalidStabilityRunInterval;
         if (self.resource_churn and (self.resources_per_iteration == 0 or self.max_live_resources == 0)) {
             return StabilityRunError.InvalidStabilityResourceCount;
@@ -1210,7 +1216,7 @@ pub const StabilityRunDescriptor = struct {
                 @as(u64, self.iterations) * @as(u64, self.resources_per_iteration)
             else
                 0,
-            .shader_cache_cycles = stabilityScheduledCycles(self.shader_cache_warm_cold, self.iterations, self.shader_cache_interval),
+            .shader_artifact_cycles = stabilityScheduledCycles(self.shader_artifact_warm_cold, self.iterations, self.shader_artifact_interval),
             .upload_readback_cycles = upload_cycles,
             .upload_bytes = saturatingMulU64(upload_cycles, self.upload_bytes_per_iteration),
             .vulkan_unaligned_fill_fallback_checks = if (self.vulkan_unaligned_fill_fallback) upload_cycles else 0,
@@ -1223,7 +1229,7 @@ pub const StabilityRunDiagnostics = struct {
     iterations_completed: u32 = 0,
     resources_created: u64 = 0,
     resize_events: u64 = 0,
-    cache_cycles: u64 = 0,
+    shader_artifact_cycles: u64 = 0,
     upload_readback_cycles: u64 = 0,
     upload_bytes: u64 = 0,
     vulkan_unaligned_fill_fallback_checks: u64 = 0,
@@ -1237,7 +1243,7 @@ pub const StabilityRunDiagnostics = struct {
             .iterations_completed = plan.iterations,
             .resources_created = plan.resources_created,
             .resize_events = plan.resize_events,
-            .cache_cycles = plan.shader_cache_cycles,
+            .shader_artifact_cycles = plan.shader_artifact_cycles,
             .upload_readback_cycles = plan.upload_readback_cycles,
             .upload_bytes = plan.upload_bytes,
             .vulkan_unaligned_fill_fallback_checks = plan.vulkan_unaligned_fill_fallback_checks,
@@ -1608,6 +1614,8 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedTaskShaders,
         error.UnsupportedAccelerationStructures,
         error.UnsupportedRayTracing,
+        error.UnsupportedRayTracingProceduralGeometry,
+        error.UnsupportedRayTracingCustomIntersection,
         error.UnsupportedDriverPipelineCache,
         error.UnsupportedBinaryArchive,
         => .unsupported_feature,
@@ -1768,7 +1776,6 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidShader,
         error.InvalidPipeline,
         error.InvalidCommand,
-        error.MissingShaderCacheDirValue,
         error.EmptyObjectCacheSourceHash,
         error.EmptyObjectCacheOptionsHash,
         error.EmptyObjectCacheEntryPoint,
@@ -2097,6 +2104,7 @@ pub const ShaderArtifact = struct {
 pub const ShaderSource = union(enum) {
     slang: []const u8,
     spirv: []const u32,
+    spirv_bytes: []const u8,
     msl: []const u8,
     artifact: ShaderArtifact,
 };
@@ -2110,6 +2118,7 @@ pub const ShaderModuleDescriptor = struct {
         switch (self.source) {
             .slang => |source| if (source.len == 0) return ShaderError.EmptyShaderSource,
             .spirv => |words| if (words.len == 0) return ShaderError.EmptyShaderSource,
+            .spirv_bytes => |bytes| if (bytes.len == 0) return ShaderError.EmptyShaderSource,
             .msl => |source| if (source.len == 0) return ShaderError.EmptyShaderSource,
             .artifact => |artifact| if (artifact.path.len == 0) return ShaderError.EmptyShaderArtifactPath,
         }
@@ -2312,11 +2321,13 @@ pub const ShaderStageReflection = struct {
 
 pub const ShaderReflectionSource = union(enum) {
     data: ShaderStageReflection,
+    json: []const u8,
     artifact: ShaderReflectionArtifact,
 
     pub fn validate(self: ShaderReflectionSource) ShaderError!void {
         switch (self) {
             .data => |reflection| try validateShaderStageReflectionShape(reflection),
+            .json => |bytes| if (bytes.len == 0) return ShaderError.EmptyShaderReflectionPath,
             .artifact => |artifact| if (artifact.path.len == 0) return ShaderError.EmptyShaderReflectionPath,
         }
     }
@@ -2684,14 +2695,76 @@ pub const AccelerationStructureGeometryKind = enum {
     instances,
 };
 
+pub const AccelerationStructureVertexFormat = enum {
+    float3,
+
+    pub fn byteSize(self: AccelerationStructureVertexFormat) u32 {
+        return switch (self) {
+            .float3 => 12,
+        };
+    }
+};
+
+pub const AccelerationStructureIndexType = enum {
+    none,
+    uint16,
+    uint32,
+
+    pub fn byteSize(self: AccelerationStructureIndexType) u32 {
+        return switch (self) {
+            .none => 0,
+            .uint16 => 2,
+            .uint32 => 4,
+        };
+    }
+};
+
 pub const AccelerationStructureGeometryDescriptor = struct {
     kind: AccelerationStructureGeometryKind = .triangles,
     primitive_count: u32,
+    vertex_format: AccelerationStructureVertexFormat = .float3,
+    vertex_count: u32 = 0,
     vertex_stride: u32 = 0,
+    vertex_buffer_offset: u64 = 0,
+    index_type: AccelerationStructureIndexType = .none,
+    index_count: u32 = 0,
+    index_buffer_offset: u64 = 0,
+    aabb_stride: u32 = 24,
+    aabb_buffer_offset: u64 = 0,
     is_opaque: bool = true,
 
     pub fn validate(self: AccelerationStructureGeometryDescriptor) AdvancedFeatureError!void {
         if (self.primitive_count == 0) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+        switch (self.kind) {
+            .triangles => {
+                const min_stride = self.vertex_format.byteSize();
+                if (self.vertex_stride != 0 and self.vertex_stride < min_stride) {
+                    return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+                }
+                if (self.vertex_count != 0 and self.vertex_count < self.primitive_count * 3 and self.index_type == .none) {
+                    return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+                }
+                if (self.index_type != .none and self.index_count != 0 and self.index_count < self.primitive_count * 3) {
+                    return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+                }
+            },
+            .aabbs => {
+                if (self.aabb_stride < 24) return AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+            },
+            .instances => {},
+        }
+    }
+
+    pub fn resolvedVertexStride(self: AccelerationStructureGeometryDescriptor) u32 {
+        return if (self.vertex_stride != 0) self.vertex_stride else self.vertex_format.byteSize();
+    }
+
+    pub fn resolvedVertexCount(self: AccelerationStructureGeometryDescriptor) u32 {
+        return if (self.vertex_count != 0) self.vertex_count else self.primitive_count * 3;
+    }
+
+    pub fn resolvedIndexCount(self: AccelerationStructureGeometryDescriptor) u32 {
+        return if (self.index_count != 0) self.index_count else self.primitive_count * 3;
     }
 };
 
@@ -2800,12 +2873,29 @@ pub const RayTracingShaderGroupKind = enum {
     callable,
 };
 
+pub const RayTracingHitGroupKind = enum {
+    triangles,
+    procedural,
+};
+
 pub const RayTracingShaderGroupDescriptor = struct {
     kind: RayTracingShaderGroupKind,
     entry_point: []const u8,
+    hit_group_kind: RayTracingHitGroupKind = .triangles,
 
-    pub fn validate(self: RayTracingShaderGroupDescriptor) AdvancedFeatureError!void {
+    pub fn validate(self: RayTracingShaderGroupDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
         if (self.entry_point.len == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
+        if (self.kind != .hit and self.hit_group_kind != .triangles) {
+            return AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        if (self.kind == .hit and self.hit_group_kind == .procedural) {
+            if (!features.ray_tracing_procedural_geometry) {
+                return AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry;
+            }
+            if (!features.ray_tracing_custom_intersection) {
+                return AdvancedFeatureError.UnsupportedRayTracingCustomIntersection;
+            }
+        }
     }
 };
 
@@ -2825,6 +2915,8 @@ pub const RayTracingPipelineDescriptor = struct {
     ray_generation: ?RayTracingShaderStageDescriptor = null,
     miss: ?RayTracingShaderStageDescriptor = null,
     closest_hit: ?RayTracingShaderStageDescriptor = null,
+    any_hit: ?RayTracingShaderStageDescriptor = null,
+    intersection: ?RayTracingShaderStageDescriptor = null,
     max_recursion_depth: u32 = 1,
 
     pub fn validate(self: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
@@ -2834,14 +2926,24 @@ pub const RayTracingPipelineDescriptor = struct {
             return AdvancedFeatureError.InvalidRayTracingPipeline;
         }
         var has_ray_generation = false;
+        var has_procedural_hit = false;
         for (self.shader_groups) |group| {
-            try group.validate();
+            try group.validate(features);
             if (group.kind == .ray_generation) has_ray_generation = true;
+            if (group.kind == .hit and group.hit_group_kind == .procedural) has_procedural_hit = true;
         }
         if (!has_ray_generation) return AdvancedFeatureError.InvalidRayTracingPipeline;
         if (self.ray_generation) |stage| try stage.validate();
         if (self.miss) |stage| try stage.validate();
         if (self.closest_hit) |stage| try stage.validate();
+        if (self.any_hit) |stage| try stage.validate();
+        if (self.intersection) |stage| {
+            if (!features.ray_tracing_custom_intersection) {
+                return AdvancedFeatureError.UnsupportedRayTracingCustomIntersection;
+            }
+            if (!has_procedural_hit) return AdvancedFeatureError.InvalidRayTracingPipeline;
+            try stage.validate();
+        }
     }
 
     pub fn hasNativeShaderStages(self: RayTracingPipelineDescriptor) bool {
@@ -2854,6 +2956,7 @@ pub const VulkanRayTracingPipelineLowering = struct {
     ray_generation_groups: u32 = 0,
     miss_groups: u32 = 0,
     hit_groups: u32 = 0,
+    procedural_hit_groups: u32 = 0,
     callable_groups: u32 = 0,
 
     pub fn fromDescriptor(descriptor: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!VulkanRayTracingPipelineLowering {
@@ -2862,7 +2965,10 @@ pub const VulkanRayTracingPipelineLowering = struct {
         for (descriptor.shader_groups) |group| switch (group.kind) {
             .ray_generation => lowering.ray_generation_groups += 1,
             .miss => lowering.miss_groups += 1,
-            .hit => lowering.hit_groups += 1,
+            .hit => {
+                lowering.hit_groups += 1;
+                if (group.hit_group_kind == .procedural) lowering.procedural_hit_groups += 1;
+            },
             .callable => lowering.callable_groups += 1,
         };
         return lowering;
@@ -2884,6 +2990,7 @@ pub const MetalRayTracingLowering = struct {
     ray_generation_groups: u32 = 0,
     miss_groups: u32 = 0,
     hit_groups: u32 = 0,
+    procedural_hit_groups: u32 = 0,
     callable_groups: u32 = 0,
     intersection_function_count: u32 = 0,
 
@@ -2898,11 +3005,15 @@ pub const MetalRayTracingLowering = struct {
         var ray_generation_groups: u32 = 0;
         var miss_groups: u32 = 0;
         var hit_groups: u32 = 0;
+        var procedural_hit_groups: u32 = 0;
         var callable_groups: u32 = 0;
         for (descriptor.shader_groups) |group| switch (group.kind) {
             .ray_generation => ray_generation_groups += 1,
             .miss => miss_groups += 1,
-            .hit => hit_groups += 1,
+            .hit => {
+                hit_groups += 1;
+                if (group.hit_group_kind == .procedural) procedural_hit_groups += 1;
+            },
             .callable => callable_groups += 1,
         };
         return .{
@@ -2911,6 +3022,7 @@ pub const MetalRayTracingLowering = struct {
             .ray_generation_groups = ray_generation_groups,
             .miss_groups = miss_groups,
             .hit_groups = hit_groups,
+            .procedural_hit_groups = procedural_hit_groups,
             .callable_groups = callable_groups,
             .intersection_function_count = @intCast(intersections.len),
         };
@@ -2952,6 +3064,13 @@ pub const RayTracingPipelineLowering = union(Backend) {
         return switch (self) {
             .vulkan => |lowering| lowering.hit_groups,
             .metal => |lowering| lowering.hit_groups,
+        };
+    }
+
+    pub fn proceduralHitGroupCount(self: RayTracingPipelineLowering) u32 {
+        return switch (self) {
+            .vulkan => |lowering| lowering.procedural_hit_groups,
+            .metal => |lowering| lowering.procedural_hit_groups,
         };
     }
 
@@ -3068,10 +3187,15 @@ pub const RayDispatchDescriptor = struct {
     width: u32,
     height: u32 = 1,
     depth: u32 = 1,
+    inline_data: []const u8 = &.{},
+    inline_data_binding: u32 = 1,
 
     pub fn validate(self: RayDispatchDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
         if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
         if (self.width == 0 or self.height == 0 or self.depth == 0) {
+            return AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        if (self.inline_data.len != 0 and self.inline_data_binding == 0) {
             return AdvancedFeatureError.InvalidRayTracingPipeline;
         }
     }
@@ -3414,6 +3538,7 @@ pub fn validateProgrammableStageReflection(
     const source = stage_descriptor.reflection orelse return;
     switch (source) {
         .data => |reflection| try validateShaderStageReflection(stage_descriptor, expected_stage, reflection, bind_group_layouts),
+        .json => {},
         .artifact => {},
     }
 }
@@ -6902,6 +7027,7 @@ pub const BufferUsage = struct {
     storage: bool = false,
     indirect: bool = false,
     acceleration_structure_scratch: bool = false,
+    acceleration_structure_build_input: bool = false,
     shader_binding_table: bool = false,
 
     pub fn isEmpty(self: BufferUsage) bool {
@@ -6913,6 +7039,7 @@ pub const BufferUsage = struct {
             !self.storage and
             !self.indirect and
             !self.acceleration_structure_scratch and
+            !self.acceleration_structure_build_input and
             !self.shader_binding_table;
     }
 };
@@ -8031,6 +8158,7 @@ test "buffer map descriptor validates ranges and modes" {
 test "buffer usage can detect empty usage" {
     try std.testing.expect((BufferUsage{}).isEmpty());
     try std.testing.expect(!(BufferUsage{ .vertex = true }).isEmpty());
+    try std.testing.expect(!(BufferUsage{ .acceleration_structure_build_input = true }).isEmpty());
 }
 
 test "shader module descriptor validates source inputs" {
@@ -8233,7 +8361,7 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     const stability_plan = try (StabilityRunDescriptor{ .iterations = 120 }).plan();
     try std.testing.expectEqual(@as(u64, 2), stability_plan.resize_events);
     try std.testing.expectEqual(@as(u64, 480), stability_plan.resources_created);
-    try std.testing.expectEqual(@as(u64, 4), stability_plan.shader_cache_cycles);
+    try std.testing.expectEqual(@as(u64, 4), stability_plan.shader_artifact_cycles);
     try std.testing.expectEqual(@as(u64, 120), stability_plan.upload_readback_cycles);
     try std.testing.expectEqual(@as(u64, 120), stability_plan.vulkan_unaligned_fill_fallback_checks);
     try std.testing.expect(stability_plan.expectsResize());
@@ -10259,6 +10387,39 @@ test "acceleration structure build plans validate geometry and scratch requireme
     }).validate(.{ .acceleration_structures = true }));
 }
 
+test "acceleration structure mesh geometry descriptors validate buffer ranges" {
+    try (AccelerationStructureGeometryDescriptor{
+        .kind = .triangles,
+        .primitive_count = 2,
+        .vertex_count = 6,
+        .vertex_stride = 12,
+    }).validate();
+    try (AccelerationStructureGeometryDescriptor{
+        .kind = .triangles,
+        .primitive_count = 2,
+        .vertex_count = 4,
+        .index_type = .uint16,
+        .index_count = 6,
+    }).validate();
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureGeometryDescriptor{
+        .kind = .triangles,
+        .primitive_count = 2,
+        .vertex_count = 4,
+    }).validate());
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureGeometryDescriptor{
+        .kind = .triangles,
+        .primitive_count = 2,
+        .vertex_count = 4,
+        .index_type = .uint32,
+        .index_count = 5,
+    }).validate());
+    try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureGeometryDescriptor{
+        .kind = .aabbs,
+        .primitive_count = 1,
+        .aabb_stride = 16,
+    }).validate());
+}
+
 test "Vulkan ray tracing lowering counts shader groups" {
     const groups = [_]RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -10275,6 +10436,54 @@ test "Vulkan ray tracing lowering counts shader groups" {
     try std.testing.expectEqual(@as(u32, 2), lowering.max_recursion_depth);
 }
 
+test "procedural ray tracing hit groups require custom intersection features" {
+    const groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+        .{
+            .kind = .hit,
+            .entry_point = "procedural_hit",
+            .hit_group_kind = .procedural,
+        },
+    };
+    const descriptor = RayTracingPipelineDescriptor{
+        .shader_groups = groups[0..],
+        .intersection = .{
+            .module = .{ .source = .{ .artifact = .{
+                .path = "procedural.spv",
+                .language = .spirv,
+            } } },
+            .entry_point = "intersection_main",
+        },
+    };
+    try std.testing.expectError(
+        AdvancedFeatureError.UnsupportedRayTracingProceduralGeometry,
+        descriptor.validate(.{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 1 }),
+    );
+    try std.testing.expectError(
+        AdvancedFeatureError.UnsupportedRayTracingCustomIntersection,
+        descriptor.validate(.{
+            .ray_tracing = true,
+            .ray_tracing_procedural_geometry = true,
+        }, .{ .max_ray_tracing_recursion_depth = 1 }),
+    );
+    try descriptor.validate(.{
+        .ray_tracing = true,
+        .ray_tracing_procedural_geometry = true,
+        .ray_tracing_custom_intersection = true,
+    }, .{ .max_ray_tracing_recursion_depth = 1 });
+
+    const lowering = try VulkanRayTracingPipelineLowering.fromDescriptor(
+        descriptor,
+        .{
+            .ray_tracing = true,
+            .ray_tracing_procedural_geometry = true,
+            .ray_tracing_custom_intersection = true,
+        },
+        .{ .max_ray_tracing_recursion_depth = 1 },
+    );
+    try std.testing.expectEqual(@as(u32, 1), lowering.procedural_hit_groups);
+}
+
 test "Metal ray tracing lowering counts function table entries" {
     const groups = [_]RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -10282,7 +10491,7 @@ test "Metal ray tracing lowering counts function table entries" {
         .{ .kind = .hit, .entry_point = "closest_hit" },
     };
     const intersections = [_]MetalIntersectionFunctionDescriptor{
-        .{ .entry_point = "intersect_triangle" },
+        .{ .entry_point = "custom_intersection" },
     };
     const lowering = try MetalRayTracingLowering.fromDescriptor(.{
         .shader_groups = groups[0..],
@@ -10314,7 +10523,7 @@ test "Metal ray tracing mapping plan records function table requirements" {
         .{ .kind = .miss, .entry_point = "miss" },
     };
     const intersections = [_]MetalIntersectionFunctionDescriptor{
-        .{ .entry_point = "intersect_triangle" },
+        .{ .entry_point = "custom_intersection" },
     };
     const plan = try MetalRayTracingMappingPlan.fromDescriptor(.{
         .pipeline = .{

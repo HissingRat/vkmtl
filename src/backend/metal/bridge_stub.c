@@ -1344,11 +1344,40 @@ unsigned int vkmtl_metal_acceleration_structure_has_driver_handle(
     return 0;
 }
 
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *vertex_buffer,
+    size_t vertex_buffer_offset,
+    unsigned int vertex_stride,
+    unsigned int vertex_count,
+    vkmtl_metal_buffer *index_buffer,
+    size_t index_buffer_offset,
+    unsigned int index_type,
+    unsigned int primitive_count
+) {
+    (void)acceleration_structure;
+    (void)vertex_buffer;
+    (void)vertex_buffer_offset;
+    (void)vertex_stride;
+    (void)vertex_count;
+    (void)index_buffer;
+    (void)index_buffer_offset;
+    (void)index_type;
+    (void)primitive_count;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *ray_generation_shader,
+    const char *ray_generation_entry,
+    size_t ray_generation_entry_len,
     vkmtl_metal_ray_tracing_pipeline_state **out_pipeline
 ) {
     (void)owner;
+    (void)ray_generation_shader;
+    (void)ray_generation_entry;
+    (void)ray_generation_entry_len;
     if (out_pipeline != NULL) {
         *out_pipeline = NULL;
     }
@@ -1399,12 +1428,18 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     vkmtl_metal_ray_tracing_pipeline_state *pipeline,
     vkmtl_metal_acceleration_structure *acceleration_structure,
     unsigned int width,
-    unsigned int height
+    unsigned int height,
+    const void *inline_data,
+    size_t inline_data_len,
+    unsigned int inline_data_index
 ) {
     (void)command_buffer;
     (void)pipeline;
     (void)acceleration_structure;
     (void)width;
     (void)height;
+    (void)inline_data;
+    (void)inline_data_len;
+    (void)inline_data_index;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }

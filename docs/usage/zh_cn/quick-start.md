@@ -23,10 +23,9 @@ adapter 代码放在 `examples/common.zig`。
 
 ## 创建 WindowContext
 
-当前窗口 convenience owner 是 `WindowContext`。它负责后端选择、presentation chain 和 shader
-cache 配置；资源创建从 `context.device()` 取得的 `Device` 进入，command buffer 从
-`context.queue()` 取得的 `Queue` 进入。需要启用 vkmtl runtime 参数时，应用的 `main` 可以接受
-`std.process.Init.Minimal`，并把 `init.args` 传给 context。
+当前窗口 convenience owner 是 `WindowContext`。它负责后端选择和 presentation chain；
+资源创建从 `context.device()` 取得的 `Device` 进入，command buffer 从 `context.queue()`
+取得的 `Queue` 进入。
 
 ```zig
 const vkmtl = @import("vkmtl");
@@ -34,7 +33,6 @@ const vkmtl = @import("vkmtl");
 var context = try vkmtl.WindowContext.init(allocator, .{
     .app_name = "my app",
     .backend = .auto,
-    .process_args = init.args,
     .surface = surface_descriptor,
     .presentation = presentation_descriptor,
 });
@@ -57,7 +55,7 @@ Apple 平台上，`.auto` 会优先选择 Metal。其他桌面平台优先 Vulka
 ## 使用预编译 Slang Shader
 
 应用嵌入 Slang source，并通过 device 请求同名 shader。`zig build` 会预编译匹配的
-SPIR-V、MSL 和 reflection JSON；运行时会把内嵌产物释放到 shader cache。
+SPIR-V、MSL 和 reflection JSON；运行时直接从内存解析内嵌产物。
 
 ```zig
 const shader_source = @embedFile("shaders/triangle.slang");
@@ -226,11 +224,11 @@ try command_buffer.commit();
 
 确定性 readback 示例见 `examples/transfer_readback` 和 `examples/compute_readback`。
 
-## Shader Cache
+## Shader Artifacts
 
-vkmtl 会自动缓存 runtime shader artifact。cache key 包含 embedded source hash；source
-变化后，vkmtl 会重新编译并重写缓存产物。如果应用把 `init.args` 传给 `WindowContext`，vkmtl
-会自动解析自己的 `--cache-dir` runtime 参数，应用代码不需要自己处理这个参数。
+`zig build` 会把 embedded Slang 预编译并内嵌进可执行文件。运行时直接从内存解析 shader
+blob，不创建 cache 目录。需要检查 SPIR-V、MSL 或 reflection JSON 时，查看
+`zig-out/shaders/<shader-name>/`。
 
 ## 当前限制
 

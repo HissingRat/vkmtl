@@ -182,8 +182,10 @@ pub fn makeAccelerationStructure(
 
 pub fn makeRayTracingPipelineState(
     self: *MetalClearScreen,
+    allocator: std.mem.Allocator,
+    descriptor: core.RayTracingPipelineDescriptor,
 ) core.AdvancedFeatureError!MetalRayTracingPipelineState {
-    return try MetalRayTracingPipelineState.init(self);
+    return try MetalRayTracingPipelineState.init(self, allocator, descriptor);
 }
 
 pub fn makeCommandBuffer(self: *MetalClearScreen) !MetalCommand.CommandBuffer {

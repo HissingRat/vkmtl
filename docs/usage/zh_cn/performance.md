@@ -14,8 +14,9 @@ var compiled = try device.compileRenderShader("main", source, .{
 defer compiled.deinit();
 ```
 
-runtime shader artifact 默认缓存在 `vkmtl-cache`。source hash 是 cache identity 的一部分，所以
-修改 embedded Slang 后下一次构建会重新生成内嵌 artifact，运行时 cache miss 会从内嵌 blob 恢复。
+shader artifact 在构建期预编译并内嵌进可执行文件；运行时直接从内存解析，不创建
+`vkmtl-cache`。修改 embedded Slang 后，下一次 `zig build` 会重新生成内嵌 artifact 和
+`zig-out/shaders` 下的调试副本。
 
 ## Object Creation
 
@@ -47,5 +48,5 @@ staging-copy fallback。
 zig build run-stability-plan -- --iterations 120
 ```
 
-这个命令会打印 resize、resource churn、shader cache、upload，以及 Vulkan unaligned-fill fallback
+这个命令会打印 resize、resource churn、shader artifact、upload，以及 Vulkan unaligned-fill fallback
 的计划计数。完整 GPU soak loop 仍属于后续 backend hardening 工作。

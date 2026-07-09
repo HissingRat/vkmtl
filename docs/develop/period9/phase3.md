@@ -12,6 +12,6 @@ runtime multi-surface capability.
 
 ## Current Limits
 
-- Planned multi-window cases are recorded in `src/development_matrix.zig`.
+- Planned multi-window cases are recorded in `tools/development_matrix.zig`.
 - Every case is gated by `DeviceFeatures.multi_surface`.
 - Native multiple swapchain creation remains future backend work.

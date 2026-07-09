@@ -75,7 +75,9 @@ Out of scope:
   completeness
 - full Vulkan/Metal ray tracing parity beyond the first visible scene
 
-These out-of-scope items remain Period32+ target work.
+Full native mesh-scene parity is Period33. Procedural geometry/custom
+intersection support is Period34. The remaining out-of-scope items stay in the
+later Period32+ target.
 
 ## Phase Plan
 
@@ -154,10 +156,11 @@ and reports `driver_pixels=visible_vulkan_rt_output` on the Vulkan path.
 
 See `phase6.md`.
 
-### Phase 7: Documentation And Period32+ Routing
+### Phase 7: Documentation And Follow-Up Routing
 
 - Update docs to state the first Vulkan ray traced scene support.
-- Route broader ray tracing completeness to Period32+.
+- Route full native mesh-scene work to Period33.
+- Route procedural/custom-intersection work to Period34.
 - Keep Metal and Vulkan support statements separate and precise.
 
 See `phase7.md`.
@@ -173,5 +176,6 @@ See `phase7.md`.
 - cross-backend ray tracing abstraction polish beyond the first scene
 - automated multi-device CI screenshots
 
-They should be planned as concrete Period32+ phases after both Metal and Vulkan
-ray traced scenes are visible.
+Full native mesh-scene work is Period33, and procedural/custom-intersection
+work is Period34. The remaining items should be planned as later concrete
+Period32+ phases after both Metal and Vulkan ray traced scenes are visible.

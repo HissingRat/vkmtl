@@ -1,7 +1,7 @@
 # Configuration
 
-vkmtl keeps backend selection, shader compilation, and runtime cache locations
-explicit. Examples expose the same knobs where possible.
+vkmtl keeps backend selection and the build-time shader compiler explicit.
+Examples expose the same knobs where possible.
 
 ## Preferences
 
@@ -107,22 +107,18 @@ package:
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
-## Shader Cache
+## Shader Artifacts
 
-vkmtl manages the runtime shader artifact cache automatically. By default, the
-cache lives under `vkmtl-cache` beside the executable. The cache key includes
-the embedded Slang source hash; source changes regenerate embedded precompiled
-blobs on the next build, and runtime restores artifacts from those blobs on a
-cache miss.
+vkmtl does not manage a runtime shader artifact cache. `zig build`
+precompiles embedded Slang source into embedded blobs, and runtime resolves
+those blobs directly from memory. It does not create `vkmtl-cache` and does not
+parse `--cache-dir`.
 
-If an application passes `std.process.Init.Minimal.args` to
-`WindowContextOptions.process_args`, vkmtl parses its own runtime arguments
-automatically. Users can pass:
+For debugging, build output includes inspectable artifacts:
 
-```sh
-zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
+```text
+zig-out/shaders/<shader-name>/
 ```
 
-Application code does not need to parse `--cache-dir` or map it to
-`shader_cache_dir`. This directory only affects runtime shader artifacts. It
-does not change where Zig places compiled executables.
+These files are not required at runtime; copying only `zig-out/bin/<example>`
+is enough for the matching precompiled shader.

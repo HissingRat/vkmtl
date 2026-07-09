@@ -5,7 +5,7 @@ Phase 5 stress-tests completed backend paths.
 ## Scope
 
 - Add resize/recreate loops.
-- Add shader cache warm/cold loops.
+- Add shader artifact warm/cold resolution loops.
 - Add resource churn and upload/readback loops.
 - Add staging-buffer reuse or pooling checks for unaligned Vulkan
   `fillBuffer(...)` fallback paths.

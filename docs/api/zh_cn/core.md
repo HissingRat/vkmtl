@@ -3,7 +3,7 @@
 vkmtl 通过公开的 `vkmtl` 模块暴露后端无关的描述符和运行时包装。用户代码不应该导入
 `backend/vulkan`、`backend/metal`、原始 Vulkan binding 或 Metal bridge header。
 
-当前窗口示例仍通过 `WindowContext` 组装后端选择、surface、presentation 和 shader cache。
+当前窗口示例仍通过 `WindowContext` 组装后端选择、surface 和 presentation。
 Period 2 开始，长期资源入口是 `Device`，长期 command-buffer / submit 入口是 `Queue`；
 `WindowContext` 保留为窗口 convenience owner，并把资源和命令 helper 转发到这些 view。
 
@@ -185,19 +185,15 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 Compute shader 使用 `compileComputeShader(...)` 和
 `CompiledComputeShader.stageDescriptor(...)`。
 
-运行时不会启动 `slangc`。cache miss 时，vkmtl 会从可执行文件内嵌的构建期预编译 blob
-释放 SPIR-V、MSL 和 reflection JSON 到自动管理的 shader cache。默认 cache 位于可执行文件
-旁边的 `vkmtl-cache`。如果调用方设置
-`WindowContextOptions.process_args = init.args`，vkmtl 会自动解析 `--cache-dir <path>` 或
-`--cache-dir=<path>`。应用代码不需要自己解析这个参数。
-
-优先级是：显式 `WindowContextOptions.shader_cache_dir` > `--cache-dir` runtime 参数 > 默认
-`vkmtl-cache`。
+运行时不会启动 `slangc`，也不会把 shader artifact 写入磁盘。vkmtl 会从可执行文件内嵌的
+构建期预编译 blob 直接解析 SPIR-V、MSL 和 reflection JSON。需要检查构建产物时，查看
+`zig-out/shaders/<shader-name>/`。
 
 Persistent runtime cache planning 使用 `RuntimeCacheManifestDescriptor`、
 `RuntimeCachePlanDescriptor` 和 `RuntimeCachePlan`。Manifest 会记录 schema version、backend、
 source hash。Plan 会把已有 metadata 分类为 compatible、missing、stale、backend mismatch 或
-source mismatch，同时保持现有 shader artifact 文件可检查。
+source mismatch。这个 object/runtime cache planning 是高级资源缓存能力，不参与 shader
+runtime 编译或 shader artifact 导出。
 
 `ProgrammableStageDescriptor.reflection` 可以携带 reflection 数据。创建 runtime
 pipeline 时，vkmtl 会把 reflection artifact 或 inline reflection data 与显式
@@ -299,7 +295,34 @@ record、ray tracing pipeline metadata、SBT record、dispatch record、Metal ta
 advanced inventory routing，以及 parity diagnostics。driver-level ray tracing pixels 和更完整的
 native parity 会拆开推进：Period31 现在已经通过 backend-private Metal command path
 压实第一个 native Metal visible ray traced scene，Period32 压实第一个 Vulkan
-pixel-producing ray traced scene，Period32+ 继续处理更广的 native coverage。
+pixel-producing ray traced scene，Period33 负责 full native mesh ray traced scene，
+Period34 负责 Vulkan procedural sphere / custom intersection path，Period35 负责共享
+scene data 和 Metal procedural parity。
+
+Period33 增加了公开 acceleration-structure build-input plumbing。Mesh AS build 可以通过
+`AccelerationStructureGeometryResources.triangles` 传入 vertex buffer、可选 index buffer、
+`AccelerationStructureVertexFormat`、`AccelerationStructureIndexType`、offset、stride 和
+primitive count。参与 AS build input 的 buffer 必须设置
+`BufferUsage.acceleration_structure_build_input`。同一套 runtime shape 也包含
+`AccelerationStructureGeometryResources.aabbs`；AABB descriptor 和 buffer validation 会进入
+Period34 的 Vulkan procedural sphere path。
+
+Period34 开始补 procedural RT contract：`RayTracingHitGroupKind.procedural`、
+`RayTracingPipelineDescriptor.intersection`、
+`DeviceFeatures.ray_tracing_procedural_geometry` 和
+`DeviceFeatures.ray_tracing_custom_intersection`。这些字段目前是 descriptor validation gate：
+不支持 procedural/custom-intersection 的用法会在 command submission 前返回 typed unsupported
+错误。Vulkan 现在会 materialize intersection shader stage、procedural hit group、SBT record，
+并接入 procedural `ray_traced_scene` 验收路径。Metal intersection function table execution
+归 Period35。
+
+`Device.compileRayTracingShader(...)` 会返回 `CompiledRayTracingShader`。使用
+`CompiledRayTracingShader.applyToPipelineDescriptor(backend, &descriptor)` 可以把
+backend-specific ray tracing artifact 附到 `RayTracingPipelineDescriptor`。Vulkan 目前接收
+Slang 生成的 SPIR-V ray-generation、miss、closest-hit、any-hit 和 intersection stages。
+Metal 通过同一个 compiled shader object 接收构建期预编译的 Metal ray-generation artifact；
+直接把 Slang HLSL RT lowering 到 Metal RT 仍属于 compiler/backend parity 工作，而不是 example
+里的后端分支。
 
 ## Binding
 

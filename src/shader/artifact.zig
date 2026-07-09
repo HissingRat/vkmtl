@@ -64,6 +64,13 @@ pub fn readSpirvWords(
     const bytes = try readBytes(allocator, artifact, .spirv);
     defer allocator.free(bytes);
 
+    return try spirvBytesToWords(allocator, bytes);
+}
+
+pub fn spirvBytesToWords(
+    allocator: std.mem.Allocator,
+    bytes: []const u8,
+) LoadError![]u32 {
     if (bytes.len == 0 or bytes.len % @sizeOf(u32) != 0) return error.InvalidSpirvArtifact;
 
     const words = try allocator.alloc(u32, bytes.len / @sizeOf(u32));

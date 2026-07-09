@@ -60,8 +60,8 @@ Out of scope:
   geometry, and ray query completeness
 - broad native advanced parity unrelated to the first ray traced scene
 
-The first Vulkan ray traced scene is Period32. The broader completeness items remain
-Period32+ target work.
+The first Vulkan ray traced scene is Period32. Full native mesh-scene parity is
+Period33, and procedural geometry/custom intersection is Period34.
 
 ## Current Visible Slice
 
@@ -133,8 +133,8 @@ See `phase6.md`.
 ### Phase 7: Documentation And Follow-Up Routing
 
 - Update usage/API docs so users know what is actually supported.
-- Move the first Vulkan ray traced scene into Period32 and broader
-  full-parity ray tracing work into Period32+ targets.
+- Move the first Vulkan ray traced scene into Period32, the full native mesh
+  scene into Period33, and procedural/custom-intersection work into Period34.
 - Keep the Period31 closeout honest about what renders and what remains.
 
 See `phase7.md`.
@@ -155,6 +155,7 @@ The following items do not block the first native Metal ray traced scene window:
 - large SBT stress tests
 - long-run GPU soak and CI device matrix coverage
 
-The first Vulkan ray traced scene should be handled by Period32. The remaining items
-should be planned as concrete Period32+ phases after both first-scene paths
-are visible or explicitly unsupported on a runtime.
+The first Vulkan ray traced scene should be handled by Period32. Full native
+mesh-scene work is Period33, procedural/custom-intersection work is Period34,
+and the remaining production/stress items should become later concrete
+Period32+ phases.

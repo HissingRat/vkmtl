@@ -19,13 +19,12 @@ examples/compute_readback/shaders/compute_readback.slang
 
 Examples embed those `.slang` files and declare the required shaders through
 `Device`. `zig build` precompiles matching SPIR-V, MSL, and reflection JSON
-into the executable; runtime restores those artifacts from embedded blobs into
-vkmtl's automatically managed cache root:
+into the executable. Runtime resolves those embedded blobs directly from
+memory and does not write shader artifacts to disk. Build-time artifacts are
+also installed for inspection under `zig-out/shaders`:
 
 ```text
-<internal-cache-root>/<shader-name>/
-  hash
-  source.slang
+zig-out/shaders/<shader-name>/
   vert.spv
   frag.spv
   vert.msl
@@ -35,10 +34,9 @@ vkmtl's automatically managed cache root:
 ```
 
 Compute shaders use `compute.spv`, `compute.msl`, and
-`compute.reflect.json`. The `hash` file stores the embedded source hash; if the
-hash or any required artifact does not match, vkmtl restores artifacts from the
-embedded precompiled blob. If no blob matches the name, entry points, and
-source hash, vkmtl returns `PrecompiledShaderMissing`.
+`compute.reflect.json`. The source hash is stored in embedded blob metadata. If
+no blob matches the name, entry points, and source hash, vkmtl returns
+`PrecompiledShaderMissing`.
 
 ## Build Commands
 
@@ -56,16 +54,9 @@ explicit build-time compiler path when needed:
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
-By default, vkmtl uses `vkmtl-cache` next to the executable. The cache directory
-only affects runtime shader artifacts; it does not change where Zig places
-compiled executables. If an application passes `init.args` to `WindowContext`,
-vkmtl automatically parses its own runtime arguments:
-
-```sh
-zig build run-triangle -- --cache-dir /tmp/vkmtl-cache
-```
-
-Application code does not need to parse `--cache-dir` itself.
+Runtime does not need a shader cache directory and does not parse
+`--cache-dir`. Inspect compiled shader artifacts in
+`zig-out/shaders/<shader-name>/` when needed.
 
 ## Triangle Shape
 
@@ -120,9 +111,8 @@ defer compiled.deinit();
 const compute_stage = compiled.stageDescriptor(context.selectedBackend());
 ```
 
-The compiler prints `using precompiled slang shader: <name>` on a cache miss
-with an embedded blob hit and `using cached slang shader: <name>` on a cache
-hit.
+The compiler prints `using precompiled slang shader: <name>` when the embedded
+blob matches.
 
 ## Binding Rules
 

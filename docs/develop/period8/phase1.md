@@ -1,14 +1,14 @@
 # Phase 1: Shader Module Cache
 
-Phase 1 defines shader module object-cache identity without changing the
-existing runtime shader artifact cache.
+Phase 1 defines shader module object-cache identity without coupling it to
+build-time shader artifact embedding.
 
 ## First Slice
 
 - Add a shader module cache-key descriptor.
 - Include source identity, compile option identity, entry point identity, and
   backend.
-- Keep SPIR-V/MSL/reflection artifact caching untouched.
+- Keep SPIR-V/MSL/reflection artifact embedding untouched.
 
 ## Current Limits
 

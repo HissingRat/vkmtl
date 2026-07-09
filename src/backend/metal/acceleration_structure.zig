@@ -2,12 +2,30 @@ const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
+const MetalBuffer = @import("buffer.zig");
 
 const MetalAccelerationStructure = @This();
 
 handle: *metal.vkmtl_metal_acceleration_structure,
 kind_value: core.AccelerationStructureKind,
 sizes_value: core.AccelerationStructureBuildSizes,
+
+pub const GeometryInput = union(core.AccelerationStructureGeometryKind) {
+    triangles: TriangleGeometryInput,
+    aabbs: AabbGeometryInput,
+    instances: void,
+};
+
+pub const TriangleGeometryInput = struct {
+    descriptor: core.AccelerationStructureGeometryDescriptor,
+    vertex_buffer: *MetalBuffer,
+    index_buffer: ?*MetalBuffer = null,
+};
+
+pub const AabbGeometryInput = struct {
+    descriptor: core.AccelerationStructureGeometryDescriptor,
+    buffer: *MetalBuffer,
+};
 
 pub fn init(
     owner: *MetalClearScreen,
@@ -75,12 +93,39 @@ pub fn kind(self: MetalAccelerationStructure) core.AccelerationStructureKind {
     return self.kind_value;
 }
 
+pub fn setTriangleGeometry(
+    self: *MetalAccelerationStructure,
+    input: TriangleGeometryInput,
+) core.AdvancedFeatureError!void {
+    const descriptor = input.descriptor;
+    if (descriptor.kind != .triangles) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    try checkAccelerationStructure(metal.vkmtl_metal_acceleration_structure_set_triangle_geometry(
+        self.handle,
+        input.vertex_buffer.handle,
+        descriptor.vertex_buffer_offset,
+        descriptor.resolvedVertexStride(),
+        descriptor.resolvedVertexCount(),
+        if (input.index_buffer) |index_buffer| index_buffer.handle else null,
+        descriptor.index_buffer_offset,
+        metalIndexType(descriptor.index_type),
+        descriptor.primitive_count,
+    ));
+}
+
 fn accelerationStructureKind(
     kind_value: core.AccelerationStructureKind,
 ) metal.vkmtl_metal_acceleration_structure_kind {
     return switch (kind_value) {
         .bottom_level => metal.VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL,
         .top_level => metal.VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL,
+    };
+}
+
+fn metalIndexType(index_type: core.AccelerationStructureIndexType) c_uint {
+    return switch (index_type) {
+        .none => 0,
+        .uint16 => 1,
+        .uint32 => 2,
     };
 }
 

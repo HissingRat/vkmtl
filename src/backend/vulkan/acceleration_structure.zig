@@ -16,6 +16,23 @@ device_address: vk.DeviceAddress = 0,
 primitive_count: u32,
 built_value: bool = false,
 
+pub const GeometryInput = union(core.AccelerationStructureGeometryKind) {
+    triangles: TriangleGeometryInput,
+    aabbs: AabbGeometryInput,
+    instances: void,
+};
+
+pub const TriangleGeometryInput = struct {
+    descriptor: core.AccelerationStructureGeometryDescriptor,
+    vertex_buffer: *const VulkanBuffer,
+    index_buffer: ?*const VulkanBuffer = null,
+};
+
+pub const AabbGeometryInput = struct {
+    descriptor: core.AccelerationStructureGeometryDescriptor,
+    buffer: *const VulkanBuffer,
+};
+
 const fallback_triangle_vertices = [_]f32{
     0.0,  -0.5, 0.0,
     0.5,  0.5,  0.0,
@@ -156,6 +173,69 @@ pub fn buildGeometry(self: VulkanAccelerationStructure, geometry_address: vk.Dev
     };
 }
 
+pub fn buildGeometryFromInput(input: GeometryInput) core.AdvancedFeatureError!vk.AccelerationStructureGeometryKHR {
+    return switch (input) {
+        .triangles => |triangles| {
+            const descriptor = triangles.descriptor;
+            const vertex_address = (triangles.vertex_buffer.deviceAddress() catch {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }) + descriptor.vertex_buffer_offset;
+            const index_address = if (triangles.index_buffer) |index_buffer|
+                (index_buffer.deviceAddress() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources) +
+                    descriptor.index_buffer_offset
+            else
+                0;
+            if (vertex_address == 0) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            if (descriptor.index_type != .none and index_address == 0) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            return .{
+                .geometry_type = .triangles_khr,
+                .geometry = .{ .triangles = .{
+                    .vertex_format = vertexFormat(descriptor.vertex_format),
+                    .vertex_data = .{ .device_address = vertex_address },
+                    .vertex_stride = descriptor.resolvedVertexStride(),
+                    .max_vertex = descriptor.resolvedVertexCount() - 1,
+                    .index_type = indexType(descriptor.index_type),
+                    .index_data = .{ .device_address = index_address },
+                    .transform_data = .{ .device_address = 0 },
+                } },
+                .flags = .{ .opaque_bit_khr = descriptor.is_opaque },
+            };
+        },
+        .aabbs => |aabbs| {
+            const descriptor = aabbs.descriptor;
+            const address = (aabbs.buffer.deviceAddress() catch {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }) + descriptor.aabb_buffer_offset;
+            if (address == 0) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            return .{
+                .geometry_type = .aabbs_khr,
+                .geometry = .{ .aabbs = .{
+                    .data = .{ .device_address = address },
+                    .stride = descriptor.aabb_stride,
+                } },
+                .flags = .{ .opaque_bit_khr = descriptor.is_opaque },
+            };
+        },
+        .instances => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+    };
+}
+
+pub fn buildRangeFromInput(input: GeometryInput) vk.AccelerationStructureBuildRangeInfoKHR {
+    const descriptor: core.AccelerationStructureGeometryDescriptor = switch (input) {
+        .triangles => |triangles| triangles.descriptor,
+        .aabbs => |aabbs| aabbs.descriptor,
+        .instances => .{ .kind = .instances, .primitive_count = 1 },
+    };
+    return .{
+        .primitive_count = descriptor.primitive_count,
+        .primitive_offset = 0,
+        .first_vertex = 0,
+        .transform_offset = 0,
+    };
+}
+
 pub fn structureType(self: VulkanAccelerationStructure) vk.AccelerationStructureTypeKHR {
     return accelerationStructureType(self.kind);
 }
@@ -164,33 +244,51 @@ pub fn writeTopLevelInstance(
     self: *VulkanAccelerationStructure,
     source: *const VulkanAccelerationStructure,
 ) core.AdvancedFeatureError!void {
-    if (self.kind != .top_level or source.kind != .bottom_level or !source.built_value or source.device_address == 0) {
+    try self.writeTopLevelInstances(&.{source});
+}
+
+pub fn writeTopLevelInstances(
+    self: *VulkanAccelerationStructure,
+    sources: []const *const VulkanAccelerationStructure,
+) core.AdvancedFeatureError!void {
+    if (sources.len == 0 or sources.len > self.primitive_count) {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
     }
-    const instance = vk.AccelerationStructureInstanceKHR{
-        .transform = .{ .matrix = .{
-            .{ 1, 0, 0, 0 },
-            .{ 0, 1, 0, 0 },
-            .{ 0, 0, 1, 0 },
-        } },
-        .instance_custom_index_and_mask = .{
-            .instance_custom_index = 0,
-            .mask = 0xff,
-        },
-        .instance_shader_binding_table_record_offset_and_flags = .{
-            .instance_shader_binding_table_record_offset = 0,
-            .flags = @truncate(vk.GeometryInstanceFlagsKHR.toInt(.{ .triangle_facing_cull_disable_bit_khr = true })),
-        },
-        .acceleration_structure_reference = source.device_address,
-    };
-
-    const mapped = self.gc.dev.mapMemory(self.geometry.memory, 0, @sizeOf(vk.AccelerationStructureInstanceKHR), .{}) catch {
+    if (self.kind != .top_level) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+    const mapped = self.gc.dev.mapMemory(
+        self.geometry.memory,
+        0,
+        @sizeOf(vk.AccelerationStructureInstanceKHR) * sources.len,
+        .{},
+    ) catch {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
     };
     defer self.gc.dev.unmapMemory(self.geometry.memory);
 
-    const dst: *vk.AccelerationStructureInstanceKHR = @ptrCast(@alignCast(mapped));
-    dst.* = instance;
+    const dst: [*]vk.AccelerationStructureInstanceKHR = @ptrCast(@alignCast(mapped));
+    for (sources, 0..) |source, i| {
+        if (source.kind != .bottom_level or !source.built_value or source.device_address == 0) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        dst[i] = vk.AccelerationStructureInstanceKHR{
+            .transform = .{ .matrix = .{
+                .{ 1, 0, 0, 0 },
+                .{ 0, 1, 0, 0 },
+                .{ 0, 0, 1, 0 },
+            } },
+            .instance_custom_index_and_mask = .{
+                .instance_custom_index = @intCast(i),
+                .mask = 0xff,
+            },
+            .instance_shader_binding_table_record_offset_and_flags = .{
+                .instance_shader_binding_table_record_offset = 0,
+                .flags = @truncate(vk.GeometryInstanceFlagsKHR.toInt(.{ .triangle_facing_cull_disable_bit_khr = true })),
+            },
+            .acceleration_structure_reference = source.device_address,
+        };
+    }
 }
 
 pub fn triangleGeometry(vertex_address: vk.DeviceAddress) vk.AccelerationStructureGeometryKHR {
@@ -209,6 +307,31 @@ pub fn triangleGeometry(vertex_address: vk.DeviceAddress) vk.AccelerationStructu
     };
 }
 
+pub fn aabbGeometry(aabb_address: vk.DeviceAddress, stride: u32) vk.AccelerationStructureGeometryKHR {
+    return .{
+        .geometry_type = .aabbs_khr,
+        .geometry = .{ .aabbs = .{
+            .data = .{ .device_address = aabb_address },
+            .stride = stride,
+        } },
+        .flags = .{ .opaque_bit_khr = false },
+    };
+}
+
+fn vertexFormat(format: core.AccelerationStructureVertexFormat) vk.Format {
+    return switch (format) {
+        .float3 => .r32g32b32_sfloat,
+    };
+}
+
+fn indexType(index_type: core.AccelerationStructureIndexType) vk.IndexType {
+    return switch (index_type) {
+        .none => .none_khr,
+        .uint16 => .uint16,
+        .uint32 => .uint32,
+    };
+}
+
 pub fn instanceGeometry(instance_address: vk.DeviceAddress) vk.AccelerationStructureGeometryKHR {
     return .{
         .geometry_type = .instances_khr,
@@ -220,20 +343,33 @@ pub fn instanceGeometry(instance_address: vk.DeviceAddress) vk.AccelerationStruc
     };
 }
 
-fn queryBuildSizes(
+pub fn queryBuildSizes(
     gc: *const GraphicsContext,
     descriptor: core.AccelerationStructureDescriptor,
 ) !core.AccelerationStructureBuildSizes {
-    var geometry = switch (descriptor.kind) {
-        .bottom_level => triangleGeometry(0),
-        .top_level => instanceGeometry(0),
-    };
+    if (descriptor.kind == .top_level) {
+        var geometry = instanceGeometry(0);
+        return queryBuildSizesForGeometry(gc, descriptor, &geometry);
+    }
+
+    var triangle = triangleGeometry(0);
+    var aabb = aabbGeometry(0, 24);
+    const triangle_sizes = try queryBuildSizesForGeometry(gc, descriptor, &triangle);
+    const aabb_sizes = try queryBuildSizesForGeometry(gc, descriptor, &aabb);
+    return maxBuildSizes(triangle_sizes, aabb_sizes);
+}
+
+fn queryBuildSizesForGeometry(
+    gc: *const GraphicsContext,
+    descriptor: core.AccelerationStructureDescriptor,
+    geometry: *vk.AccelerationStructureGeometryKHR,
+) !core.AccelerationStructureBuildSizes {
     var build_info = vk.AccelerationStructureBuildGeometryInfoKHR{
         .type = accelerationStructureType(descriptor.kind),
         .flags = .{ .prefer_fast_trace_bit_khr = true },
         .mode = .build_khr,
         .geometry_count = 1,
-        .p_geometries = @ptrCast(&geometry),
+        .p_geometries = @ptrCast(geometry),
         .scratch_data = .{ .device_address = 0 },
     };
     const primitive_counts = [_]u32{descriptor.primitive_count};
@@ -252,6 +388,17 @@ fn queryBuildSizes(
         .result_size = @max(size_info.acceleration_structure_size, 1),
         .scratch_size = @max(size_info.build_scratch_size, 1),
         .update_scratch_size = size_info.update_scratch_size,
+    };
+}
+
+fn maxBuildSizes(
+    lhs: core.AccelerationStructureBuildSizes,
+    rhs: core.AccelerationStructureBuildSizes,
+) core.AccelerationStructureBuildSizes {
+    return .{
+        .result_size = @max(lhs.result_size, rhs.result_size),
+        .scratch_size = @max(lhs.scratch_size, rhs.scratch_size),
+        .update_scratch_size = @max(lhs.update_scratch_size, rhs.update_scratch_size),
     };
 }
 

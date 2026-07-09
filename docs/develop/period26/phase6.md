@@ -20,7 +20,7 @@ Phase 6 closes Period 26 with release-oriented checks.
 - Added a Period 26 production-hardening matrix that separates completed
   portable planning/diagnostics from native backend lowering.
 - Added `production_hardening` to the validation matrix and
-  `src/development_matrix.zig` metadata/tests.
+  `tools/development_matrix.zig` metadata/tests.
 - Updated Period 26 roadmap and README status to completed for the portable
   production-hardening slice.
 - Updated backend-completion docs so native work remains visible instead of

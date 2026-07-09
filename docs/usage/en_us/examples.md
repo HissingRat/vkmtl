@@ -14,24 +14,20 @@ Examples may import:
 If an example needs a backend feature that is not public yet, add the public
 vkmtl API first instead of reaching into a backend implementation.
 
-The current gallery metadata is tracked in `src/development_matrix.zig` so
+The current gallery metadata is tracked in `tools/development_matrix.zig` so
 tests can keep names, paths, run steps, deterministic output markers, and
 backend expectations in sync with this document.
 
 Shader-backed examples embed their Slang source with `@embedFile(...)`, compile
 it through `Device.compileRenderShader(...)` or
-`Device.compileComputeShader(...)` by resolving build-time precompiled
-artifacts, and attach reflection JSON to pipeline stages. Single-buffer rendering examples derive their vertex
-descriptors from reflection. Shader-resource examples also derive bind group
-layouts from reflection.
-
-vkmtl manages the runtime shader artifact cache automatically. Examples pass
-process arguments to `WindowContext`, so users can pass vkmtl runtime arguments
-directly while example code does not parse them:
-
-```sh
-zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
-```
+`Device.compileComputeShader(...)` by resolving build-time precompiled blobs,
+and attach embedded reflection JSON to pipeline stages. Ray tracing examples
+use `Device.compileRayTracingShader(...)` and let the compiled shader apply the
+selected backend's ray-generation/miss/hit shader blobs to the pipeline
+descriptor. Single-buffer rendering examples derive their vertex descriptors
+from reflection. Shader-resource examples also derive bind group layouts from
+reflection. Inspectable build-time artifacts are installed under
+`zig-out/shaders/`.
 
 ## Triangle
 
@@ -338,7 +334,7 @@ zig build run-bindless-textures
 
 ## Compute Gallery
 
-Period 9 tracks the broader compute gallery in `src/development_matrix.zig`.
+Period 9 tracks the broader compute gallery in `tools/development_matrix.zig`.
 Current status:
 
 - implemented: `compute_readback`
@@ -437,12 +433,20 @@ zig build run-mesh-shader
 the Period 30 backend-private runtime records: acceleration-structure objects,
 scratch-buffer validation, ray tracing pipeline state, shader binding table
 creation, ray dispatch records, and Metal table metadata when Metal is
-selected. On supported Metal devices it now opens a window, creates a real
-`MTLAccelerationStructure`, and presents a native ray traced triangle produced
-by a backend-private Metal intersector dispatch. It prints
-`driver_pixels=visible_metal_native_rt_output` after the first visible frame.
-Vulkan parity is tracked in Period32, and broader native ray tracing coverage is
-Period32+ work.
+selected. The example calls `Device.compileRayTracingShader(...)` once and lets
+the compiled shader fill `RayTracingPipelineDescriptor` for the selected
+backend. Vulkan consumes the Slang RT SPIR-V stages; Metal consumes the
+build-time precompiled Metal ray-generation artifact through the same vkmtl
+compiled-shader object. On supported Metal devices it now opens a window, creates a real
+`MTLAccelerationStructure`, builds a full mesh RT scene from a user-provided
+mesh vertex buffer, and presents a room with multiple spheres through the
+backend-private Metal intersector dispatch. It prints
+`driver_pixels=visible_metal_full_mesh_rt_scene` after the first visible frame.
+The Vulkan path now uses procedural sphere AABBs, Slang intersection SPIR-V,
+procedural hit groups, and native `vkCmdTraceRaysKHR` dispatch. On supported
+Vulkan RT hardware its success marker is
+`driver_pixels=visible_vulkan_procedural_rt_scene`. Metal procedural
+function-table parity and shared RT scene buffers are routed to Period35.
 
 Run it with:
 

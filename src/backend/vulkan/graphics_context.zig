@@ -359,6 +359,8 @@ fn queryNativeFeatures(
     result.task_shaders = extensions.mesh_shader;
     result.acceleration_structures = ray_tracing.supported;
     result.ray_tracing = ray_tracing.supported;
+    result.ray_tracing_procedural_geometry = ray_tracing.supported;
+    result.ray_tracing_custom_intersection = ray_tracing.supported;
     result.driver_pipeline_cache = true;
     return result;
 }
@@ -522,7 +524,7 @@ fn queryRayTracingCapabilityDiagnostics(
             .vulkan,
             .missing_extension,
             std.mem.span(missing),
-            "required for the Period32 Vulkan ray traced scene path",
+            "required for the Vulkan ray tracing runtime path",
         );
     }
 
@@ -594,7 +596,7 @@ fn queryRayTracingCapabilityDiagnostics(
             .vulkan,
             .missing_limit,
             "VkPhysicalDeviceRayTracingPipelinePropertiesKHR.maxRayRecursionDepth",
-            "must be non-zero for the first ray traced scene",
+            "must be non-zero for recursive ray tracing dispatch",
         );
     }
     if (ray_tracing_properties.shader_group_handle_size == 0) {

@@ -108,16 +108,16 @@ into a generated `vkmtl_precompiled_shaders` module. Runtime shader APIs do not
 spawn `slangc`, do not require `slangc` beside the executable, and must report a
 typed missing-precompiled-shader error when no matching name/entry/source hash
 blob exists. Unknown build hosts must use an explicit build-time
-`-Dslangc=/path/to/build-time/slangc` override. Runtime shader artifacts live in
-`vkmtl-cache` beside the executable by default. Applications may either pass an
-explicit `WindowContextOptions.shader_cache_dir` or pass process arguments to
-`WindowContextOptions.process_args` so vkmtl can parse its own runtime
-arguments such as `--cache-dir`.
+`-Dslangc=/path/to/build-time/slangc` override. Runtime shader APIs must consume
+embedded precompiled blobs directly from memory and must not create
+`vkmtl-cache`, parse `--cache-dir`, or write SPIR-V/MSL/reflection JSON beside
+the executable. Build-time artifact copies for inspection belong under
+`zig-out/shaders/<shader-name>/`.
 `build.zig` owns the pinned Slang distribution version and auto-download
 metadata. Slang setup command bodies belong in `scripts/`, not inline heredocs
 in `build.zig`.
 
-Keep runtime shader cache artifacts inspectable while the pipeline is young.
+Keep build-time shader artifacts inspectable while the pipeline is young.
 Reflection data feeds bind group layout derivation, vertex descriptor
 derivation, and binding validation. Explicit descriptors are still allowed when
 an example or application needs direct control. Keep examples on the public

@@ -16,7 +16,7 @@ Phase 6 closes Period 25 with examples and documentation.
 
 ## Result
 
-- `src/development_matrix.zig` records the Period 25 platform/interop matrix
+- `tools/development_matrix.zig` records the Period 25 platform/interop matrix
   and `platform_interop_regression` backend-test row.
 - `docs/develop/backend-test-matrix.md` documents portable runtime,
   capability-gated, and deferred native interop paths.

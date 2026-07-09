@@ -24,7 +24,7 @@ pub fn main(init: std.process.Init) !void {
     try stdout.print("iterations: {}\n", .{plan.iterations});
     try stdout.print("resize events: {}\n", .{plan.resize_events});
     try stdout.print("resources created: {}\n", .{plan.resources_created});
-    try stdout.print("shader cache cycles: {}\n", .{plan.shader_cache_cycles});
+    try stdout.print("shader artifact cycles: {}\n", .{plan.shader_artifact_cycles});
     try stdout.print("upload/readback cycles: {}\n", .{plan.upload_readback_cycles});
     try stdout.print("upload bytes: {}\n", .{plan.upload_bytes});
     try stdout.print("vulkan unaligned fill fallback checks: {}\n", .{plan.vulkan_unaligned_fill_fallback_checks});

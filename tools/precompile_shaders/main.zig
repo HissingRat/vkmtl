@@ -18,9 +18,12 @@ const ComputeSpec = struct {
 const RayTracingSpec = struct {
     name: []const u8,
     source_path: []const u8,
+    metal_ray_generation_source_path: ?[]const u8 = null,
     ray_generation_entry: []const u8 = "raygen",
     miss_entry: []const u8 = "miss",
     closest_hit_entry: []const u8 = "closest_hit",
+    any_hit_entry: []const u8 = "any_hit",
+    intersection_entry: []const u8 = "intersection_main",
 };
 
 const GeneratedRender = struct {
@@ -75,7 +78,12 @@ const compute_specs = [_]ComputeSpec{
 };
 
 const ray_tracing_specs = [_]RayTracingSpec{
-    .{ .name = "ray_traced_scene_rt", .source_path = "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang" },
+    .{
+        .name = "ray_traced_scene_rt",
+        .source_path = "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
+        .metal_ray_generation_source_path = "examples/ray_traced_scene/shaders/ray_traced_scene_metal.msl",
+        .intersection_entry = "intersect_sphere",
+    },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -221,16 +229,35 @@ fn precompileRayTracing(
     defer allocator.free(miss_spv);
     const closest_hit_spv = try std.fs.path.join(allocator, &.{ shader_dir, "closest_hit.spv" });
     defer allocator.free(closest_hit_spv);
+    const any_hit_spv = try std.fs.path.join(allocator, &.{ shader_dir, "any_hit.spv" });
+    defer allocator.free(any_hit_spv);
+    const intersection_spv = try std.fs.path.join(allocator, &.{ shader_dir, "intersection.spv" });
+    defer allocator.free(intersection_spv);
+    const raygen_msl = try std.fs.path.join(allocator, &.{ shader_dir, "raygen.msl" });
+    defer allocator.free(raygen_msl);
     const raygen_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "raygen.reflect.json" });
     defer allocator.free(raygen_reflect);
     const miss_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "miss.reflect.json" });
     defer allocator.free(miss_reflect);
     const closest_hit_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "closest_hit.reflect.json" });
     defer allocator.free(closest_hit_reflect);
+    const any_hit_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "any_hit.reflect.json" });
+    defer allocator.free(any_hit_reflect);
+    const intersection_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "intersection.reflect.json" });
+    defer allocator.free(intersection_reflect);
 
     try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.ray_generation_entry, raygen_spv);
     try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.miss_entry, miss_spv);
     try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.closest_hit_entry, closest_hit_spv);
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.any_hit_entry, any_hit_spv);
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.intersection_entry, intersection_spv);
+    if (spec.metal_ray_generation_source_path) |metal_source_path| {
+        const metal_source = try readFile(allocator, metal_source_path);
+        defer allocator.free(metal_source);
+        try writeFile(raygen_msl, metal_source);
+    } else {
+        return error.MissingMetalRayGenerationArtifact;
+    }
 
     const raygen_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "ray_generation", spec.ray_generation_entry);
     defer allocator.free(raygen_json);
@@ -241,6 +268,12 @@ fn precompileRayTracing(
     const closest_hit_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "closest_hit", spec.closest_hit_entry);
     defer allocator.free(closest_hit_json);
     try writeFile(closest_hit_reflect, closest_hit_json);
+    const any_hit_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "any_hit", spec.any_hit_entry);
+    defer allocator.free(any_hit_json);
+    try writeFile(any_hit_reflect, any_hit_json);
+    const intersection_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "intersection", spec.intersection_entry);
+    defer allocator.free(intersection_json);
+    try writeFile(intersection_reflect, intersection_json);
 
     return .{ .spec = spec, .hash = hash };
 }
@@ -388,12 +421,19 @@ fn writeGeneratedModule(
         \\    ray_generation_entry: []const u8,
         \\    miss_entry: []const u8,
         \\    closest_hit_entry: []const u8,
+        \\    any_hit_entry: []const u8,
+        \\    intersection_entry: []const u8,
         \\    ray_generation_spirv: []const u8,
         \\    miss_spirv: []const u8,
         \\    closest_hit_spirv: []const u8,
+        \\    any_hit_spirv: []const u8,
+        \\    intersection_spirv: []const u8,
+        \\    ray_generation_msl: []const u8,
         \\    ray_generation_reflection: []const u8,
         \\    miss_reflection: []const u8,
         \\    closest_hit_reflection: []const u8,
+        \\    any_hit_reflection: []const u8,
+        \\    intersection_reflection: []const u8,
         \\};
         \\
         \\pub const render_shaders = [_]RenderShaderBlob{
@@ -447,13 +487,20 @@ fn writeGeneratedModule(
     for (ray_tracing_items) |item| {
         try zig.print(
             allocator,
-            "    .{{ .name = \"{s}\", .source_hash = \"{s}\", .ray_generation_entry = \"{s}\", .miss_entry = \"{s}\", .closest_hit_entry = \"{s}\", .ray_generation_spirv = @embedFile(\"{s}/raygen.spv\"), .miss_spirv = @embedFile(\"{s}/miss.spv\"), .closest_hit_spirv = @embedFile(\"{s}/closest_hit.spv\"), .ray_generation_reflection = @embedFile(\"{s}/raygen.reflect.json\"), .miss_reflection = @embedFile(\"{s}/miss.reflect.json\"), .closest_hit_reflection = @embedFile(\"{s}/closest_hit.reflect.json\") }},\n",
+            "    .{{ .name = \"{s}\", .source_hash = \"{s}\", .ray_generation_entry = \"{s}\", .miss_entry = \"{s}\", .closest_hit_entry = \"{s}\", .any_hit_entry = \"{s}\", .intersection_entry = \"{s}\", .ray_generation_spirv = @embedFile(\"{s}/raygen.spv\"), .miss_spirv = @embedFile(\"{s}/miss.spv\"), .closest_hit_spirv = @embedFile(\"{s}/closest_hit.spv\"), .any_hit_spirv = @embedFile(\"{s}/any_hit.spv\"), .intersection_spirv = @embedFile(\"{s}/intersection.spv\"), .ray_generation_msl = @embedFile(\"{s}/raygen.msl\"), .ray_generation_reflection = @embedFile(\"{s}/raygen.reflect.json\"), .miss_reflection = @embedFile(\"{s}/miss.reflect.json\"), .closest_hit_reflection = @embedFile(\"{s}/closest_hit.reflect.json\"), .any_hit_reflection = @embedFile(\"{s}/any_hit.reflect.json\"), .intersection_reflection = @embedFile(\"{s}/intersection.reflect.json\") }},\n",
             .{
                 item.spec.name,
                 item.hash,
                 item.spec.ray_generation_entry,
                 item.spec.miss_entry,
                 item.spec.closest_hit_entry,
+                item.spec.any_hit_entry,
+                item.spec.intersection_entry,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
                 item.spec.name,
                 item.spec.name,
                 item.spec.name,

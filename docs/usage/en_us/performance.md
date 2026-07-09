@@ -16,10 +16,10 @@ var compiled = try device.compileRenderShader("main", source, .{
 defer compiled.deinit();
 ```
 
-Runtime shader artifacts are cached under `vkmtl-cache` by default. Source
-hashes are part of the cache identity, so editing embedded Slang regenerates
-embedded artifacts on the next build, and runtime restores them from the blob on
-a cache miss.
+Shader artifacts are precompiled at build time and embedded into the
+executable; runtime resolves them directly from memory and does not create
+`vkmtl-cache`. Editing embedded Slang regenerates embedded artifacts and the
+debug copy under `zig-out/shaders` on the next `zig build`.
 
 ## Object Creation
 
@@ -55,6 +55,6 @@ without opening a window:
 zig build run-stability-plan -- --iterations 120
 ```
 
-This command prints the planned resize, resource churn, shader cache, upload,
+This command prints the planned resize, resource churn, shader artifact, upload,
 and Vulkan unaligned-fill fallback counters. Full GPU soak loops remain
 backend-hardening work.

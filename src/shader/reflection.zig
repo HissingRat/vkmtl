@@ -112,6 +112,13 @@ fn validateStage(
             reflection,
             bind_group_layouts,
         ),
+        .json => |bytes| try validateJsonStageBytes(
+            allocator,
+            stage_descriptor,
+            expected_stage,
+            bytes,
+            bind_group_layouts,
+        ),
         .artifact => |artifact| try validateArtifactStage(
             allocator,
             stage_descriptor,
@@ -134,6 +141,21 @@ fn validateArtifactStage(
     };
     defer allocator.free(bytes);
 
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{}) catch {
+        return core.ShaderError.InvalidShaderReflection;
+    };
+    defer parsed.deinit();
+
+    try validateJsonStage(stage_descriptor, expected_stage, parsed.value, bind_group_layouts);
+}
+
+fn validateJsonStageBytes(
+    allocator: std.mem.Allocator,
+    stage_descriptor: core.ProgrammableStageDescriptor,
+    expected_stage: core.ShaderStage,
+    bytes: []const u8,
+    bind_group_layouts: []const core.BindGroupLayoutDescriptor,
+) !void {
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{}) catch {
         return core.ShaderError.InvalidShaderReflection;
     };
@@ -222,6 +244,7 @@ const LayoutBuilder = struct {
         const source = stage_descriptor.reflection orelse return;
         switch (source) {
             .data => |reflection| try self.addStageReflection(stage_descriptor, expected_stage, reflection),
+            .json => |bytes| try self.addJsonStageBytes(stage_descriptor, expected_stage, bytes),
             .artifact => |artifact| try self.addArtifactStage(stage_descriptor, expected_stage, artifact),
         }
     }
@@ -257,6 +280,20 @@ const LayoutBuilder = struct {
         };
         defer self.allocator.free(bytes);
 
+        var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, bytes, .{}) catch {
+            return core.ShaderError.InvalidShaderReflection;
+        };
+        defer parsed.deinit();
+
+        try self.addJsonStage(stage_descriptor, expected_stage, parsed.value);
+    }
+
+    fn addJsonStageBytes(
+        self: *LayoutBuilder,
+        stage_descriptor: core.ProgrammableStageDescriptor,
+        expected_stage: core.ShaderStage,
+        bytes: []const u8,
+    ) !void {
         var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, bytes, .{}) catch {
             return core.ShaderError.InvalidShaderReflection;
         };
@@ -394,6 +431,7 @@ const VertexInputBuilder = struct {
         const source = stage_descriptor.reflection orelse return;
         switch (source) {
             .data => |reflection| try self.addVertexStageReflection(stage_descriptor, reflection),
+            .json => |bytes| try self.addJsonVertexStageBytes(stage_descriptor, bytes),
             .artifact => |artifact| try self.addArtifactVertexStage(stage_descriptor, artifact),
         }
     }
@@ -425,6 +463,19 @@ const VertexInputBuilder = struct {
         };
         defer self.allocator.free(bytes);
 
+        var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, bytes, .{}) catch {
+            return core.ShaderError.InvalidShaderReflection;
+        };
+        defer parsed.deinit();
+
+        try self.addJsonVertexStage(stage_descriptor, parsed.value);
+    }
+
+    fn addJsonVertexStageBytes(
+        self: *VertexInputBuilder,
+        stage_descriptor: core.ProgrammableStageDescriptor,
+        bytes: []const u8,
+    ) !void {
         var parsed = std.json.parseFromSlice(std.json.Value, self.allocator, bytes, .{}) catch {
             return core.ShaderError.InvalidShaderReflection;
         };

@@ -1,6 +1,6 @@
 # Backend Test Matrix
 
-The authoritative matrix metadata lives in `src/development_matrix.zig`.
+The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 
 ## Required Rows
 
@@ -137,14 +137,16 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
-| Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; first-triangle Metal handles in Period 31, Vulkan handles in Period 32, broader parity in Period 32+ |
+| Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; first-triangle Metal handles in Period 31, Vulkan handles in Period 32, full scene mesh BLAS/TLAS in Period33, procedural AS geometry in Period34 |
 | Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
-| Native ray tracing pipelines | Backend-private pipeline metadata | First native Metal RT compute pipeline | Period 31 implements the first visible Metal pipeline path; Vulkan pipeline in Period 32, broader parity in Period 32+ |
+| Native ray tracing pipelines | Backend-private pipeline metadata | First native Metal RT compute pipeline | Period 31 implements the first visible Metal pipeline path; Vulkan pipeline in Period 32, full-scene pipelines in Period33, procedural/custom-intersection pipelines in Period34 |
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
-| Native ray dispatch commands | Backend-private dispatch records | First native Metal RT dispatch to drawable | Period 31 implements first-triangle Metal dispatch; Vulkan dispatch in Period 32, broader parity in Period 32+ |
+| Native ray dispatch commands | Backend-private dispatch records | First native Metal RT dispatch to drawable | Period 31 implements first-triangle Metal dispatch; Vulkan dispatch in Period 32, full-scene dispatch in Period33, procedural dispatch in Period34 |
 | Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
-| Native Metal ray tracing execution | Validation no-op | First native Metal RT AS/build/dispatch path plus table metadata | Period 31 implements first-triangle Metal dispatch binding; function-table completeness remains Period 32+ |
+| Native Metal ray tracing execution | Validation no-op | First native Metal RT AS/build/dispatch path plus table metadata | Period 31 implements first-triangle Metal dispatch binding; mesh scene support is Period33, function-table procedural support is Period35 |
 | Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
-| Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, broader driver execution in Period 32+ |
+| Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, mesh scene driver execution in Period33, procedural driver execution in Period34 |
 | Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period32+ |
-| Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make the first ray traced scenes pixel-producing; broader parity remains Period32+ |
+| Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make first ray traced scenes pixel-producing; Period33/34 own the full mesh/procedural scene examples |
+| Full native RT mesh scene | Mesh build-input path implemented and superseded by Period34 procedural scene for the Vulkan example | Visible Metal full mesh scene | Period33 uses user mesh buffers for `ray_traced_scene`; Vulkan mesh validation happened before the Period34 procedural replacement |
+| Procedural RT geometry and custom intersection | AABB build-input lowering, intersection SPIR-V precompile, procedural hit groups, SBT records, and procedural `ray_traced_scene` marker implemented; supported-device visual validation pending | Procedural/intersection-function-table execution deferred to Period35 | Period34 closes the Vulkan procedural path; Period35 owns Metal procedural parity and shared scene data |

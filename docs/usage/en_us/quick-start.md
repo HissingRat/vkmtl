@@ -26,11 +26,9 @@ The repository examples use `zig_glfw` and keep the adapter code in
 ## Create A Window Context
 
 The current window convenience owner is `WindowContext`. It owns backend
-selection, the presentation chain, and shader-cache configuration. Resource
-creation goes through the `Device` returned by `context.device()`, and command
-buffers go through the `Queue` returned by `context.queue()`. To enable vkmtl
-runtime arguments, the application's `main` can accept
-`std.process.Init.Minimal` and pass `init.args` to the context.
+selection and the presentation chain. Resource creation goes through the
+`Device` returned by `context.device()`, and command buffers go through the
+`Queue` returned by `context.queue()`.
 
 ```zig
 const vkmtl = @import("vkmtl");
@@ -38,7 +36,6 @@ const vkmtl = @import("vkmtl");
 var context = try vkmtl.WindowContext.init(allocator, .{
     .app_name = "my app",
     .backend = .auto,
-    .process_args = init.args,
     .surface = surface_descriptor,
     .presentation = presentation_descriptor,
 });
@@ -66,7 +63,7 @@ they should gradually become compatibility helpers.
 
 Applications embed Slang source and request the matching shader through the
 device. `zig build` precompiles matching SPIR-V, MSL, and reflection JSON;
-runtime restores embedded artifacts into the shader cache.
+runtime resolves embedded artifacts directly from memory.
 
 ```zig
 const shader_source = @embedFile("shaders/triangle.slang");
@@ -239,13 +236,12 @@ same device-limit checks.
 See `examples/transfer_readback` and `examples/compute_readback` for
 deterministic readback samples.
 
-## Shader Cache
+## Shader Artifacts
 
-vkmtl caches runtime shader artifacts automatically. The cache key includes the
-embedded source hash. If the source changes, vkmtl recompiles and rewrites the
-cached artifacts. If an application passes `init.args` to `WindowContext`, vkmtl
-automatically parses its own `--cache-dir` runtime argument; application code
-does not need to handle that argument itself.
+`zig build` precompiles embedded Slang and embeds the result into the
+executable. Runtime resolves shader blobs directly from memory and does not
+create a cache directory. Inspect SPIR-V, MSL, or reflection JSON under
+`zig-out/shaders/<shader-name>/` when needed.
 
 ## Current Limits
 

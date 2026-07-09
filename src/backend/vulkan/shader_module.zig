@@ -18,6 +18,11 @@ pub fn init(
 
     switch (descriptor.source) {
         .spirv => |spirv| return try initWords(gc, spirv),
+        .spirv_bytes => |bytes| {
+            const words = try shader_artifact.spirvBytesToWords(allocator, bytes);
+            defer allocator.free(words);
+            return try initWords(gc, words);
+        },
         .artifact => |artifact| {
             const words = try shader_artifact.readSpirvWords(allocator, artifact);
             defer allocator.free(words);

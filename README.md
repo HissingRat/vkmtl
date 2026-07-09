@@ -15,8 +15,9 @@ of calling Vulkan or Metal directly.
 
 Shader authoring uses Slang. Applications embed Slang source and declare shader
 usage through `Device`; `zig build` precompiles matching SPIR-V, MSL, and
-reflection JSON into the executable, and runtime restores inspectable artifacts
-into `vkmtl-cache`. The public API should only expose vkmtl concepts, not raw
+reflection JSON into the executable. Runtime consumes those embedded blobs
+directly from memory; inspectable build artifacts are installed under
+`zig-out/shaders`. The public API should only expose vkmtl concepts, not raw
 Vulkan or Metal handles except through explicit debug/native-handle escape
 hatches.
 
@@ -50,7 +51,6 @@ zig build
 zig build run-triangle
 zig build run-sampled-texture
 zig build run-rainbow-cube
-zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
 ```
 
 On macOS, `.auto` selects Metal when available. Vulkan can be forced for
@@ -62,7 +62,7 @@ zig build run-triangle -Dvulkan
 
 See [Configuration zh_CN](docs/usage/zh_cn/configuration.md) or
 [Configuration en_US](docs/usage/en_us/configuration.md) for backend overrides,
-macOS Vulkan paths, Slang precompile setup, and vkmtl runtime arguments.
+macOS Vulkan paths, and Slang precompile setup.
 
 ## References
 

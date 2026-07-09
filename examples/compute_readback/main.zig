@@ -12,7 +12,7 @@ const texture_width = 2;
 const texture_height = 2;
 const texture_pixels_len = texture_width * texture_height * 4;
 
-pub fn main(init: std.process.Init.Minimal) !void {
+pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
 
@@ -31,7 +31,6 @@ pub fn main(init: std.process.Init.Minimal) !void {
         .app_name = app_name,
         .backend = .auto,
         .debug_backend_override = backendOverrideFromEnv(),
-        .process_args = init.args,
         .surface = common.surfaceDescriptor(window),
         .presentation = common.presentationDescriptor(window, .fifo),
     });

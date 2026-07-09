@@ -31,7 +31,7 @@ Completed so far:
   and vertex attribute layout
 - runtime `WindowContext.compileRenderShader(...)` and
   `WindowContext.compileComputeShader(...)` plumbing
-- runtime shader artifact loading for SPIR-V and MSL files
+- shader module loading for explicit SPIR-V and MSL artifact paths
 - backend shader module creation and render pipeline state creation for Vulkan
   and Metal
 
@@ -61,20 +61,18 @@ Tool overrides:
 
 - `-Dslangc=/path/to/build-time/slangc`
 
-Runtime shader declaration stages restore embedded precompiled artifacts into
-the shader cache, exposing SPIR-V for Vulkan, MSL for Metal, and per-stage
-reflection JSON.
+Runtime shader declaration stages resolve embedded precompiled blobs from
+memory, exposing SPIR-V for Vulkan, MSL for Metal, and per-stage reflection
+JSON without writing shader artifacts to disk.
 
 ## Shader Artifact Layout
 
-Runtime shader artifacts should stay inspectable.
+Build-time shader artifacts should stay inspectable.
 
-Runtime render shader cache layout:
+Build output render shader artifact layout:
 
 ```text
-<internal-cache-root>/<shader-name>/
-  hash
-  source.slang
+zig-out/shaders/<shader-name>/
   vert.spv
   frag.spv
   vert.msl

@@ -35,7 +35,7 @@ const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
     .{ .format = .bgra8_unorm_srgb },
 };
 
-pub fn main(init: std.process.Init.Minimal) !void {
+pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
 
@@ -54,7 +54,6 @@ pub fn main(init: std.process.Init.Minimal) !void {
         .app_name = app_name,
         .backend = .auto,
         .debug_backend_override = backendOverrideFromEnv(),
-        .process_args = init.args,
         .surface = common.surfaceDescriptor(window),
         .presentation = common.presentationDescriptor(window, .fifo),
     });

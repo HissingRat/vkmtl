@@ -1,5 +1,4 @@
 const core = @import("core.zig");
-const development_matrix = @import("development_matrix.zig");
 const shader_compiler = @import("shader/compiler.zig");
 pub const ShaderReflection = @import("shader/reflection.zig");
 
@@ -149,6 +148,8 @@ pub const AccelerationStructureDescriptor = core.AccelerationStructureDescriptor
 pub const AccelerationStructureBuildSizes = core.AccelerationStructureBuildSizes;
 pub const AccelerationStructureInstanceDescriptor = core.AccelerationStructureInstanceDescriptor;
 pub const AccelerationStructureGeometryKind = core.AccelerationStructureGeometryKind;
+pub const AccelerationStructureVertexFormat = core.AccelerationStructureVertexFormat;
+pub const AccelerationStructureIndexType = core.AccelerationStructureIndexType;
 pub const AccelerationStructureGeometryDescriptor = core.AccelerationStructureGeometryDescriptor;
 pub const AccelerationStructureBuildMode = core.AccelerationStructureBuildMode;
 pub const AccelerationStructureBuildFlags = core.AccelerationStructureBuildFlags;
@@ -156,8 +157,10 @@ pub const AccelerationStructureBuildDescriptor = core.AccelerationStructureBuild
 pub const AccelerationStructureBuildPlan = core.AccelerationStructureBuildPlan;
 pub const estimateAccelerationStructureBuildSizes = core.estimateAccelerationStructureBuildSizes;
 pub const AccelerationStructure = runtime.AccelerationStructure;
+pub const AccelerationStructureGeometryResources = runtime.AccelerationStructureGeometryResources;
 pub const AccelerationStructureBuildResources = runtime.AccelerationStructureBuildResources;
 pub const RayTracingShaderGroupKind = core.RayTracingShaderGroupKind;
+pub const RayTracingHitGroupKind = core.RayTracingHitGroupKind;
 pub const RayTracingShaderGroupDescriptor = core.RayTracingShaderGroupDescriptor;
 pub const RayTracingShaderStageDescriptor = core.RayTracingShaderStageDescriptor;
 pub const RayTracingPipelineDescriptor = core.RayTracingPipelineDescriptor;
@@ -368,7 +371,6 @@ pub const maxMipLevelCountForExtent = core.maxMipLevelCountForExtent;
 
 pub const WindowContext = runtime.WindowContext;
 pub const WindowContextOptions = runtime.WindowContextOptions;
-pub const ShaderCompilerOptions = shader_compiler.CompilerOptions;
 pub const RenderShaderCompileOptions = shader_compiler.RenderShaderOptions;
 pub const ComputeShaderCompileOptions = shader_compiler.ComputeShaderOptions;
 pub const RayTracingShaderCompileOptions = shader_compiler.RayTracingShaderOptions;
@@ -414,10 +416,6 @@ pub const Device = runtime.Device;
 pub const Queue = runtime.Queue;
 pub const Surface = runtime.Surface;
 pub const Swapchain = runtime.Swapchain;
-
-test {
-    _ = development_matrix;
-}
 
 test "resource tracker records retain and release counts" {
     var tracker = runtime.ResourceTracker{};

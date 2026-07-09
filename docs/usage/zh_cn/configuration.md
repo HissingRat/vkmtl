@@ -1,6 +1,6 @@
 # 配置
 
-vkmtl 会显式处理后端选择、shader 编译器和 runtime cache 位置。示例尽量暴露相同配置项。
+vkmtl 会显式处理后端选择和构建期 shader 编译器。示例尽量暴露相同配置项。
 
 ## 后端偏好
 
@@ -94,18 +94,16 @@ MoltenVK ICD JSON。
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
-## Shader Cache
+## Shader Artifacts
 
-vkmtl 会自动管理 runtime shader artifact cache。默认情况下，cache 位于可执行文件旁边的
-`vkmtl-cache`，cache key 包含 embedded Slang source hash；source 变化后下一次构建会重新生成
-内嵌预编译 blob，运行时 cache miss 时会从 blob 释放产物。
+vkmtl 不在 runtime 管理 shader artifact cache。`zig build` 会把 embedded Slang source
+预编译成内嵌 blob，运行时直接从内存解析这些 blob，不创建 `vkmtl-cache`，也不解析
+`--cache-dir`。
 
-如果应用把 `std.process.Init.Minimal.args` 传给 `WindowContextOptions.process_args`，vkmtl 会自动
-解析自己的 runtime 参数。用户可以直接传：
+为了调试，构建时会安装一份可检查 artifact：
 
-```sh
-zig build run-rainbow-cube -- --cache-dir /tmp/vkmtl-cache
+```text
+zig-out/shaders/<shader-name>/
 ```
 
-应用代码不需要自己解析 `--cache-dir`，也不需要把它映射到 `shader_cache_dir`。这个目录只影响
-runtime shader artifact，不影响 Zig 编译产物位置。
+这些文件不影响可执行文件运行；只拷贝 `zig-out/bin/<example>` 也可以运行对应的预编译 shader。

@@ -66,6 +66,7 @@ struct vkmtl_metal_acceleration_structure {
     id<MTLAccelerationStructure> acceleration_structure;
     MTLAccelerationStructureDescriptor *descriptor;
     id<MTLBuffer> geometry_buffer;
+    id<MTLBuffer> index_buffer;
     id<MTLBuffer> instance_buffer;
     vkmtl_metal_acceleration_structure_kind kind;
     unsigned int primitive_count;
@@ -97,40 +98,6 @@ struct vkmtl_metal_blit_command_encoder {
 struct vkmtl_metal_compute_command_encoder {
     id<MTLComputeCommandEncoder> encoder;
 };
-
-static const char *vkmtl_metal_native_rt_msl =
-    "#include <metal_stdlib>\n"
-    "#include <metal_raytracing>\n"
-    "using namespace metal;\n"
-    "using namespace raytracing;\n"
-    "kernel void vkmtl_native_rt_drawable(\n"
-    "    texture2d<float, access::write> output [[texture(0)]],\n"
-    "    primitive_acceleration_structure accelerationStructure [[buffer(0)]],\n"
-    "    uint2 tid [[thread_position_in_grid]]) {\n"
-    "    const uint width = output.get_width();\n"
-    "    const uint height = output.get_height();\n"
-    "    if (tid.x >= width || tid.y >= height) return;\n"
-    "    float2 uv = (float2(tid) + 0.5f) / float2(width, height);\n"
-    "    float2 p = uv * 2.0f - 1.0f;\n"
-    "    p.y = -p.y;\n"
-    "    p.x *= float(width) / max(float(height), 1.0f);\n"
-    "    ray r;\n"
-    "    r.origin = float3(0.0f, 0.0f, 2.25f);\n"
-    "    r.direction = normalize(float3(p, -1.55f));\n"
-    "    r.min_distance = 0.001f;\n"
-    "    r.max_distance = 100.0f;\n"
-    "    intersector<triangle_data> intersector;\n"
-    "    intersection_result<triangle_data> hit = intersector.intersect(r, accelerationStructure);\n"
-    "    float3 background = mix(float3(0.025f, 0.035f, 0.055f), float3(0.08f, 0.12f, 0.19f), uv.y);\n"
-    "    float vignette = smoothstep(1.35f, 0.15f, length(p));\n"
-    "    float3 color = background * (0.45f + 0.55f * vignette);\n"
-    "    if (hit.type == intersection_type::triangle) {\n"
-    "        float edge = smoothstep(0.0f, 0.02f, min(min(abs(p.x + 0.62f), abs(p.x - 0.62f)), abs(p.y - 0.58f)));\n"
-    "        color = mix(float3(0.95f, 0.12f, 0.12f), float3(0.10f, 0.30f, 1.0f), clamp((p.y + 0.55f) / 1.15f, 0.0f, 1.0f));\n"
-    "        color += float3(0.16f, 0.08f, 0.02f) * (1.0f - edge);\n"
-    "    }\n"
-    "    output.write(float4(color, 1.0f), tid);\n"
-    "}\n";
 
 static NSString *vkmtl_new_string_from_bytes(const char *bytes, size_t len) {
     if (bytes == NULL) {
@@ -527,7 +494,7 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
         }
 
         layer.device = device;
-        layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
+        layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
         layer.framebufferOnly = NO;
         layer.opaque = YES;
         layer.contentsScale = [window backingScaleFactor];
@@ -2125,6 +2092,7 @@ void vkmtl_metal_acceleration_structure_destroy(
     @autoreleasepool {
         [acceleration_structure->instance_buffer release];
         [acceleration_structure->geometry_buffer release];
+        [acceleration_structure->index_buffer release];
         [acceleration_structure->descriptor release];
         [acceleration_structure->acceleration_structure release];
         free(acceleration_structure);
@@ -2172,8 +2140,104 @@ unsigned int vkmtl_metal_acceleration_structure_has_driver_handle(
         acceleration_structure->acceleration_structure != nil ? 1u : 0u;
 }
 
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *vertex_buffer,
+    size_t vertex_buffer_offset,
+    unsigned int vertex_stride,
+    unsigned int vertex_count,
+    vkmtl_metal_buffer *index_buffer,
+    size_t index_buffer_offset,
+    unsigned int index_type,
+    unsigned int primitive_count
+) {
+    if (acceleration_structure == NULL ||
+        acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL ||
+        acceleration_structure->acceleration_structure == nil ||
+        vertex_buffer == NULL ||
+        vertex_buffer->buffer == nil ||
+        vertex_stride == 0 ||
+        vertex_count == 0 ||
+        primitive_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    const size_t vertex_bytes = (size_t)vertex_stride * (size_t)vertex_count;
+    if (vertex_buffer_offset > vertex_buffer->length ||
+        vertex_bytes > vertex_buffer->length - vertex_buffer_offset) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+
+    MTLIndexType metal_index_type = MTLIndexTypeUInt16;
+    BOOL uses_indices = NO;
+    if (index_type == 1u) {
+        uses_indices = YES;
+        metal_index_type = MTLIndexTypeUInt16;
+    } else if (index_type == 2u) {
+        uses_indices = YES;
+        metal_index_type = MTLIndexTypeUInt32;
+    } else if (index_type != 0u) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (uses_indices) {
+        if (index_buffer == NULL || index_buffer->buffer == nil) {
+            return VKMTL_METAL_STATUS_INVALID_BUFFER;
+        }
+        const size_t index_size = index_type == 1u ? sizeof(uint16_t) : sizeof(uint32_t);
+        const size_t index_bytes = (size_t)primitive_count * 3u * index_size;
+        if (index_buffer_offset > index_buffer->length ||
+            index_bytes > index_buffer->length - index_buffer_offset) {
+            return VKMTL_METAL_STATUS_INVALID_BUFFER;
+        }
+    }
+
+    @autoreleasepool {
+        MTLAccelerationStructureTriangleGeometryDescriptor *geometry =
+            [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+        if (geometry == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        geometry.vertexBuffer = vertex_buffer->buffer;
+        geometry.vertexBufferOffset = vertex_buffer_offset;
+        if ([geometry respondsToSelector:@selector(setVertexFormat:)]) {
+            geometry.vertexFormat = MTLAttributeFormatFloat3;
+        }
+        geometry.vertexStride = vertex_stride;
+        geometry.triangleCount = primitive_count;
+        geometry.opaque = YES;
+        if (uses_indices) {
+            geometry.indexBuffer = index_buffer->buffer;
+            geometry.indexBufferOffset = index_buffer_offset;
+            geometry.indexType = metal_index_type;
+        }
+
+        MTLPrimitiveAccelerationStructureDescriptor *descriptor =
+            [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+        if (descriptor == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        descriptor.geometryDescriptors = @[geometry];
+        descriptor.usage = MTLAccelerationStructureUsageNone;
+
+        MTLAccelerationStructureDescriptor *retained_descriptor = [descriptor retain];
+        [acceleration_structure->descriptor release];
+        acceleration_structure->descriptor = retained_descriptor;
+
+        [acceleration_structure->geometry_buffer release];
+        acceleration_structure->geometry_buffer = [vertex_buffer->buffer retain];
+        [acceleration_structure->index_buffer release];
+        acceleration_structure->index_buffer = uses_indices ? [index_buffer->buffer retain] : nil;
+        acceleration_structure->primitive_count = primitive_count;
+        acceleration_structure->built = 0u;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *ray_generation_shader,
+    const char *ray_generation_entry,
+    size_t ray_generation_entry_len,
     vkmtl_metal_ray_tracing_pipeline_state **out_pipeline
 ) {
     if (out_pipeline == NULL) {
@@ -2184,33 +2248,25 @@ vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
     if (owner == NULL || owner->device == nil) {
         return VKMTL_METAL_STATUS_NO_DEVICE;
     }
+    if (ray_generation_shader == NULL ||
+        ray_generation_shader->library == nil ||
+        ray_generation_entry == NULL ||
+        ray_generation_entry_len == 0) {
+        return VKMTL_METAL_STATUS_INVALID_SHADER;
+    }
     if (!vkmtl_device_supports_raytracing(owner->device)) {
         return VKMTL_METAL_STATUS_UNSUPPORTED;
     }
 
     @autoreleasepool {
-        NSString *source = [[NSString alloc]
-            initWithUTF8String:vkmtl_metal_native_rt_msl];
-        if (source == nil) {
-            return VKMTL_METAL_STATUS_INVALID_SHADER;
-        }
-
         NSError *error = nil;
-        id<MTLLibrary> library = [owner->device newLibraryWithSource:source options:nil error:&error];
-        [source release];
-        if (library == nil) {
-            return VKMTL_METAL_STATUS_INVALID_SHADER;
-        }
-
-        NSString *function_name = [[NSString alloc] initWithUTF8String:"vkmtl_native_rt_drawable"];
+        NSString *function_name = vkmtl_new_string_from_bytes(ray_generation_entry, ray_generation_entry_len);
         if (function_name == nil) {
-            [library release];
             return VKMTL_METAL_STATUS_INVALID_SHADER;
         }
 
-        id<MTLFunction> function = [library newFunctionWithName:function_name];
+        id<MTLFunction> function = [ray_generation_shader->library newFunctionWithName:function_name];
         [function_name release];
-        [library release];
         if (function == nil) {
             return VKMTL_METAL_STATUS_INVALID_SHADER;
         }
@@ -2469,7 +2525,10 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     vkmtl_metal_ray_tracing_pipeline_state *pipeline,
     vkmtl_metal_acceleration_structure *acceleration_structure,
     unsigned int width,
-    unsigned int height
+    unsigned int height,
+    const void *inline_data,
+    size_t inline_data_len,
+    unsigned int inline_data_index
 ) {
     if (command_buffer == NULL ||
         command_buffer->command_buffer == nil ||
@@ -2508,6 +2567,9 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
             return VKMTL_METAL_STATUS_UNSUPPORTED;
         }
         [encoder setAccelerationStructure:acceleration_structure->acceleration_structure atBufferIndex:0];
+        if (inline_data != NULL && inline_data_len != 0) {
+            [encoder setBytes:inline_data length:inline_data_len atIndex:inline_data_index];
+        }
 
         const NSUInteger threadgroup_width = 8;
         const NSUInteger threadgroup_height = 8;

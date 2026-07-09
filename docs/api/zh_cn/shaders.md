@@ -19,12 +19,11 @@ examples/compute_readback/shaders/compute_readback.slang
 
 示例通过 `@embedFile(...)` 嵌入这些 `.slang` 文件，并在运行时通过 `Device`
 声明需要的 shader。`zig build` 会把匹配的 SPIR-V、MSL 和 reflection JSON 预编译进
-可执行文件；运行时产物从内嵌 blob 释放到 vkmtl 自动管理的 cache root：
+可执行文件；运行时直接从内嵌 blob 解析，不会写入磁盘。构建时会同时安装一份可检查的
+artifact 到 `zig-out/shaders`：
 
 ```text
-<internal-cache-root>/<shader-name>/
-  hash
-  source.slang
+zig-out/shaders/<shader-name>/
   vert.spv
   frag.spv
   vert.msl
@@ -34,9 +33,8 @@ examples/compute_readback/shaders/compute_readback.slang
 ```
 
 Compute shader 使用 `compute.spv`、`compute.msl` 和 `compute.reflect.json`。
-`hash` 文件保存 embedded source hash；如果 hash 或必要产物不匹配，vkmtl 会从内嵌
-precompiled blob 重新释放产物。找不到匹配 name、entry 和 source hash 的 blob 时会报
-`PrecompiledShaderMissing`。
+source hash 保存在内嵌 blob metadata 里。找不到匹配 name、entry 和 source hash 的 blob
+时会报 `PrecompiledShaderMissing`。
 
 ## 构建命令
 
@@ -51,15 +49,8 @@ host 没有对应 pinned package，构建会失败；需要显式指定构建期
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
 
-vkmtl 默认使用可执行文件旁边的 `vkmtl-cache`。这个 cache 目录只影响运行时 shader 产物，不影响
-Zig 输出可执行文件的位置。如果应用把 `init.args` 传给 `WindowContext`，vkmtl 会自动解析自己的
-runtime 参数：
-
-```sh
-zig build run-triangle -- --cache-dir /tmp/vkmtl-cache
-```
-
-应用代码不需要自己解析 `--cache-dir`。
+运行时不需要 shader cache 目录，也不解析 `--cache-dir`。如果需要检查编译后的 shader
+产物，使用构建输出中的 `zig-out/shaders/<shader-name>/`。
 
 ## 当前 Shader 形状
 
@@ -112,8 +103,7 @@ defer compiled.deinit();
 const compute_stage = compiled.stageDescriptor(context.selectedBackend());
 ```
 
-cache miss 且内嵌 blob 命中时会打印 `using precompiled slang shader: <name>`；cache hit
-时打印 `using cached slang shader: <name>`。
+内嵌 blob 命中时会打印 `using precompiled slang shader: <name>`。
 
 ## Binding 规则
 

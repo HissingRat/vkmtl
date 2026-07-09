@@ -229,17 +229,21 @@ Tracked in `docs/develop/period30/`.
 
 - [x] Backend-private acceleration structure handle state and build command
   records. First-triangle Metal driver AS work is Period 31, first-triangle
-  Vulkan driver AS work is Period 32, and broader AS parity is Period 32+.
+  Vulkan driver AS work is Period 32, full-scene mesh BLAS/TLAS work is
+  Period33, and procedural AS geometry work is Period34.
 - [x] Backend-private ray tracing pipeline handle metadata. First-triangle
   Metal driver pipeline work is Period 31, first-triangle Vulkan driver
-  pipeline work is Period 32, and broader pipeline parity is Period 32+.
+  pipeline work is Period 32, full-scene pipeline work is Period33, and
+  procedural/custom-intersection pipeline work is Period34.
 - [x] Backend-private SBT record metadata and ray dispatch command records.
   First-triangle Metal dispatch is Period 31, first-triangle Vulkan dispatch is
-  Period 32, and broader dispatch parity is Period 32+.
+  Period 32, full-scene dispatch is Period33, and procedural dispatch is
+  Period34.
 - [x] Backend-private Metal ray tracing table and acceleration-slot metadata.
   Direct Metal dispatch binding for the first triangle is Period 31.
 - [x] Backend-private native advanced inventory with first-triangle routing to
-  Period 31 and Period 32, and broader driver routing to Period32+.
+  Period 31 and Period 32, full native RT scene routing to Period33, and
+  procedural RT routing to Period34.
 - [x] Backend-private parity validation plans and stability diagnostics.
   GPU-backed soak loops are Period32+ validation matrix work.
 - [x] Backend-private native advanced example record checks. Pixel-producing
@@ -248,7 +252,8 @@ Tracked in `docs/develop/period30/`.
 Expected result: supported Vulkan and Metal adapters can validate and record the
 high-end paths that Period 29 made expressible through public runtime
 contracts. Direct driver execution for those high-end paths is routed to
-Period31, Period32, and Period32+ according to backend and scope.
+Period31, Period32, Period33, Period34, and later Period32+ work according to
+backend and scope.
 
 ## Wave 12: Metal Ray Traced Triangle Driver Path
 
@@ -269,16 +274,61 @@ triangle on supported macOS Metal devices.
 
 Tracked in `docs/develop/period32/`.
 
-- [ ] Vulkan ray tracing capability gate and loader contract.
-- [ ] Real Vulkan acceleration structure creation and BLAS build.
-- [ ] Vulkan ray tracing shader path through Slang/SPIR-V.
-- [ ] Vulkan ray tracing pipeline and SBT materialization.
-- [ ] `vkCmdTraceRaysKHR` dispatch to an output texture.
-- [ ] Present the Vulkan ray tracing output texture in the window.
+- [x] Vulkan ray tracing capability gate and loader contract.
+- [x] Real Vulkan acceleration structure creation and BLAS build.
+- [x] Vulkan ray tracing shader path through Slang/SPIR-V.
+- [x] Vulkan ray tracing pipeline and SBT materialization.
+- [x] `vkCmdTraceRaysKHR` dispatch to an output texture.
+- [x] Present the Vulkan ray tracing output texture in the window.
+- [ ] Supported-hardware validation and visible-result documentation.
 - [ ] Documentation closeout and Period32+ routing.
 
 Expected result: `zig build run-ray-traced-scene -Dvulkan` shows a visible
 ray traced scene on supported Vulkan ray tracing devices.
+
+## Wave 14: Native RT Mesh Scene
+
+Tracked in `docs/develop/period33/`.
+
+- [x] Freeze the full mesh RT scene acceptance contract.
+- [x] Add public vertex/index-backed RT mesh geometry descriptors.
+- [x] Lower mesh BLAS builds from user buffers on Vulkan.
+- [x] Lower mesh BLAS builds from user buffers on Metal.
+- [ ] Bind camera, material, light, and instance scene buffers instead of
+  using fixed example-side scene constants.
+- [x] Render the full `examples/ray_traced_scene` through native RT using mesh
+  room and mesh sphere geometry.
+- [ ] Validate visible output or exact unsupported reasons on supported Vulkan
+  RT runtimes.
+- [x] Validate visible output on supported local Metal RT hardware.
+
+Expected result: `examples/ray_traced_scene` is no longer just a first-triangle
+smoke path. It renders the reference-inspired room/sphere scene through native
+RT using mesh geometry on supported backends.
+
+## Wave 15: Procedural RT Geometry And Custom Intersection
+
+Tracked in `docs/develop/period34/`.
+
+- [x] Add procedural/custom-intersection feature gates and procedural hit-group
+  descriptor validation.
+- [x] Add procedural sphere API contract through AABB build input and
+  procedural hit-group descriptors.
+- [x] Add backend resource plumbing for Vulkan AABB build input.
+- [x] Lower Vulkan intersection shader groups.
+- [ ] Create and bind Metal intersection function tables for procedural
+  sphere intersections. Deferred to Period35 Phase 3.
+- [ ] Share procedural sphere, material, light, camera, and instance scene data
+  between Vulkan and Metal paths. Deferred to Period35 Phases 1-4.
+- [x] Replace tessellated sphere meshes with procedural sphere geometry in the
+  full native `ray_traced_scene` acceptance example.
+- [ ] Validate visible procedural output or exact unsupported reasons on
+  supported Vulkan RT runtimes. Metal procedural validation is Period35.
+
+Expected result: the Vulkan full native ray traced scene uses procedural
+sphere/custom-intersection geometry for spheres and prints
+`driver_pixels=visible_vulkan_procedural_rt_scene`. Metal keeps the Period33
+mesh path until Period35 closes procedural function-table parity.
 
 ## Slice Checklist
 

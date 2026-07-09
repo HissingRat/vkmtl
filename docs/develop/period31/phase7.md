@@ -8,8 +8,8 @@ Status: completed for the current visual acceptance slice.
 
 - Update usage docs for the Metal ray traced scene example.
 - Update API docs where user-facing behavior changed.
-- Move the first Vulkan ray traced scene to Period32 and broader
-  full-parity ray tracing work to concrete Period32+ targets.
+- Move the first Vulkan ray traced scene to Period32, the full native mesh
+  scene to Period33, and procedural/custom-intersection work to Period34.
 - Document exact unsupported cases and known limitations.
 
 ## Acceptance

@@ -406,12 +406,16 @@ fn hashShaderSource(hash: *u64, source: core.ShaderSource) void {
             hashU64(hash, 1);
             hashU32Slice(hash, words);
         },
-        .msl => |bytes| {
+        .spirv_bytes => |bytes| {
             hashU64(hash, 2);
             hashBytes(hash, bytes);
         },
-        .artifact => |artifact| {
+        .msl => |bytes| {
             hashU64(hash, 3);
+            hashBytes(hash, bytes);
+        },
+        .artifact => |artifact| {
+            hashU64(hash, 4);
             hashU64(hash, @intFromEnum(artifact.language));
             hashBytes(hash, artifact.path);
         },
@@ -1716,11 +1720,89 @@ pub const AccelerationStructure = struct {
     }
 };
 
+pub const AccelerationStructureGeometryResources = union(core.AccelerationStructureGeometryKind) {
+    triangles: TriangleGeometryResources,
+    aabbs: AabbGeometryResources,
+    instances: void,
+
+    pub const TriangleGeometryResources = struct {
+        descriptor: core.AccelerationStructureGeometryDescriptor,
+        vertex_buffer: *Buffer,
+        index_buffer: ?*Buffer = null,
+    };
+
+    pub const AabbGeometryResources = struct {
+        descriptor: core.AccelerationStructureGeometryDescriptor,
+        buffer: *Buffer,
+    };
+
+    fn descriptor(self: AccelerationStructureGeometryResources) core.AccelerationStructureGeometryDescriptor {
+        return switch (self) {
+            .triangles => |triangles| triangles.descriptor,
+            .aabbs => |aabbs| aabbs.descriptor,
+            .instances => .{ .kind = .instances, .primitive_count = 1 },
+        };
+    }
+
+    fn primitiveCount(self: AccelerationStructureGeometryResources) u32 {
+        return self.descriptor().primitive_count;
+    }
+
+    fn validate(
+        self: AccelerationStructureGeometryResources,
+        backend: core.Backend,
+    ) core.AdvancedFeatureError!void {
+        const geometry_descriptor = self.descriptor();
+        try geometry_descriptor.validate();
+        switch (self) {
+            .triangles => |triangles| {
+                if (geometry_descriptor.kind != .triangles) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                try validateBuildInputBuffer(backend, triangles.vertex_buffer);
+                const vertex_stride = geometry_descriptor.resolvedVertexStride();
+                const vertex_count = geometry_descriptor.resolvedVertexCount();
+                const vertex_bytes = @as(u64, vertex_stride) * @as(u64, vertex_count);
+                try validateBuildInputRange(triangles.vertex_buffer, geometry_descriptor.vertex_buffer_offset, vertex_bytes);
+                if (geometry_descriptor.index_type != .none) {
+                    const index_buffer = triangles.index_buffer orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                    try validateBuildInputBuffer(backend, index_buffer);
+                    const index_bytes = @as(u64, geometry_descriptor.index_type.byteSize()) *
+                        @as(u64, geometry_descriptor.resolvedIndexCount());
+                    try validateBuildInputRange(index_buffer, geometry_descriptor.index_buffer_offset, index_bytes);
+                }
+            },
+            .aabbs => |aabbs| {
+                if (geometry_descriptor.kind != .aabbs) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                try validateBuildInputBuffer(backend, aabbs.buffer);
+                const bytes = @as(u64, geometry_descriptor.aabb_stride) * @as(u64, geometry_descriptor.primitive_count);
+                try validateBuildInputRange(aabbs.buffer, geometry_descriptor.aabb_buffer_offset, bytes);
+            },
+            .instances => {},
+        }
+    }
+
+    fn recordUsage(self: AccelerationStructureGeometryResources) void {
+        switch (self) {
+            .triangles => |triangles| {
+                _ = triangles.vertex_buffer.recordUsage(.acceleration_structure_build_input);
+                if (triangles.index_buffer) |index_buffer| {
+                    _ = index_buffer.recordUsage(.acceleration_structure_build_input);
+                }
+            },
+            .aabbs => |aabbs| {
+                _ = aabbs.buffer.recordUsage(.acceleration_structure_build_input);
+            },
+            .instances => {},
+        }
+    }
+};
+
 pub const AccelerationStructureBuildResources = struct {
     result: *AccelerationStructure,
     scratch: *Buffer,
     update_source: ?*AccelerationStructure = null,
     instance_source: ?*AccelerationStructure = null,
+    instance_sources: []const *AccelerationStructure = &.{},
+    geometries: []const AccelerationStructureGeometryResources = &.{},
     scratch_offset: u64 = 0,
 
     pub fn validate(
@@ -1734,12 +1816,27 @@ pub const AccelerationStructureBuildResources = struct {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         if (plan.kind == .top_level) {
-            const instance_source = self.instance_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-            assertAlive(instance_source.alive, .acceleration_structure);
-            if (instance_source.backend != backend or
-                instance_source.descriptor_value.kind != .bottom_level or
-                !instance_source.isBuilt())
-            {
+            if (self.instance_sources.len != 0) {
+                if (self.instance_sources.len != plan.primitive_count) {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }
+                for (self.instance_sources) |instance_source| {
+                    try validateBottomLevelInstanceSource(backend, instance_source);
+                }
+            } else {
+                const instance_source = self.instance_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                try validateBottomLevelInstanceSource(backend, instance_source);
+            }
+        } else if (self.geometries.len != 0) {
+            if (self.geometries.len != plan.geometry_count) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            var primitive_count: u32 = 0;
+            for (self.geometries) |geometry| {
+                try geometry.validate(backend);
+                primitive_count +|= geometry.primitiveCount();
+            }
+            if (primitive_count != plan.primitive_count) {
                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
             }
         }
@@ -1771,6 +1868,42 @@ pub const AccelerationStructureBuildResources = struct {
         }
     }
 };
+
+fn validateBottomLevelInstanceSource(
+    backend: core.Backend,
+    instance_source: *AccelerationStructure,
+) core.AdvancedFeatureError!void {
+    assertAlive(instance_source.alive, .acceleration_structure);
+    if (instance_source.backend != backend or
+        instance_source.descriptor_value.kind != .bottom_level or
+        !instance_source.isBuilt())
+    {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+}
+
+fn validateBuildInputBuffer(
+    backend: core.Backend,
+    buffer: *Buffer,
+) core.AdvancedFeatureError!void {
+    assertAlive(buffer.alive, .buffer);
+    if (buffer.backend != backend or !buffer.usage_value.acceleration_structure_build_input) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+}
+
+fn validateBuildInputRange(
+    buffer: *Buffer,
+    offset: u64,
+    size: u64,
+) core.AdvancedFeatureError!void {
+    const end = std.math.add(u64, offset, size) catch {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    };
+    if (end > @as(u64, @intCast(buffer.length()))) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+}
 
 const BackendPrivateRayTracingPipelineHandle = struct {
     backend: core.Backend,
@@ -3298,6 +3431,7 @@ pub const CommandBuffer = struct {
         if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try resources.validate(self.backend, plan);
         _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
+        for (resources.geometries) |geometry| geometry.recordUsage();
         var driver_submitted = false;
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
@@ -3313,12 +3447,55 @@ pub const CommandBuffer = struct {
                             .vulkan => |*vulkan_source| vulkan_source,
                             .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                         } else null;
+                        var vulkan_instance_source_buffer: [64]*const VulkanAccelerationStructure = undefined;
+                        if (resources.instance_sources.len > vulkan_instance_source_buffer.len) {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }
+                        for (resources.instance_sources, 0..) |source, source_index| {
+                            vulkan_instance_source_buffer[source_index] = switch (source.impl orelse {
+                                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                            }) {
+                                .vulkan => |*vulkan_source| vulkan_source,
+                                .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                            };
+                        }
+                        const instance_source_impls = vulkan_instance_source_buffer[0..resources.instance_sources.len];
+                        var vulkan_geometry_buffer: [64]VulkanAccelerationStructure.GeometryInput = undefined;
+                        if (resources.geometries.len > vulkan_geometry_buffer.len) {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }
+                        for (resources.geometries, 0..) |geometry, geometry_index| {
+                            vulkan_geometry_buffer[geometry_index] = switch (geometry) {
+                                .triangles => |triangles| .{ .triangles = .{
+                                    .descriptor = triangles.descriptor,
+                                    .vertex_buffer = switch (triangles.vertex_buffer.impl) {
+                                        .vulkan => |*vertex_buffer| vertex_buffer,
+                                        .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                    },
+                                    .index_buffer = if (triangles.index_buffer) |index_buffer| switch (index_buffer.impl) {
+                                        .vulkan => |*vulkan_index_buffer| vulkan_index_buffer,
+                                        .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                    } else null,
+                                } },
+                                .aabbs => |aabbs| .{ .aabbs = .{
+                                    .descriptor = aabbs.descriptor,
+                                    .buffer = switch (aabbs.buffer.impl) {
+                                        .vulkan => |*buffer| buffer,
+                                        .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                    },
+                                } },
+                                .instances => .{ .instances = {} },
+                            };
+                        }
+                        const vulkan_geometries = vulkan_geometry_buffer[0..resources.geometries.len];
                         try vulkan.encodeAccelerationStructureBuild(
                             plan,
                             vulkan_as,
                             scratch_impl,
                             resources.scratch_offset,
                             instance_source_impl,
+                            instance_source_impls,
+                            vulkan_geometries,
                         );
                         driver_submitted = true;
                     },
@@ -3339,11 +3516,54 @@ pub const CommandBuffer = struct {
                             .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                             .metal => |*metal_source| metal_source,
                         } else null;
+                        var metal_instance_source_buffer: [64]*const MetalAccelerationStructure = undefined;
+                        if (resources.instance_sources.len > metal_instance_source_buffer.len) {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }
+                        for (resources.instance_sources, 0..) |source, source_index| {
+                            metal_instance_source_buffer[source_index] = switch (source.impl orelse {
+                                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                            }) {
+                                .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                .metal => |*metal_source| metal_source,
+                            };
+                        }
+                        const instance_source_impls = metal_instance_source_buffer[0..resources.instance_sources.len];
+                        var metal_geometry_buffer: [64]MetalAccelerationStructure.GeometryInput = undefined;
+                        if (resources.geometries.len > metal_geometry_buffer.len) {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }
+                        for (resources.geometries, 0..) |geometry, geometry_index| {
+                            metal_geometry_buffer[geometry_index] = switch (geometry) {
+                                .triangles => |triangles| .{ .triangles = .{
+                                    .descriptor = triangles.descriptor,
+                                    .vertex_buffer = switch (triangles.vertex_buffer.impl) {
+                                        .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                        .metal => |*vertex_buffer| vertex_buffer,
+                                    },
+                                    .index_buffer = if (triangles.index_buffer) |index_buffer| switch (index_buffer.impl) {
+                                        .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                        .metal => |*metal_index_buffer| metal_index_buffer,
+                                    } else null,
+                                } },
+                                .aabbs => |aabbs| .{ .aabbs = .{
+                                    .descriptor = aabbs.descriptor,
+                                    .buffer = switch (aabbs.buffer.impl) {
+                                        .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                                        .metal => |*buffer| buffer,
+                                    },
+                                } },
+                                .instances => .{ .instances = {} },
+                            };
+                        }
+                        const metal_geometries = metal_geometry_buffer[0..resources.geometries.len];
                         try metal.encodeAccelerationStructureBuild(
                             metal_as,
                             scratch_impl,
                             resources.scratch_offset,
                             instance_source_impl,
+                            instance_source_impls,
+                            metal_geometries,
                         );
                         driver_submitted = true;
                     },
@@ -4457,8 +4677,6 @@ pub const WindowContextOptions = struct {
     backend: core.BackendPreference = .auto,
     adapter_selection: core.AdapterSelectionDescriptor = .{},
     debug_backend_override: ?core.Backend = null,
-    process_args: ?std.process.Args = null,
-    shader_cache_dir: ?[]const u8 = null,
     surface: core.SurfaceDescriptor,
     presentation: core.PresentationDescriptor,
 };
@@ -4604,7 +4822,6 @@ pub const Device = struct {
     impl: *BackendRuntime,
     adapter_info: core.AdapterInfo,
     capability_report: core.DeviceCapabilityReport,
-    shader_cache_dir: ?[]const u8 = null,
 
     pub fn selectedBackend(self: Device) core.Backend {
         return self.backend;
@@ -4733,9 +4950,19 @@ pub const Device = struct {
             descriptor,
             self.nativeFeatures(),
         );
-        if (self.backend == .metal and self.capability_report.source == .metal_query) {
+        if (self.capability_report.source == .vulkan_query or self.capability_report.source == .metal_query) {
             switch (self.impl.*) {
-                .vulkan => {},
+                .vulkan => |*vulkan| {
+                    const sizes = try vulkan.accelerationStructureBuildSizes(descriptor.acceleration_structure);
+                    plan.result_size = sizes.result_size;
+                    plan.scratch_size = std.mem.alignForward(u64, sizes.scratch_size, descriptor.scratch_alignment);
+                    plan.update_scratch_size = if (descriptor.mode == .update or
+                        descriptor.acceleration_structure.allow_update or
+                        descriptor.flags.allow_update)
+                        std.mem.alignForward(u64, sizes.update_scratch_size, descriptor.scratch_alignment)
+                    else
+                        0;
+                },
                 .metal => |*metal| {
                     const sizes = try metal.accelerationStructureBuildSizes(descriptor.acceleration_structure);
                     plan.result_size = sizes.result_size;
@@ -4825,7 +5052,7 @@ pub const Device = struct {
             },
             .metal => |*metal| {
                 if (self.backend == .metal) {
-                    impl = .{ .metal = try metal.makeRayTracingPipelineState() };
+                    impl = .{ .metal = try metal.makeRayTracingPipelineState(self.allocator, descriptor) };
                 }
             },
         }
@@ -5105,7 +5332,6 @@ pub const Device = struct {
             name,
             source,
             options,
-            self.shaderCompilerOptions(),
         );
     }
 
@@ -5120,7 +5346,6 @@ pub const Device = struct {
             name,
             source,
             options,
-            self.shaderCompilerOptions(),
         );
     }
 
@@ -5135,7 +5360,6 @@ pub const Device = struct {
             name,
             source,
             options,
-            self.shaderCompilerOptions(),
         );
     }
 
@@ -5485,12 +5709,6 @@ pub const Device = struct {
         sampler.setLabel(descriptor.label);
         return sampler;
     }
-
-    fn shaderCompilerOptions(self: Device) ShaderCompiler.CompilerOptions {
-        return .{
-            .cache_dir = self.shader_cache_dir,
-        };
-    }
 };
 
 const ResolvedAdapterInfo = struct {
@@ -5568,17 +5786,12 @@ pub const WindowContext = struct {
     adapter_info: core.AdapterInfo,
     capability_report: core.DeviceCapabilityReport,
     owned_adapter_name: ?[]u8 = null,
-    shader_cache_dir: ?[]const u8 = null,
-    owns_shader_cache_dir: bool = false,
     impl: BackendRuntime,
 
     pub fn init(allocator: std.mem.Allocator, options: WindowContextOptions) !WindowContext {
         const tracker = try allocator.create(ResourceTracker);
         errdefer allocator.destroy(tracker);
         tracker.* = .{};
-
-        const resolved_shader_cache_dir = try resolveShaderCacheDir(allocator, options);
-        errdefer resolved_shader_cache_dir.deinit(allocator);
 
         const backend_preference: core.BackendPreference = if (build_options.force_vulkan) .vulkan else options.backend;
         var adapter_selection = options.adapter_selection;
@@ -5623,8 +5836,6 @@ pub const WindowContext = struct {
             .adapter_info = adapter_info.info,
             .capability_report = capability_report,
             .owned_adapter_name = adapter_info.owned_name,
-            .shader_cache_dir = resolved_shader_cache_dir.value,
-            .owns_shader_cache_dir = resolved_shader_cache_dir.owned,
             .impl = impl,
         };
     }
@@ -5635,11 +5846,6 @@ pub const WindowContext = struct {
         deinitBackendRuntime(&self.impl);
         if (self.owned_adapter_name) |name| {
             self.allocator.free(name);
-        }
-        if (self.owns_shader_cache_dir) {
-            if (self.shader_cache_dir) |shader_cache_dir| {
-                self.allocator.free(shader_cache_dir);
-            }
         }
         self.allocator.destroy(self.tracker);
     }
@@ -5699,7 +5905,6 @@ pub const WindowContext = struct {
             .impl = &self.impl,
             .adapter_info = self.adapter_info,
             .capability_report = self.capability_report,
-            .shader_cache_dir = self.shader_cache_dir,
         };
     }
 
@@ -6441,65 +6646,6 @@ fn metalSurfaceCompatible(surface: core.SurfaceDescriptor) bool {
     return source.display != null or source.provider == .metal_layer or source.provider == .app_kit_view;
 }
 
-const ResolvedShaderCacheDir = struct {
-    value: ?[]const u8 = null,
-    owned: bool = false,
-
-    fn deinit(self: ResolvedShaderCacheDir, allocator: std.mem.Allocator) void {
-        if (self.owned) {
-            if (self.value) |value| allocator.free(value);
-        }
-    }
-};
-
-fn resolveShaderCacheDir(
-    allocator: std.mem.Allocator,
-    options: WindowContextOptions,
-) !ResolvedShaderCacheDir {
-    if (options.shader_cache_dir) |shader_cache_dir| {
-        return .{ .value = shader_cache_dir };
-    }
-
-    const process_args = options.process_args orelse return .{};
-    const parsed = try parseShaderCacheDirFromProcessArgs(allocator, process_args);
-    return .{
-        .value = parsed,
-        .owned = parsed != null,
-    };
-}
-
-fn parseShaderCacheDirFromProcessArgs(
-    allocator: std.mem.Allocator,
-    args: std.process.Args,
-) !?[]u8 {
-    var iterator = try std.process.Args.Iterator.initAllocator(args, allocator);
-    defer iterator.deinit();
-
-    _ = iterator.skip();
-    return try parseShaderCacheDirFromIterator(allocator, &iterator);
-}
-
-fn parseShaderCacheDirFromIterator(
-    allocator: std.mem.Allocator,
-    iterator: anytype,
-) !?[]u8 {
-    while (iterator.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--cache-dir")) {
-            const value = iterator.next() orelse return error.MissingShaderCacheDirValue;
-            if (value.len == 0) return error.MissingShaderCacheDirValue;
-            return try allocator.dupe(u8, value);
-        }
-
-        if (std.mem.startsWith(u8, arg, "--cache-dir=")) {
-            const value = arg["--cache-dir=".len..];
-            if (value.len == 0) return error.MissingShaderCacheDirValue;
-            return try allocator.dupe(u8, value);
-        }
-    }
-
-    return null;
-}
-
 fn mipDimension(base: u32, level: u32) u32 {
     var value = base;
     var i: u32 = 0;
@@ -6507,42 +6653,6 @@ fn mipDimension(base: u32, level: u32) u32 {
         value /= 2;
     }
     return value;
-}
-
-const TestArgIterator = struct {
-    args: []const []const u8,
-    index: usize = 0,
-
-    fn next(self: *TestArgIterator) ?[]const u8 {
-        if (self.index >= self.args.len) return null;
-        const arg = self.args[self.index];
-        self.index += 1;
-        return arg;
-    }
-};
-
-test "runtime parses shader cache dir from split process args" {
-    var iterator = TestArgIterator{ .args = &.{ "--cache-dir", "zig-out/custom-cache" } };
-    const parsed = try parseShaderCacheDirFromIterator(std.testing.allocator, &iterator);
-    defer std.testing.allocator.free(parsed.?);
-
-    try std.testing.expectEqualStrings("zig-out/custom-cache", parsed.?);
-}
-
-test "runtime parses shader cache dir from equals process arg" {
-    var iterator = TestArgIterator{ .args = &.{"--cache-dir=zig-out/custom-cache"} };
-    const parsed = try parseShaderCacheDirFromIterator(std.testing.allocator, &iterator);
-    defer std.testing.allocator.free(parsed.?);
-
-    try std.testing.expectEqualStrings("zig-out/custom-cache", parsed.?);
-}
-
-test "runtime rejects shader cache dir arg without value" {
-    var iterator = TestArgIterator{ .args = &.{"--cache-dir"} };
-    try std.testing.expectError(
-        error.MissingShaderCacheDirValue,
-        parseShaderCacheDirFromIterator(std.testing.allocator, &iterator),
-    );
 }
 
 test "resource tracker defers retirements until submitted work completes" {
@@ -7094,6 +7204,85 @@ test "runtime encodes acceleration structure build resources from native capabil
     try std.testing.expectEqual(core.ResourceUsageKind.acceleration_structure_scratch, scratch.currentUsage().?);
 }
 
+test "runtime validates acceleration structure mesh build input buffers" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.acceleration_structures = false;
+    report.native_features.acceleration_structures = true;
+
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "test acceleration mesh adapter",
+        },
+        .capability_report = report,
+    };
+
+    const geometry = core.AccelerationStructureGeometryDescriptor{
+        .kind = .triangles,
+        .primitive_count = 1,
+        .vertex_count = 3,
+        .vertex_stride = 12,
+    };
+    const descriptor = core.AccelerationStructureDescriptor{
+        .label = "mesh blas",
+        .kind = .bottom_level,
+        .primitive_count = 1,
+    };
+    var acceleration_structure = try device.makeAccelerationStructure(descriptor);
+    defer acceleration_structure.deinit();
+    const plan = try device.planAccelerationStructureBuild(.{
+        .acceleration_structure = descriptor,
+        .geometries = &.{geometry},
+    });
+
+    var scratch = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = @intCast(plan.scratch_size),
+        .usage_value = .{ .acceleration_structure_scratch = true },
+        .impl = undefined,
+    };
+    var vertex_buffer = Buffer{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 36,
+        .usage_value = .{ .acceleration_structure_build_input = true },
+        .impl = undefined,
+    };
+    var bad_vertex_buffer = vertex_buffer;
+    bad_vertex_buffer.usage_value = .{ .vertex = true };
+
+    const geometry_resources = [_]AccelerationStructureGeometryResources{.{
+        .triangles = .{
+            .descriptor = geometry,
+            .vertex_buffer = &vertex_buffer,
+        },
+    }};
+    try (AccelerationStructureBuildResources{
+        .result = &acceleration_structure,
+        .scratch = &scratch,
+        .geometries = geometry_resources[0..],
+    }).validate(.vulkan, plan);
+
+    const bad_geometry_resources = [_]AccelerationStructureGeometryResources{.{
+        .triangles = .{
+            .descriptor = geometry,
+            .vertex_buffer = &bad_vertex_buffer,
+        },
+    }};
+    try std.testing.expectError(core.AdvancedFeatureError.InvalidAccelerationStructureResources, (AccelerationStructureBuildResources{
+        .result = &acceleration_structure,
+        .scratch = &scratch,
+        .geometries = bad_geometry_resources[0..],
+    }).validate(.vulkan, plan));
+}
+
 test "runtime device plans ray tracing pipeline lowering from native capabilities" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
@@ -7312,7 +7501,7 @@ test "runtime device plans Metal ray tracing mapping from native capabilities" {
         .{ .kind = .miss, .entry_point = "miss" },
     };
     const intersections = [_]core.MetalIntersectionFunctionDescriptor{
-        .{ .entry_point = "intersect_triangle" },
+        .{ .entry_point = "custom_intersection" },
     };
     const plan = try device.planMetalRayTracingMapping(.{
         .pipeline = .{
@@ -7350,7 +7539,7 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
         .{ .kind = .miss, .entry_point = "miss" },
     };
     const intersections = [_]core.MetalIntersectionFunctionDescriptor{
-        .{ .entry_point = "intersect_triangle" },
+        .{ .entry_point = "custom_intersection" },
     };
     var mapping = try device.makeMetalRayTracingExecutionMapping(.{
         .pipeline = .{

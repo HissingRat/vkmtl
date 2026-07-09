@@ -1,16 +1,31 @@
+const std = @import("std");
 const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
+const MetalShaderModule = @import("shader_module.zig");
 
 const MetalRayTracingPipelineState = @This();
 
 handle: *metal.vkmtl_metal_ray_tracing_pipeline_state,
 
-pub fn init(owner: *MetalClearScreen) core.AdvancedFeatureError!MetalRayTracingPipelineState {
+pub fn init(
+    owner: *MetalClearScreen,
+    allocator: std.mem.Allocator,
+    descriptor: core.RayTracingPipelineDescriptor,
+) core.AdvancedFeatureError!MetalRayTracingPipelineState {
+    const ray_generation = descriptor.ray_generation orelse return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    var ray_generation_module = MetalShaderModule.init(owner, allocator, ray_generation.module) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    };
+    defer ray_generation_module.deinit();
+
     var handle: ?*metal.vkmtl_metal_ray_tracing_pipeline_state = null;
     try checkRayTracingPipeline(metal.vkmtl_metal_ray_tracing_pipeline_state_create(
         owner.handle,
+        ray_generation_module.handle,
+        ray_generation.entry_point.ptr,
+        ray_generation.entry_point.len,
         &handle,
     ));
     return .{

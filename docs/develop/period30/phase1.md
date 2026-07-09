@@ -7,9 +7,9 @@ through the command buffer path.
 Status: completed for vkmtl-owned backend-private handle state. First-triangle
 driver object creation is split into Period 31 for Metal
 `MTLAccelerationStructure` and Period 32 for Vulkan `VkAccelerationStructureKHR`.
-Broader acceleration-structure parity remains Period 32+ work because the
-public/runtime boundary now exists but the low-level driver calls need
-backend-specific extension enablement and hardware validation.
+Full-scene mesh acceleration structures are Period33 work, procedural
+acceleration-structure geometry is Period34 work, and remaining broader
+acceleration-structure parity stays in later Period32+ work.
 
 ## Scope
 
@@ -33,5 +33,7 @@ backend-specific extension enablement and hardware validation.
 - Direct Vulkan `VkAccelerationStructureKHR` allocation and
   `vkCmdBuildAccelerationStructuresKHR` submission for the first triangle are
   deferred to Period 32.
-- Compaction, update/refit, larger scenes, and broader AS semantics are
-  deferred to concrete Period32+ phases.
+- Full-scene mesh BLAS/TLAS work is deferred to Period33.
+- Procedural AS geometry is deferred to Period34.
+- Compaction, update/refit, and broader AS semantics are deferred to later
+  concrete Period32+ phases.

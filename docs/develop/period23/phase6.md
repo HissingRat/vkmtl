@@ -16,7 +16,7 @@ Phase 6 closes Period 23 with matrix and examples.
 
 ## Result
 
-- `src/development_matrix.zig` records the sync/query backend matrix and keeps
+- `tools/development_matrix.zig` records the sync/query backend matrix and keeps
   the regression row tied to `zig build test`.
 - `docs/develop/backend-test-matrix.md` separates portable runtime behavior
   from explicit escape hatches and deferred native lowering.

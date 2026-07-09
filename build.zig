@@ -27,6 +27,7 @@ const shader_source_paths = [_][]const u8{
     "examples/offscreen_texture/shaders/offscreen_texture.slang",
     "examples/compute_readback/shaders/compute_readback.slang",
     "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
+    "examples/ray_traced_scene/shaders/ray_traced_scene_metal.msl",
 };
 
 const slang_packages = [_]SlangPackage{
@@ -644,6 +645,18 @@ pub fn build(b: *std.Build) void {
     addMetalBridge(b, root_tests.root_module, target.result.os.tag);
     const run_root_tests = b.addRunArtifact(root_tests);
 
+    const development_matrix_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/development_matrix.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vkmtl_core", .module = unit_tests.root_module },
+            },
+        }),
+    });
+    const run_development_matrix_tests = b.addRunArtifact(development_matrix_tests);
+
     const backend_pipeline_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/backend_pipeline_compile_test.zig"),
@@ -662,6 +675,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run vkmtl tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_root_tests.step);
+    test_step.dependOn(&run_development_matrix_tests.step);
     test_step.dependOn(&run_backend_pipeline_tests.step);
 }
 
@@ -722,6 +736,12 @@ fn addPrecompiledShaderModule(
     for (shader_source_paths) |path| {
         run_generator.addFileArg(b.path(path));
     }
+    b.installDirectory(.{
+        .source_dir = generated_dir,
+        .install_dir = .prefix,
+        .install_subdir = "shaders",
+        .include_extensions = &.{ ".spv", ".msl", ".json" },
+    });
 
     return b.createModule(.{
         .root_source_file = generated_dir.path(b, "precompiled_shaders.zig"),

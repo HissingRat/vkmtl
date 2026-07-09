@@ -18,7 +18,7 @@ Phase 6 closes Period 27 with examples and matrix coverage.
 
 - Added `advanced_resource_geometry_regression` to the backend test matrix.
 - Added an authoritative advanced resource/geometry matrix in
-  `src/development_matrix.zig`.
+  `tools/development_matrix.zig`.
 - Added validation inventory coverage for sparse/tiled planning, residency
   planning, tessellation lowering, and mesh/task lowering.
 - Marked Period 27 as complete as a planning and validation slice.

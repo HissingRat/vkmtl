@@ -13,7 +13,7 @@ Phase 2 defines the compute example gallery beyond the deterministic
 ## Current Limits
 
 - `compute_readback` is the only implemented compute gallery case.
-- Planned gallery cases are recorded in `src/development_matrix.zig` and
+- Planned gallery cases are recorded in `tools/development_matrix.zig` and
   validated by `zig build test`.
 - Additional compute examples may be planned before their full backend and
   visual implementations are added.

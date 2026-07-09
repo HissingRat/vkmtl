@@ -14,14 +14,17 @@ diagnostics.
 
 Direct driver execution for these high-end paths is split after Period30:
 Period31 owns the first Metal ray traced scene, Period32 owns the first
-Vulkan ray traced scene, and Period32+ owns broader parity.
+Vulkan ray traced scene, Period33 owns the full native mesh ray traced scene,
+Period34 owns procedural/custom intersection, and later Period32+ work owns
+the remaining broader parity.
 
 ## Phase 1: Native Acceleration Structure Handles
 
 - Added backend-private acceleration-structure handle state.
 - Recorded backend-private build command metadata.
 - Routed first-triangle Metal AS driver calls to Period31, first-triangle
-  Vulkan AS driver calls to Period32, and broader AS parity to Period32+.
+  Vulkan AS driver calls to Period32, mesh-scene AS work to Period33, and
+  procedural AS geometry to Period34.
 
 See `phase1.md`.
 
@@ -30,7 +33,8 @@ See `phase1.md`.
 - Added backend-private ray tracing pipeline metadata.
 - Preserved shader-group counts, function-table entries, and recursion limits.
 - Routed first-triangle Metal pipeline work to Period31, first-triangle Vulkan
-  pipeline work to Period32, and broader pipeline parity to Period32+.
+  pipeline work to Period32, mesh-scene pipelines to Period33, and procedural
+  custom-intersection pipelines to Period34.
 
 See `phase2.md`.
 
@@ -39,7 +43,8 @@ See `phase2.md`.
 - Added backend-private SBT record metadata.
 - Recorded backend-private ray dispatch command metadata.
 - Routed first-triangle Metal dispatch to Period31, first-triangle Vulkan
-  dispatch to Period32, and broader dispatch parity to Period32+.
+  dispatch to Period32, full-scene dispatch to Period33, and procedural
+  dispatch to Period34.
 
 See `phase3.md`.
 
@@ -56,8 +61,9 @@ See `phase4.md`.
 
 - Added backend-private runtime inventory counts to
   `NativeAdvancedClosurePlan`.
-- Routed first-triangle driver work to Period31 and Period32, with broader
-  native advanced work left for Period32+.
+- Routed first-triangle driver work to Period31 and Period32, full native RT
+  scene work to Period33, procedural RT work to Period34, and remaining native
+  advanced work to later Period32+ phases.
 
 See `phase5.md`.
 

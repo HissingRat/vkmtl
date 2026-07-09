@@ -26,4 +26,7 @@ dispatch parity remains Period 32+ work.
 - Submitting the first Metal ray dispatch command is deferred to Period 31.
 - Submitting the first Vulkan `cmdTraceRaysKHR` command is deferred to Period
   32.
-- Larger SBT layouts and broader dispatch semantics are deferred to Period32+.
+- Full-scene mesh RT dispatch is deferred to Period33.
+- Procedural RT dispatch is deferred to Period34.
+- Larger SBT layouts and remaining broader dispatch semantics are deferred to
+  later Period32+ phases.
