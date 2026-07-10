@@ -824,8 +824,8 @@ See `docs/develop/period43/`.
 ## Period 44: CI, Device Matrix, And Soak Validation
 
 Status: complete for validation infrastructure and the current parity report.
-Release readiness remains false until the three hosted CI artifacts are
-attached; local physical Metal and Vulkan evidence is recorded.
+All nine release-evidence gates are observed: the hosted macOS/Linux/Windows
+matrix and local physical Metal/Vulkan evidence are recorded.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a
@@ -852,9 +852,9 @@ See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
-- Periods 42 through 44 are complete as implementation slices. The active
-  validation priority is collecting the three missing hosted CI artifacts
-  identified by the Period 44 parity report.
+- Periods 42 through 44 and all nine Period 44 release-evidence gates are
+  complete. Remaining validation work is non-gate native-pressure and physical
+  Linux GPU coverage tracked by the parity report.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the
   deterministic capability contract and unit coverage because the host had no

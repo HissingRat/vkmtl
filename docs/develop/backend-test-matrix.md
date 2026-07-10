@@ -8,8 +8,8 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
   `macos-15`; build-only evidence, not GPU proof.
 - `hosted_linux_build`: formatting, tests, forced-Vulkan build, and validation
   plan on `ubuntu-24.04`; build-only evidence.
-- `hosted_windows_build`: tests, forced-Vulkan build, and validation plan on
-  `windows-2025`; build-only evidence.
+- `hosted_windows_build`: formatting, tests, forced-Vulkan build, and validation
+  plan on `windows-2025`; build-only evidence.
 - `self_hosted_metal_smoke`: `scripts/ci/run_gpu_smoke.sh metal ...` on a
   physical Apple Silicon host labeled `vkmtl-metal`.
 - `self_hosted_vulkan_smoke`: `scripts/ci/run_gpu_smoke.sh vulkan ...` on a

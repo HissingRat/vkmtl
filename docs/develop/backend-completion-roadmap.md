@@ -492,7 +492,8 @@ Tracked in `docs/develop/period44/`.
 
 Expected result: vkmtl can make evidence-backed parity claims against a
 documented device matrix without treating configured but unobserved lanes as
-proof. The current report remains not release-ready.
+proof. The hosted matrix and physical GPU evidence now satisfy all 9 explicit
+release-readiness gates; deferred native feature lanes remain outside the claim.
 
 ## Slice Checklist
 

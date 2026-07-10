@@ -17,9 +17,9 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Current Priority
 
-- Period 44 implementation is complete. Current validation priority is to
-  execute the three configured hosted CI lanes; local physical Metal and
-  Vulkan evidence is now recorded.
+- Period 44 implementation and its nine release-evidence gates are complete.
+  Hosted macOS, Linux, and Windows CI plus local physical Metal and Vulkan
+  evidence are recorded.
 - Period 32 Phases 6-7 are closed with a supported Windows/NVIDIA Vulkan RT
   run, visible-result evidence, and the unsupported-runtime diagnostics
   contract documented without claiming a non-RT hardware observation.
@@ -27,7 +27,7 @@ closed one by one as vkmtl moves from prototype to library.
   multi-instance and shared scene-layout items are routed to later RT
   completeness/device-matrix work.
 - Periods 42 through 44 are complete as implementation slices. Period 44's
-  parity report remains not release-ready until missing evidence is collected.
+  explicit readiness evaluator reports 9/9, `release ready: true`.
 - Period 1 Phase 9 pre-tag API and release-polish items remain open, but are not
   the active feature phase.
 

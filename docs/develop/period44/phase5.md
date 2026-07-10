@@ -1,8 +1,7 @@
 # Phase 5: Release Readiness And Parity Report
 
-Status: complete. The current report is intentionally not release-ready because
-6 of 9 required evidence gates were observed; the three hosted build/test
-artifacts remain missing.
+Status: complete. All 9 required evidence gates are observed and the explicit
+readiness result is `release ready: true`.
 
 ## Release Gate
 
@@ -17,6 +16,13 @@ presence. A release-ready result requires:
 
 Evidence flags are explicit command-line inputs. The default report is not
 ready, so configuring a workflow cannot be confused with executing it.
+
+GitHub Actions run
+[29086828016](https://github.com/HissingRat/vkmtl/actions/runs/29086828016)
+validated commit `e303a61` on `macos-15`, `ubuntu-24.04`, and `windows-2025`.
+All three jobs passed formatting, 550/550 tests, their configured build, and the
+validation-plan command, then uploaded the hosted evidence artifacts referenced
+by `parity-report.md`.
 
 ## Current Parity Claim
 

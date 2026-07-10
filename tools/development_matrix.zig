@@ -415,7 +415,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .macos,
         .backend = .metal,
         .required = true,
-        .command = "zig build test && zig build && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools && zig build test && zig build && zig build run-validation-plan",
         .expectation = "hosted Apple path compiles Metal-capable code without claiming physical GPU execution",
     },
     .{
@@ -432,7 +432,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .linux,
         .backend = .vulkan,
         .required = true,
-        .command = "zig build test && zig build -Dvulkan && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools && zig build test && zig build -Dvulkan && zig build run-validation-plan",
         .expectation = "hosted Linux path compiles Vulkan code without claiming a physical GPU smoke run",
     },
     .{
@@ -440,7 +440,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .windows,
         .backend = .vulkan,
         .required = true,
-        .command = "zig build test && zig build -Dvulkan && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools && zig build test && zig build -Dvulkan && zig build run-validation-plan",
         .expectation = "hosted Windows path compiles Vulkan code without claiming a physical GPU smoke run",
     },
     .{
@@ -644,7 +644,7 @@ pub const period44_jobs = [_]Period44Job{
         .expected_outcome = .build_only,
         .evidence = .configured_automated,
         .required_for_release = true,
-        .command = "zig build test && zig build -Dvulkan && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools && zig build test && zig build -Dvulkan && zig build run-validation-plan",
     },
     .{
         .name = "self_hosted_metal_smoke",
@@ -1627,7 +1627,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "backend parity matrix",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 44 parity report tracks missing advanced-native and Vulkan device evidence",
+        .deferred_to = "Period 44 parity report tracks remaining advanced-native evidence",
         .validation = "common GPU soak is executable while advanced native pressure lanes remain explicit missing evidence",
     },
     .{
@@ -1778,8 +1778,7 @@ pub const validation_cases = [_]ValidationCase{
         .name = "period44_device_evidence",
         .kind = .period44_device_evidence,
         .test_location = "tools/development_matrix.zig, examples/offscreen_texture/main.zig, tools/gpu_soak/main.zig, and Period 44 workflows/scripts",
-        .integration_gap = true,
-        .expectation = "hosted builds, physical smoke, pixel readback, soak, and release gates stay distinct while missing Vulkan evidence remains explicit",
+        .expectation = "hosted builds, physical smoke, pixel readback, soak, and release gates stay distinct; all nine explicit gates are observed",
     },
 };
 
@@ -1864,7 +1863,7 @@ pub const documentation_topics = [_]DocumentationTopic{
     .{
         .name = "period44_parity_report",
         .path = "docs/develop/period44/parity-report.md",
-        .expectation = "observed Metal evidence, missing Vulkan/hosted evidence, known unsupported lanes, and release decision",
+        .expectation = "observed Metal, Vulkan, and hosted evidence, known unsupported lanes, and release decision",
     },
 };
 

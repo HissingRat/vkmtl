@@ -54,7 +54,8 @@ Current cases:
   capability-gated and deterministic.
 - `period44_device_evidence`: hosted builds, physical smoke, exact/tolerant
   pixel readback, bounded soak, and release evidence gates remain distinct;
-  missing Vulkan and hosted artifacts remain explicit integration gaps.
+  all nine explicit release gates are observed, while physical Linux GPU and
+  advanced-native pressure lanes remain outside the claim.
 
 Unit-test metadata remains authoritative for portable validation. Period 44
 adds separate physical GPU evidence workflows so source/build coverage is not

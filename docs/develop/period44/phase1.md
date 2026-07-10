@@ -1,7 +1,7 @@
 # Phase 1: CI Job Matrix And Feature Reporting
 
-Status: complete for the CI contract and workflow configuration. Hosted run
-artifacts remain missing evidence in the parity report.
+Status: complete for the CI contract, workflow configuration, and observed
+hosted run artifacts on macOS, Linux, and Windows.
 
 ## Evidence Classes
 
@@ -40,3 +40,8 @@ Implemented by `.github/workflows/ci.yml`,
 `.github/workflows/gpu-validation.yml`, the Period 44 matrix rows, and the
 validation-plan tool. Workflow artifacts retain build/capability/pixel/soak
 logs independently of job success.
+
+The hosted matrix executed successfully for commit `e303a61` in GitHub Actions
+run [29086828016](https://github.com/HissingRat/vkmtl/actions/runs/29086828016).
+The three artifact IDs and platform summaries are recorded in
+`parity-report.md`.

@@ -1,8 +1,8 @@
 # Period 44: CI, Device Matrix, And Soak Validation
 
 Status: complete for validation infrastructure and the current evidence report.
-The release gate remains open because the three hosted CI artifacts are not
-present; reviewed local physical Metal and Vulkan evidence is now recorded in
+All nine release-evidence gates are observed; hosted macOS, Linux, and Windows
+artifacts plus reviewed physical Metal and Vulkan evidence are recorded in
 `parity-report.md`.
 
 Goal: turn the parity work into something trustworthy by validating examples,
@@ -79,9 +79,10 @@ See `phase5.md` for the evidence gate, parity report, and voxel-world decision.
 - Long-run tests produce repeatable diagnostics.
 - vkmtl can make a measured, evidence-backed parity claim.
 
-Current result: the infrastructure and report meet the acceptance contract,
-while the report itself is deliberately not release-ready. Metal and Vulkan
-smoke/pixels/bounded soak were observed locally. The Vulkan evidence came from
-a physical Windows/NVIDIA host; the configured Linux self-hosted lane remains
-unexecuted. The three hosted CI artifacts remain missing rather than inferred
-from local runs.
+Current result: the infrastructure and report meet the acceptance contract and
+the explicit readiness evaluator reports 9/9, `release ready: true`. Metal and
+Vulkan smoke/pixels/bounded soak were observed locally. Hosted build/test
+artifacts were produced for macOS, Linux, and Windows by run 29086828016. The
+Vulkan GPU evidence came from a physical Windows/NVIDIA host; the configured
+Linux self-hosted GPU lane remains unexecuted and is not inferred from hosted
+build evidence.
