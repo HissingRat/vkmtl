@@ -1,6 +1,6 @@
 # Period 41: External Interop Matrix
 
-Status: Phase 1 complete.
+Status: Phase 2 complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
@@ -33,9 +33,26 @@ Phase 1 result:
 
 ### Phase 2: Vulkan External Memory/Image/Semaphore Import
 
-- Implement external memory and image import where supported.
-- Implement external semaphore wait/signal where supported.
-- Validate handle ownership and lifetime.
+- Implement external memory and image import planning where supported.
+- Implement external semaphore wait/signal import planning where supported.
+- Validate handle ownership and lifetime before backend import hooks run.
+
+Phase 2 result:
+
+- `ExternalInteropImportPlan` records backend, platform, resource kind, handle
+  kind, interop lane, feature gate, ownership, and whether the import requires
+  native backend work.
+- Vulkan import planning now distinguishes Linux `opaque_fd`, Windows
+  `win32_handle`, and backend-native Vulkan handles for memory, texture/image,
+  and semaphore resources.
+- `Device.planExternal*Import(...)` and `Device.makeExternal*(...)` validate
+  native feature gates and attach the resolved import plan to runtime wrappers.
+- Missing native support returns the resource-specific typed error
+  (`UnsupportedExternalMemory`, `UnsupportedExternalTextures`, or
+  `UnsupportedExternalSemaphores`) instead of silently creating an unusable
+  wrapper.
+- The real OS/Vulkan handle import calls remain behind backend hooks; the
+  public contract and diagnostics are now stable enough for those hooks to use.
 
 ### Phase 3: Metal Shared Texture/Event Import
 

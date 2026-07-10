@@ -6192,6 +6192,33 @@ pub const ExternalResourceOwnership = enum {
     transferred,
 };
 
+pub const ExternalInteropImportPlan = struct {
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    resource: ExternalInteropResourceKind,
+    handle_kind: ExternalHandleKind,
+    lane: ExternalInteropLane,
+    feature_gate: ?ExternalInteropFeatureGate = null,
+    ownership: ExternalResourceOwnership = .borrowed,
+    handle_value: usize = 0,
+
+    pub fn enabled(self: ExternalInteropImportPlan) bool {
+        return self.lane != .unsupported;
+    }
+
+    pub fn requiresNativeImport(self: ExternalInteropImportPlan) bool {
+        return self.lane == .capability_gated or self.lane == .native_only;
+    }
+
+    pub fn isPortableWrapper(self: ExternalInteropImportPlan) bool {
+        return self.lane == .portable;
+    }
+
+    pub fn isTransferred(self: ExternalInteropImportPlan) bool {
+        return self.ownership == .transferred;
+    }
+};
+
 pub const ExternalHandleDescriptor = struct {
     kind: ExternalHandleKind,
     value: usize,
@@ -6316,6 +6343,140 @@ pub const ExternalEventDescriptor = struct {
         try self.handle.validateForBackend(selected_backend);
     }
 };
+
+fn unsupportedExternalResource(resource: ExternalInteropResourceKind) AdvancedFeatureError {
+    return switch (resource) {
+        .memory, .buffer => AdvancedFeatureError.UnsupportedExternalMemory,
+        .texture => AdvancedFeatureError.UnsupportedExternalTextures,
+        .semaphore, .event => AdvancedFeatureError.UnsupportedExternalSemaphores,
+    };
+}
+
+fn externalInteropImportPlan(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+    resource: ExternalInteropResourceKind,
+    handle: ExternalHandleDescriptor,
+    ownership: ExternalResourceOwnership,
+) AdvancedFeatureError!ExternalInteropImportPlan {
+    try handle.validateForBackend(backend);
+
+    const matrix = externalInteropCapabilityMatrix(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+    );
+    const entry = matrix.find(resource, handle.kind) orelse
+        return unsupportedExternalResource(resource);
+    if (!matrix.entryEnabled(entry)) return unsupportedExternalResource(resource);
+
+    return .{
+        .backend = backend,
+        .platform = platform,
+        .resource = resource,
+        .handle_kind = handle.kind,
+        .lane = entry.lane,
+        .feature_gate = entry.feature_gate,
+        .ownership = ownership,
+        .handle_value = handle.value,
+    };
+}
+
+pub fn planExternalMemoryImport(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    descriptor: ExternalMemoryDescriptor,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+) AdvancedFeatureError!ExternalInteropImportPlan {
+    if (descriptor.size == 0) return AdvancedFeatureError.InvalidExternalHandle;
+    return externalInteropImportPlan(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+        .memory,
+        descriptor.handle,
+        descriptor.ownership,
+    );
+}
+
+pub fn planExternalBufferImport(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    descriptor: ExternalBufferDescriptor,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+) AdvancedFeatureError!ExternalInteropImportPlan {
+    if (descriptor.length == 0) return AdvancedFeatureError.InvalidExternalHandle;
+    return externalInteropImportPlan(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+        .buffer,
+        descriptor.handle,
+        descriptor.ownership,
+    );
+}
+
+pub fn planExternalTextureImport(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    descriptor: ExternalTextureDescriptor,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+) (AdvancedFeatureError || TextureError)!ExternalInteropImportPlan {
+    try descriptor.textureDescriptor().validate();
+    return externalInteropImportPlan(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+        .texture,
+        descriptor.handle,
+        descriptor.ownership,
+    );
+}
+
+pub fn planExternalSemaphoreImport(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    descriptor: ExternalSemaphoreDescriptor,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+) AdvancedFeatureError!ExternalInteropImportPlan {
+    return externalInteropImportPlan(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+        .semaphore,
+        descriptor.handle,
+        descriptor.ownership,
+    );
+}
+
+pub fn planExternalEventImport(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    descriptor: ExternalEventDescriptor,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+) AdvancedFeatureError!ExternalInteropImportPlan {
+    return externalInteropImportPlan(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+        .event,
+        descriptor.handle,
+        descriptor.ownership,
+    );
+}
 
 pub const TextureViewDescriptor = struct {
     label: ?[]const u8 = null,
@@ -11762,6 +11923,83 @@ test "external interop capability matrix classifies platform handle lanes" {
     const unsupported = externalInteropCapabilityMatrix(.metal, .linux, external_features, external_features);
     try std.testing.expectEqual(@as(usize, 0), unsupported.countEnabled());
     try std.testing.expectEqual(ExternalInteropLane.unsupported, unsupported.find(.texture, null).?.lane);
+}
+
+test "vulkan external import planning validates platform handle lanes" {
+    const no_features = DeviceFeatures{};
+    const external_features = DeviceFeatures{
+        .external_memory = true,
+        .external_textures = true,
+        .external_semaphores = true,
+    };
+
+    const linux_memory = ExternalMemoryDescriptor{
+        .handle = .{ .kind = .opaque_fd, .value = 10 },
+        .size = 4096,
+        .ownership = .transferred,
+    };
+    const linux_plan = try planExternalMemoryImport(
+        .vulkan,
+        .linux,
+        linux_memory,
+        no_features,
+        external_features,
+    );
+    try std.testing.expectEqual(Backend.vulkan, linux_plan.backend);
+    try std.testing.expectEqual(ExternalInteropPlatform.linux, linux_plan.platform);
+    try std.testing.expectEqual(ExternalInteropResourceKind.memory, linux_plan.resource);
+    try std.testing.expectEqual(ExternalInteropLane.capability_gated, linux_plan.lane);
+    try std.testing.expect(linux_plan.requiresNativeImport());
+    try std.testing.expect(linux_plan.isTransferred());
+
+    const windows_texture = ExternalTextureDescriptor{
+        .handle = .{ .kind = .win32_handle, .value = 11 },
+        .format = .rgba8_unorm,
+        .width = 32,
+        .height = 32,
+    };
+    const windows_plan = try planExternalTextureImport(
+        .vulkan,
+        .windows,
+        windows_texture,
+        no_features,
+        external_features,
+    );
+    try std.testing.expectEqual(ExternalInteropLane.capability_gated, windows_plan.lane);
+    try std.testing.expectEqual(ExternalHandleKind.win32_handle, windows_plan.handle_kind);
+
+    const native_semaphore = ExternalSemaphoreDescriptor{
+        .handle = .{ .kind = .vulkan_semaphore, .value = 12 },
+        .timeline = true,
+    };
+    const native_plan = try planExternalSemaphoreImport(
+        .vulkan,
+        .linux,
+        native_semaphore,
+        no_features,
+        external_features,
+    );
+    try std.testing.expectEqual(ExternalInteropLane.native_only, native_plan.lane);
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalMemory, planExternalMemoryImport(
+        .vulkan,
+        .linux,
+        linux_memory,
+        no_features,
+        no_features,
+    ));
+    try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, planExternalTextureImport(
+        .vulkan,
+        .linux,
+        .{
+            .handle = .{ .kind = .metal_texture, .value = 13 },
+            .format = .rgba8_unorm,
+            .width = 32,
+            .height = 32,
+        },
+        no_features,
+        external_features,
+    ));
 }
 
 test "native command insertion descriptors are explicit and gated" {

@@ -1005,6 +1005,7 @@ pub const ExternalMemory = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     descriptor_value: core.ExternalMemoryDescriptor,
+    import_plan_value: core.ExternalInteropImportPlan,
     alive: bool = true,
 
     pub fn deinit(self: *ExternalMemory) void {
@@ -1031,12 +1032,18 @@ pub const ExternalMemory = struct {
         assertAlive(self.alive, .external_memory);
         return self.descriptor_value.ownership;
     }
+
+    pub fn importPlan(self: ExternalMemory) core.ExternalInteropImportPlan {
+        assertAlive(self.alive, .external_memory);
+        return self.import_plan_value;
+    }
 };
 
 pub const ExternalBuffer = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     descriptor_value: core.ExternalBufferDescriptor,
+    import_plan_value: core.ExternalInteropImportPlan,
     alive: bool = true,
 
     pub fn deinit(self: *ExternalBuffer) void {
@@ -1068,12 +1075,18 @@ pub const ExternalBuffer = struct {
         assertAlive(self.alive, .external_buffer);
         return self.descriptor_value.ownership;
     }
+
+    pub fn importPlan(self: ExternalBuffer) core.ExternalInteropImportPlan {
+        assertAlive(self.alive, .external_buffer);
+        return self.import_plan_value;
+    }
 };
 
 pub const ExternalSemaphore = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     descriptor_value: core.ExternalSemaphoreDescriptor,
+    import_plan_value: core.ExternalInteropImportPlan,
     alive: bool = true,
 
     pub fn deinit(self: *ExternalSemaphore) void {
@@ -1100,12 +1113,18 @@ pub const ExternalSemaphore = struct {
         assertAlive(self.alive, .external_semaphore);
         return self.descriptor_value.ownership;
     }
+
+    pub fn importPlan(self: ExternalSemaphore) core.ExternalInteropImportPlan {
+        assertAlive(self.alive, .external_semaphore);
+        return self.import_plan_value;
+    }
 };
 
 pub const ExternalEvent = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     descriptor_value: core.ExternalEventDescriptor,
+    import_plan_value: core.ExternalInteropImportPlan,
     alive: bool = true,
 
     pub fn deinit(self: *ExternalEvent) void {
@@ -1131,6 +1150,11 @@ pub const ExternalEvent = struct {
     pub fn ownership(self: ExternalEvent) core.ExternalResourceOwnership {
         assertAlive(self.alive, .external_event);
         return self.descriptor_value.ownership;
+    }
+
+    pub fn importPlan(self: ExternalEvent) core.ExternalInteropImportPlan {
+        assertAlive(self.alive, .external_event);
+        return self.import_plan_value;
     }
 };
 
@@ -1244,6 +1268,7 @@ pub const ExternalTexture = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
     descriptor_value: core.ExternalTextureDescriptor,
+    import_plan_value: core.ExternalInteropImportPlan,
     alive: bool = true,
 
     pub fn deinit(self: *ExternalTexture) void {
@@ -1269,6 +1294,11 @@ pub const ExternalTexture = struct {
     pub fn ownership(self: ExternalTexture) core.ExternalResourceOwnership {
         assertAlive(self.alive, .texture);
         return self.descriptor_value.ownership;
+    }
+
+    pub fn importPlan(self: ExternalTexture) core.ExternalInteropImportPlan {
+        assertAlive(self.alive, .texture);
+        return self.import_plan_value;
     }
 };
 
@@ -5001,6 +5031,76 @@ pub const Device = struct {
         try descriptor.validate(self.backend, self.features());
     }
 
+    pub fn planExternalMemoryImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try core.planExternalMemoryImport(
+            self.backend,
+            platform,
+            descriptor,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
+    pub fn planExternalBufferImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try core.planExternalBufferImport(
+            self.backend,
+            platform,
+            descriptor,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
+    pub fn planExternalTextureImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
+        return try core.planExternalTextureImport(
+            self.backend,
+            platform,
+            descriptor,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
+    pub fn planExternalSemaphoreImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try core.planExternalSemaphoreImport(
+            self.backend,
+            platform,
+            descriptor,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
+    pub fn planExternalEventImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try core.planExternalEventImport(
+            self.backend,
+            platform,
+            descriptor,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
+    pub fn planExternalMemoryImport(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try self.planExternalMemoryImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
+    pub fn planExternalBufferImport(self: Device, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try self.planExternalBufferImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
+    pub fn planExternalTextureImport(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
+        return try self.planExternalTextureImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
+    pub fn planExternalSemaphoreImport(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try self.planExternalSemaphoreImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
+    pub fn planExternalEventImport(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+        return try self.planExternalEventImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
     pub fn externalInteropCapabilityMatrix(self: Device) core.ExternalInteropCapabilityMatrix {
         return self.externalInteropCapabilityMatrixForPlatform(core.ExternalInteropPlatform.native());
     }
@@ -5861,51 +5961,61 @@ pub const Device = struct {
 
     pub fn makeExternalMemory(self: *Device, descriptor: core.ExternalMemoryDescriptor) !ExternalMemory {
         try self.validateExternalMemoryDescriptor(descriptor);
+        const import_plan = try self.planExternalMemoryImport(descriptor);
         self.tracker.retain(.external_memory);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
             .descriptor_value = descriptor,
+            .import_plan_value = import_plan,
         };
     }
 
     pub fn makeExternalBuffer(self: *Device, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
         try self.validateExternalBufferDescriptor(descriptor);
+        const import_plan = try self.planExternalBufferImport(descriptor);
         self.tracker.retain(.external_buffer);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
             .descriptor_value = descriptor,
+            .import_plan_value = import_plan,
         };
     }
 
     pub fn makeExternalSemaphore(self: *Device, descriptor: core.ExternalSemaphoreDescriptor) !ExternalSemaphore {
         try self.validateExternalSemaphoreDescriptor(descriptor);
+        const import_plan = try self.planExternalSemaphoreImport(descriptor);
         self.tracker.retain(.external_semaphore);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
             .descriptor_value = descriptor,
+            .import_plan_value = import_plan,
         };
     }
 
     pub fn makeExternalEvent(self: *Device, descriptor: core.ExternalEventDescriptor) !ExternalEvent {
         try self.validateExternalEventDescriptor(descriptor);
+        const import_plan = try self.planExternalEventImport(descriptor);
         self.tracker.retain(.external_event);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
             .descriptor_value = descriptor,
+            .import_plan_value = import_plan,
         };
     }
 
     pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
         try self.validateExternalTextureDescriptor(descriptor);
+        const import_plan = try self.planExternalTextureImport(descriptor);
         self.tracker.retain(.texture);
         return .{
             .backend = self.backend,
             .tracker = self.tracker,
             .descriptor_value = descriptor,
+            .import_plan_value = import_plan,
         };
     }
 
@@ -8916,13 +9026,18 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(core.Backend.metal, texture.selectedBackend());
     try std.testing.expectEqual(core.ExternalResourceOwnership.borrowed, texture.ownership());
     try std.testing.expectEqual(@as(u32, 64), texture.textureDescriptor().width);
+    try std.testing.expectEqual(core.ExternalInteropLane.native_only, texture.importPlan().lane);
+    try std.testing.expect(texture.importPlan().requiresNativeImport());
     try std.testing.expectEqual(core.Backend.metal, memory.selectedBackend());
     try std.testing.expectEqual(@as(u64, 256), memory.size());
     try std.testing.expectEqual(core.ExternalResourceOwnership.transferred, memory.ownership());
+    try std.testing.expectEqual(core.ExternalInteropLane.native_only, memory.importPlan().lane);
     try std.testing.expectEqual(@as(u64, 128), buffer.length());
     try std.testing.expect(buffer.usage().storage);
     try std.testing.expect(semaphore.isTimeline());
+    try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, semaphore.importPlan().lane);
     try std.testing.expect(event.isShared());
+    try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, event.importPlan().lane);
     var command_buffer = CommandBuffer{
         .backend = .metal,
         .tracker = &tracker,

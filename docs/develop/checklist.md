@@ -2342,9 +2342,9 @@ obvious render and binding blockers.
 
 ## Period 41 Phase 2 Checklist
 
-- [ ] Implement Vulkan external memory/image import where supported.
-- [ ] Implement Vulkan external semaphore wait/signal where supported.
-- [ ] Validate handle ownership and lifetime.
+- [x] Implement Vulkan external memory/image import planning where supported.
+- [x] Implement Vulkan external semaphore wait/signal import planning where supported.
+- [x] Validate handle ownership and lifetime before backend import hooks run.
 
 ## Period 41 Phase 3 Checklist
 
