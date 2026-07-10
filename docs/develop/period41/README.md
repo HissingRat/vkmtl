@@ -1,6 +1,6 @@
 # Period 41: External Interop Matrix
 
-Status: Phase 3 complete.
+Status: Phase 4 complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
@@ -77,9 +77,21 @@ Phase 3 result:
 
 ### Phase 4: External Texture Sampling And Presentation Examples
 
-- Turn `examples/external_texture` from a wrapper probe into a real interop
-  sample where a supported external texture is available.
+- Turn `examples/external_texture` from a wrapper probe into an interop usage
+  planning sample where a supported external texture is available.
 - Validate sampling, copy, and presentation usage.
+
+Phase 4 result:
+
+- `ExternalTextureUsageDescriptor` declares whether an imported texture will be
+  sampled, copied from, copied into, or used as a presentation/render target.
+- `ExternalTextureUsagePlan` pairs the import plan with validated usage bits and
+  reports whether the usage requires sampling, copy, or presentation behavior.
+- `Device.planExternalTextureUsage(...)` validates usage intent against
+  `TextureUsage` and backend/platform import support before a runtime wrapper is
+  created.
+- `examples/external_texture` now plans sample/copy/presentation usage through
+  the public API and prints the resolved interop lane.
 
 ### Phase 5: External Synchronization Validation
 

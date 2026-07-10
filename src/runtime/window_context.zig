@@ -5061,6 +5061,15 @@ pub const Device = struct {
         );
     }
 
+    pub fn planExternalTextureUsageForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalTextureUsageDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalTextureUsagePlan {
+        return try descriptor.validate(
+            self.backend,
+            platform,
+            self.features(),
+            self.nativeFeatures(),
+        );
+    }
+
     pub fn planExternalSemaphoreImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try core.planExternalSemaphoreImport(
             self.backend,
@@ -5091,6 +5100,10 @@ pub const Device = struct {
 
     pub fn planExternalTextureImport(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
         return try self.planExternalTextureImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
+    pub fn planExternalTextureUsage(self: Device, descriptor: core.ExternalTextureUsageDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalTextureUsagePlan {
+        return try self.planExternalTextureUsageForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
     pub fn planExternalSemaphoreImport(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
@@ -9028,6 +9041,29 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(@as(u32, 64), texture.textureDescriptor().width);
     try std.testing.expectEqual(core.ExternalInteropLane.native_only, texture.importPlan().lane);
     try std.testing.expect(texture.importPlan().requiresNativeImport());
+    const usage_plan = try device.planExternalTextureUsageForPlatform(.macos, .{
+        .texture = .{
+            .label = "external texture",
+            .handle = .{
+                .kind = .metal_texture,
+                .value = 1,
+            },
+            .format = .rgba8_unorm,
+            .width = 64,
+            .height = 32,
+            .usage = .{
+                .shader_read = true,
+                .copy_source = true,
+                .render_attachment = true,
+            },
+        },
+        .sample = true,
+        .copy_source = true,
+        .present = true,
+    });
+    try std.testing.expect(usage_plan.requiresSampling());
+    try std.testing.expect(usage_plan.requiresCopy());
+    try std.testing.expect(usage_plan.requiresPresentation());
     try std.testing.expectEqual(core.Backend.metal, memory.selectedBackend());
     try std.testing.expectEqual(@as(u64, 256), memory.size());
     try std.testing.expectEqual(core.ExternalResourceOwnership.transferred, memory.ownership());

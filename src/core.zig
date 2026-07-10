@@ -1002,6 +1002,7 @@ pub const AdvancedFeatureError = error{
     UnsupportedExternalSemaphores,
     UnsupportedNativeCommandInsertion,
     InvalidExternalHandle,
+    InvalidExternalTextureUsage,
     ExternalHandleBackendMismatch,
     MissingNativeCommandCallback,
     NativeCommandEncoderMismatch,
@@ -2082,6 +2083,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidSparseRegion,
         error.SparseRegionCountExceeded,
         error.InvalidExternalHandle,
+        error.InvalidExternalTextureUsage,
         error.ExternalHandleBackendMismatch,
         error.MissingNativeCommandCallback,
         error.NativeCommandEncoderMismatch,
@@ -6497,6 +6499,65 @@ pub fn planExternalTextureImport(
         descriptor.ownership,
     );
 }
+
+pub const ExternalTextureUsagePlan = struct {
+    import_plan: ExternalInteropImportPlan,
+    usage: TextureUsage,
+    sample: bool = true,
+    copy_source: bool = false,
+    copy_destination: bool = false,
+    present: bool = false,
+
+    pub fn requiresSampling(self: ExternalTextureUsagePlan) bool {
+        return self.sample;
+    }
+
+    pub fn requiresCopy(self: ExternalTextureUsagePlan) bool {
+        return self.copy_source or self.copy_destination;
+    }
+
+    pub fn requiresPresentation(self: ExternalTextureUsagePlan) bool {
+        return self.present;
+    }
+};
+
+pub const ExternalTextureUsageDescriptor = struct {
+    texture: ExternalTextureDescriptor,
+    sample: bool = true,
+    copy_source: bool = false,
+    copy_destination: bool = false,
+    present: bool = false,
+
+    pub fn validate(
+        self: ExternalTextureUsageDescriptor,
+        backend: Backend,
+        platform: ExternalInteropPlatform,
+        usable_features: DeviceFeatures,
+        native_features: DeviceFeatures,
+    ) (AdvancedFeatureError || TextureError)!ExternalTextureUsagePlan {
+        const import_plan = try planExternalTextureImport(
+            backend,
+            platform,
+            self.texture,
+            usable_features,
+            native_features,
+        );
+        const usage = self.texture.usage;
+        if (self.sample and !usage.shader_read) return AdvancedFeatureError.InvalidExternalTextureUsage;
+        if (self.copy_source and !usage.copy_source) return AdvancedFeatureError.InvalidExternalTextureUsage;
+        if (self.copy_destination and !usage.copy_destination) return AdvancedFeatureError.InvalidExternalTextureUsage;
+        if (self.present and !usage.render_attachment) return AdvancedFeatureError.InvalidExternalTextureUsage;
+
+        return .{
+            .import_plan = import_plan,
+            .usage = usage,
+            .sample = self.sample,
+            .copy_source = self.copy_source,
+            .copy_destination = self.copy_destination,
+            .present = self.present,
+        };
+    }
+};
 
 pub fn planExternalSemaphoreImport(
     backend: Backend,
@@ -12122,6 +12183,58 @@ test "metal external import planning records shared texture and event constraint
         no_features,
         external_features,
     ));
+}
+
+test "external texture usage planning validates sample copy and presentation intents" {
+    const no_features = DeviceFeatures{};
+    const external_features = DeviceFeatures{
+        .external_textures = true,
+    };
+    const texture = ExternalTextureDescriptor{
+        .handle = .{ .kind = .vulkan_image, .value = 30 },
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .usage = .{
+            .shader_read = true,
+            .copy_source = true,
+            .copy_destination = true,
+            .render_attachment = true,
+        },
+    };
+    const plan = try (ExternalTextureUsageDescriptor{
+        .texture = texture,
+        .sample = true,
+        .copy_source = true,
+        .copy_destination = true,
+        .present = true,
+    }).validate(.vulkan, .linux, no_features, external_features);
+    try std.testing.expect(plan.requiresSampling());
+    try std.testing.expect(plan.requiresCopy());
+    try std.testing.expect(plan.requiresPresentation());
+    try std.testing.expectEqual(ExternalInteropLane.native_only, plan.import_plan.lane);
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidExternalTextureUsage, (ExternalTextureUsageDescriptor{
+        .texture = .{
+            .handle = .{ .kind = .vulkan_image, .value = 31 },
+            .format = .rgba8_unorm,
+            .width = 64,
+            .height = 64,
+            .usage = .{ .shader_read = true },
+        },
+        .copy_source = true,
+    }).validate(.vulkan, .linux, no_features, external_features));
+
+    try std.testing.expectError(AdvancedFeatureError.InvalidExternalTextureUsage, (ExternalTextureUsageDescriptor{
+        .texture = .{
+            .handle = .{ .kind = .vulkan_image, .value = 32 },
+            .format = .rgba8_unorm,
+            .width = 64,
+            .height = 64,
+            .usage = .{ .shader_read = true },
+        },
+        .present = true,
+    }).validate(.vulkan, .linux, no_features, external_features));
 }
 
 test "native command insertion descriptors are explicit and gated" {

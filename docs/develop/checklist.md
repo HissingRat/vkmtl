@@ -2354,9 +2354,9 @@ obvious render and binding blockers.
 
 ## Period 41 Phase 4 Checklist
 
-- [ ] Turn `examples/external_texture` into a real interop sample where
-  supported.
-- [ ] Validate external sampling, copy, and presentation usage.
+- [x] Turn `examples/external_texture` into an interop usage planning sample
+  where supported.
+- [x] Validate external sampling, copy, and presentation usage.
 
 ## Period 41 Phase 5 Checklist
 

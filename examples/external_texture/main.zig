@@ -44,7 +44,7 @@ pub fn main() !void {
         });
     }
 
-    var texture = device.makeExternalTexture(.{
+    const external_texture_descriptor = vkmtl.ExternalTextureDescriptor{
         .label = "example external texture",
         .handle = .{
             .kind = handle_kind,
@@ -54,19 +54,40 @@ pub fn main() !void {
         .format = .rgba8_unorm,
         .width = 64,
         .height = 64,
-        .usage = .{ .shader_read = true },
+        .usage = .{
+            .shader_read = true,
+            .copy_source = true,
+            .copy_destination = true,
+            .render_attachment = true,
+        },
+    };
+    const usage_plan = device.planExternalTextureUsage(.{
+        .texture = external_texture_descriptor,
+        .sample = true,
+        .copy_source = true,
+        .copy_destination = true,
+        .present = true,
     }) catch |err| {
+        std.debug.print("external texture usage unsupported: {s}\n", .{@errorName(err)});
+        return;
+    };
+
+    var texture = device.makeExternalTexture(external_texture_descriptor) catch |err| {
         std.debug.print("external texture unsupported: {s}\n", .{@errorName(err)});
         return;
     };
     defer texture.deinit();
 
     const descriptor = texture.textureDescriptor();
-    std.debug.print("external texture wrapper ok: backend={s}, format={s}, extent={}x{}, ownership={s}\n", .{
+    std.debug.print("external texture wrapper ok: backend={s}, format={s}, extent={}x{}, ownership={s}, lane={s}, sample={}, copy={}, present={}\n", .{
         @tagName(texture.selectedBackend()),
         @tagName(descriptor.format),
         descriptor.width,
         descriptor.height,
         @tagName(texture.ownership()),
+        @tagName(usage_plan.import_plan.lane),
+        usage_plan.requiresSampling(),
+        usage_plan.requiresCopy(),
+        usage_plan.requiresPresentation(),
     });
 }
