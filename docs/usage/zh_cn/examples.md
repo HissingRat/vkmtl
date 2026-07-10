@@ -194,11 +194,12 @@ execution 仍由 `DeviceFeatures.multi_surface` gate。
 
 Native interop 示例是显式高级样例，不应该变成普通示例的依赖。
 
-`examples/external_texture` 会验证显式 external texture descriptor 和 runtime `ExternalTexture`
-wrapper。Period 25 也暴露了 `ExternalMemory`、`ExternalBuffer`、`ExternalSemaphore`、
-`ExternalEvent` 和 `ExternalSynchronizationDescriptor`，用于高级 interop validation。示例可以用
-`Device.externalInteropCapabilityMatrix(...)` 说明所选 backend/platform 上哪些 handle kind 属于
-portable wrapper、capability-gated native import、native-only object 或 unsupported。
+`examples/external_texture` 会验证显式 external texture descriptor、
+`ExternalTextureUsageDescriptor` 和 runtime `ExternalTexture` wrapper。Period 41 也暴露了
+`ExternalInteropImportPlan`、`ExternalTextureUsagePlan`、`ExternalSynchronizationPlan` 和
+`ExternalInteropImportDiagnostic`，用于高级 interop validation。示例可以用
+`Device.externalInteropCapabilityMatrix(...)` 说明所选 backend/platform 上哪些 handle kind
+属于 portable wrapper、capability-gated native import、native-only object 或 unsupported。
 
 运行：
 

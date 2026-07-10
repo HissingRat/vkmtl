@@ -6206,6 +6206,29 @@ pub const ExternalInteropDeviceScope = enum {
     platform_defined,
 };
 
+pub const ExternalInteropImportFailure = enum {
+    none,
+    invalid_handle,
+    backend_mismatch,
+    unsupported_resource_or_platform,
+    missing_feature_gate,
+};
+
+pub const ExternalInteropImportDiagnostic = struct {
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    resource: ExternalInteropResourceKind,
+    handle_kind: ExternalHandleKind,
+    lane: ExternalInteropLane = .unsupported,
+    feature_gate: ?ExternalInteropFeatureGate = null,
+    supported: bool = false,
+    failure: ExternalInteropImportFailure = .unsupported_resource_or_platform,
+
+    pub fn ok(self: ExternalInteropImportDiagnostic) bool {
+        return self.supported and self.failure == .none;
+    }
+};
+
 pub const ExternalInteropImportPlan = struct {
     backend: Backend,
     platform: ExternalInteropPlatform,
@@ -6406,6 +6429,44 @@ fn externalInteropDeviceScope(handle_kind: ExternalHandleKind) ExternalInteropDe
         .metal_texture,
         => .same_device,
     };
+}
+
+pub fn diagnoseExternalInteropImport(
+    backend: Backend,
+    platform: ExternalInteropPlatform,
+    usable_features: DeviceFeatures,
+    native_features: DeviceFeatures,
+    resource: ExternalInteropResourceKind,
+    handle: ExternalHandleDescriptor,
+) ExternalInteropImportDiagnostic {
+    var diagnostic = ExternalInteropImportDiagnostic{
+        .backend = backend,
+        .platform = platform,
+        .resource = resource,
+        .handle_kind = handle.kind,
+    };
+
+    handle.validateForBackend(backend) catch |err| {
+        diagnostic.failure = switch (err) {
+            AdvancedFeatureError.InvalidExternalHandle => .invalid_handle,
+            AdvancedFeatureError.ExternalHandleBackendMismatch => .backend_mismatch,
+            else => .unsupported_resource_or_platform,
+        };
+        return diagnostic;
+    };
+
+    const matrix = externalInteropCapabilityMatrix(
+        backend,
+        platform,
+        usable_features,
+        native_features,
+    );
+    const entry = matrix.find(resource, handle.kind) orelse return diagnostic;
+    diagnostic.lane = entry.lane;
+    diagnostic.feature_gate = entry.feature_gate;
+    diagnostic.supported = matrix.entryEnabled(entry);
+    diagnostic.failure = if (diagnostic.supported) .none else .missing_feature_gate;
+    return diagnostic;
 }
 
 fn externalInteropImportPlan(
@@ -12235,6 +12296,57 @@ test "external texture usage planning validates sample copy and presentation int
         },
         .present = true,
     }).validate(.vulkan, .linux, no_features, external_features));
+}
+
+test "external interop import diagnostics classify failures without importing" {
+    const no_features = DeviceFeatures{};
+    const external_features = DeviceFeatures{
+        .external_textures = true,
+    };
+
+    const ok = diagnoseExternalInteropImport(
+        .vulkan,
+        .linux,
+        no_features,
+        external_features,
+        .texture,
+        .{ .kind = .vulkan_image, .value = 40 },
+    );
+    try std.testing.expect(ok.ok());
+    try std.testing.expectEqual(ExternalInteropLane.native_only, ok.lane);
+    try std.testing.expectEqual(ExternalInteropImportFailure.none, ok.failure);
+
+    const missing_gate = diagnoseExternalInteropImport(
+        .vulkan,
+        .linux,
+        no_features,
+        no_features,
+        .texture,
+        .{ .kind = .vulkan_image, .value = 41 },
+    );
+    try std.testing.expect(!missing_gate.ok());
+    try std.testing.expectEqual(ExternalInteropImportFailure.missing_feature_gate, missing_gate.failure);
+    try std.testing.expectEqual(ExternalInteropFeatureGate.external_textures, missing_gate.feature_gate.?);
+
+    const mismatch = diagnoseExternalInteropImport(
+        .vulkan,
+        .linux,
+        no_features,
+        external_features,
+        .texture,
+        .{ .kind = .metal_texture, .value = 42 },
+    );
+    try std.testing.expectEqual(ExternalInteropImportFailure.backend_mismatch, mismatch.failure);
+
+    const invalid = diagnoseExternalInteropImport(
+        .vulkan,
+        .linux,
+        no_features,
+        external_features,
+        .texture,
+        .{ .kind = .vulkan_image, .value = 0 },
+    );
+    try std.testing.expectEqual(ExternalInteropImportFailure.invalid_handle, invalid.failure);
 }
 
 test "native command insertion descriptors are explicit and gated" {

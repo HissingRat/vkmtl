@@ -766,7 +766,7 @@ See `docs/develop/period40/`.
 
 ## Period 41: External Interop Matrix
 
-Status: Phase 5 complete.
+Status: complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.

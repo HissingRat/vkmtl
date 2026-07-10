@@ -143,17 +143,23 @@ External interop shape 由 `ExternalHandleDescriptor`、`ExternalMemoryDescripto
 表示。它们会校验 handle kind、selected backend compatibility、resource shape、ownership
 和 feature gate。Runtime wrapper 包括 `ExternalMemory`、`ExternalBuffer` 和
 `ExternalTexture`，分别由 `Device.makeExternalMemory(...)`、
-`Device.makeExternalBuffer(...)` 和 `Device.makeExternalTexture(...)` 创建。External sync
+`Device.makeExternalBuffer(...)` 和 `Device.makeExternalTexture(...)` 创建。
+`ExternalInteropImportPlan` 会记录每个 wrapper 的 backend/platform lane、
+process/device scope、feature gate 和 ownership。
+`ExternalTextureUsageDescriptor` 和 `Device.planExternalTextureUsage(...)`
+会在使用 texture wrapper 前校验 sampling、copy 和 presentation intent。External sync
 wrapper 包括 `ExternalSemaphore` 和 `ExternalEvent`，分别由
 `Device.makeExternalSemaphore(...)` 和 `Device.makeExternalEvent(...)` 创建。
-`ExternalSynchronizationDescriptor` 可以传给
+`ExternalSynchronizationDescriptor` 可以先通过
+`ExternalSynchronizationDescriptor.plan(...)` 生成 order plan，也可以传给
 `CommandBuffer.commitWithExternalSynchronization(...)`，在 native wait/signal lowering
-完成前先做 portable backend/lifetime validation。Native handle import/export 仍是显式
-future backend work。
+完成前先做 portable backend/lifetime/order validation。Native handle import/export
+仍是显式 future backend work。
 `ExternalInteropCapabilityMatrix`、`ExternalInteropCapabilityEntry` 和
 `Device.externalInteropCapabilityMatrix(...)` 会按 backend/platform 列出可用 handle kind，
 并把路径分成 `portable`、`capability_gated`、`native_only` 或 `unsupported`。这用于在
-native import 代码运行前生成清晰诊断。
+native import 代码运行前生成清晰诊断。`Device.diagnoseExternalInteropImport(...)`
+会在 import 无法规划时返回可用于 issue report 的 `ExternalInteropImportDiagnostic`。
 
 Period 2 开始，runtime resource 会记录 portable usage state。当前 `ResourceUsageState`
 能识别 read-after-write、write-after-read 和 write-after-write hazard；blit copy、

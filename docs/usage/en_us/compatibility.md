@@ -69,9 +69,13 @@ intent only.
 
 External memory, buffer, texture, semaphore, and shared-event interop use
 explicit platform/backend handle descriptors. Runtime wrappers validate
-ownership and backend compatibility, while native import and wait/signal
-lowering remain advanced feature-gated work. `ExternalInteropCapabilityMatrix`
-classifies handle support by backend/platform before import is attempted.
+ownership and backend compatibility. Import plans classify each handle lane,
+texture usage plans validate sampling/copy/presentation intent, and external
+synchronization plans validate wait/signal ordering before submission. Native
+OS/Vulkan/Metal handle import and wait/signal lowering remain backend hook
+work. `ExternalInteropCapabilityMatrix` and
+`Device.diagnoseExternalInteropImport(...)` classify handle support by
+backend/platform before import is attempted.
 
 Tessellation is represented by `TessellationDescriptor` and remains an optional
 render pipeline extension, not a default portable render path.

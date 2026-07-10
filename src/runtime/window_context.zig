@@ -5133,6 +5133,22 @@ pub const Device = struct {
         );
     }
 
+    pub fn diagnoseExternalInteropImportForPlatform(
+        self: Device,
+        platform: core.ExternalInteropPlatform,
+        resource: core.ExternalInteropResourceKind,
+        handle: core.ExternalHandleDescriptor,
+    ) core.ExternalInteropImportDiagnostic {
+        return core.diagnoseExternalInteropImport(
+            self.backend,
+            platform,
+            self.features(),
+            self.nativeFeatures(),
+            resource,
+            handle,
+        );
+    }
+
     pub fn planExternalMemoryImport(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try self.planExternalMemoryImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
@@ -5155,6 +5171,18 @@ pub const Device = struct {
 
     pub fn planExternalEventImport(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try self.planExternalEventImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
+    }
+
+    pub fn diagnoseExternalInteropImport(
+        self: Device,
+        resource: core.ExternalInteropResourceKind,
+        handle: core.ExternalHandleDescriptor,
+    ) core.ExternalInteropImportDiagnostic {
+        return self.diagnoseExternalInteropImportForPlatform(
+            core.ExternalInteropPlatform.native(),
+            resource,
+            handle,
+        );
     }
 
     pub fn externalInteropCapabilityMatrix(self: Device) core.ExternalInteropCapabilityMatrix {
@@ -9026,6 +9054,13 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expect(interop_matrix.supportsPortableWrapper(.texture));
     try std.testing.expect(interop_matrix.supports(.texture, .iosurface));
     try std.testing.expect(interop_matrix.supports(.event, .metal_shared_event));
+    const iosurface_diagnostic = device.diagnoseExternalInteropImportForPlatform(
+        .macos,
+        .texture,
+        .{ .kind = .iosurface, .value = 6 },
+    );
+    try std.testing.expect(iosurface_diagnostic.ok());
+    try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, iosurface_diagnostic.lane);
 
     var memory = try device.makeExternalMemory(.{
         .label = "external memory",

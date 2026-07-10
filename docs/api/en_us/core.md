@@ -177,17 +177,25 @@ handle kind, selected backend compatibility, resource shape, ownership, and
 feature gates. Runtime wrappers include `ExternalMemory`, `ExternalBuffer`,
 and `ExternalTexture`, created with `Device.makeExternalMemory(...)`,
 `Device.makeExternalBuffer(...)`, and `Device.makeExternalTexture(...)`.
+`ExternalInteropImportPlan` records the backend/platform lane, process/device
+scope, feature gate, and ownership for each wrapper.
+`ExternalTextureUsageDescriptor` and `Device.planExternalTextureUsage(...)`
+validate sampling, copy, and presentation intent before a texture wrapper is
+used.
 External synchronization wrappers include `ExternalSemaphore` and
 `ExternalEvent`, created with `Device.makeExternalSemaphore(...)` and
 `Device.makeExternalEvent(...)`. `ExternalSynchronizationDescriptor` can be
-passed to `CommandBuffer.commitWithExternalSynchronization(...)` for portable
-backend/lifetime validation before native wait/signal lowering exists.
+planned with `ExternalSynchronizationDescriptor.plan(...)` or passed to
+`CommandBuffer.commitWithExternalSynchronization(...)` for portable
+backend/lifetime/order validation before native wait/signal lowering exists.
 Native handle import/export remains explicit future backend work.
 `ExternalInteropCapabilityMatrix`, `ExternalInteropCapabilityEntry`, and
 `Device.externalInteropCapabilityMatrix(...)` list handle kinds by
 backend/platform and classify each path as `portable`, `capability_gated`,
 `native_only`, or `unsupported`. This gives diagnostics a stable source before
-native import code runs.
+native import code runs. `Device.diagnoseExternalInteropImport(...)` returns an
+`ExternalInteropImportDiagnostic` for issue reports when an import cannot be
+planned.
 
 Starting in Period 2, runtime resources record portable usage state.
 `ResourceUsageState` can classify read-after-write, write-after-read, and

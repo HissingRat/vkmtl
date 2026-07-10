@@ -2366,9 +2366,9 @@ obvious render and binding blockers.
 
 ## Period 41 Phase 6 Checklist
 
-- [ ] Document imported object ownership.
-- [ ] Document cross-process and cross-API caveats.
-- [ ] Add issue-report diagnostics for failed imports.
+- [x] Document imported object ownership.
+- [x] Document cross-process and cross-API caveats.
+- [x] Add issue-report diagnostics for failed imports.
 
 ## Period 42 Phase 1 Checklist
 

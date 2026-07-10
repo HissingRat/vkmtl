@@ -300,11 +300,12 @@ Native interop examples are explicit advanced samples, not ordinary example
 dependencies.
 
 `examples/external_texture` exercises explicit external texture descriptor
-validation and the runtime `ExternalTexture` wrapper. Period 25 also exposes
-`ExternalMemory`, `ExternalBuffer`, `ExternalSemaphore`, `ExternalEvent`, and
-`ExternalSynchronizationDescriptor` for advanced interop validation. The
-example can use `Device.externalInteropCapabilityMatrix(...)` to explain which
-handle kinds are portable wrappers, capability-gated native imports, native-only
+validation, `ExternalTextureUsageDescriptor`, and the runtime `ExternalTexture`
+wrapper. Period 41 also exposes `ExternalInteropImportPlan`,
+`ExternalTextureUsagePlan`, `ExternalSynchronizationPlan`, and
+`ExternalInteropImportDiagnostic` for advanced interop validation. The example
+uses `Device.externalInteropCapabilityMatrix(...)` to explain which handle
+kinds are portable wrappers, capability-gated native imports, native-only
 objects, or unsupported on the selected backend/platform.
 
 Run it with:

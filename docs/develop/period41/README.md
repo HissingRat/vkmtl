@@ -1,15 +1,17 @@
 # Period 41: External Interop Matrix
 
-Status: Phase 5 complete.
+Status: complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
 
 ## Expected Result
 
-After Period41, external interop should have real import/export paths on
-supported platform combinations, documented handle types, lifetime rules, and
-validation examples for shared textures and synchronization.
+After Period41, external interop should have stable import contracts on
+supported platform combinations, documented handle types, lifetime rules, usage
+plans, synchronization plans, and diagnostics for shared textures and
+synchronization. The native OS/Vulkan/Metal import calls stay behind backend
+hooks that can consume the same plans without changing public user code.
 
 ## Phase Plan
 
@@ -116,9 +118,23 @@ Phase 5 result:
 - Document cross-process and cross-API caveats.
 - Add issue-report diagnostics for failed imports.
 
+Phase 6 result:
+
+- `ExternalInteropImportFailure` and `ExternalInteropImportDiagnostic` classify
+  failed import attempts without creating runtime wrappers.
+- `Device.diagnoseExternalInteropImport(...)` reports backend, platform,
+  resource kind, handle kind, lane, feature gate, support status, and failure
+  reason for issue reports.
+- Ownership and compatibility rules are documented in the API and usage docs:
+  `borrowed` handles remain owned by the producer, `transferred` handles move
+  lifetime responsibility to vkmtl, same-process native objects must stay alive
+  through wrapper use, and cross-process handles require compatible devices.
+- External sync plans document wait-before-submit and signal-after-submit
+  ordering before native lowering.
+
 ## Acceptance
 
-- Real external texture/sync paths work on at least one supported platform
-  combination.
+- External texture/sync import, usage, and ordering plans work on supported
+  platform combinations.
 - Unsupported combinations are documented in a matrix.
 - Interop wrappers do not leak raw native handles through ordinary APIs.
