@@ -40,5 +40,6 @@ Phase 6 turns parity into a maintained product artifact.
 - Native SBT and ray dispatch commands: Period 29 Phase 3.
 - Native Metal ray tracing execution mapping: Period 29 Phase 4.
 - Native advanced escape-hatch execution: Period 29 Phase 5.
-- Remaining parity semantics and GPU-backed soak loops: Period 29 Phase 6.
+- Remaining parity semantics were completed in Period 29 Phase 6; GPU-backed
+  soak loops are owned by Period 44.
 - Native advanced examples: Period 29 Phase 7.

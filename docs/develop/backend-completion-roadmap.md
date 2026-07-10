@@ -459,13 +459,16 @@ attachments, mips, layers, and slices across Vulkan and Metal.
 
 Tracked in `docs/develop/period43/`.
 
-- [ ] Debug labels and command markers.
-- [ ] Vulkan debug utils integration.
-- [ ] Metal debug groups and capture integration.
-- [ ] Timestamp/query/profiling support.
+- [x] Debug label lifetime/naming and command-marker scope contract.
+- [x] Vulkan debug utils integration with validation-only command-buffer scope.
+- [x] Metal debug groups and opt-in developer-tools capture integration.
+- [x] Logical timestamp source reporting, typed GPU-time gate, and CPU/marker
+  profiling fallback.
+- [x] Issue-report snapshot and expanded capability dump.
 
 Expected result: vkmtl objects and command streams are inspectable in native
-debuggers and profiling tools.
+debuggers; profiling reports distinguish logical ordering, CPU fallback, and
+future native GPU timing without overstating support.
 
 ## Wave 25: CI, Device Matrix, And Soak Validation
 

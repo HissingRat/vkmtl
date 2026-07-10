@@ -11,6 +11,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, synchronization commit descriptors, logical queue planning, ownership transfer validation, and query readback/resolve validation.
+- `debug_marker_regression`: `zig build test && zig build run-profiling-plan`; includes borrowed label lifetime, UTF-8 and embedded-NUL validation, native/validation-only marker capabilities, capture gates, query-source semantics, profiling fallback, and issue-report snapshots.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
@@ -114,6 +115,22 @@ conservative until the relevant backend period lands.
 | Color MSAA resolve | Native render-pass resolve | Native render-pass resolve | Source must be multisampled; destination must be matching single-sample texture |
 | Depth/stencil resolve | Typed unsupported | Typed unsupported | Capability flags remain false until validated lowering exists |
 | View format reinterpretation | Typed unsupported | Typed unsupported | Views currently keep the texture's exact format |
+
+## Period 43 Debug Label And Marker Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Object label memory | Borrowed portable slice; native call copies synchronously | Borrowed portable slice; Objective-C label copies synchronously | Caller keeps bytes alive until replacement, clear, or object destruction |
+| Object label encoding | Invalid UTF-8 or embedded NUL is not forwarded | Invalid UTF-8 or embedded NUL is not forwarded | Object setters stay infallible for compatibility |
+| Marker label memory | Borrowed for the push/signpost call | Borrowed for the push/signpost call | Portable stack stores depth only |
+| Command-buffer group scope | Portable validation; native command-buffer marker remains deferred | Native command-buffer debug group | May surround complete encoders; push/pop only in ready state |
+| Encoder group scope | Native debug-utils label | Native encoder debug group | Local to one encoder and closed before `endEncoding()` |
+| Capture naming | Exact caller-buffer formatting | Exact caller-buffer formatting | `scope:name`, optional backend and frame fields |
+| Marker capability report | Object/encoder native when debug utils is enabled; command-buffer validation-only | Object/command-buffer/encoder native | `DebugMarkerCapabilities` reports each lane independently |
+| Native capture | Typed `UnsupportedCapture` | Opt-in developer-tools capture scope | `CaptureScope` borrows the backend owner and ends explicitly |
+| Timestamp source | Logical command-order sequence | Logical command-order sequence | Not GPU time; `require_gpu_timestamps` returns typed unsupported |
+| Profiling fallback | CPU wall clock or markers only | CPU wall clock or markers only | `run-profiling-plan` prints the selected truthful plan |
+| Issue snapshot | Backend, adapter, features, limits, operations, errors, runtime counters | Same portable bundle | `issueReport(...)` plus expanded capability dump |
 
 ## Period 25 Platform And Interop Expectations
 

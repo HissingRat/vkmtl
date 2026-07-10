@@ -220,6 +220,9 @@ fn supportsPresentationFormat(self: GraphicsContext, format: vk.Format) bool {
 pub fn setDebugName(self: GraphicsContext, object_type: vk.ObjectType, object_handle: u64, label_value: ?[]const u8) void {
     if (!self.debug_utils_enabled) return;
     if (self.dev.wrapper.dispatch.vkSetDebugUtilsObjectNameEXT == null) return;
+    if (label_value) |label| {
+        if (!validNativeDebugLabel(label)) return;
+    }
 
     const label_z = if (label_value) |label|
         self.allocator.dupeZ(u8, label) catch return
@@ -237,6 +240,7 @@ pub fn setDebugName(self: GraphicsContext, object_type: vk.ObjectType, object_ha
 pub fn beginDebugLabel(self: GraphicsContext, cmdbuf: vk.CommandBuffer, label_value: []const u8) void {
     if (!self.debug_utils_enabled) return;
     if (self.dev.wrapper.dispatch.vkCmdBeginDebugUtilsLabelEXT == null) return;
+    if (!validNativeDebugLabel(label_value)) return;
 
     const label_z = self.allocator.dupeZ(u8, label_value) catch return;
     defer self.allocator.free(label_z);
@@ -254,6 +258,7 @@ pub fn endDebugLabel(self: GraphicsContext, cmdbuf: vk.CommandBuffer) void {
 pub fn insertDebugLabel(self: GraphicsContext, cmdbuf: vk.CommandBuffer, label_value: []const u8) void {
     if (!self.debug_utils_enabled) return;
     if (self.dev.wrapper.dispatch.vkCmdInsertDebugUtilsLabelEXT == null) return;
+    if (!validNativeDebugLabel(label_value)) return;
 
     const label_z = self.allocator.dupeZ(u8, label_value) catch return;
     defer self.allocator.free(label_z);
@@ -270,6 +275,10 @@ fn debugLabelInfo(label: [*:0]const u8) vk.DebugUtilsLabelEXT {
         .p_label_name = label,
         .color = .{ 0.2, 0.6, 1.0, 1.0 },
     };
+}
+
+fn validNativeDebugLabel(label: []const u8) bool {
+    return std.mem.indexOfScalar(u8, label, 0) == null and std.unicode.utf8ValidateSlice(label);
 }
 
 pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
@@ -1095,6 +1104,13 @@ test "Vulkan format feature mapping keeps copy and attachment caps separate" {
     try std.testing.expect(!blit_only.copy_destination);
     try std.testing.expect(blit_only.blit_source);
     try std.testing.expect(blit_only.blit_destination);
+}
+
+test "Vulkan native debug labels reject invalid encoding and embedded NUL" {
+    const invalid_utf8 = [_]u8{0xff};
+    try std.testing.expect(validNativeDebugLabel("frame:main-pass"));
+    try std.testing.expect(!validNativeDebugLabel(invalid_utf8[0..]));
+    try std.testing.expect(!validNativeDebugLabel("frame\x00hidden"));
 }
 
 fn debugCallback(

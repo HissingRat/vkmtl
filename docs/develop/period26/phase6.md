@@ -33,5 +33,6 @@ Phase 6 closes Period 26 with release-oriented checks.
 - Automatic runtime cache manifest read/write: Period 29 Phase 5.
 - Persistent native staging-buffer pools and reusable upload rings: Period 28
   Phase 5.
-- Native capture/profiler enrichment and GPU-backed soak loops: Period 28 Phase
-  6.
+- Native capture/profiler enrichment: completed in Period 43 for scoped Metal
+  capture and truthful CPU/marker fallback; native GPU timestamps remain gated.
+- GPU-backed soak loops: Period 44 device-matrix and soak validation.

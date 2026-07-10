@@ -1,7 +1,7 @@
 # Public API Inventory
 
-Status: initial inventory established and refreshed after Period 42 on
-2026-07-10.
+Status: initial inventory established and refreshed through Period 43 Phase 5
+on 2026-07-10.
 
 This document records the current public surface and assigns every flat root
 export a canonical API domain. It is an inventory and migration input, not a
@@ -30,9 +30,10 @@ The current result is 492. It includes the seven initial domain namespace facade
 and the separate `ShaderReflection` module export. Tests declared in
 `src/vkmtl.zig` are not API entries.
 
-`src/runtime/window_context.zig` currently contains 514 `pub fn` declarations.
-Fourteen belong to module-private or non-root helper types; 500 are methods on
-runtime types reachable through the current root exports.
+`src/runtime/window_context.zig` currently contains 526 `pub fn` declarations.
+Six are module-level diagnostics operations exposed through the diagnostics
+facade, fourteen belong to module-private or non-public helper types, and 506
+are methods on runtime types reachable through root or domain exports.
 
 ## Snapshot Summary
 
@@ -45,6 +46,7 @@ runtime types reachable through the current root exports.
 | `Device` public methods | 108 | Split common owner operations from advanced domain planning |
 | `WindowContext` public methods | 56 | Keep 10 owner/lifecycle methods; review 46 compatibility forwards |
 | Command and render/compute/blit encoder methods | 87 | Keep operation methods on their natural encoder owners |
+| Diagnostics module operations | 6 | Canonical namespace-only queries, capture, profiling, and issue reports |
 
 The inventory does not set a hard root count by subtraction. A declaration may
 have a canonical domain namespace and retain a root alias only when it satisfies
@@ -405,6 +407,72 @@ The Period 42 namespace additions are:
 Compatibility impact: existing flat aliases and owner methods remain. Copy
 descriptors gained defaulted fields, capability records and limits gained
 defaulted fields, and new failures are typed validation/unsupported errors.
+
+## Period 43 Guardrail
+
+Debug label and marker behavior remains canonical under `command`, while
+capture-name and issue-report data belong under `diagnostics`.
+
+Phase 1 added no root export or runtime owner method. It added the
+`InvalidDebugLabelEncoding` tag to the existing `CommandEncodingError` type and
+adds canonical facade aliases for label/group/signpost descriptors under
+`command` and `CaptureNameDescriptor` under `diagnostics`. It also
+clarifies public behavior that already counted as API:
+
+- object labels are borrowed until replacement, clear, or object destruction
+- marker labels are borrowed only for the call
+- valid labels are UTF-8 without embedded NUL bytes
+- command-buffer marker mutation is ready-state-only; groups may surround
+  complete encoders but encoder-local groups cannot escape their encoder
+- capture-name length is exact for the selected backend and frame value
+
+Compatibility impact: valid existing labels and marker sequences keep their
+behavior. Invalid encoding and command-buffer marker mutation during an active
+encoder now fail deterministically before native calls.
+
+Phases 2 through 5 keep all new declarations under `diagnostics`; the flat root
+count remains 492. Canonical additions are:
+
+```text
+NativeDiagnosticSupport
+DebugMarkerCapabilities
+CaptureCapabilities
+CaptureDestination
+CaptureScopeDescriptor
+CaptureError
+CaptureScope
+TimestampQuerySource
+ProfilingMode
+ProfilingCapabilities
+ProfilingPlanDescriptor
+ProfilingPlan
+IssueReportDescriptor
+IssueReportSnapshot
+debugMarkerCapabilities
+captureCapabilities
+beginCaptureScope
+profilingCapabilities
+planProfiling
+issueReport
+```
+
+The diagnostics facade is the owner because all of these declarations are
+specialized capability, capture, profiling, or report data. They do not satisfy
+flat root admission. Capture scope lifetime is borrowed from `Device`/
+`WindowContext`, capture failures are typed, and unsupported Vulkan capture is
+reported before backend work.
+
+`QuerySet.resultSource()` is the only added method on an existing root runtime
+object. It closes an existing semantic ambiguity: current timestamp results are
+`logical_sequence`, not GPU time. `CaptureScope` contributes five methods on a
+namespace-only public type, and six module-level operations are re-exported by
+the diagnostics facade. No `Device` planning/validation method and no
+`WindowContext` compatibility forward was added.
+
+Compatibility impact: existing query values keep their deterministic numeric
+behavior, but their non-GPU meaning is now explicit. Metal gains opt-in native
+capture; Vulkan receives a typed unsupported result. Capability dump output is
+expanded additively.
 
 ## Update Checklist
 

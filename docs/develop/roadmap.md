@@ -805,8 +805,8 @@ See `docs/develop/period42/`.
 
 ## Period 43: Profiling, Capture, And Debug Markers
 
-Status: active. Phase 1 label lifetime and naming rules are the current
-implementation priority.
+Status: complete. Debug capability truth, Metal capture, profiling fallback,
+and issue-report diagnostics are implemented.
 
 Goal: make vkmtl debuggable in native tools by providing stable labels,
 markers, capture scopes, timestamps, and issue-report diagnostics.
@@ -821,7 +821,8 @@ See `docs/develop/period43/`.
 
 ## Period 44: CI, Device Matrix, And Soak Validation
 
-Status: planned after Period43.
+Status: active. Phase 1 CI job matrix and feature reporting is the current
+implementation priority.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a
@@ -848,7 +849,8 @@ See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
-- Period 42 is complete; Period 43 Phase 1 is the active implementation phase.
+- Periods 42 and 43 are complete; Period 44 Phase 1 is the active implementation
+  phase.
 - Period 32 Phases 6-7 remain a carry-over validation gate: the Vulkan RT path
   still needs a supported-hardware run and its visible/unsupported behavior
   documented. This does not block portable contract work in later periods.

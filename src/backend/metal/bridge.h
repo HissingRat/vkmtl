@@ -275,6 +275,12 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
     const vkmtl_metal_clear_screen *clear_screen,
     vkmtl_metal_device_capabilities *out_capabilities
 );
+vkmtl_metal_status vkmtl_metal_clear_screen_begin_capture(
+    vkmtl_metal_clear_screen *clear_screen
+);
+vkmtl_metal_status vkmtl_metal_clear_screen_end_capture(
+    vkmtl_metal_clear_screen *clear_screen
+);
 
 vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_clear_screen *owner,

@@ -34,5 +34,4 @@ Phase 5 stress-tests completed backend paths.
 - Persistent native staging-buffer pools and reusable upload rings remain
   deferred to Period 29 Phase 5.
 - GPU-backed resize/resource/upload soak loops that open windows remain
-  deferred to Period 29 Phase 6, after the native backend parity matrix is
-  tighter.
+  deferred to Period 44 device-matrix and soak validation.

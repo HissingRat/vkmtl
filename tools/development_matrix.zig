@@ -476,6 +476,14 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .expectation = "explicit barriers, fences/events, synchronization descriptors, logical queue plans, ownership transfers, and query validation regressions pass",
     },
     .{
+        .name = "debug_marker_regression",
+        .host = .headless,
+        .backend = null,
+        .required = true,
+        .command = "zig build test && zig build run-profiling-plan",
+        .expectation = "borrowed labels, native/validation-only marker capabilities, capture gates, profiling fallback, and issue-report regressions pass",
+    },
+    .{
         .name = "resource_utility_regression",
         .host = .headless,
         .backend = null,
@@ -658,12 +666,12 @@ pub const sync_query_matrix = [_]SyncQueryMatrixEntry{
     },
     .{
         .feature = .timestamp_queries,
-        .public_api = "QuerySet timestamp writes and readback/resolve",
+        .public_api = "QuerySet timestamp writes, resultSource, and readback/resolve",
         .portable_default = true,
         .escape_hatch = false,
         .vulkan_status = .portable_runtime,
         .metal_status = .portable_runtime,
-        .validation = "timestamp query writes become deterministic values for readback and resolve validation",
+        .validation = "timestamp query writes produce deterministic logical-sequence values and never claim native GPU duration",
     },
     .{
         .feature = .occlusion_queries,
@@ -1395,6 +1403,7 @@ pub const ValidationCaseKind = enum {
     runtime_sync_objects,
     logical_queue_ownership,
     query_readback,
+    debug_marker_contract,
     resource_utilities,
     platform_interop,
     production_hardening,
@@ -1471,6 +1480,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .query_readback,
         .test_location = "src/runtime/window_context.zig runtime query sets support encoder writes and readback",
         .expectation = "timestamp and occlusion query sets validate availability, type, range, and feature gates",
+    },
+    .{
+        .name = "debug_marker_contract",
+        .kind = .debug_marker_contract,
+        .test_location = "src/core.zig, src/runtime/window_context.zig, backend debug bridges, tools/profiling_plan/main.zig, and examples/capability_dump/main.zig Period 43 tests",
+        .expectation = "invalid markers fail before native calls; capabilities, capture gates, query sources, profiling fallback, and issue snapshots remain truthful",
     },
     .{
         .name = "resource_utilities",

@@ -560,6 +560,8 @@ compute 和 render encoder 写入，occlusion query 可以从 render encoder beg
 query data 可以直接 readback，也可以 resolve 到 buffer。vkmtl 会校验 query range、
 result alignment、resource ownership 和 availability。pipeline statistics query 仍然
 通过 feature gate 保守关闭，等 native backend lowering 补齐后再开放。
+当前 timestamp value 是确定性的 logical sequence number。把结果当作 GPU tick/duration 前，
+必须调用 `QuerySet.resultSource()` 并确认 source 是 `native_gpu`。
 
 Transfer 使用 Metal 风格的 blit encoder：
 
@@ -711,10 +713,13 @@ try render_encoder.insertDebugSignpost("draw batch");
 try render_encoder.popDebugGroup();
 ```
 
-资源或 pipeline 创建时，descriptor 里的 label 会写入 runtime wrapper，并在后端支持时同步到
-native object label。`label()` 返回当前借用 label，`setLabel(null)` 会清空 label。
+资源或 pipeline 创建时，descriptor 与 `setLabel(...)` 的 label 会以 borrowed slice 保存在
+runtime wrapper，并在后端支持时同步到 native object label。调用方必须让 backing bytes 保持存活且
+不变，直到 object 销毁、label 被替换，或 `setLabel(null)` 清空 label。Portable wrapper 不分配也
+不复制 label bytes。Label 必须是没有 embedded NUL 的有效 UTF-8；object setter 为兼容性继续保持
+infallible，但不会把无效 encoding 转发给 native tool。
 
-Capture-friendly name 可以用 `CaptureNameDescriptor` 或 runtime helper
+Capture-friendly name 可以用 `vkmtl.diagnostics.CaptureNameDescriptor` 或 runtime helper
 `device.writeCaptureName(...)` / `context.writeCaptureName(...)` 生成。如果 descriptor 没有写
 `backend`，runtime helper 会自动填入当前选择的 backend：
 
@@ -727,13 +732,37 @@ const capture_name = try device.writeCaptureName(.{
 }, name_buffer[0..]);
 ```
 
-Debug group 和 signpost 会做可移植验证：空 label、stack underflow、stack overflow、未闭合
-group 都会变成 `CommandEncodingError`。`DebugSignpostDescriptor` 是 shape-only marker
+Debug group 和 signpost 只在调用期间 borrow label，并做可移植验证：空 label、无效 UTF-8、
+embedded NUL、stack underflow、stack overflow、错误 scope state、未闭合 group 都会变成
+`CommandEncodingError`。`vkmtl.command.DebugSignpostDescriptor` 是 shape-only marker
 descriptor；command buffer 以及 render/blit/compute encoder 都暴露
-`insertDebugSignpost(...)`。Metal command buffer/encoder marker 会下沉到 Metal debug API；
+`insertDebugSignpost(...)`。Command-buffer group 可以包围完整 encoder，但 command-buffer 的
+push/pop/signpost 只能在没有 active encoder 时调用。Encoder group 只属于当前 encoder，必须在
+`endEncoding()` 前关闭；command-buffer group 必须在 `commit()` 前关闭。Metal command
+buffer/encoder marker 会下沉到 Metal debug API；
 Vulkan render/blit/compute encoder marker 会在 command buffer recording 期间下沉到
 `EXT_debug_utils`。Vulkan command-buffer-level marker 仍只保留 portable validation，因为该 API
 允许在 encoder 创建之前调用，而 Vulkan native marker 要求 command buffer 已经开始 recording。
+
+`vkmtl.diagnostics.debugMarkerCapabilities(device)` 会把每条能力报告为 `native`、
+`validation_only` 或 `unavailable`，工具不需要再按 backend 猜测 native 可见性。
+
+## Capture、Profiling 与 Issue Report
+
+Metal capture 通过 `vkmtl.diagnostics.beginCaptureScope(&device, descriptor)` 使用。返回的
+`CaptureScope` 会 borrow label 和 backend owner，支持显式 `end()`，并且必须在销毁
+`WindowContext` 前结束。当前 destination 是 Apple developer tools。Vulkan 返回
+`UnsupportedCapture`；capture manager 启动失败返回 `CaptureFailed`。
+
+当前 timestamp `QuerySet` value 只保留 command order。`QuerySet.resultSource()` 会报告
+`logical_sequence`；这些值不是 GPU tick，不能计算 GPU duration。使用
+`vkmtl.diagnostics.planProfiling(device, descriptor)` 选择 CPU wall-clock fallback 或
+marker-only mode。真实 backend timing 接好之前，要求 native GPU timestamp 会返回
+`UnsupportedGpuTimestamps`。
+
+`vkmtl.diagnostics.issueReport(device, descriptor)` 会打包 backend/adapter、精确 error/category、
+usable/native features、limits、marker/capture/profiling capabilities 和 runtime diagnostics。
+Snapshot 会 borrow string。推荐 issue bundle 与命令见 `docs/usage/zh_cn/diagnostics.md`。
 
 ## Error 分类
 

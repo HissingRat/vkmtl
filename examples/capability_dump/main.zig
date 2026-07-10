@@ -31,11 +31,61 @@ pub fn main() !void {
     var device = context.device();
     dumpAdapter(device.adapterInfo());
     dumpReport(device.capabilityReport());
+    try dumpDiagnostics(device);
     dumpFormatCaps(&device, .rgba8_unorm);
     dumpFormatCaps(&device, .bgra8_unorm);
     dumpFormatCaps(&device, .bgra8_unorm_srgb);
     dumpFormatCaps(&device, .depth32_float);
     dumpFormatCaps(&device, .depth32_float_stencil8);
+}
+
+fn dumpDiagnostics(device: vkmtl.Device) !void {
+    const markers = vkmtl.diagnostics.debugMarkerCapabilities(device);
+    const capture = vkmtl.diagnostics.captureCapabilities(device);
+    const profiling = vkmtl.diagnostics.profilingCapabilities(device);
+    const plan = try vkmtl.diagnostics.planProfiling(device, .{});
+    const issue = try vkmtl.diagnostics.issueReport(device, .{
+        .operation = "blitTexture",
+        .object_kind = "texture",
+        .object_label = "capability-probe",
+        .failure = error.UnsupportedTextureBlit,
+    });
+
+    std.debug.print("debug markers:\n", .{});
+    std.debug.print("  object labels: {s}\n", .{@tagName(markers.object_labels)});
+    std.debug.print("  command-buffer groups: {s}\n", .{@tagName(markers.command_buffer_groups)});
+    std.debug.print("  command-buffer signposts: {s}\n", .{@tagName(markers.command_buffer_signposts)});
+    std.debug.print("  encoder groups: {s}\n", .{@tagName(markers.encoder_groups)});
+    std.debug.print("  encoder signposts: {s}\n", .{@tagName(markers.encoder_signposts)});
+    std.debug.print("capture:\n", .{});
+    std.debug.print("  native: {}\n", .{capture.native_capture});
+    std.debug.print("  scoped: {}\n", .{capture.scoped_capture});
+    std.debug.print("  developer tools destination: {}\n", .{capture.developer_tools_destination});
+    std.debug.print("profiling:\n", .{});
+    std.debug.print("  timestamp source: {s}\n", .{@tagName(profiling.timestamp_source)});
+    std.debug.print("  native GPU timestamps: {}\n", .{profiling.native_gpu_timestamps});
+    std.debug.print("  selected mode: {s}\n", .{@tagName(plan.mode)});
+    std.debug.print("  GPU duration available: {}\n", .{plan.gpu_duration_available});
+    std.debug.print("  reason: {s}\n", .{plan.reason});
+    dumpIssueReport(issue);
+}
+
+fn dumpIssueReport(report: vkmtl.diagnostics.IssueReportSnapshot) void {
+    std.debug.print("issue report probe:\n", .{});
+    std.debug.print("  backend: {s}\n", .{@tagName(report.backend)});
+    std.debug.print("  adapter: {s}\n", .{report.adapter_name});
+    std.debug.print("  capability source: {s}\n", .{@tagName(report.capability_source)});
+    std.debug.print("  operation: {s}\n", .{report.operation});
+    std.debug.print("  object: {s}\n", .{report.object_kind});
+    if (report.object_label) |label| std.debug.print("  object label: {s}\n", .{label});
+    if (report.failure_name) |failure| std.debug.print("  failure: {s}\n", .{failure});
+    if (report.failure_category) |category| std.debug.print("  category: {s}\n", .{@tagName(category)});
+    std.debug.print("  live resources: {}\n", .{report.runtime.live_resources});
+    std.debug.print("  pending retirements: {}\n", .{report.runtime.pending_retirements});
+    std.debug.print("  submitted/completed serial: {}/{}\n", .{
+        report.runtime.submitted_work_serial,
+        report.runtime.completed_work_serial,
+    });
 }
 
 fn dumpAdapter(adapter: vkmtl.AdapterInfo) void {

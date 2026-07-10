@@ -57,6 +57,16 @@ Vulkan and Metal backends still wait for work to complete before `commit()`
 returns, so these retirements are flushed at the end of the same commit. Later
 non-idle submission can attach native destroys to the same serial model.
 
+## Label Memory
+
+Object labels are borrowed rather than owned. Keep descriptor or
+`setLabel(...)` backing bytes alive and unchanged until the object is destroyed,
+the label is replaced, or `setLabel(null)` clears it. A descriptor may itself
+be temporary; only the referenced label bytes have the longer lifetime.
+
+Debug-group and signpost labels have call-only lifetime because vkmtl stores
+only marker stack depth after the native call returns.
+
 ## Command Objects
 
 Command buffers, render command encoders, blit command encoders, and compute

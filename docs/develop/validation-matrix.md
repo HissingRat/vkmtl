@@ -24,6 +24,11 @@ Current cases:
   recorded.
 - `query_readback`: timestamp and occlusion query sets validate availability,
   type, range, readback, and resolve paths before native work.
+- `debug_marker_contract`: borrowed object-label and call-only marker lifetime,
+  UTF-8/NUL validation, exact capture names, stack balance, and
+  command-buffer/encoder marker scope remain deterministic before native work;
+  backend marker capabilities, capture gates, logical timestamp sources,
+  profiling fallback, and issue-report snapshots stay truthful.
 - `resource_utilities`: mipmap generation, fill fallback selection, texture
   copy compatibility, backend alignment, mip/layer/3D-slice ranges,
   depth/stencil aspects, scaled blit gates, MSAA resolve/copy behavior,

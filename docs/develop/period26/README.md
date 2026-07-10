@@ -1,8 +1,8 @@
 # Period 26: Object Cache And Production Backend Hardening
 
 Status: completed production-hardening planning and diagnostics slice. Native
-cache object consumption, native object pooling, persistent staging pools, and
-GPU-backed soak loops are deferred to Period 29.
+cache object consumption, native object pooling, and persistent staging pools
+remain later backend work; GPU-backed soak loops are owned by Period 44.
 
 Goal: make completed backend paths efficient, cacheable, diagnosable, and stable
 under long-running applications.
@@ -43,7 +43,7 @@ See `phase4.md`.
 ## Phase 5: Long-Run Stability
 
 - Add deterministic stability plans and an opt-in planning command. GPU-backed
-  soak loops are deferred to Period 29 Phase 6.
+  soak loops are deferred to Period 44 device-matrix and soak validation.
 
 See `phase5.md`.
 

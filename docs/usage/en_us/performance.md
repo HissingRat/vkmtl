@@ -58,3 +58,16 @@ zig build run-stability-plan -- --iterations 120
 This command prints the planned resize, resource churn, shader artifact, upload,
 and Vulkan unaligned-fill fallback counters. Full GPU soak loops remain
 backend-hardening work.
+
+## Profiling Plans
+
+Inspect the current profiling semantics without opening a window:
+
+```sh
+zig build run-profiling-plan
+```
+
+Current timestamp query values are logical command-order sequence numbers, not
+GPU time. The default plan therefore selects application-supplied CPU wall-clock
+fallback. Use `--markers-only` to disable that fallback or `--require-gpu` to
+verify the typed `UnsupportedGpuTimestamps` gate.

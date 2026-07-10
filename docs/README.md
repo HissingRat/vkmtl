@@ -8,11 +8,13 @@ vkmtl documentation is organized by audience and purpose.
 - `usage/zh_cn/configuration.md`: 中文配置项
 - `usage/zh_cn/examples.md`: 中文示例目录
 - `usage/zh_cn/performance.md`: 中文性能指南
+- `usage/zh_cn/diagnostics.md`: 中文 diagnostics 与 issue-report 指南
 - `usage/zh_cn/compatibility.md`: 中文兼容性说明
 - `usage/en_us/quick-start.md`: English quick start
 - `usage/en_us/configuration.md`: English configuration
 - `usage/en_us/examples.md`: English examples
 - `usage/en_us/performance.md`: English performance guide
+- `usage/en_us/diagnostics.md`: English diagnostics and issue-report guide
 - `usage/en_us/compatibility.md`: English compatibility notes
 
 ## API

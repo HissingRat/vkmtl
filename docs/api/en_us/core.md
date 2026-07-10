@@ -676,6 +676,9 @@ begun and ended from render encoders, and query data can be read back directly
 or resolved into a buffer. Query ranges, result alignment, resource ownership,
 and availability are validated by vkmtl. Pipeline statistics queries remain
 feature-gated until the native backend lowering is filled in.
+Current timestamp values are deterministic logical sequence numbers. Call
+`QuerySet.resultSource()` and require `native_gpu` before treating results as
+GPU ticks or durations.
 
 Transfer work uses a Metal-style blit encoder:
 
@@ -852,12 +855,16 @@ try render_encoder.insertDebugSignpost("draw batch");
 try render_encoder.popDebugGroup();
 ```
 
-Descriptor labels are copied into runtime wrappers when resources or pipelines
-are created, and they are synchronized to native object labels when the backend
-supports it. `label()` returns the current borrowed label, and `setLabel(null)`
-clears it.
+Descriptor and `setLabel(...)` labels are borrowed by runtime wrappers and are
+synchronized to native object labels when the backend supports it. The caller
+must keep the backing bytes alive and unchanged until the object is destroyed,
+the label is replaced, or `setLabel(null)` clears it. The portable wrapper does
+not allocate or copy label bytes. Labels must be valid UTF-8 without embedded
+NUL bytes; object setters remain infallible for compatibility and do not
+forward invalid encoding to native tools.
 
-Capture-friendly names can be built with `CaptureNameDescriptor` or the runtime
+Capture-friendly names can be built with
+`vkmtl.diagnostics.CaptureNameDescriptor` or the runtime
 helpers `device.writeCaptureName(...)` / `context.writeCaptureName(...)`.
 If the descriptor omits `backend`, the runtime helper fills in the selected
 backend:
@@ -871,15 +878,46 @@ const capture_name = try device.writeCaptureName(.{
 }, name_buffer[0..]);
 ```
 
-Debug groups and signposts are validated portably. Empty labels, underflow,
-overflow, and unclosed groups become `CommandEncodingError` values.
-`DebugSignpostDescriptor` is the shape-only marker descriptor, and command
+Debug groups and signposts borrow their labels only for the call and validate
+them portably. Empty labels, invalid UTF-8 or embedded NUL, underflow, overflow,
+invalid scope state, and unclosed groups become `CommandEncodingError` values.
+`vkmtl.command.DebugSignpostDescriptor` is the shape-only marker descriptor, and command
 buffers plus render/blit/compute encoders expose `insertDebugSignpost(...)`.
+Command-buffer groups may surround complete encoders, but command-buffer group
+push/pop and signposts are only valid while no encoder is active. Encoder groups
+are local to one encoder and must close before `endEncoding()`; command-buffer
+groups must close before `commit()`.
 Metal command-buffer and encoder markers lower to Metal debug APIs. Vulkan
 render/blit/compute encoder markers lower to `EXT_debug_utils` while the command
 buffer is recording. Vulkan command-buffer-level markers remain portable
 validation only because vkmtl allows them before an encoder exists, while native
 Vulkan markers require a recording command buffer.
+
+`vkmtl.diagnostics.debugMarkerCapabilities(device)` reports each lane as
+`native`, `validation_only`, or `unavailable`, so tooling does not have to infer
+native visibility from the selected backend.
+
+## Capture, Profiling, And Issue Reports
+
+Metal capture is available through
+`vkmtl.diagnostics.beginCaptureScope(&device, descriptor)`. The returned
+`CaptureScope` borrows its label and backend owner, supports explicit `end()`,
+and must finish before `WindowContext` is destroyed. The current destination is
+Apple developer tools. Vulkan reports `UnsupportedCapture`; capture-manager
+startup failures report `CaptureFailed`.
+
+Timestamp `QuerySet` values currently preserve command order only.
+`QuerySet.resultSource()` reports `logical_sequence`; those values are not GPU
+ticks and cannot produce a GPU duration. Use
+`vkmtl.diagnostics.planProfiling(device, descriptor)` to select CPU wall-clock
+fallback or marker-only mode. Requiring native GPU timestamps returns
+`UnsupportedGpuTimestamps` until real backend timing is implemented.
+
+`vkmtl.diagnostics.issueReport(device, descriptor)` bundles backend and adapter
+identity, exact error/category, usable and native features, limits, marker/
+capture/profiling capabilities, and runtime diagnostics. The snapshot borrows
+its strings. See `docs/usage/en_us/diagnostics.md` for the recommended issue
+bundle and commands.
 
 ## Error Classification
 

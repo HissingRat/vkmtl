@@ -2542,6 +2542,7 @@ pub const QuerySet = struct {
     allocator: std.mem.Allocator,
     label_value: ?[]const u8 = null,
     descriptor_value: core.QuerySetDescriptor,
+    result_source_value: core.TimestampQuerySource = .unavailable,
     values: []u64,
     available: []bool,
     active_occlusion_query: ?u32 = null,
@@ -2572,6 +2573,11 @@ pub const QuerySet = struct {
     pub fn descriptor(self: QuerySet) core.QuerySetDescriptor {
         assertObjectAlive(self.alive, "query_set");
         return self.descriptor_value;
+    }
+
+    pub fn resultSource(self: QuerySet) core.TimestampQuerySource {
+        assertObjectAlive(self.alive, "query_set");
+        return self.result_source_value;
     }
 
     pub fn reset(self: *QuerySet) void {
@@ -3927,6 +3933,7 @@ pub const CommandBuffer = struct {
 
     pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) !void {
         assertObjectAlive(self.alive, "command_buffer");
+        if (self.debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
         try self.debug_groups.push(label_value);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
@@ -3936,6 +3943,7 @@ pub const CommandBuffer = struct {
 
     pub fn popDebugGroup(self: *CommandBuffer) !void {
         assertObjectAlive(self.alive, "command_buffer");
+        if (self.debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
         try self.debug_groups.pop();
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.popDebugGroup(),
@@ -5859,6 +5867,7 @@ pub const Device = struct {
             .allocator = self.allocator,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
+            .result_source_value = if (descriptor.query_type == .timestamp) .logical_sequence else .unavailable,
             .values = values,
             .available = available,
         };
@@ -6337,6 +6346,107 @@ pub const Device = struct {
         return sampler;
     }
 };
+
+pub const CaptureScope = struct {
+    backend: core.Backend,
+    label_value: []const u8,
+    active: bool = true,
+    impl: Impl,
+
+    const Impl = union(core.Backend) {
+        vulkan: void,
+        metal: *MetalClearScreen,
+    };
+
+    pub fn selectedBackend(self: CaptureScope) core.Backend {
+        return self.backend;
+    }
+
+    pub fn label(self: CaptureScope) []const u8 {
+        return self.label_value;
+    }
+
+    pub fn isActive(self: CaptureScope) bool {
+        return self.active;
+    }
+
+    pub fn end(self: *CaptureScope) core.CaptureError!void {
+        if (!self.active) return core.CaptureError.CaptureNotActive;
+        switch (self.impl) {
+            .vulkan => return core.CaptureError.UnsupportedCapture,
+            .metal => |metal| try metal.endCapture(),
+        }
+        self.active = false;
+    }
+
+    pub fn deinit(self: *CaptureScope) void {
+        if (!self.active) return;
+        self.end() catch {};
+    }
+};
+
+pub fn debugMarkerCapabilities(device: Device) core.DebugMarkerCapabilities {
+    return core.DebugMarkerCapabilities.fromFeatures(device.backend, device.features());
+}
+
+pub fn captureCapabilities(device: Device) core.CaptureCapabilities {
+    return core.CaptureCapabilities.forBackend(device.backend);
+}
+
+pub fn beginCaptureScope(
+    device: *Device,
+    descriptor: core.CaptureScopeDescriptor,
+) (core.CaptureError || core.CommandEncodingError)!CaptureScope {
+    try descriptor.validate(captureCapabilities(device.*));
+    return switch (device.impl.*) {
+        .vulkan => core.CaptureError.UnsupportedCapture,
+        .metal => |*metal| blk: {
+            try metal.beginCapture();
+            break :blk .{
+                .backend = .metal,
+                .label_value = descriptor.label,
+                .impl = .{ .metal = metal },
+            };
+        },
+    };
+}
+
+pub fn profilingCapabilities(device: Device) core.ProfilingCapabilities {
+    return core.ProfilingCapabilities.fromFeatures(device.backend, device.features());
+}
+
+pub fn planProfiling(
+    device: Device,
+    descriptor: core.ProfilingPlanDescriptor,
+) core.QueryError!core.ProfilingPlan {
+    return try descriptor.resolve(profilingCapabilities(device));
+}
+
+pub fn issueReport(
+    device: Device,
+    descriptor: core.IssueReportDescriptor,
+) core.CommandEncodingError!core.IssueReportSnapshot {
+    try descriptor.validate();
+    const failure_name = if (descriptor.failure) |failure| @errorName(failure) else null;
+    const failure_category = if (descriptor.failure) |failure| core.classifyError(failure) else null;
+    return .{
+        .backend = device.backend,
+        .adapter_name = device.adapter_info.name,
+        .capability_source = device.capability_report.source,
+        .operation = descriptor.operation,
+        .object_kind = descriptor.object_kind,
+        .object_label = descriptor.object_label,
+        .failure_name = failure_name,
+        .failure_category = failure_category,
+        .features = device.features(),
+        .native_features = device.nativeFeatures(),
+        .limits = device.limits(),
+        .debug_markers = debugMarkerCapabilities(device),
+        .capture = captureCapabilities(device),
+        .profiling = profilingCapabilities(device),
+        .runtime = device.runtimeDiagnostics(),
+    };
+}
 
 const ResolvedAdapterInfo = struct {
     info: core.AdapterInfo,
@@ -10088,6 +10198,7 @@ test "runtime query sets support encoder writes and readback" {
         .count = 2,
     });
     defer timestamps.deinit();
+    try std.testing.expectEqual(core.TimestampQuerySource.logical_sequence, timestamps.resultSource());
     try std.testing.expectEqual(@as(usize, 1), tracker.query_sets);
     try compute_encoder.writeTimestamp(&timestamps, 0);
     try render_encoder.writeTimestamp(&timestamps, 1);
@@ -10106,6 +10217,7 @@ test "runtime query sets support encoder writes and readback" {
         .count = 1,
     });
     defer occlusion.deinit();
+    try std.testing.expectEqual(core.TimestampQuerySource.unavailable, occlusion.resultSource());
     var resolve_destination = Buffer{
         .backend = .vulkan,
         .tracker = &tracker,
@@ -10140,6 +10252,53 @@ test "runtime query sets support encoder writes and readback" {
         .query_type = .pipeline_statistics,
         .count = 1,
         .pipeline_statistics = .{ .vertex_invocations = true },
+    }));
+}
+
+test "Period 43 runtime diagnostics expose markers profiling capture and issue reports" {
+    var tracker = ResourceTracker{};
+    tracker.retain(.buffer);
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.debug_labels = true;
+    report.features.debug_markers = true;
+    report.features.timestamp_queries = true;
+    var device = Device{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .vulkan,
+        .impl = &backend_runtime,
+        .adapter_info = .{
+            .backend = .vulkan,
+            .name = "diagnostic adapter",
+        },
+        .capability_report = report,
+    };
+
+    const markers = debugMarkerCapabilities(device);
+    try std.testing.expectEqual(core.NativeDiagnosticSupport.native, markers.object_labels);
+    try std.testing.expectEqual(core.NativeDiagnosticSupport.validation_only, markers.command_buffer_groups);
+    try std.testing.expectEqual(core.NativeDiagnosticSupport.native, markers.encoder_groups);
+
+    const profiling = profilingCapabilities(device);
+    try std.testing.expectEqual(core.TimestampQuerySource.logical_sequence, profiling.timestamp_source);
+    const plan = try planProfiling(device, .{});
+    try std.testing.expectEqual(core.ProfilingMode.cpu_fallback, plan.mode);
+    try std.testing.expect(!plan.gpu_duration_available);
+
+    const issue = try issueReport(device, .{
+        .operation = "blitTexture",
+        .object_kind = "texture",
+        .object_label = "upload target",
+        .failure = error.UnsupportedTextureBlit,
+    });
+    try std.testing.expectEqualStrings("diagnostic adapter", issue.adapter_name);
+    try std.testing.expectEqualStrings("UnsupportedTextureBlit", issue.failure_name.?);
+    try std.testing.expectEqual(core.ErrorCategory.unsupported_feature, issue.failure_category.?);
+    try std.testing.expectEqual(@as(usize, 1), issue.runtime.live_resources);
+
+    try std.testing.expectError(core.CaptureError.UnsupportedCapture, beginCaptureScope(&device, .{
+        .label = "vulkan capture",
     }));
 }
 
@@ -11029,15 +11188,15 @@ test "runtime texture views expose resolved ranges" {
 
 test "runtime command objects validate debug group balance" {
     var command_buffer = CommandBuffer{ .backend = .vulkan };
+    const invalid_utf8 = [_]u8{0xff};
     command_buffer.setLabel("frame commands");
     try std.testing.expectEqualStrings("frame commands", command_buffer.label().?);
 
     try command_buffer.insertDebugSignpost("frame start");
     try std.testing.expectError(core.CommandEncodingError.EmptyDebugGroupLabel, command_buffer.insertDebugSignpost(""));
+    try std.testing.expectError(core.CommandEncodingError.InvalidDebugLabelEncoding, command_buffer.insertDebugSignpost(invalid_utf8[0..]));
 
     try command_buffer.pushDebugGroup("frame");
-    try std.testing.expectError(core.CommandEncodingError.UnclosedDebugGroup, command_buffer.commit());
-    try command_buffer.popDebugGroup();
 
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
@@ -11045,6 +11204,9 @@ test "runtime command objects validate debug group balance" {
         .color_attachments = color_attachments[0..],
     });
     try std.testing.expectEqualStrings("main render", encoder.label().?);
+    try std.testing.expectError(core.CommandEncodingError.InvalidCommandBufferState, command_buffer.pushDebugGroup("nested command scope"));
+    try std.testing.expectError(core.CommandEncodingError.InvalidCommandBufferState, command_buffer.popDebugGroup());
+    try std.testing.expectError(core.CommandEncodingError.InvalidCommandBufferState, command_buffer.insertDebugSignpost("inside encoder"));
 
     try encoder.insertDebugSignpost("draw setup");
     try std.testing.expectError(core.CommandEncodingError.EmptyDebugGroupLabel, encoder.insertDebugSignpost(""));
@@ -11054,6 +11216,8 @@ test "runtime command objects validate debug group balance" {
     try encoder.popDebugGroup();
     try encoder.endEncoding();
 
+    try std.testing.expectError(core.CommandEncodingError.UnclosedDebugGroup, command_buffer.commit());
+    try command_buffer.popDebugGroup();
     try command_buffer.commit();
 }
 

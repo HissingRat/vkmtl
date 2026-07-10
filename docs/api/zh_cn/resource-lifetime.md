@@ -51,6 +51,15 @@ Period 2 开始，tracker 还会记录 command buffer `commit()` 产生的 submi
 `commit()` 返回前等待 work 完成，所以这些 retirement 会在同一个 commit 结束后被清空。后续取消
 wait-idle 时，native destroy 会接到同一套 serial 模型上。
 
+## Label Memory
+
+Object label 是 borrowed 而不是 owned。Descriptor 或 `setLabel(...)` 引用的 backing bytes
+必须保持存活且不变，直到 object 销毁、label 被替换，或 `setLabel(null)` 清空 label。Descriptor
+本身可以是临时值；只有它引用的 label bytes 需要更长生命周期。
+
+Debug-group 和 signpost label 只需要在调用期间存活，因为 native call 返回后 vkmtl 只保存 marker
+stack depth。
+
 ## Command Object
 
 Command buffer、render command encoder、blit command encoder 和 compute command encoder 都是短生命周期

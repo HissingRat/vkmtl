@@ -31,10 +31,14 @@ hatches.
   Chinese.
 - [Quick Start zh_CN](docs/usage/zh_cn/quick-start.md): current usage path in
   Chinese.
+- [Diagnostics zh_CN](docs/usage/zh_cn/diagnostics.md): capture, profiling, and
+  issue-report guidance in Chinese.
 - [Core API en_US](docs/api/en_us/core.md): current public API surface in
   English.
 - [Quick Start en_US](docs/usage/en_us/quick-start.md): current usage path in
   English.
+- [Diagnostics en_US](docs/usage/en_us/diagnostics.md): capture, profiling, and
+  issue-report guidance in English.
 
 ## Examples
 
@@ -52,6 +56,8 @@ zig build run-triangle
 zig build run-offscreen-texture
 zig build run-rainbow-cube
 zig build run-compute-readback
+zig build run-capability-dump
+zig build run-profiling-plan
 ```
 
 On macOS, `.auto` selects Metal when available. Vulkan can be forced for

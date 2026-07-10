@@ -1,6 +1,7 @@
 # Period 44: CI, Device Matrix, And Soak Validation
 
-Status: planned after Period43.
+Status: active. Phase 1 CI job matrix and feature reporting is the current
+implementation priority.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a

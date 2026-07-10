@@ -15,6 +15,7 @@ const MetalClearScreen = @This();
 
 handle: *metal.vkmtl_metal_clear_screen,
 extent: core.Extent2D,
+capture_active: bool = false,
 
 pub const AdapterInfoResult = struct {
     info: core.AdapterInfo,
@@ -51,10 +52,15 @@ pub fn init(
     return .{
         .handle = handle orelse return Error.InvalidSurface,
         .extent = presentation.extent,
+        .capture_active = false,
     };
 }
 
 pub fn deinit(self: *MetalClearScreen) void {
+    if (self.capture_active) {
+        _ = metal.vkmtl_metal_clear_screen_end_capture(self.handle);
+        self.capture_active = false;
+    }
     metal.vkmtl_metal_clear_screen_destroy(self.handle);
 }
 
@@ -210,6 +216,24 @@ pub fn makeTexture(self: *MetalClearScreen, descriptor: core.TextureDescriptor) 
 
 pub fn makeSamplerState(self: *MetalClearScreen, descriptor: core.SamplerDescriptor) !MetalSamplerState {
     return try MetalSamplerState.init(self, descriptor);
+}
+
+pub fn beginCapture(self: *MetalClearScreen) core.CaptureError!void {
+    if (self.capture_active) return core.CaptureError.CaptureAlreadyActive;
+    switch (metal.vkmtl_metal_clear_screen_begin_capture(self.handle)) {
+        metal.VKMTL_METAL_STATUS_OK => self.capture_active = true,
+        metal.VKMTL_METAL_STATUS_UNSUPPORTED => return core.CaptureError.UnsupportedCapture,
+        else => return core.CaptureError.CaptureFailed,
+    }
+}
+
+pub fn endCapture(self: *MetalClearScreen) core.CaptureError!void {
+    if (!self.capture_active) return core.CaptureError.CaptureNotActive;
+    switch (metal.vkmtl_metal_clear_screen_end_capture(self.handle)) {
+        metal.VKMTL_METAL_STATUS_OK => self.capture_active = false,
+        metal.VKMTL_METAL_STATUS_UNSUPPORTED => return core.CaptureError.UnsupportedCapture,
+        else => return core.CaptureError.CaptureFailed,
+    }
 }
 
 fn check(status: metal.vkmtl_metal_status) Error!void {

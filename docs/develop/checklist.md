@@ -17,15 +17,15 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Current Priority
 
-- Active implementation phase: Period 43 Phase 1, label lifetime and naming
-  rules.
+- Active implementation phase: Period 44 Phase 1, CI job matrix and feature
+  reporting.
 - Carry-over validation gate: Period 32 Phases 6-7 still require a supported
   Vulkan RT hardware run plus visible-result and unsupported-runtime docs.
 - Period 33 is closed for its mesh-scene slice; remaining original
   multi-instance and shared scene-layout items are routed to later RT
   completeness/device-matrix work.
-- Period 42 is complete. Period 44 owns CI, device-matrix, visual, and soak
-  validation after Period 43.
+- Periods 42 and 43 are complete. Period 44 owns CI, device-matrix, visual, and
+  soak validation.
 - Period 1 Phase 9 pre-tag API and release-polish items remain open, but are not
   the active feature phase.
 
@@ -1568,8 +1568,8 @@ obvious render and binding blockers.
 - [x] Add capture-friendly naming helpers that fill the selected backend when
   applications do not specify one.
 - [x] Add focused tests for capture names and runtime diagnostics counters.
-- [x] Document native capture/profiler enrichment as deferred to Period 29
-  Phase 6.
+- [x] Route native capture/profiler enrichment forward; the scoped capture and
+  truthful profiling fallback slice was completed in Period 43.
 
 ## Period 26 Phase 5 Checklist
 
@@ -2420,33 +2420,35 @@ obvious render and binding blockers.
 
 ## Period 43 Phase 1 Checklist
 
-- [ ] Define label lifetime and naming rules for public objects.
-- [ ] Define command encoder marker scopes.
-- [ ] Keep labels optional and low overhead.
+- [x] Define label lifetime and naming rules for public objects.
+- [x] Define command encoder marker scopes.
+- [x] Keep labels optional and low overhead.
 
 ## Period 43 Phase 2 Checklist
 
-- [ ] Lower object labels and command markers to Vulkan debug utils where
+- [x] Lower object labels and command markers to Vulkan debug utils where
   available.
-- [ ] Validate marker nesting and command buffer boundaries.
+- [x] Validate marker nesting and command buffer boundaries.
+- [x] Report object, encoder, and command-buffer marker support as native or
+  validation-only without overstating Vulkan capabilities.
 
 ## Period 43 Phase 3 Checklist
 
-- [ ] Lower labels and command groups to Metal debug APIs.
-- [ ] Add opt-in Metal capture scope helpers where practical.
-- [ ] Preserve capture integration behind public diagnostics APIs.
+- [x] Lower labels and command groups to Metal debug APIs.
+- [x] Add opt-in Metal capture scope helpers where practical.
+- [x] Preserve capture integration behind public diagnostics APIs.
 
 ## Period 43 Phase 4 Checklist
 
-- [ ] Add timestamp/query APIs where supported.
-- [ ] Define fallback behavior when profiling queries are unavailable.
-- [ ] Add simple profiling examples or tools.
+- [x] Add timestamp/query source reporting where supported.
+- [x] Define fallback behavior when profiling queries are unavailable.
+- [x] Add simple profiling examples or tools.
 
 ## Period 43 Phase 5 Checklist
 
-- [ ] Expand capability dump and diagnostics output.
-- [ ] Include backend object names, feature gates, and failing operations.
-- [ ] Document recommended issue-report bundle contents.
+- [x] Expand capability dump and diagnostics output.
+- [x] Include backend object names, feature gates, and failing operations.
+- [x] Document recommended issue-report bundle contents.
 
 ## Period 44 Phase 1 Checklist
 

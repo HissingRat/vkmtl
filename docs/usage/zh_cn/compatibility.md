@@ -20,7 +20,9 @@ vkmtl 优先覆盖 portable Vulkan 和 Metal workflow；高级能力放在显式
 ## Sync And Query Defaults
 
 vkmtl 会保持普通 command path portable：resource usage tracking、binary fence、event、
-timestamp query 和 occlusion query 都通过 backend-neutral runtime object 暴露。显式 barrier
+timestamp query 和 occlusion query 都通过 backend-neutral runtime object 暴露。当前 timestamp
+value 只保留 command order，并不是 native GPU 时间；计算 GPU duration 前必须显式确认
+`native_gpu` source。显式 barrier
 和 queue ownership transfer 是高级 escape hatch；Vulkan 会把 barrier path 下沉到 native，
 Metal 会在 encoder boundary 已经定义 ordering 的地方使用 validation/no-op marker。Timeline
 fence、shared event 和 logical queue planning 已经有 portable descriptor / validation 入口；

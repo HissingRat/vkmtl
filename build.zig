@@ -519,6 +519,26 @@ pub fn build(b: *std.Build) void {
     const stability_plan_step = b.step("run-stability-plan", "Run the vkmtl opt-in stability plan diagnostic");
     stability_plan_step.dependOn(&stability_plan_cmd.step);
 
+    const profiling_plan = b.addExecutable(.{
+        .name = "vkmtl-profiling-plan",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/profiling_plan/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+            },
+        }),
+    });
+    b.installArtifact(profiling_plan);
+
+    const profiling_plan_cmd = b.addRunArtifact(profiling_plan);
+    forwardRunArgs(b, profiling_plan_cmd);
+
+    const profiling_plan_step = b.step("run-profiling-plan", "Inspect the vkmtl profiling fallback plan");
+    profiling_plan_step.dependOn(&profiling_plan_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{

@@ -50,3 +50,15 @@ zig build run-stability-plan -- --iterations 120
 
 这个命令会打印 resize、resource churn、shader artifact、upload，以及 Vulkan unaligned-fill fallback
 的计划计数。完整 GPU soak loop 仍属于后续 backend hardening 工作。
+
+## Profiling Plan
+
+不开窗口也可以查看当前 profiling 语义：
+
+```sh
+zig build run-profiling-plan
+```
+
+当前 timestamp query value 是 logical command-order sequence，不是 GPU 时间。因此默认 plan 会选择
+由应用提供的 CPU wall-clock fallback。使用 `--markers-only` 可以关闭该 fallback；使用
+`--require-gpu` 可以验证 typed `UnsupportedGpuTimestamps` gate。

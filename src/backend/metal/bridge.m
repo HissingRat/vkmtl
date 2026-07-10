@@ -103,6 +103,9 @@ static NSString *vkmtl_new_string_from_bytes(const char *bytes, size_t len) {
     if (bytes == NULL) {
         return nil;
     }
+    if (memchr(bytes, '\0', len) != NULL) {
+        return nil;
+    }
     return [[NSString alloc]
         initWithBytes:bytes
                length:len
@@ -660,6 +663,50 @@ vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
     out_handles->layer = (void *)clear_screen->layer;
     out_handles->view = (void *)clear_screen->view;
     return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_clear_screen_begin_capture(
+    vkmtl_metal_clear_screen *clear_screen
+) {
+    if (clear_screen == NULL || clear_screen->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        MTLCaptureManager *manager = [MTLCaptureManager sharedCaptureManager];
+        if (manager == nil || [manager isCapturing]) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        MTLCaptureDescriptor *descriptor = [[MTLCaptureDescriptor alloc] init];
+        if (descriptor == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        descriptor.captureObject = clear_screen->device;
+        descriptor.destination = MTLCaptureDestinationDeveloperTools;
+
+        NSError *error = nil;
+        BOOL started = [manager startCaptureWithDescriptor:descriptor error:&error];
+        [descriptor release];
+        return started ? VKMTL_METAL_STATUS_OK : VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_clear_screen_end_capture(
+    vkmtl_metal_clear_screen *clear_screen
+) {
+    if (clear_screen == NULL || clear_screen->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        MTLCaptureManager *manager = [MTLCaptureManager sharedCaptureManager];
+        if (manager == nil || ![manager isCapturing]) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        [manager stopCapture];
+        return VKMTL_METAL_STATUS_OK;
+    }
 }
 
 static MTLResourceOptions vkmtl_storage_options(vkmtl_metal_storage_mode storage_mode) {

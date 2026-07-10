@@ -23,7 +23,9 @@ typed errors rather than silently changing semantics.
 
 vkmtl keeps the ordinary command path portable: resource usage tracking, binary
 fences, events, timestamp queries, and occlusion queries are available through
-backend-neutral runtime objects. Explicit barriers and queue ownership transfers
+backend-neutral runtime objects. Current timestamp values preserve command order
+but are not native GPU time; require `native_gpu` explicitly before computing a
+GPU duration. Explicit barriers and queue ownership transfers
 are advanced escape hatches; Vulkan lowers the barrier path natively, while
 Metal uses validation/no-op markers where encoder boundaries already define
 ordering. Timeline fences, shared events, and logical queue planning now have

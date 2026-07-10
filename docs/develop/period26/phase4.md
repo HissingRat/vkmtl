@@ -30,5 +30,6 @@ Phase 4 makes backend work visible to developers.
 
 ## Deferred
 
-- Native capture/profiler enrichment beyond labels and marker lowering remains
-  deferred to Period 29 Phase 6.
+- This phase originally deferred native capture/profiler enrichment. Metal
+  scoped capture and truthful profiling fallback were completed in Period 43;
+  native GPU timestamps remain a typed unsupported lane.

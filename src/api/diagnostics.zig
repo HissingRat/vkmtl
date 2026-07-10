@@ -1,7 +1,30 @@
 const core = @import("../core.zig");
+const runtime = @import("../runtime/window_context.zig");
 
 pub const DeviceFeatures = core.DeviceFeatures;
 pub const DeviceLimits = core.DeviceLimits;
 pub const DeviceCapabilitySource = core.DeviceCapabilitySource;
 pub const DeviceCapabilityReport = core.DeviceCapabilityReport;
 pub const ErrorCategory = core.ErrorCategory;
+pub const CaptureNameDescriptor = core.CaptureNameDescriptor;
+pub const NativeDiagnosticSupport = core.NativeDiagnosticSupport;
+pub const DebugMarkerCapabilities = core.DebugMarkerCapabilities;
+pub const CaptureCapabilities = core.CaptureCapabilities;
+pub const CaptureDestination = core.CaptureDestination;
+pub const CaptureScopeDescriptor = core.CaptureScopeDescriptor;
+pub const CaptureError = core.CaptureError;
+pub const CaptureScope = runtime.CaptureScope;
+pub const TimestampQuerySource = core.TimestampQuerySource;
+pub const ProfilingMode = core.ProfilingMode;
+pub const ProfilingCapabilities = core.ProfilingCapabilities;
+pub const ProfilingPlanDescriptor = core.ProfilingPlanDescriptor;
+pub const ProfilingPlan = core.ProfilingPlan;
+pub const IssueReportDescriptor = core.IssueReportDescriptor;
+pub const IssueReportSnapshot = core.IssueReportSnapshot;
+
+pub const debugMarkerCapabilities = runtime.debugMarkerCapabilities;
+pub const captureCapabilities = runtime.captureCapabilities;
+pub const beginCaptureScope = runtime.beginCaptureScope;
+pub const profilingCapabilities = runtime.profilingCapabilities;
+pub const planProfiling = runtime.planProfiling;
+pub const issueReport = runtime.issueReport;

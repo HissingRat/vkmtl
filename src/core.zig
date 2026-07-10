@@ -1091,7 +1091,7 @@ pub const DebugGroupStack = struct {
     max_depth: u32 = 64,
 
     pub fn push(self: *DebugGroupStack, label: []const u8) CommandEncodingError!void {
-        if (label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        try validateDebugLabel(label);
         if (self.depth >= self.max_depth) return CommandEncodingError.DebugGroupStackOverflow;
         self.depth += 1;
     }
@@ -1110,9 +1110,16 @@ pub const DebugSignpostDescriptor = struct {
     label: []const u8,
 
     pub fn validate(self: DebugSignpostDescriptor) CommandEncodingError!void {
-        if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        try validateDebugLabel(self.label);
     }
 };
+
+fn validateDebugLabel(label: []const u8) CommandEncodingError!void {
+    if (label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+    if (std.mem.indexOfScalar(u8, label, 0) != null or !std.unicode.utf8ValidateSlice(label)) {
+        return CommandEncodingError.InvalidDebugLabelEncoding;
+    }
+}
 
 pub const BackendAvailability = struct {
     vulkan: bool = true,
@@ -1577,7 +1584,7 @@ pub const DebugLabelDescriptor = struct {
 
     pub fn validate(self: DebugLabelDescriptor) CommandEncodingError!void {
         _ = self.target;
-        if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        try validateDebugLabel(self.label);
     }
 };
 
@@ -1588,14 +1595,15 @@ pub const CaptureNameDescriptor = struct {
     frame_index: ?u64 = null,
 
     pub fn validate(self: CaptureNameDescriptor) CommandEncodingError!void {
-        if (self.scope.len == 0 or self.name.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        try validateDebugLabel(self.scope);
+        try validateDebugLabel(self.name);
     }
 
     pub fn formattedLength(self: CaptureNameDescriptor) CommandEncodingError!usize {
         try self.validate();
         var length = self.scope.len + 1 + self.name.len;
-        if (self.backend != null) length += " backend=".len + "vulkan".len;
-        if (self.frame_index != null) length += " frame=".len + 20;
+        if (self.backend) |backend| length += " backend=".len + @tagName(backend).len;
+        if (self.frame_index) |frame_index| length += " frame=".len + decimalDigitCount(frame_index);
         return length;
     }
 
@@ -1613,6 +1621,89 @@ pub const CaptureNameDescriptor = struct {
         }
         return std.fmt.bufPrint(buffer, "{s}:{s}", .{ self.scope, self.name }) catch return CommandEncodingError.CaptureNameTooLong;
     }
+};
+
+fn decimalDigitCount(value: u64) usize {
+    var remaining = value;
+    var digits: usize = 1;
+    while (remaining >= 10) : (digits += 1) remaining /= 10;
+    return digits;
+}
+
+pub const NativeDiagnosticSupport = enum {
+    native,
+    validation_only,
+    unavailable,
+};
+
+pub const DebugMarkerCapabilities = struct {
+    object_labels: NativeDiagnosticSupport = .validation_only,
+    command_buffer_groups: NativeDiagnosticSupport = .validation_only,
+    command_buffer_signposts: NativeDiagnosticSupport = .validation_only,
+    encoder_groups: NativeDiagnosticSupport = .validation_only,
+    encoder_signposts: NativeDiagnosticSupport = .validation_only,
+
+    pub fn fromFeatures(backend: Backend, features: DeviceFeatures) DebugMarkerCapabilities {
+        const object_labels: NativeDiagnosticSupport = if (features.debug_labels) .native else .validation_only;
+        const encoder_markers: NativeDiagnosticSupport = if (features.debug_markers) .native else .validation_only;
+        return .{
+            .object_labels = object_labels,
+            .command_buffer_groups = if (backend == .metal and features.debug_markers) .native else .validation_only,
+            .command_buffer_signposts = if (backend == .metal and features.debug_markers) .native else .validation_only,
+            .encoder_groups = encoder_markers,
+            .encoder_signposts = encoder_markers,
+        };
+    }
+
+    pub fn hasAnyNativeSupport(self: DebugMarkerCapabilities) bool {
+        return self.object_labels == .native or
+            self.command_buffer_groups == .native or
+            self.command_buffer_signposts == .native or
+            self.encoder_groups == .native or
+            self.encoder_signposts == .native;
+    }
+};
+
+pub const CaptureCapabilities = struct {
+    native_capture: bool = false,
+    scoped_capture: bool = false,
+    developer_tools_destination: bool = false,
+    file_destination: bool = false,
+
+    pub fn forBackend(backend: Backend) CaptureCapabilities {
+        return switch (backend) {
+            .vulkan => .{},
+            .metal => .{
+                .native_capture = true,
+                .scoped_capture = true,
+                .developer_tools_destination = true,
+            },
+        };
+    }
+};
+
+pub const CaptureDestination = enum {
+    developer_tools,
+};
+
+pub const CaptureScopeDescriptor = struct {
+    label: []const u8,
+    destination: CaptureDestination = .developer_tools,
+
+    pub fn validate(self: CaptureScopeDescriptor, capabilities: CaptureCapabilities) (CaptureError || CommandEncodingError)!void {
+        try validateDebugLabel(self.label);
+        if (!capabilities.native_capture or !capabilities.scoped_capture) return CaptureError.UnsupportedCapture;
+        if (self.destination == .developer_tools and !capabilities.developer_tools_destination) {
+            return CaptureError.UnsupportedCapture;
+        }
+    }
+};
+
+pub const CaptureError = error{
+    UnsupportedCapture,
+    CaptureAlreadyActive,
+    CaptureNotActive,
+    CaptureFailed,
 };
 
 pub const StabilityRunError = error{
@@ -2011,6 +2102,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.NoMetalDevice,
         error.FenceWaitTimeout,
         error.EventWaitTimeout,
+        error.CaptureFailed,
         => .backend,
 
         error.NoSupportedBackend,
@@ -2051,6 +2143,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedMultiDraw,
         error.UnsupportedOcclusionQueries,
         error.UnsupportedTimestampQueries,
+        error.UnsupportedGpuTimestamps,
         error.UnsupportedPipelineStatisticsQueries,
         error.UnsupportedShaderReflectionSchema,
         error.UnsupportedCommandBufferPooling,
@@ -2086,6 +2179,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedRayTracingCustomIntersection,
         error.UnsupportedDriverPipelineCache,
         error.UnsupportedBinaryArchive,
+        error.UnsupportedCapture,
         => .unsupported_feature,
 
         error.EmptyShaderSource,
@@ -2125,10 +2219,13 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidBlendColor,
         error.InvalidStencilReference,
         error.EmptyDebugGroupLabel,
+        error.InvalidDebugLabelEncoding,
         error.CaptureNameTooLong,
         error.DebugGroupStackOverflow,
         error.DebugGroupStackUnderflow,
         error.UnclosedDebugGroup,
+        error.CaptureAlreadyActive,
+        error.CaptureNotActive,
         error.InvalidVertexCount,
         error.InvalidIndexCount,
         error.InvalidInstanceCount,
@@ -5205,6 +5302,113 @@ pub const PipelineStatisticFlags = struct {
     }
 };
 
+pub const TimestampQuerySource = enum {
+    unavailable,
+    logical_sequence,
+    native_gpu,
+};
+
+pub const ProfilingMode = enum {
+    markers_only,
+    cpu_fallback,
+    native_gpu_timestamps,
+};
+
+pub const ProfilingCapabilities = struct {
+    timestamp_queries: bool = false,
+    timestamp_source: TimestampQuerySource = .unavailable,
+    native_gpu_timestamps: bool = false,
+    cpu_fallback: bool = true,
+    marker_support: NativeDiagnosticSupport = .validation_only,
+
+    pub fn fromFeatures(backend: Backend, features: DeviceFeatures) ProfilingCapabilities {
+        const markers = DebugMarkerCapabilities.fromFeatures(backend, features);
+        return .{
+            .timestamp_queries = features.timestamp_queries,
+            .timestamp_source = if (features.timestamp_queries) .logical_sequence else .unavailable,
+            .native_gpu_timestamps = false,
+            .cpu_fallback = true,
+            .marker_support = markers.encoder_groups,
+        };
+    }
+};
+
+pub const ProfilingPlanDescriptor = struct {
+    require_gpu_timestamps: bool = false,
+    allow_cpu_fallback: bool = true,
+    allow_markers_only: bool = true,
+
+    pub fn resolve(
+        self: ProfilingPlanDescriptor,
+        capabilities: ProfilingCapabilities,
+    ) QueryError!ProfilingPlan {
+        if (capabilities.native_gpu_timestamps and capabilities.timestamp_source == .native_gpu) {
+            return .{
+                .mode = .native_gpu_timestamps,
+                .timestamp_source = .native_gpu,
+                .gpu_duration_available = true,
+                .reason = "native GPU timestamps",
+            };
+        }
+        if (self.require_gpu_timestamps) return QueryError.UnsupportedGpuTimestamps;
+        if (self.allow_cpu_fallback and capabilities.cpu_fallback) {
+            return .{
+                .mode = .cpu_fallback,
+                .timestamp_source = capabilities.timestamp_source,
+                .gpu_duration_available = false,
+                .reason = "CPU wall-clock fallback; query values preserve command order only",
+            };
+        }
+        if (self.allow_markers_only and capabilities.marker_support != .unavailable) {
+            return .{
+                .mode = .markers_only,
+                .timestamp_source = capabilities.timestamp_source,
+                .gpu_duration_available = false,
+                .reason = "markers only; duration unavailable",
+            };
+        }
+        return QueryError.UnsupportedTimestampQueries;
+    }
+};
+
+pub const ProfilingPlan = struct {
+    mode: ProfilingMode,
+    timestamp_source: TimestampQuerySource,
+    gpu_duration_available: bool,
+    reason: []const u8,
+};
+
+pub const IssueReportDescriptor = struct {
+    operation: []const u8,
+    object_kind: []const u8 = "",
+    object_label: ?[]const u8 = null,
+    failure: ?anyerror = null,
+
+    pub fn validate(self: IssueReportDescriptor) CommandEncodingError!void {
+        try validateDebugLabel(self.operation);
+        if (self.object_kind.len != 0) try validateDebugLabel(self.object_kind);
+        if (self.object_label) |label| try validateDebugLabel(label);
+    }
+};
+
+pub const IssueReportSnapshot = struct {
+    backend: Backend,
+    adapter_name: []const u8,
+    capability_source: DeviceCapabilitySource,
+    operation: []const u8,
+    object_kind: []const u8,
+    object_label: ?[]const u8,
+    failure_name: ?[]const u8,
+    failure_category: ?ErrorCategory,
+    features: DeviceFeatures,
+    native_features: DeviceFeatures,
+    limits: DeviceLimits,
+    debug_markers: DebugMarkerCapabilities,
+    capture: CaptureCapabilities,
+    profiling: ProfilingCapabilities,
+    runtime: RuntimeDiagnosticsSnapshot,
+};
+
 pub const QuerySetDescriptor = struct {
     label: ?[]const u8 = null,
     query_type: QueryType,
@@ -5230,7 +5434,7 @@ pub const ProfilerMarkerDescriptor = struct {
     write_timestamp_end: bool = false,
 
     pub fn validate(self: ProfilerMarkerDescriptor, features: DeviceFeatures) (QueryError || CommandEncodingError)!void {
-        if (self.label.len == 0) return CommandEncodingError.EmptyDebugGroupLabel;
+        try validateDebugLabel(self.label);
         if ((self.write_timestamp_begin or self.write_timestamp_end) and !features.timestamp_queries) {
             return QueryError.UnsupportedTimestampQueries;
         }
@@ -5280,6 +5484,7 @@ pub const QueryError = error{
     MissingPipelineStatistics,
     UnsupportedOcclusionQueries,
     UnsupportedTimestampQueries,
+    UnsupportedGpuTimestamps,
     UnsupportedPipelineStatisticsQueries,
 };
 
@@ -5969,6 +6174,7 @@ pub const CommandEncodingError = error{
     InvalidStencilReference,
     InvalidDepthBias,
     EmptyDebugGroupLabel,
+    InvalidDebugLabelEncoding,
     CaptureNameTooLong,
     DebugGroupStackOverflow,
     DebugGroupStackUnderflow,
@@ -10038,6 +10244,7 @@ test "queue descriptors validate capabilities and gates" {
 
 test "debug group stack validates labels and nesting" {
     var stack = DebugGroupStack{ .max_depth = 1 };
+    const invalid_utf8 = [_]u8{0xff};
 
     try (DebugSignpostDescriptor{ .label = "frame marker" }).validate();
     try (DebugLabelDescriptor{
@@ -10049,6 +10256,10 @@ test "debug group stack validates labels and nesting" {
         .label = "",
     }).validate());
     try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (DebugSignpostDescriptor{ .label = "" }).validate());
+    try std.testing.expectError(CommandEncodingError.InvalidDebugLabelEncoding, (DebugSignpostDescriptor{
+        .label = invalid_utf8[0..],
+    }).validate());
+    try std.testing.expectError(CommandEncodingError.InvalidDebugLabelEncoding, stack.push("bad\x00label"));
 
     try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, stack.push(""));
     try stack.push("frame");
@@ -10067,13 +10278,15 @@ test "debug group stack validates labels and nesting" {
 
 test "capture names format backend and frame context" {
     var buffer: [96]u8 = undefined;
-    const name = try (CaptureNameDescriptor{
+    const descriptor = CaptureNameDescriptor{
         .scope = "frame",
         .name = "main-pass",
         .backend = .metal,
         .frame_index = 17,
-    }).write(buffer[0..]);
+    };
+    const name = try descriptor.write(buffer[0..]);
     try std.testing.expectEqualStrings("frame:main-pass backend=metal frame=17", name);
+    try std.testing.expectEqual(name.len, try descriptor.formattedLength());
 
     try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (CaptureNameDescriptor{
         .scope = "",
@@ -10084,14 +10297,63 @@ test "capture names format backend and frame context" {
         .name = "main-pass",
         .backend = .vulkan,
     }).write(buffer[0..8]));
+    try std.testing.expectError(CommandEncodingError.InvalidDebugLabelEncoding, (CaptureNameDescriptor{
+        .scope = "frame\x00hidden",
+        .name = "main-pass",
+    }).write(buffer[0..]));
+}
+
+test "Period 43 debug marker and capture capabilities stay backend truthful" {
+    const vulkan = DebugMarkerCapabilities.fromFeatures(.vulkan, .{
+        .debug_labels = true,
+        .debug_markers = true,
+    });
+    try std.testing.expectEqual(NativeDiagnosticSupport.native, vulkan.object_labels);
+    try std.testing.expectEqual(NativeDiagnosticSupport.validation_only, vulkan.command_buffer_groups);
+    try std.testing.expectEqual(NativeDiagnosticSupport.native, vulkan.encoder_groups);
+    try std.testing.expect(vulkan.hasAnyNativeSupport());
+
+    const metal = DebugMarkerCapabilities.fromFeatures(.metal, .{
+        .debug_labels = true,
+        .debug_markers = true,
+    });
+    try std.testing.expectEqual(NativeDiagnosticSupport.native, metal.command_buffer_groups);
+    try std.testing.expectEqual(NativeDiagnosticSupport.native, metal.encoder_signposts);
+
+    const capture_descriptor = CaptureScopeDescriptor{ .label = "frame:capture" };
+    try capture_descriptor.validate(CaptureCapabilities.forBackend(.metal));
+    try std.testing.expectError(CaptureError.UnsupportedCapture, capture_descriptor.validate(
+        CaptureCapabilities.forBackend(.vulkan),
+    ));
+    try std.testing.expectError(CommandEncodingError.InvalidDebugLabelEncoding, (CaptureScopeDescriptor{
+        .label = "frame\x00capture",
+    }).validate(CaptureCapabilities.forBackend(.metal)));
+
+    try (IssueReportDescriptor{
+        .operation = "blitTexture",
+        .object_kind = "texture",
+        .object_label = "upload target",
+        .failure = error.UnsupportedTextureBlit,
+    }).validate();
+    try std.testing.expectError(CommandEncodingError.EmptyDebugGroupLabel, (IssueReportDescriptor{
+        .operation = "",
+    }).validate());
+    try std.testing.expectError(CommandEncodingError.InvalidDebugLabelEncoding, (IssueReportDescriptor{
+        .operation = "blitTexture",
+        .object_label = "upload\x00target",
+    }).validate());
 }
 
 test "error classifier groups public error categories" {
     try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.InvalidBufferLength));
     try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.InvalidCopyTextureAspect));
+    try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.InvalidDebugLabelEncoding));
     try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedSampleCount));
     try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedTextureBlit));
     try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedTextureResolve));
+    try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedCapture));
+    try std.testing.expectEqual(ErrorCategory.backend, classifyError(error.CaptureFailed));
+    try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.CaptureAlreadyActive));
     try std.testing.expectEqual(ErrorCategory.backend, classifyError(error.VulkanUnavailable));
     try std.testing.expectEqual(ErrorCategory.surface_lost, classifyError(error.SurfaceLost));
     try std.testing.expectEqual(ErrorCategory.device_lost, classifyError(error.DeviceLost));
@@ -12386,6 +12648,36 @@ test "query descriptors validate feature gates and ranges" {
         .write_timestamp_begin = true,
         .write_timestamp_end = true,
     }).validate(.{ .timestamp_queries = true });
+}
+
+test "Period 43 profiling plans distinguish logical queries CPU fallback and GPU time" {
+    const current = ProfilingCapabilities.fromFeatures(.metal, .{
+        .timestamp_queries = true,
+        .debug_markers = true,
+    });
+    try std.testing.expectEqual(TimestampQuerySource.logical_sequence, current.timestamp_source);
+    try std.testing.expect(!current.native_gpu_timestamps);
+
+    const fallback = try (ProfilingPlanDescriptor{}).resolve(current);
+    try std.testing.expectEqual(ProfilingMode.cpu_fallback, fallback.mode);
+    try std.testing.expect(!fallback.gpu_duration_available);
+    try std.testing.expectError(QueryError.UnsupportedGpuTimestamps, (ProfilingPlanDescriptor{
+        .require_gpu_timestamps = true,
+    }).resolve(current));
+
+    const markers_only = try (ProfilingPlanDescriptor{
+        .allow_cpu_fallback = false,
+    }).resolve(current);
+    try std.testing.expectEqual(ProfilingMode.markers_only, markers_only.mode);
+
+    var native = current;
+    native.native_gpu_timestamps = true;
+    native.timestamp_source = .native_gpu;
+    const gpu = try (ProfilingPlanDescriptor{
+        .require_gpu_timestamps = true,
+    }).resolve(native);
+    try std.testing.expectEqual(ProfilingMode.native_gpu_timestamps, gpu.mode);
+    try std.testing.expect(gpu.gpu_duration_available);
 }
 
 test "compute dispatch descriptors validate limits and resolve thread counts" {

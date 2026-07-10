@@ -102,6 +102,20 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_begin_capture(
+    vkmtl_metal_clear_screen *clear_screen
+) {
+    (void)clear_screen;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_clear_screen_end_capture(
+    vkmtl_metal_clear_screen *clear_screen
+) {
+    (void)clear_screen;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_clear_screen *owner,
     size_t length,
