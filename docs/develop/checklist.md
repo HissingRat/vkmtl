@@ -2348,9 +2348,9 @@ obvious render and binding blockers.
 
 ## Period 41 Phase 3 Checklist
 
-- [ ] Implement Metal shared texture/event import where supported.
-- [ ] Define process/device compatibility constraints.
-- [ ] Preserve native objects behind explicit interop wrappers.
+- [x] Implement Metal shared texture/event import planning where supported.
+- [x] Define process/device compatibility constraints.
+- [x] Preserve native objects behind explicit interop wrappers.
 
 ## Period 41 Phase 4 Checklist
 

@@ -1,6 +1,6 @@
 # Period 41: External Interop Matrix
 
-Status: Phase 2 complete.
+Status: Phase 3 complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
@@ -56,9 +56,24 @@ Phase 2 result:
 
 ### Phase 3: Metal Shared Texture/Event Import
 
-- Implement shared texture and shared event import where supported.
+- Implement shared texture and shared event import planning where supported.
 - Define process/device compatibility constraints.
 - Preserve native objects behind explicit interop wrappers.
+
+Phase 3 result:
+
+- `ExternalInteropImportPlan` now includes `process_scope` and `device_scope`
+  so wrappers can report whether an import is same-process, cross-process, or
+  platform-defined, and whether it requires the same device or a compatible
+  backend device.
+- Metal `IOSurface` textures are planned as capability-gated, cross-process,
+  compatible-device imports on Apple platforms.
+- Metal `MTLBuffer` / `MTLTexture` native objects are planned as native-only,
+  same-process, same-device imports.
+- Metal shared events are planned as capability-gated synchronization objects
+  with platform-defined sharing and device compatibility rules.
+- Runtime external wrappers keep the native handle opaque and expose only the
+  backend-neutral import plan.
 
 ### Phase 4: External Texture Sampling And Presentation Examples
 

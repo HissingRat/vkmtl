@@ -6192,6 +6192,18 @@ pub const ExternalResourceOwnership = enum {
     transferred,
 };
 
+pub const ExternalInteropProcessScope = enum {
+    same_process,
+    cross_process,
+    platform_defined,
+};
+
+pub const ExternalInteropDeviceScope = enum {
+    same_device,
+    compatible_device,
+    platform_defined,
+};
+
 pub const ExternalInteropImportPlan = struct {
     backend: Backend,
     platform: ExternalInteropPlatform,
@@ -6201,6 +6213,8 @@ pub const ExternalInteropImportPlan = struct {
     feature_gate: ?ExternalInteropFeatureGate = null,
     ownership: ExternalResourceOwnership = .borrowed,
     handle_value: usize = 0,
+    process_scope: ExternalInteropProcessScope = .same_process,
+    device_scope: ExternalInteropDeviceScope = .same_device,
 
     pub fn enabled(self: ExternalInteropImportPlan) bool {
         return self.lane != .unsupported;
@@ -6216,6 +6230,14 @@ pub const ExternalInteropImportPlan = struct {
 
     pub fn isTransferred(self: ExternalInteropImportPlan) bool {
         return self.ownership == .transferred;
+    }
+
+    pub fn supportsCrossProcess(self: ExternalInteropImportPlan) bool {
+        return self.process_scope == .cross_process;
+    }
+
+    pub fn requiresCompatibleDevice(self: ExternalInteropImportPlan) bool {
+        return self.device_scope == .compatible_device or self.device_scope == .same_device;
     }
 };
 
@@ -6352,6 +6374,38 @@ fn unsupportedExternalResource(resource: ExternalInteropResourceKind) AdvancedFe
     };
 }
 
+fn externalInteropProcessScope(handle_kind: ExternalHandleKind) ExternalInteropProcessScope {
+    return switch (handle_kind) {
+        .opaque_fd,
+        .win32_handle,
+        .iosurface,
+        => .cross_process,
+        .metal_shared_event => .platform_defined,
+        .vulkan_memory,
+        .vulkan_image,
+        .vulkan_semaphore,
+        .metal_buffer,
+        .metal_texture,
+        => .same_process,
+    };
+}
+
+fn externalInteropDeviceScope(handle_kind: ExternalHandleKind) ExternalInteropDeviceScope {
+    return switch (handle_kind) {
+        .opaque_fd,
+        .win32_handle,
+        .iosurface,
+        => .compatible_device,
+        .metal_shared_event => .platform_defined,
+        .vulkan_memory,
+        .vulkan_image,
+        .vulkan_semaphore,
+        .metal_buffer,
+        .metal_texture,
+        => .same_device,
+    };
+}
+
 fn externalInteropImportPlan(
     backend: Backend,
     platform: ExternalInteropPlatform,
@@ -6382,6 +6436,8 @@ fn externalInteropImportPlan(
         .feature_gate = entry.feature_gate,
         .ownership = ownership,
         .handle_value = handle.value,
+        .process_scope = externalInteropProcessScope(handle.kind),
+        .device_scope = externalInteropDeviceScope(handle.kind),
     };
 }
 
@@ -11997,6 +12053,72 @@ test "vulkan external import planning validates platform handle lanes" {
             .width = 32,
             .height = 32,
         },
+        no_features,
+        external_features,
+    ));
+}
+
+test "metal external import planning records shared texture and event constraints" {
+    const no_features = DeviceFeatures{};
+    const external_features = DeviceFeatures{
+        .external_memory = true,
+        .external_textures = true,
+        .external_semaphores = true,
+    };
+
+    const iosurface_texture = ExternalTextureDescriptor{
+        .handle = .{ .kind = .iosurface, .value = 20 },
+        .format = .bgra8_unorm,
+        .width = 128,
+        .height = 64,
+    };
+    const iosurface_plan = try planExternalTextureImport(
+        .metal,
+        .macos,
+        iosurface_texture,
+        no_features,
+        external_features,
+    );
+    try std.testing.expectEqual(ExternalInteropLane.capability_gated, iosurface_plan.lane);
+    try std.testing.expectEqual(ExternalInteropProcessScope.cross_process, iosurface_plan.process_scope);
+    try std.testing.expectEqual(ExternalInteropDeviceScope.compatible_device, iosurface_plan.device_scope);
+    try std.testing.expect(iosurface_plan.supportsCrossProcess());
+
+    const native_texture = try planExternalTextureImport(
+        .metal,
+        .macos,
+        .{
+            .handle = .{ .kind = .metal_texture, .value = 21 },
+            .format = .rgba8_unorm,
+            .width = 64,
+            .height = 64,
+        },
+        no_features,
+        external_features,
+    );
+    try std.testing.expectEqual(ExternalInteropLane.native_only, native_texture.lane);
+    try std.testing.expectEqual(ExternalInteropProcessScope.same_process, native_texture.process_scope);
+    try std.testing.expectEqual(ExternalInteropDeviceScope.same_device, native_texture.device_scope);
+
+    const shared_event = try planExternalEventImport(
+        .metal,
+        .macos,
+        .{
+            .handle = .{ .kind = .metal_shared_event, .value = 22 },
+            .shared = true,
+            .ownership = .borrowed,
+        },
+        no_features,
+        external_features,
+    );
+    try std.testing.expectEqual(ExternalInteropLane.capability_gated, shared_event.lane);
+    try std.testing.expectEqual(ExternalInteropProcessScope.platform_defined, shared_event.process_scope);
+    try std.testing.expectEqual(ExternalInteropDeviceScope.platform_defined, shared_event.device_scope);
+
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalTextures, planExternalTextureImport(
+        .metal,
+        .linux,
+        iosurface_texture,
         no_features,
         external_features,
     ));
