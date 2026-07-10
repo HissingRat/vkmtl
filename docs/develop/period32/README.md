@@ -1,8 +1,8 @@
 # Period 32: Vulkan Ray Traced Scene Driver Path
 
-Status: in progress; Phases 1-5 complete for the first direct Vulkan ray
-tracing output path. Phases 6-7 own supported-hardware validation and docs
-closure.
+Status: completed. Phases 1-5 implement the first direct Vulkan ray tracing
+output path, and Phases 6-7 close supported-hardware validation and
+documentation on the recorded Windows/NVIDIA setup.
 
 Goal: make `zig build run-ray-traced-scene -Dvulkan` create the Vulkan
 ray-tracing driver objects, submit the Vulkan trace command, and present
@@ -142,10 +142,15 @@ for command lowering.
 
 See `phase5.md`.
 
-Phase 5 is complete for the first-scene Vulkan path. The example now builds a
+Phase 5 is complete for the first-scene Vulkan path. The example builds a
 minimal TLAS, creates and binds a storage output texture, dispatches
-`vkCmdTraceRaysKHR`, copies the output image into the current swapchain image,
-and reports `driver_pixels=visible_vulkan_rt_output` on the Vulkan path.
+`vkCmdTraceRaysKHR`, and copies the output image into the current swapchain
+image. The original Period32 path reported
+`driver_pixels=visible_vulkan_rt_output`. The current example has since been
+upgraded by Period33 and Period34 and reports
+`driver_pixels=visible_vulkan_procedural_rt_scene`; that marker supersedes the
+original marker and proves the Period32 AS/pipeline/SBT/trace/presentation path
+as part of a broader procedural scene.
 
 ### Phase 6: Validation On Supported Vulkan Hardware
 
@@ -156,6 +161,12 @@ and reports `driver_pixels=visible_vulkan_rt_output` on the Vulkan path.
 
 See `phase6.md`.
 
+Phase 6 is complete. The forced Vulkan example was visibly validated on an
+NVIDIA GeForce RTX 5080 under Windows 10, with both BLAS and TLAS built and the
+trace dispatch submitted to the driver. The exact environment, commands,
+markers, screenshot location, and unsupported-lane evidence classification are
+recorded in `phase6.md`.
+
 ### Phase 7: Documentation And Follow-Up Routing
 
 - Update docs to state the first Vulkan ray traced scene support.
@@ -164,6 +175,10 @@ See `phase6.md`.
 - Keep Metal and Vulkan support statements separate and precise.
 
 See `phase7.md`.
+
+Phase 7 is complete. Usage documentation records the forced Vulkan command,
+the current superseding success marker, and the actionable unsupported
+contract. Period33, Period34, and later Period32+ routing remains explicit.
 
 ## Deferred From Period 32
 

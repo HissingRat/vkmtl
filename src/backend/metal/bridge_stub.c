@@ -1039,6 +1039,15 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_fill_buffer(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_generate_mipmaps(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_texture *texture
+) {
+    (void)encoder;
+    (void)texture;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_end_encoding(
     vkmtl_metal_blit_command_encoder *encoder
 ) {

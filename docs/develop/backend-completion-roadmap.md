@@ -284,11 +284,18 @@ Tracked in `docs/develop/period32/`.
 - [x] Vulkan ray tracing pipeline and SBT materialization.
 - [x] `vkCmdTraceRaysKHR` dispatch to an output texture.
 - [x] Present the Vulkan ray tracing output texture in the window.
-- [ ] Supported-hardware validation and visible-result documentation.
-- [ ] Documentation closeout and Period32+ routing.
+- [x] Supported-hardware validation and visible-result documentation.
+- [x] Documentation closeout and Period32+ routing.
 
 Expected result: `zig build run-ray-traced-scene -Dvulkan` shows a visible
 ray traced scene on supported Vulkan ray tracing devices.
+
+Observed result: the current Period34-upgraded example was visibly validated
+on Windows/NVIDIA Vulkan hardware. It reported built BLAS/TLAS objects,
+driver-submitted trace work, runtime readiness, and
+`driver_pixels=visible_vulkan_procedural_rt_scene`. This marker supersedes the
+original Period32 `visible_vulkan_rt_output` marker and proves a superset of
+the Wave 13 path.
 
 ## Wave 14: Native RT Mesh Scene
 
@@ -326,8 +333,9 @@ Tracked in `docs/develop/period34/`.
   and Metal paths through the Period35 scene-data payload.
 - [x] Replace tessellated sphere meshes with procedural sphere geometry in the
   full native `ray_traced_scene` acceptance example.
-- [ ] Validate visible procedural output or exact unsupported reasons on
-  supported Vulkan RT runtimes. Metal procedural validation is Period39.
+- [x] Validate visible procedural output on supported Vulkan RT hardware.
+  Observed on the Windows/NVIDIA Period32 validation host. Metal procedural
+  validation remains Period39.
 
 Expected result: the Vulkan full native ray traced scene uses procedural
 sphere/custom-intersection geometry for spheres and prints

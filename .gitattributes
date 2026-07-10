@@ -1,0 +1,16 @@
+* text=auto
+
+# Zig's formatter requires LF input even on Windows runners.
+*.zig text eol=lf
+*.zon text eol=lf
+
+# Keep build, shader, and CI sources portable across hosted runners.
+*.c text eol=lf
+*.h text eol=lf
+*.m text eol=lf
+*.mm text eol=lf
+*.slang text eol=lf
+*.msl text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

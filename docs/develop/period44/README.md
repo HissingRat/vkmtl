@@ -1,8 +1,9 @@
 # Period 44: CI, Device Matrix, And Soak Validation
 
 Status: complete for validation infrastructure and the current evidence report.
-The release gate remains open because hosted CI and physical Vulkan artifacts
-are not present; see `parity-report.md`.
+The release gate remains open because the three hosted CI artifacts are not
+present; reviewed local physical Metal and Vulkan evidence is now recorded in
+`parity-report.md`.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a
@@ -79,6 +80,8 @@ See `phase5.md` for the evidence gate, parity report, and voxel-world decision.
 - vkmtl can make a measured, evidence-backed parity claim.
 
 Current result: the infrastructure and report meet the acceptance contract,
-while the report itself is deliberately not release-ready. Metal smoke/pixels/
-bounded soak were observed locally; hosted CI artifacts and physical Vulkan
-smoke/pixels/soak remain missing evidence rather than inferred success.
+while the report itself is deliberately not release-ready. Metal and Vulkan
+smoke/pixels/bounded soak were observed locally. The Vulkan evidence came from
+a physical Windows/NVIDIA host; the configured Linux self-hosted lane remains
+unexecuted. The three hosted CI artifacts remain missing rather than inferred
+from local runs.

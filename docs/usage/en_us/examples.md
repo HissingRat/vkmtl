@@ -377,8 +377,31 @@ Vulkan RT hardware its success marker is
 `driver_pixels=visible_vulkan_procedural_rt_scene`. Metal procedural
 function-table parity and shared RT scene buffers are routed to Period35.
 
+The current procedural marker supersedes the original Period32
+`driver_pixels=visible_vulkan_rt_output` marker. It still proves the native
+Vulkan acceleration-structure, pipeline, SBT, `vkCmdTraceRaysKHR`, and
+output-presentation path, now as part of the later procedural scene. The
+[Period32 Phase 6 validation record](../../develop/period32/phase6.md) names
+the observed Windows/NVIDIA hardware, command, build gates, and screenshot.
+
+When the Vulkan runtime lacks a required extension, feature, limit, or device
+procedure, the example exits before native ray tracing setup and reports an
+actionable diagnostic:
+
+```text
+vulkan ray tracing unsupported: blocker=<blocker>, requirement=<requirement>, details=<details>
+```
+
+The recorded validation host had no non-ray-tracing ICD. This unsupported
+behavior is therefore documented from the passing capability-diagnostics unit
+contract, not claimed as a physical unsupported-device run.
+
 Run it with:
 
 ```sh
 zig build run-ray-traced-scene
+zig build run-ray-traced-scene -Dvulkan
 ```
+
+Use `-Dvulkan` when the validation result must prove the Vulkan path rather
+than the default backend selection.

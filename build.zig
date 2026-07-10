@@ -92,6 +92,11 @@ pub fn build(b: *std.Build) void {
     });
     const zig_glfw = zig_glfw_dep.module("zig_glfw");
     const glfw = zig_glfw_dep.artifact("glfw");
+    if (target.result.os.tag == .linux) {
+        // GLFW's CMake build defines this because -std=c99 otherwise hides
+        // the POSIX interfaces used by its Linux platform sources.
+        glfw.root_module.addCMacro("_DEFAULT_SOURCE", "1");
+    }
 
     const metal_bridge = b.addTranslateC(.{
         .root_source_file = b.path("src/backend/metal/bridge.h"),

@@ -31,6 +31,10 @@ const VulkanShaderModule = @import("../backend/vulkan/shader_module.zig");
 const VulkanTexture = @import("../backend/vulkan/texture.zig");
 const VulkanTextureView = @import("../backend/vulkan/texture_view.zig");
 
+const windows_c = if (builtin.os.tag == .windows) struct {
+    extern "c" fn _waccess(path: [*:0]const u16, mode: c_int) c_int;
+} else struct {};
+
 pub const ClearColor = core.ClearColorLike;
 
 pub const ResourceKind = enum {
@@ -640,8 +644,18 @@ fn objectCreationElapsedNs(start: i128) u64 {
 }
 
 fn pathExists(path: []const u8) bool {
-    if (builtin.os.tag == .windows) return false;
     if (path.len == 0 or path.len >= std.Io.Dir.max_path_bytes) return false;
+
+    if (builtin.os.tag == .windows) {
+        var wide_buffer: [std.Io.Dir.max_path_bytes:0]u16 = undefined;
+        const wide_len = std.unicode.wtf8ToWtf16Le(
+            wide_buffer[0..path.len],
+            path,
+        ) catch return false;
+        wide_buffer[wide_len] = 0;
+        return windows_c._waccess(wide_buffer[0..wide_len :0].ptr, 0) == 0;
+    }
+
     var buffer: [std.Io.Dir.max_path_bytes:0]u8 = undefined;
     @memcpy(buffer[0..path.len], path);
     buffer[path.len] = 0;
@@ -8499,7 +8513,7 @@ test "runtime device plans ray tracing pipeline lowering from native capabilitie
 
 test "runtime creates ray tracing pipeline states from native capabilities" {
     var tracker = ResourceTracker{};
-    var backend_runtime: BackendRuntime = undefined;
+    var backend_runtime: BackendRuntime = .{ .vulkan = undefined };
     var report = core.defaultDeviceCapabilityReport(.vulkan);
     report.features.ray_tracing = false;
     report.native_features.ray_tracing = true;
@@ -8624,7 +8638,7 @@ test "runtime plans complex shader binding tables through device" {
 
 test "runtime creates shader binding tables and dispatches rays" {
     var tracker = ResourceTracker{};
-    var backend_runtime: BackendRuntime = undefined;
+    var backend_runtime: BackendRuntime = .{ .vulkan = undefined };
     var report = core.defaultDeviceCapabilityReport(.vulkan);
     report.features.ray_tracing = false;
     report.native_features.ray_tracing = true;
@@ -9432,14 +9446,49 @@ test "runtime resource table rejects update after bind without range support" {
 }
 
 test "runtime external texture wrapper validates and tracks lifetime" {
+    const platform = core.ExternalInteropPlatform.native();
+    const backend: core.Backend = switch (platform) {
+        .macos, .ios => .metal,
+        .linux, .windows => .vulkan,
+        .unknown => return error.SkipZigTest,
+    };
+    const memory_handle_kind: core.ExternalHandleKind = switch (platform) {
+        .macos, .ios => .metal_buffer,
+        .linux => .opaque_fd,
+        .windows => .win32_handle,
+        .unknown => unreachable,
+    };
+    const texture_handle_kind: core.ExternalHandleKind = switch (platform) {
+        .macos, .ios => .metal_texture,
+        .linux => .opaque_fd,
+        .windows => .win32_handle,
+        .unknown => unreachable,
+    };
+    const platform_texture_handle_kind: core.ExternalHandleKind = switch (platform) {
+        .macos, .ios => .iosurface,
+        .linux => .opaque_fd,
+        .windows => .win32_handle,
+        .unknown => unreachable,
+    };
+    const semaphore_handle_kind: core.ExternalHandleKind = switch (platform) {
+        .macos, .ios => .metal_shared_event,
+        .linux => .opaque_fd,
+        .windows => .win32_handle,
+        .unknown => unreachable,
+    };
+    const resource_lane: core.ExternalInteropLane = if (backend == .metal) .native_only else .capability_gated;
+    const supports_external_events = backend == .metal;
+    const other_backend: core.Backend = if (backend == .metal) .vulkan else .metal;
+
     var tracker = ResourceTracker{};
-    var backend_runtime = BackendRuntime{
-        .metal = .{
+    var backend_runtime: BackendRuntime = switch (backend) {
+        .metal => .{ .metal = .{
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
-        },
+        } },
+        .vulkan => .{ .vulkan = undefined },
     };
-    var report = core.defaultDeviceCapabilityReport(.metal);
+    var report = core.defaultDeviceCapabilityReport(backend);
     report.features.external_memory = true;
     report.features.external_textures = true;
     report.features.external_semaphores = true;
@@ -9450,31 +9499,35 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     var device = Device{
         .allocator = std.testing.allocator,
         .tracker = &tracker,
-        .backend = .metal,
+        .backend = backend,
         .impl = &backend_runtime,
         .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
+            .backend = backend,
+            .name = "test external interop adapter",
         },
         .capability_report = report,
     };
 
-    const interop_matrix = device.externalInteropCapabilityMatrixForPlatform(.macos);
+    const interop_matrix = device.externalInteropCapabilityMatrixForPlatform(platform);
     try std.testing.expect(interop_matrix.supportsPortableWrapper(.texture));
-    try std.testing.expect(interop_matrix.supports(.texture, .iosurface));
-    try std.testing.expect(interop_matrix.supports(.event, .metal_shared_event));
-    const iosurface_diagnostic = device.diagnoseExternalInteropImportForPlatform(
-        .macos,
-        .texture,
-        .{ .kind = .iosurface, .value = 6 },
+    try std.testing.expect(interop_matrix.supports(.texture, texture_handle_kind));
+    try std.testing.expect(interop_matrix.supports(.texture, platform_texture_handle_kind));
+    try std.testing.expectEqual(
+        supports_external_events,
+        interop_matrix.supports(.event, semaphore_handle_kind),
     );
-    try std.testing.expect(iosurface_diagnostic.ok());
-    try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, iosurface_diagnostic.lane);
+    const texture_diagnostic = device.diagnoseExternalInteropImportForPlatform(
+        platform,
+        .texture,
+        .{ .kind = platform_texture_handle_kind, .value = 6 },
+    );
+    try std.testing.expect(texture_diagnostic.ok());
+    try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, texture_diagnostic.lane);
 
     var memory = try device.makeExternalMemory(.{
         .label = "external memory",
         .handle = .{
-            .kind = .metal_buffer,
+            .kind = memory_handle_kind,
             .value = 2,
         },
         .size = 256,
@@ -9485,7 +9538,7 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     var buffer = try device.makeExternalBuffer(.{
         .label = "external buffer",
         .handle = .{
-            .kind = .metal_buffer,
+            .kind = memory_handle_kind,
             .value = 3,
         },
         .length = 128,
@@ -9495,26 +9548,38 @@ test "runtime external texture wrapper validates and tracks lifetime" {
 
     var semaphore = try device.makeExternalSemaphore(.{
         .handle = .{
-            .kind = .metal_shared_event,
+            .kind = semaphore_handle_kind,
             .value = 4,
         },
         .timeline = true,
     });
     defer semaphore.deinit();
 
-    var event = try device.makeExternalEvent(.{
-        .handle = .{
-            .kind = .metal_shared_event,
-            .value = 5,
-        },
-        .shared = true,
-    });
-    defer event.deinit();
+    var event: ?ExternalEvent = if (supports_external_events)
+        try device.makeExternalEvent(.{
+            .handle = .{
+                .kind = semaphore_handle_kind,
+                .value = 5,
+            },
+            .shared = true,
+        })
+    else
+        null;
+    defer if (event) |*external_event| external_event.deinit();
+    if (!supports_external_events) {
+        try std.testing.expectError(core.AdvancedFeatureError.UnsupportedExternalSemaphores, device.makeExternalEvent(.{
+            .handle = .{
+                .kind = semaphore_handle_kind,
+                .value = 5,
+            },
+            .shared = true,
+        }));
+    }
 
     var texture = try device.makeExternalTexture(.{
         .label = "external texture",
         .handle = .{
-            .kind = .metal_texture,
+            .kind = texture_handle_kind,
             .value = 1,
         },
         .format = .rgba8_unorm,
@@ -9523,16 +9588,16 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     });
     defer texture.deinit();
 
-    try std.testing.expectEqual(core.Backend.metal, texture.selectedBackend());
+    try std.testing.expectEqual(backend, texture.selectedBackend());
     try std.testing.expectEqual(core.ExternalResourceOwnership.borrowed, texture.ownership());
     try std.testing.expectEqual(@as(u32, 64), texture.textureDescriptor().width);
-    try std.testing.expectEqual(core.ExternalInteropLane.native_only, texture.importPlan().lane);
+    try std.testing.expectEqual(resource_lane, texture.importPlan().lane);
     try std.testing.expect(texture.importPlan().requiresNativeImport());
-    const usage_plan = try device.planExternalTextureUsageForPlatform(.macos, .{
+    const usage_plan = try device.planExternalTextureUsageForPlatform(platform, .{
         .texture = .{
             .label = "external texture",
             .handle = .{
-                .kind = .metal_texture,
+                .kind = texture_handle_kind,
                 .value = 1,
             },
             .format = .rgba8_unorm,
@@ -9551,31 +9616,40 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expect(usage_plan.requiresSampling());
     try std.testing.expect(usage_plan.requiresCopy());
     try std.testing.expect(usage_plan.requiresPresentation());
-    try std.testing.expectEqual(core.Backend.metal, memory.selectedBackend());
+    try std.testing.expectEqual(backend, memory.selectedBackend());
     try std.testing.expectEqual(@as(u64, 256), memory.size());
     try std.testing.expectEqual(core.ExternalResourceOwnership.transferred, memory.ownership());
-    try std.testing.expectEqual(core.ExternalInteropLane.native_only, memory.importPlan().lane);
+    try std.testing.expectEqual(resource_lane, memory.importPlan().lane);
     try std.testing.expectEqual(@as(u64, 128), buffer.length());
     try std.testing.expect(buffer.usage().storage);
     try std.testing.expect(semaphore.isTimeline());
     try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, semaphore.importPlan().lane);
-    try std.testing.expect(event.isShared());
-    try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, event.importPlan().lane);
-    const external_sync = ExternalSynchronizationDescriptor{
-        .wait_semaphores = &.{&semaphore},
-        .signal_events = &.{&event},
-    };
-    const external_sync_plan = try external_sync.plan(.metal);
+    if (event) |external_event| {
+        try std.testing.expect(external_event.isShared());
+        try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, external_event.importPlan().lane);
+    }
+    const external_sync = if (event) |*external_event|
+        ExternalSynchronizationDescriptor{
+            .wait_semaphores = &.{&semaphore},
+            .signal_events = &.{external_event},
+        }
+    else
+        ExternalSynchronizationDescriptor{
+            .wait_semaphores = &.{&semaphore},
+            .signal_semaphores = &.{&semaphore},
+        };
+    const external_sync_plan = try external_sync.plan(backend);
     try std.testing.expect(external_sync_plan.hasWaits());
     try std.testing.expect(external_sync_plan.hasSignals());
     try std.testing.expect(external_sync_plan.requiresNativeInterop());
     try std.testing.expectEqual(@as(usize, 1), external_sync_plan.wait_semaphore_count);
-    try std.testing.expectEqual(@as(usize, 1), external_sync_plan.signal_event_count);
+    try std.testing.expectEqual(@as(usize, if (supports_external_events) 0 else 1), external_sync_plan.signal_semaphore_count);
+    try std.testing.expectEqual(@as(usize, if (supports_external_events) 1 else 0), external_sync_plan.signal_event_count);
     try std.testing.expectEqual(@as(usize, 1), external_sync_plan.native_wait_count);
     try std.testing.expectEqual(@as(usize, 1), external_sync_plan.native_signal_count);
-    try std.testing.expectError(RuntimeError.BackendMismatch, external_sync.plan(.vulkan));
+    try std.testing.expectError(RuntimeError.BackendMismatch, external_sync.plan(other_backend));
     var command_buffer = CommandBuffer{
-        .backend = .metal,
+        .backend = backend,
         .tracker = &tracker,
     };
     try command_buffer.commitWithExternalSynchronization(external_sync);
@@ -9583,7 +9657,7 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(@as(usize, 1), tracker.external_memories);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_buffers);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_semaphores);
-    try std.testing.expectEqual(@as(usize, 1), tracker.external_events);
+    try std.testing.expectEqual(@as(usize, if (supports_external_events) 1 else 0), tracker.external_events);
     try std.testing.expectEqual(@as(usize, 1), tracker.textures);
 }
 

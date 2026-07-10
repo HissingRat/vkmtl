@@ -602,8 +602,9 @@ See `docs/develop/period31/`.
 
 ## Period 32: Vulkan Ray Traced Scene Driver Path
 
-Status: in progress; Phases 1-5 implement the first direct Vulkan ray tracing
-output path. Phases 6-7 own supported-hardware validation and docs closure.
+Status: completed. Phases 1-5 implement the first direct Vulkan ray tracing
+output path, and Phases 6-7 close supported-hardware validation and docs on the
+recorded Windows/NVIDIA setup.
 
 Goal: make `zig build run-ray-traced-scene -Dvulkan` pass Vulkan capability
 gates, create real Vulkan AS/pipeline/SBT objects, submit `vkCmdTraceRaysKHR`,
@@ -645,8 +646,9 @@ See `docs/develop/period33/`.
 
 ## Period 34: Procedural RT Geometry And Custom Intersection
 
-Status: Vulkan procedural path implemented; supported-hardware validation
-pending.
+Status: Vulkan procedural path implemented and visibly validated on the
+recorded Windows/NVIDIA hardware. Metal procedural/intersection-function-table
+completion remains routed to Period39.
 
 Goal: replace the Vulkan mesh-sphere approximation from Period 33 with native
 procedural sphere/custom intersection support. The full `ray_traced_scene`
@@ -822,8 +824,8 @@ See `docs/develop/period43/`.
 ## Period 44: CI, Device Matrix, And Soak Validation
 
 Status: complete for validation infrastructure and the current parity report.
-Release readiness remains false until hosted CI and physical Vulkan evidence
-are attached.
+Release readiness remains false until the three hosted CI artifacts are
+attached; local physical Metal and Vulkan evidence is recorded.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a
@@ -851,11 +853,12 @@ See `docs/develop/period32+/target.md`.
 ## Priority Notes
 
 - Periods 42 through 44 are complete as implementation slices. The active
-  validation priority is collecting the missing hosted CI and physical Vulkan
-  artifacts identified by the Period 44 parity report.
-- Period 32 Phases 6-7 remain a carry-over validation gate: the Vulkan RT path
-  still needs a supported-hardware run and its visible/unsupported behavior
-  documented. This does not block portable contract work in later periods.
+  validation priority is collecting the three missing hosted CI artifacts
+  identified by the Period 44 parity report.
+- Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
+  Windows/NVIDIA hardware; unsupported behavior is documented from the
+  deterministic capability contract and unit coverage because the host had no
+  non-RT ICD.
 - Period 33 is closed for the mesh-scene slice; its original multi-instance,
   shared scene-layout, and cross-backend parity follow-ups are owned by the
   later ray-tracing completeness and device-matrix work.
@@ -863,8 +866,9 @@ See `docs/develop/period32+/target.md`.
   claim driver-level ray tracing pixels or full native parity.
 - Period 31 has made the Metal ray traced scene visibly render in the window
   through a first native Metal RT command path.
-- Period 32 implemented the Vulkan driver path, but supported-hardware evidence
-  and documentation are still open.
+- Period 32 implemented and physically validated the Vulkan driver path. The
+  current Period34 procedural success marker supersedes the original Period32
+  marker while retaining the AS/pipeline/SBT/trace/presentation baseline.
 - Period 34 adds Vulkan procedural sphere/custom intersection support and
   validates it through the full native `ray_traced_scene` example.
 - Period 35 owns shared RT scene data and precise ownership for the remaining

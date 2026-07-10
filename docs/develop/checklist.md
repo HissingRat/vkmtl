@@ -18,9 +18,11 @@ closed one by one as vkmtl moves from prototype to library.
 ## Current Priority
 
 - Period 44 implementation is complete. Current validation priority is to
-  execute the configured hosted CI and physical Vulkan evidence lanes.
-- Carry-over validation gate: Period 32 Phases 6-7 still require a supported
-  Vulkan RT hardware run plus visible-result and unsupported-runtime docs.
+  execute the three configured hosted CI lanes; local physical Metal and
+  Vulkan evidence is now recorded.
+- Period 32 Phases 6-7 are closed with a supported Windows/NVIDIA Vulkan RT
+  run, visible-result evidence, and the unsupported-runtime diagnostics
+  contract documented without claiming a non-RT hardware observation.
 - Period 33 is closed for its mesh-scene slice; remaining original
   multi-instance and shared scene-layout items are routed to later RT
   completeness/device-matrix work.
@@ -1984,14 +1986,18 @@ obvious render and binding blockers.
 
 - [x] Keep `zig build test` passing.
 - [x] Keep `zig build` passing.
-- [ ] Run `zig build run-ray-traced-scene -Dvulkan` on supported Vulkan ray
+- [x] Run `zig build run-ray-traced-scene -Dvulkan` on supported Vulkan ray
   tracing hardware.
-- [ ] Document visible-result and unsupported-runtime behavior.
+- [x] Document the physically observed visible result and the deterministic
+  unsupported-runtime contract. The validation host had no non-RT ICD, so the
+  unsupported lane is not recorded as a hardware run.
 
 ## Period 32 Phase 7 Checklist
 
-- [ ] Update usage docs for the pixel-producing Vulkan ray traced scene.
-- [ ] Update API docs if public behavior changed.
+- [x] Update usage docs for the pixel-producing Vulkan ray traced scene.
+- [x] Confirm that no API documentation update is required: Phase 6-7 change
+  validation evidence and support wording only, not public API or runtime
+  behavior.
 - [x] Route full native mesh-scene work to Period33.
 - [x] Route procedural/custom-intersection work to Period34.
 
@@ -2124,8 +2130,8 @@ obvious render and binding blockers.
 - [x] Keep `zig build` passing.
 - [x] Run the Metal RT path on supported hardware to verify the Period33 mesh
   path still works.
-- [ ] Run the procedural Vulkan path on supported hardware, or record an exact
-  unsupported reason. Pending external Windows/NVIDIA validation.
+- [x] Run the procedural Vulkan path on supported hardware. Observed on the
+  Windows/NVIDIA Period32 validation host with the procedural success marker.
 - [x] Capture or document visible procedural scene output.
 - [x] Update backend completion and test matrices.
 - [x] Update usage/API docs for procedural RT support.

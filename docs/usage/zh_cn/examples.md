@@ -262,8 +262,28 @@ Slang intersection SPIR-V、procedural hit group 和 native `vkCmdTraceRaysKHR` 
 `driver_pixels=visible_vulkan_procedural_rt_scene`。Metal procedural function table parity
 和共享 RT scene buffer 被路由到 Period35。
 
+当前 procedural marker 已取代 Period32 原来的
+`driver_pixels=visible_vulkan_rt_output` marker。它仍会验证 native Vulkan
+acceleration structure、pipeline、SBT、`vkCmdTraceRaysKHR` 和 output presentation，
+只是现在这些路径属于后续 procedural scene 的一部分。
+[Period32 Phase 6 验证记录](../../develop/period32/phase6.md)列出了实际观察到的
+Windows/NVIDIA 硬件、命令、build gate 和截图。
+
+如果 Vulkan runtime 缺少所需 extension、feature、limit 或 device procedure，示例会在
+native ray tracing setup 前退出并打印可执行的诊断：
+
+```text
+vulkan ray tracing unsupported: blocker=<blocker>, requirement=<requirement>, details=<details>
+```
+
+本次验证主机没有非 ray-tracing ICD。因此 unsupported 行为来自已通过的 capability
+diagnostics 单元契约，不声称做过物理 unsupported-device 运行。
+
 运行：
 
 ```sh
 zig build run-ray-traced-scene
+zig build run-ray-traced-scene -Dvulkan
 ```
+
+需要明确验证 Vulkan 路径而不是默认 backend selection 时，请使用 `-Dvulkan`。

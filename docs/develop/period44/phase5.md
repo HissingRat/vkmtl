@@ -1,7 +1,8 @@
 # Phase 5: Release Readiness And Parity Report
 
 Status: complete. The current report is intentionally not release-ready because
-only 3 of 9 required evidence gates were observed.
+6 of 9 required evidence gates were observed; the three hosted build/test
+artifacts remain missing.
 
 ## Release Gate
 

@@ -1,7 +1,8 @@
 # Phase 3: Screenshot And Pixel Regression Harness
 
-Status: complete. The Metal run passed all three automated cases; the Vulkan
-run remains a configured, unobserved release gate.
+Status: complete. The Metal and Windows/NVIDIA Vulkan runs passed all three
+automated cases. The configured Linux self-hosted Vulkan lane remains
+unexecuted.
 
 ## Automated Pixel Cases
 
@@ -32,3 +33,9 @@ only to make a failing device pass.
 
 Observed Metal result: `render pixel regression ok backend=metal
 max_channel_delta=0`.
+
+Observed Vulkan result at commit `e2a7362f` on Windows 10 build 19045 x86_64,
+an NVIDIA GeForce RTX 5080, NVIDIA driver 610.62, and Vulkan API 1.4.341:
+transfer and compute readbacks were exact, and
+`render pixel regression ok backend=vulkan max_channel_delta=1`. The existing
+render tolerances were not widened for this result.
