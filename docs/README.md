@@ -53,6 +53,9 @@ vkmtl documentation is organized by audience and purpose.
 - `develop/period17/`: ray tracing backend lowering
 - `develop/period18/`: production hardening and performance
 - `develop/period19/`: voxel world pressure-test example
+- `develop/period43/`: profiling, capture, and debug-marker diagnostics
+- `develop/period44/`: CI/device evidence, pixel regression, GPU soak, and
+  current parity report
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

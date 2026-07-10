@@ -17,15 +17,15 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Current Priority
 
-- Active implementation phase: Period 44 Phase 1, CI job matrix and feature
-  reporting.
+- Period 44 implementation is complete. Current validation priority is to
+  execute the configured hosted CI and physical Vulkan evidence lanes.
 - Carry-over validation gate: Period 32 Phases 6-7 still require a supported
   Vulkan RT hardware run plus visible-result and unsupported-runtime docs.
 - Period 33 is closed for its mesh-scene slice; remaining original
   multi-instance and shared scene-layout items are routed to later RT
   completeness/device-matrix work.
-- Periods 42 and 43 are complete. Period 44 owns CI, device-matrix, visual, and
-  soak validation.
+- Periods 42 through 44 are complete as implementation slices. Period 44's
+  parity report remains not release-ready until missing evidence is collected.
 - Period 1 Phase 9 pre-tag API and release-polish items remain open, but are not
   the active feature phase.
 
@@ -1792,8 +1792,8 @@ obvious render and binding blockers.
 - [x] Decide depth/stencil and MSAA texture copies as typed unsupported
   behavior for now.
 - [x] Decide custom sampler border colors as native-extension-only semantics.
-- [x] Route GPU-backed soak validation to Period 32+ validation matrix while preserving
-  opt-in `StabilityRunPlan` planning.
+- [x] Route GPU-backed soak validation forward while preserving opt-in
+  `StabilityRunPlan` planning; the common GPU runner landed in Period 44.
 - [x] Add focused core and runtime tests for parity plans.
 
 ## Period 29 Phase 7 Checklist
@@ -2452,34 +2452,34 @@ obvious render and binding blockers.
 
 ## Period 44 Phase 1 Checklist
 
-- [ ] Define host OS, target OS, backend, and device classes.
-- [ ] Record unsupported features as expected matrix outcomes.
-- [ ] Keep capability dump output attached to failures.
+- [x] Define host OS, target OS, backend, and device classes.
+- [x] Record unsupported features as expected matrix outcomes.
+- [x] Keep capability dump output attached to failures.
 
 ## Period 44 Phase 2 Checklist
 
-- [ ] Add or document at least one Metal smoke host.
-- [ ] Add or document at least one Vulkan smoke host.
-- [ ] Separate local-only GPU runs from ordinary CPU-only CI.
+- [x] Add or document at least one Metal smoke host.
+- [x] Add or document at least one Vulkan smoke host.
+- [x] Separate local-only GPU runs from ordinary CPU-only CI.
 
 ## Period 44 Phase 3 Checklist
 
-- [ ] Add screenshot or pixel readback checks for representative examples.
-- [ ] Track expected tolerances for Vulkan/Metal differences.
-- [ ] Keep visual tests deterministic where possible.
+- [x] Add screenshot or pixel readback checks for representative examples.
+- [x] Track expected tolerances for Vulkan/Metal differences.
+- [x] Keep visual tests deterministic where possible.
 
 ## Period 44 Phase 4 Checklist
 
-- [ ] Add long-running presentation, shader, resource, and residency churn
+- [x] Add long-running presentation, shader, resource, and residency churn
   runs.
-- [ ] Record memory pressure, queue sync, and device-loss behavior.
-- [ ] Keep soak failures actionable and scoped.
+- [x] Record memory pressure, queue sync, and device-loss behavior.
+- [x] Keep soak failures actionable and scoped.
 
 ## Period 44 Phase 5 Checklist
 
-- [ ] Produce a backend capability/parity report from current test data.
-- [ ] Document known unsupported items and native escape hatch requirements.
-- [ ] Decide whether the voxel-world pressure test can move from deferred to
+- [x] Produce a backend capability/parity report from current test data.
+- [x] Document known unsupported items and native escape hatch requirements.
+- [x] Decide whether the voxel-world pressure test can move from deferred to
   active.
 
 ## First Backend-Independent Triangle Checklist

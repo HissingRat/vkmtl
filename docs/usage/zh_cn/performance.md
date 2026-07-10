@@ -48,8 +48,20 @@ staging-copy fallback。
 zig build run-stability-plan -- --iterations 120
 ```
 
-这个命令会打印 resize、resource churn、shader artifact、upload，以及 Vulkan unaligned-fill fallback
-的计划计数。完整 GPU soak loop 仍属于后续 backend hardening 工作。
+这个命令会在不开窗口的情况下打印 resize、resource churn、shader artifact、upload，以及 Vulkan
+unaligned-fill fallback 的计划计数。
+
+需要 opt-in 的真实 GPU workload 时，使用：
+
+```sh
+zig build run-pixel-regression
+zig build run-gpu-soak -- --iterations=120
+```
+
+Pixel step 会做 transfer、compute 和 offscreen render readback。Soak 会交替 presentation extent，
+并 churn resource、upload、readback、embedded shader resolution 和 portable residency state。
+Native heap/sparse/async-queue/memory-pressure 行为仍是独立 capability gate，不能从 portable churn
+counter 推断出来。
 
 ## Profiling Plan
 

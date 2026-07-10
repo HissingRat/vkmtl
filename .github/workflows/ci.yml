@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS aarch64 build
+            os: macos-15
+            command: zig fmt --check build.zig src examples tools && zig build test --summary all && zig build && zig build run-validation-plan
+          - name: Linux x86_64 build
+            os: ubuntu-24.04
+            command: zig fmt --check build.zig src examples tools && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan
+          - name: Windows x86_64 build
+            os: windows-2025
+            command: zig fmt --check build.zig src examples tools && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Install Linux window-system development packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libwayland-dev libxkbcommon-dev
+      - name: Run hosted build evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/hosted-build
+          {
+            echo "runner_os=${RUNNER_OS}"
+            echo "runner_arch=${RUNNER_ARCH}"
+            echo "zig=$(zig version)"
+            ${{ matrix.command }}
+          } 2>&1 | tee artifacts/hosted-build/build.log
+      - name: Upload hosted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-${{ matrix.os }}
+          path: artifacts/hosted-build
+          if-no-files-found: warn
+          retention-days: 14

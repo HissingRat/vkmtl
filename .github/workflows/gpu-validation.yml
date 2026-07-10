@@ -1,0 +1,72 @@
+name: GPU Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: Physical GPU backend to validate
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - metal
+          - vulkan
+      run_soak:
+        description: Run the opt-in GPU soak after smoke/pixels
+        required: true
+        default: false
+        type: boolean
+      soak_iterations:
+        description: Positive iteration count for the optional soak
+        required: true
+        default: "120"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  metal:
+    if: inputs.backend == 'all' || inputs.backend == 'metal'
+    runs-on: [self-hosted, macOS, ARM64, vkmtl-metal]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Metal smoke and pixels
+        run: scripts/ci/run_gpu_smoke.sh metal artifacts/metal-smoke
+      - name: Metal soak
+        if: inputs.run_soak
+        run: scripts/ci/run_gpu_soak.sh metal "${{ inputs.soak_iterations }}" artifacts/metal-soak
+      - name: Upload Metal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metal-gpu-evidence
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
+  vulkan:
+    if: inputs.backend == 'all' || inputs.backend == 'vulkan'
+    runs-on: [self-hosted, Linux, X64, vkmtl-vulkan]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Vulkan smoke and pixels
+        run: scripts/ci/run_gpu_smoke.sh vulkan artifacts/vulkan-smoke
+      - name: Vulkan soak
+        if: inputs.run_soak
+        run: scripts/ci/run_gpu_soak.sh vulkan "${{ inputs.soak_iterations }}" artifacts/vulkan-soak
+      - name: Upload Vulkan evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulkan-gpu-evidence
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30

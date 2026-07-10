@@ -821,8 +821,9 @@ See `docs/develop/period43/`.
 
 ## Period 44: CI, Device Matrix, And Soak Validation
 
-Status: active. Phase 1 CI job matrix and feature reporting is the current
-implementation priority.
+Status: complete for validation infrastructure and the current parity report.
+Release readiness remains false until hosted CI and physical Vulkan evidence
+are attached.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a
@@ -849,8 +850,9 @@ See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
-- Periods 42 and 43 are complete; Period 44 Phase 1 is the active implementation
-  phase.
+- Periods 42 through 44 are complete as implementation slices. The active
+  validation priority is collecting the missing hosted CI and physical Vulkan
+  artifacts identified by the Period 44 parity report.
 - Period 32 Phases 6-7 remain a carry-over validation gate: the Vulkan RT path
   still needs a supported-hardware run and its visible/unsupported behavior
   documented. This does not block portable contract work in later periods.

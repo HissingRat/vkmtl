@@ -23,6 +23,7 @@ const shader_source_paths = [_][]const u8{
     "examples/msaa_triangle/shaders/msaa_triangle.slang",
     "examples/offscreen_texture/shaders/offscreen_texture.slang",
     "examples/compute_readback/shaders/compute_readback.slang",
+    "tools/gpu_soak/shaders/soak.slang",
     "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
     "examples/ray_traced_scene/shaders/ray_traced_scene_metal.msl",
 };
@@ -299,6 +300,22 @@ pub fn build(b: *std.Build) void {
     const compute_readback_step = b.step("run-compute-readback", "Run the vkmtl compute readback example");
     compute_readback_step.dependOn(&compute_readback_cmd.step);
 
+    const pixel_transfer_cmd = b.addRunArtifact(transfer_readback);
+    pixel_transfer_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, pixel_transfer_cmd, target.result.os.tag, vulkan_runtime);
+
+    const pixel_compute_cmd = b.addRunArtifact(compute_readback);
+    pixel_compute_cmd.step.dependOn(&pixel_transfer_cmd.step);
+    configureVulkanRuntimeForRun(b, pixel_compute_cmd, target.result.os.tag, vulkan_runtime);
+
+    const pixel_render_cmd = b.addRunArtifact(offscreen_texture);
+    pixel_render_cmd.step.dependOn(&pixel_compute_cmd.step);
+    pixel_render_cmd.setEnvironmentVariable("VKMTL_PIXEL_REGRESSION", "1");
+    configureVulkanRuntimeForRun(b, pixel_render_cmd, target.result.os.tag, vulkan_runtime);
+
+    const pixel_regression_step = b.step("run-pixel-regression", "Run deterministic transfer, compute, and render pixel readback checks");
+    pixel_regression_step.dependOn(&pixel_render_cmd.step);
+
     const capability_dump = b.addExecutable(.{
         .name = "vkmtl-capability-dump",
         .root_module = b.createModule(.{
@@ -539,6 +556,31 @@ pub fn build(b: *std.Build) void {
     const profiling_plan_step = b.step("run-profiling-plan", "Inspect the vkmtl profiling fallback plan");
     profiling_plan_step.dependOn(&profiling_plan_cmd.step);
 
+    const gpu_soak = b.addExecutable(.{
+        .name = "vkmtl-gpu-soak",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/gpu_soak/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    gpu_soak.root_module.linkLibrary(glfw);
+    b.installArtifact(gpu_soak);
+
+    const gpu_soak_cmd = b.addRunArtifact(gpu_soak);
+    gpu_soak_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, gpu_soak_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, gpu_soak_cmd);
+
+    const gpu_soak_step = b.step("run-gpu-soak", "Run the opt-in windowed GPU resource, upload, shader, and presentation soak");
+    gpu_soak_step.dependOn(&gpu_soak_cmd.step);
+
     const probe = b.addExecutable(.{
         .name = "vkmtl-metal-probe",
         .root_module = b.createModule(.{
@@ -587,17 +629,51 @@ pub fn build(b: *std.Build) void {
     addMetalBridge(b, root_tests.root_module, target.result.os.tag);
     const run_root_tests = b.addRunArtifact(root_tests);
 
+    const development_matrix_module = b.createModule(.{
+        .root_source_file = b.path("tools/development_matrix.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "vkmtl_core", .module = unit_tests.root_module },
+        },
+    });
     const development_matrix_tests = b.addTest(.{
+        .root_module = development_matrix_module,
+    });
+    const run_development_matrix_tests = b.addRunArtifact(development_matrix_tests);
+
+    const validation_plan = b.addExecutable(.{
+        .name = "vkmtl-validation-plan",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/development_matrix.zig"),
+            .root_source_file = b.path("tools/validation_plan/main.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "vkmtl_core", .module = unit_tests.root_module },
+                .{ .name = "vkmtl_development_matrix", .module = development_matrix_module },
             },
         }),
     });
-    const run_development_matrix_tests = b.addRunArtifact(development_matrix_tests);
+    b.installArtifact(validation_plan);
+    const validation_plan_cmd = b.addRunArtifact(validation_plan);
+    const validation_plan_step = b.step("run-validation-plan", "Print the Period 44 host, backend, device, and feature validation plan");
+    validation_plan_step.dependOn(&validation_plan_cmd.step);
+
+    const release_readiness = b.addExecutable(.{
+        .name = "vkmtl-release-readiness",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/release_readiness/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vkmtl_development_matrix", .module = development_matrix_module },
+            },
+        }),
+    });
+    b.installArtifact(release_readiness);
+    const release_readiness_cmd = b.addRunArtifact(release_readiness);
+    forwardRunArgs(b, release_readiness_cmd);
+    const release_readiness_step = b.step("run-release-readiness", "Evaluate explicit Period 44 release evidence gates");
+    release_readiness_step.dependOn(&release_readiness_cmd.step);
 
     const backend_pipeline_tests = b.addTest(.{
         .root_module = b.createModule(.{

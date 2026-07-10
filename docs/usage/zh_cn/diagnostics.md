@@ -91,3 +91,18 @@ profiling support、resource count、work serial 和 object-cache diagnostics。
 
 不要把 native handle 当作稳定标识；优先使用 `scene:opaque-pass`、`upload:staging` 这类确定性
 label。
+
+## Device Evidence 命令
+
+Period 44 会把 build、GPU、pixel、soak 和 release evidence 分开：
+
+```sh
+zig build run-validation-plan
+zig build run-pixel-regression
+zig build run-gpu-soak -- --iterations=120
+zig build run-release-readiness
+```
+
+Readiness 命令默认把所有 evidence gate 设为 missing。只有审阅对应 hosted/self-hosted artifact
+后才能传入 gate flag。当前已经观察到和仍缺失的 lane 记录在
+`docs/develop/period44/parity-report.md`。

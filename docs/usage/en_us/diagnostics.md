@@ -98,3 +98,19 @@ Attach all of the following:
 
 Do not attach native handles as stable identifiers. Prefer deterministic labels
 such as `scene:opaque-pass` or `upload:staging`.
+
+## Device Evidence Commands
+
+Period 44 keeps build, GPU, pixel, soak, and release evidence separate:
+
+```sh
+zig build run-validation-plan
+zig build run-pixel-regression
+zig build run-gpu-soak -- --iterations=120
+zig build run-release-readiness
+```
+
+The readiness command defaults every evidence gate to missing. Pass a gate flag
+only after reviewing the corresponding hosted/self-hosted artifact. The current
+observed and missing lanes are recorded in
+`docs/develop/period44/parity-report.md`.

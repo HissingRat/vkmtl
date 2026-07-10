@@ -159,7 +159,9 @@ Tracked in `docs/develop/period26/`.
 - [x] Diagnostics for cache misses, creation cost, resource churn, capture
   names, and runtime live-resource snapshots.
 - [x] Long-run stability planning command.
-- [ ] GPU-backed long-run soak loops. Deferred to Period 32+ validation matrix.
+- [x] Common GPU-backed presentation/resource/upload/shader/residency-state
+  soak runner. Advanced native pressure lanes remain missing evidence in the
+  Period 44 parity report.
 
 Expected result: completed backend paths are fast enough and observable enough
 for real applications instead of only examples.
@@ -202,8 +204,8 @@ Tracked in `docs/develop/period28/`.
   dispatch integration is deferred to Period 30 Phase 4.
 - [x] Native advanced escape-hatch runtime contract. Backend-private lowering is
   deferred to Period 32+ driver parity plan.
-- [x] Parity semantic decisions and stress planning. Native soak validation is
-  deferred to Period 32+ validation matrix.
+- [x] Parity semantic decisions and stress planning. Period 44 adds the common
+  GPU soak runner and records advanced native soak as missing evidence.
 
 Expected result: high-end backend-specific features become explicit, testable,
 and documented as planning/runtime-contract APIs. Period 30 owns executable
@@ -474,14 +476,15 @@ future native GPU timing without overstating support.
 
 Tracked in `docs/develop/period44/`.
 
-- [ ] CI job matrix and feature reporting.
-- [ ] Metal and Vulkan smoke hosts.
-- [ ] Screenshot/pixel regression harness.
-- [ ] GPU soak and resource churn tests.
-- [ ] Release readiness and parity report.
+- [x] CI job matrix and feature reporting.
+- [x] Metal and Vulkan smoke host definitions and runners.
+- [x] Deterministic transfer, compute, and render pixel regression harness.
+- [x] GPU soak and resource churn runner.
+- [x] Release readiness and parity report with missing evidence kept explicit.
 
 Expected result: vkmtl can make evidence-backed parity claims against a
-documented device matrix.
+documented device matrix without treating configured but unobserved lanes as
+proof. The current report remains not release-ready.
 
 ## Slice Checklist
 

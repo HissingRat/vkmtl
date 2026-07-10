@@ -52,6 +52,10 @@ Current cases:
 - `ray_tracing_completeness`: AS maintenance, many-instance TLAS metadata, ray
   query support, complex SBT layout, callable records, and RT stress plans stay
   capability-gated and deterministic.
+- `period44_device_evidence`: hosted builds, physical smoke, exact/tolerant
+  pixel readback, bounded soak, and release evidence gates remain distinct;
+  missing Vulkan and hosted artifacts remain explicit integration gaps.
 
-The matrix is intentionally tied to unit-test names until backend CI can run
-the same cases through native Vulkan and Metal devices.
+Unit-test metadata remains authoritative for portable validation. Period 44
+adds separate physical GPU evidence workflows so source/build coverage is not
+confused with executed Metal/Vulkan behavior.

@@ -1,6 +1,6 @@
 # Public API Inventory
 
-Status: initial inventory established and refreshed through Period 43 Phase 5
+Status: initial inventory established and refreshed through Period 44 Phase 5
 on 2026-07-10.
 
 This document records the current public surface and assigns every flat root
@@ -473,6 +473,24 @@ Compatibility impact: existing query values keep their deterministic numeric
 behavior, but their non-GPU meaning is now explicit. Metal gains opt-in native
 capture; Vulkan receives a typed unsupported result. Capability dump output is
 expanded additively.
+
+## Period 44 Guardrail
+
+Period 44 adds validation infrastructure, build steps, workflows, scripts,
+pixel checks inside an existing example, and opt-in tools. It adds no reachable
+public declaration in `src/vkmtl.zig`, `src/api/`, `src/core.zig`, or exported
+runtime types.
+
+The flat root count remains 492 and
+`src/runtime/window_context.zig` remains at 526 `pub fn` declarations. The new
+validation-plan, release-readiness, pixel-regression, and GPU-soak commands are
+repository tooling, not library API. No `Device` method, `WindowContext`
+compatibility forward, root alias, descriptor field, error tag, ownership rule,
+or capability meaning changed.
+
+Compatibility impact: none for library callers. `offscreen_texture` gains an
+opt-in `VKMTL_PIXEL_REGRESSION` execution mode and its texture usage adds
+copy-source capability; ordinary interactive behavior is unchanged.
 
 ## Update Checklist
 

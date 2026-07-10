@@ -72,6 +72,7 @@ const render_specs = [_]RenderSpec{
 
 const compute_specs = [_]ComputeSpec{
     .{ .name = "compute_readback", .source_path = "examples/compute_readback/shaders/compute_readback.slang" },
+    .{ .name = "gpu_soak", .source_path = "tools/gpu_soak/shaders/soak.slang" },
 };
 
 const ray_tracing_specs = [_]RayTracingSpec{

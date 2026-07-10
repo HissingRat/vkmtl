@@ -415,8 +415,8 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .macos,
         .backend = .metal,
         .required = true,
-        .command = "zig build test && zig build && zig build run-capability-dump",
-        .expectation = "default Apple path builds tests and examples through Metal-capable runtime",
+        .command = "zig build test && zig build && zig build run-validation-plan",
+        .expectation = "hosted Apple path compiles Metal-capable code without claiming physical GPU execution",
     },
     .{
         .name = "macos_moltenvk_forced",
@@ -432,16 +432,16 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .linux,
         .backend = .vulkan,
         .required = true,
-        .command = "zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan",
-        .expectation = "Linux Vulkan builds tests and examples with a system Vulkan loader",
+        .command = "zig build test && zig build -Dvulkan && zig build run-validation-plan",
+        .expectation = "hosted Linux path compiles Vulkan code without claiming a physical GPU smoke run",
     },
     .{
         .name = "windows_vulkan",
         .host = .windows,
         .backend = .vulkan,
         .required = true,
-        .command = "zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan",
-        .expectation = "Windows Vulkan builds tests and examples with a system Vulkan loader",
+        .command = "zig build test && zig build -Dvulkan && zig build run-validation-plan",
+        .expectation = "hosted Windows path compiles Vulkan code without claiming a physical GPU smoke run",
     },
     .{
         .name = "ios_metal_optional",
@@ -534,6 +534,263 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
 };
 
 pub fn validateBackendTestMatrix(entries: []const BackendMatrixEntry) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, entry.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
+pub const ValidationExecutionClass = enum {
+    hosted_build,
+    self_hosted_gpu,
+    local_gpu,
+    manual_visual,
+};
+
+pub const ValidationDeviceClass = enum {
+    none,
+    integrated_gpu,
+    discrete_gpu,
+    software_adapter,
+    unknown_gpu,
+};
+
+pub const ValidationExpectedOutcome = enum {
+    pass,
+    build_only,
+    typed_unsupported,
+    manual_evidence,
+};
+
+pub const ValidationEvidenceState = enum {
+    configured_automated,
+    configured,
+    documented,
+    missing,
+};
+
+pub const Period44Job = struct {
+    name: []const u8,
+    host_os: MatrixHost,
+    target_os: MatrixHost,
+    architecture: []const u8,
+    backend: ?core.Backend,
+    device_class: ValidationDeviceClass,
+    execution: ValidationExecutionClass,
+    expected_outcome: ValidationExpectedOutcome,
+    evidence: ValidationEvidenceState,
+    required_for_release: bool,
+    attach_capability_dump: bool = false,
+    command: []const u8,
+
+    pub fn validate(self: Period44Job) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.architecture.len == 0) return DevelopmentMatrixError.EmptyExpectation;
+        if (self.command.len == 0) return DevelopmentMatrixError.EmptyRunStep;
+        const gpu_execution = self.execution == .self_hosted_gpu or
+            self.execution == .local_gpu or
+            self.execution == .manual_visual;
+        if (gpu_execution and (self.backend == null or self.device_class == .none)) {
+            return DevelopmentMatrixError.MissingFeatureGate;
+        }
+        if (self.execution == .hosted_build and self.device_class != .none) {
+            return DevelopmentMatrixError.MissingDeterministicOutput;
+        }
+        if ((self.execution == .self_hosted_gpu or self.execution == .local_gpu) and
+            !self.attach_capability_dump)
+        {
+            return DevelopmentMatrixError.MissingDeterministicOutput;
+        }
+    }
+};
+
+pub const period44_jobs = [_]Period44Job{
+    .{
+        .name = "hosted_macos_build",
+        .host_os = .macos,
+        .target_os = .macos,
+        .architecture = "aarch64",
+        .backend = .metal,
+        .device_class = .none,
+        .execution = .hosted_build,
+        .expected_outcome = .build_only,
+        .evidence = .configured_automated,
+        .required_for_release = true,
+        .command = "zig fmt --check build.zig src examples tools && zig build test && zig build && zig build run-validation-plan",
+    },
+    .{
+        .name = "hosted_linux_build",
+        .host_os = .linux,
+        .target_os = .linux,
+        .architecture = "x86_64",
+        .backend = .vulkan,
+        .device_class = .none,
+        .execution = .hosted_build,
+        .expected_outcome = .build_only,
+        .evidence = .configured_automated,
+        .required_for_release = true,
+        .command = "zig fmt --check build.zig src examples tools && zig build test && zig build -Dvulkan && zig build run-validation-plan",
+    },
+    .{
+        .name = "hosted_windows_build",
+        .host_os = .windows,
+        .target_os = .windows,
+        .architecture = "x86_64",
+        .backend = .vulkan,
+        .device_class = .none,
+        .execution = .hosted_build,
+        .expected_outcome = .build_only,
+        .evidence = .configured_automated,
+        .required_for_release = true,
+        .command = "zig build test && zig build -Dvulkan && zig build run-validation-plan",
+    },
+    .{
+        .name = "self_hosted_metal_smoke",
+        .host_os = .macos,
+        .target_os = .macos,
+        .architecture = "aarch64",
+        .backend = .metal,
+        .device_class = .integrated_gpu,
+        .execution = .self_hosted_gpu,
+        .expected_outcome = .pass,
+        .evidence = .configured,
+        .required_for_release = true,
+        .attach_capability_dump = true,
+        .command = "scripts/ci/run_gpu_smoke.sh metal artifacts/metal-smoke",
+    },
+    .{
+        .name = "self_hosted_vulkan_smoke",
+        .host_os = .linux,
+        .target_os = .linux,
+        .architecture = "x86_64",
+        .backend = .vulkan,
+        .device_class = .discrete_gpu,
+        .execution = .self_hosted_gpu,
+        .expected_outcome = .pass,
+        .evidence = .configured,
+        .required_for_release = true,
+        .attach_capability_dump = true,
+        .command = "scripts/ci/run_gpu_smoke.sh vulkan artifacts/vulkan-smoke",
+    },
+    .{
+        .name = "local_metal_pixel_regression",
+        .host_os = .macos,
+        .target_os = .macos,
+        .architecture = "aarch64",
+        .backend = .metal,
+        .device_class = .integrated_gpu,
+        .execution = .local_gpu,
+        .expected_outcome = .pass,
+        .evidence = .configured,
+        .required_for_release = true,
+        .attach_capability_dump = true,
+        .command = "VKMTL_BACKEND=metal zig build run-pixel-regression",
+    },
+    .{
+        .name = "local_vulkan_pixel_regression",
+        .host_os = .linux,
+        .target_os = .linux,
+        .architecture = "x86_64",
+        .backend = .vulkan,
+        .device_class = .discrete_gpu,
+        .execution = .local_gpu,
+        .expected_outcome = .pass,
+        .evidence = .configured,
+        .required_for_release = true,
+        .attach_capability_dump = true,
+        .command = "VKMTL_BACKEND=vulkan zig build run-pixel-regression -Dvulkan",
+    },
+    .{
+        .name = "self_hosted_metal_soak",
+        .host_os = .macos,
+        .target_os = .macos,
+        .architecture = "aarch64",
+        .backend = .metal,
+        .device_class = .integrated_gpu,
+        .execution = .self_hosted_gpu,
+        .expected_outcome = .pass,
+        .evidence = .configured,
+        .required_for_release = true,
+        .attach_capability_dump = true,
+        .command = "scripts/ci/run_gpu_soak.sh metal 120 artifacts/metal-soak",
+    },
+    .{
+        .name = "self_hosted_vulkan_soak",
+        .host_os = .linux,
+        .target_os = .linux,
+        .architecture = "x86_64",
+        .backend = .vulkan,
+        .device_class = .discrete_gpu,
+        .execution = .self_hosted_gpu,
+        .expected_outcome = .pass,
+        .evidence = .configured,
+        .required_for_release = true,
+        .attach_capability_dump = true,
+        .command = "scripts/ci/run_gpu_soak.sh vulkan 120 artifacts/vulkan-soak",
+    },
+    .{
+        .name = "manual_ray_traced_scene_visual",
+        .host_os = .macos,
+        .target_os = .macos,
+        .architecture = "aarch64",
+        .backend = .metal,
+        .device_class = .integrated_gpu,
+        .execution = .manual_visual,
+        .expected_outcome = .manual_evidence,
+        .evidence = .documented,
+        .required_for_release = false,
+        .attach_capability_dump = true,
+        .command = "zig build run-ray-traced-scene",
+    },
+};
+
+pub fn validatePeriod44Jobs(entries: []const Period44Job) DevelopmentMatrixError!void {
+    for (entries, 0..) |entry, i| {
+        try entry.validate();
+        for (entries[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, entry.name, other.name)) return DevelopmentMatrixError.DuplicateName;
+        }
+    }
+}
+
+pub const BackendEvidenceExpectation = enum {
+    executable,
+    capability_gated,
+    typed_unsupported,
+    validation_only,
+    planning_only,
+    native_escape_hatch,
+};
+
+pub const Period44FeatureExpectation = struct {
+    name: []const u8,
+    vulkan: BackendEvidenceExpectation,
+    metal: BackendEvidenceExpectation,
+    evidence: []const u8,
+
+    pub fn validate(self: Period44FeatureExpectation) DevelopmentMatrixError!void {
+        if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
+        if (self.evidence.len == 0) return DevelopmentMatrixError.EmptyExpectation;
+    }
+};
+
+pub const period44_feature_expectations = [_]Period44FeatureExpectation{
+    .{ .name = "object_and_encoder_debug_markers", .vulkan = .capability_gated, .metal = .executable, .evidence = "capability dump and native capture/debug tool" },
+    .{ .name = "command_buffer_debug_markers", .vulkan = .validation_only, .metal = .executable, .evidence = "DebugMarkerCapabilities" },
+    .{ .name = "native_gpu_timestamps", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "run-profiling-plan -- --require-gpu" },
+    .{ .name = "scaled_texture_blit", .vulkan = .capability_gated, .metal = .typed_unsupported, .evidence = "format capability dump and UnsupportedTextureBlit" },
+    .{ .name = "pipeline_statistics_queries", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "QuerySet creation gate" },
+    .{ .name = "native_heap_backing", .vulkan = .planning_only, .metal = .planning_only, .evidence = "heap and aliasing plans" },
+    .{ .name = "native_sparse_page_binding", .vulkan = .planning_only, .metal = .planning_only, .evidence = "sparse residency plans" },
+    .{ .name = "external_resource_import", .vulkan = .planning_only, .metal = .planning_only, .evidence = "external interop capability matrix" },
+    .{ .name = "native_dedicated_queues", .vulkan = .planning_only, .metal = .planning_only, .evidence = "logical queue fallback report" },
+    .{ .name = "ray_query", .vulkan = .capability_gated, .metal = .typed_unsupported, .evidence = "ray query plan and selected device features" },
+    .{ .name = "native_handle_escape_hatch", .vulkan = .native_escape_hatch, .metal = .native_escape_hatch, .evidence = "NativeHandles tagged union lifetime contract" },
+};
+
+pub fn validatePeriod44FeatureExpectations(entries: []const Period44FeatureExpectation) DevelopmentMatrixError!void {
     for (entries, 0..) |entry, i| {
         try entry.validate();
         for (entries[i + 1 ..]) |other| {
@@ -747,7 +1004,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "GenerateMipmapsDescriptor partial mip/layer ranges",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 32+ validation matrix",
+        .deferred_to = "future backend extension; Period 44 parity report keeps the typed-unsupported lane explicit",
         .validation = "partial ranges remain typed unsupported at runtime",
     },
     .{
@@ -776,7 +1033,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "CopyTextureToTextureDescriptor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 32+ validation matrix",
+        .deferred_to = "future backend extension; Period 44 parity report keeps the typed-unsupported lane explicit",
         .validation = "depth/stencil and MSAA texture copies remain typed unsupported",
     },
     .{
@@ -791,7 +1048,7 @@ pub const resource_utility_matrix = [_]ResourceUtilityMatrixEntry{
         .public_api = "SamplerBorderColor",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 32+ validation matrix",
+        .deferred_to = "native-extension-only; Period 44 parity report keeps it outside portable support",
         .validation = "custom border colors are intentionally absent from the portable enum",
     },
     .{
@@ -1088,11 +1345,10 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
     },
     .{
         .feature = .gpu_backed_soak_loops,
-        .public_api = "run-stability-plan contract",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 32+ validation matrix",
-        .validation = "current opt-in command is deterministic planning; windowed GPU soak loops remain future backend validation",
+        .public_api = "run-gpu-soak repository tool",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "windowed presentation, resource, upload/readback, shader-resolution, and portable residency churn runs through real backend commands",
     },
 };
 
@@ -1183,7 +1439,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "TessellationLowering, VulkanTessellationDrawLowering, and MetalTessellationDrawLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period44 Phase3 screenshot/pixel regression after native pipeline hooks land",
+        .deferred_to = "native tessellation pipeline hooks plus future physical-device pixel evidence",
         .validation = "native tessellation pipeline creation and executable draw commands remain explicit backend work",
     },
     .{
@@ -1198,7 +1454,7 @@ pub const advanced_resource_geometry_matrix = [_]AdvancedResourceGeometryMatrixE
         .public_api = "MeshPipelineLowering, VulkanMeshDispatchLowering, and MetalMeshDispatchLowering",
         .vulkan_status = .deferred_native_lowering,
         .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period44 Phase3 screenshot/pixel regression after native pipeline hooks land",
+        .deferred_to = "native mesh/task pipeline hooks plus future physical-device pixel evidence",
         .validation = "native mesh/task pipeline creation and executable draw commands remain explicit backend work",
     },
     .{
@@ -1371,8 +1627,8 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "backend parity matrix",
         .vulkan_status = .backend_private_runtime,
         .metal_status = .backend_private_runtime,
-        .deferred_to = "Period 32+ validation matrix",
-        .validation = "backend parity plans include runtime diagnostics while GPU soak loops remain device-matrix work",
+        .deferred_to = "Period 44 parity report tracks missing advanced-native and Vulkan device evidence",
+        .validation = "common GPU soak is executable while advanced native pressure lanes remain explicit missing evidence",
     },
     .{
         .feature = .advanced_native_examples,
@@ -1409,6 +1665,7 @@ pub const ValidationCaseKind = enum {
     production_hardening,
     advanced_resource_geometry,
     ray_tracing_native_parity,
+    period44_device_evidence,
 };
 
 pub const ValidationCase = struct {
@@ -1517,6 +1774,13 @@ pub const validation_cases = [_]ValidationCase{
         .test_location = "src/core.zig and src/runtime/window_context.zig Period 28 tests",
         .expectation = "ray tracing planning, Metal mapping, native advanced closure, and future Period 29 assignments stay explicit",
     },
+    .{
+        .name = "period44_device_evidence",
+        .kind = .period44_device_evidence,
+        .test_location = "tools/development_matrix.zig, examples/offscreen_texture/main.zig, tools/gpu_soak/main.zig, and Period 44 workflows/scripts",
+        .integration_gap = true,
+        .expectation = "hosted builds, physical smoke, pixel readback, soak, and release gates stay distinct while missing Vulkan evidence remains explicit",
+    },
 };
 
 pub fn validateValidationCases(cases: []const ValidationCase) DevelopmentMatrixError!void {
@@ -1597,6 +1861,11 @@ pub const documentation_topics = [_]DocumentationTopic{
         .path = "docs/usage/en_us/compatibility.md",
         .expectation = "current platform/backend capability expectations",
     },
+    .{
+        .name = "period44_parity_report",
+        .path = "docs/develop/period44/parity-report.md",
+        .expectation = "observed Metal evidence, missing Vulkan/hosted evidence, known unsupported lanes, and release decision",
+    },
 };
 
 pub fn validateDocumentationTopics(topics: []const DocumentationTopic) DevelopmentMatrixError!void {
@@ -1673,6 +1942,50 @@ test "backend test matrix metadata is valid" {
     try std.testing.expect(has_advanced_resource_geometry_regression);
     try std.testing.expect(has_advanced_geometry_feature_gates);
     try std.testing.expect(has_ray_tracing_native_parity_regression);
+}
+
+test "Period 44 validation jobs separate hosted builds from physical GPU evidence" {
+    try validatePeriod44Jobs(period44_jobs[0..]);
+
+    var hosted_jobs: usize = 0;
+    var physical_metal = false;
+    var physical_vulkan = false;
+    var release_gpu_jobs: usize = 0;
+    for (period44_jobs) |entry| {
+        if (entry.execution == .hosted_build) {
+            hosted_jobs += 1;
+            try std.testing.expectEqual(ValidationDeviceClass.none, entry.device_class);
+            try std.testing.expectEqual(ValidationExpectedOutcome.build_only, entry.expected_outcome);
+        }
+        if (entry.execution == .self_hosted_gpu) {
+            try std.testing.expect(entry.attach_capability_dump);
+            if (entry.backend == .metal) physical_metal = true;
+            if (entry.backend == .vulkan) physical_vulkan = true;
+        }
+        if (entry.required_for_release and entry.device_class != .none) release_gpu_jobs += 1;
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), hosted_jobs);
+    try std.testing.expect(physical_metal);
+    try std.testing.expect(physical_vulkan);
+    try std.testing.expect(release_gpu_jobs >= 4);
+}
+
+test "Period 44 feature expectations keep unsupported and planning lanes explicit" {
+    try validatePeriod44FeatureExpectations(period44_feature_expectations[0..]);
+
+    var typed_unsupported: usize = 0;
+    var planning_only: usize = 0;
+    var native_escape_hatches: usize = 0;
+    for (period44_feature_expectations) |entry| {
+        if (entry.vulkan == .typed_unsupported or entry.metal == .typed_unsupported) typed_unsupported += 1;
+        if (entry.vulkan == .planning_only or entry.metal == .planning_only) planning_only += 1;
+        if (entry.vulkan == .native_escape_hatch or entry.metal == .native_escape_hatch) native_escape_hatches += 1;
+    }
+
+    try std.testing.expect(typed_unsupported >= 4);
+    try std.testing.expect(planning_only >= 4);
+    try std.testing.expect(native_escape_hatches >= 1);
 }
 
 test "sync and query backend matrix is complete" {
@@ -1772,8 +2085,8 @@ test "production hardening backend matrix is complete" {
     for (seen) |was_seen| {
         try std.testing.expect(was_seen);
     }
-    try std.testing.expect(runtime_paths >= 6);
-    try std.testing.expect(deferred_paths >= 4);
+    try std.testing.expect(runtime_paths >= 7);
+    try std.testing.expect(deferred_paths >= 3);
 }
 
 test "advanced resource and geometry backend matrix is complete" {
@@ -1813,6 +2126,7 @@ test "ray tracing and native parity backend matrix is complete" {
     var period31_targets: usize = 0;
     var period32_targets: usize = 0;
     var period32_plus_targets: usize = 0;
+    var period44_targets: usize = 0;
 
     for (ray_tracing_native_parity_matrix) |entry| {
         seen[@intFromEnum(entry.feature)] = true;
@@ -1827,6 +2141,7 @@ test "ray tracing and native parity backend matrix is complete" {
             if (std.mem.indexOf(u8, target, "Period 31") != null) period31_targets += 1;
             if (std.mem.indexOf(u8, target, "Period 32 ") != null) period32_targets += 1;
             if (std.mem.indexOf(u8, target, "Period 32+") != null) period32_plus_targets += 1;
+            if (std.mem.indexOf(u8, target, "Period 44") != null) period44_targets += 1;
         }
     }
 
@@ -1839,7 +2154,8 @@ test "ray tracing and native parity backend matrix is complete" {
     try std.testing.expectEqual(@as(usize, 0), period30_targets);
     try std.testing.expect(period31_targets >= 2);
     try std.testing.expect(period32_targets >= 2);
-    try std.testing.expect(period32_plus_targets >= 5);
+    try std.testing.expect(period32_plus_targets >= 4);
+    try std.testing.expect(period44_targets >= 1);
 }
 
 test "validation case inventory is valid" {

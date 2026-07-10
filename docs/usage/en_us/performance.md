@@ -56,8 +56,20 @@ zig build run-stability-plan -- --iterations 120
 ```
 
 This command prints the planned resize, resource churn, shader artifact, upload,
-and Vulkan unaligned-fill fallback counters. Full GPU soak loops remain
-backend-hardening work.
+and Vulkan unaligned-fill fallback counters without opening a window.
+
+For opt-in physical GPU work, use:
+
+```sh
+zig build run-pixel-regression
+zig build run-gpu-soak -- --iterations=120
+```
+
+The pixel step performs transfer, compute, and offscreen render readback. The
+soak alternates presentation extents while churning resources, uploads,
+readbacks, embedded shader resolution, and portable residency state. Native
+heap/sparse/async-queue/memory-pressure behavior remains a separate capability
+gate and is not inferred from the portable churn counters.
 
 ## Profiling Plans
 

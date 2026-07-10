@@ -23,6 +23,7 @@
         "src",
         "shaders",
         "examples",
+        "scripts",
         "tools",
         "docs",
         "AGENTS.md",

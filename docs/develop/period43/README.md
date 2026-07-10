@@ -1,7 +1,7 @@
 # Period 43: Profiling, Capture, And Debug Markers
 
-Status: complete. All five phases are implemented; Period 44 Phase 1 is the
-current implementation priority.
+Status: complete. All five phases are implemented; Period 44 validation
+infrastructure and current parity reporting are also complete.
 
 Goal: make vkmtl debuggable in native tools by providing stable labels,
 markers, capture scopes, timestamps, and issue-report diagnostics.

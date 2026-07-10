@@ -1,7 +1,8 @@
 # Period 44: CI, Device Matrix, And Soak Validation
 
-Status: active. Phase 1 CI job matrix and feature reporting is the current
-implementation priority.
+Status: complete for validation infrastructure and the current evidence report.
+The release gate remains open because hosted CI and physical Vulkan artifacts
+are not present; see `parity-report.md`.
 
 Goal: turn the parity work into something trustworthy by validating examples,
 feature gates, screenshots, readbacks, and long-running workloads across a
@@ -22,17 +23,24 @@ examples, and long-running soak tests for resource churn.
 - Record unsupported features as expected matrix outcomes.
 - Keep capability dump output attached to failures.
 
+See `phase1.md` for evidence classes and the hosted/self-hosted CI boundary.
+
 ### Phase 2: Metal And Vulkan Smoke Hosts
 
 - Add or document at least one Metal smoke host.
 - Add or document at least one Vulkan smoke host.
 - Separate local-only GPU runs from ordinary CPU-only CI.
 
+See `phase2.md` for physical host labels, prerequisites, and smoke sequence.
+See `runner-setup.md` for reusable self-hosted runner setup.
+
 ### Phase 3: Screenshot And Pixel Regression Harness
 
 - Add screenshot or pixel readback checks for representative examples.
 - Track expected tolerances for Vulkan/Metal differences.
 - Keep visual tests deterministic where possible.
+
+See `phase3.md` for exact/tolerant pixel cases and manual screenshot evidence.
 
 ### Phase 4: GPU Soak And Resource Churn Tests
 
@@ -53,11 +61,15 @@ examples, and long-running soak tests for resource churn.
   on supported hosts once backend lowering exists.
 - Keep soak failures actionable and scoped.
 
+See `phase4.md` for the opt-in GPU workload and deferred native pressure lanes.
+
 ### Phase 5: Release Readiness And Parity Report
 
 - Produce a backend capability/parity report from current test data.
 - Document known unsupported items and native escape hatch requirements.
 - Decide whether the voxel-world pressure test can move from deferred to active.
+
+See `phase5.md` for the evidence gate, parity report, and voxel-world decision.
 
 ## Acceptance
 
@@ -65,3 +77,8 @@ examples, and long-running soak tests for resource churn.
 - Representative GPU examples have visual or pixel validation.
 - Long-run tests produce repeatable diagnostics.
 - vkmtl can make a measured, evidence-backed parity claim.
+
+Current result: the infrastructure and report meet the acceptance contract,
+while the report itself is deliberately not release-ready. Metal smoke/pixels/
+bounded soak were observed locally; hosted CI artifacts and physical Vulkan
+smoke/pixels/soak remain missing evidence rather than inferred success.

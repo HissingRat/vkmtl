@@ -4,9 +4,19 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 
 ## Required Rows
 
-- `macos_metal_default`: `zig build test && zig build && zig build run-capability-dump`
-- `linux_vulkan`: `zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan`
-- `windows_vulkan`: `zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan`
+- `hosted_macos_build`: formatting, tests, build, and validation plan on
+  `macos-15`; build-only evidence, not GPU proof.
+- `hosted_linux_build`: formatting, tests, forced-Vulkan build, and validation
+  plan on `ubuntu-24.04`; build-only evidence.
+- `hosted_windows_build`: tests, forced-Vulkan build, and validation plan on
+  `windows-2025`; build-only evidence.
+- `self_hosted_metal_smoke`: `scripts/ci/run_gpu_smoke.sh metal ...` on a
+  physical Apple Silicon host labeled `vkmtl-metal`.
+- `self_hosted_vulkan_smoke`: `scripts/ci/run_gpu_smoke.sh vulkan ...` on a
+  physical Linux Vulkan host labeled `vkmtl-vulkan`.
+- `metal/vulkan_pixel_regression`: transfer, compute, and render readback via
+  `run-pixel-regression`.
+- `metal/vulkan_soak`: capability dump plus bounded `run-gpu-soak` artifact.
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
@@ -39,6 +49,19 @@ zig build -Dtarget=aarch64-ios
 The iOS row is planning metadata until platform surface packaging is designed.
 The MoltenVK row is explicit because macOS Vulkan is for backend testing, not a
 default release target.
+
+## Period 44 Evidence Boundary
+
+`.github/workflows/ci.yml` owns hosted build/test evidence.
+`.github/workflows/gpu-validation.yml` is manual and uses labeled self-hosted
+physical GPU runners. Hosted runner compilation never upgrades a GPU gate.
+
+Every physical smoke and soak bundle contains `capability-dump.txt` before the
+workload log. Failures trigger a second failure capability dump when possible.
+`zig build run-release-readiness` only marks a gate observed when the caller
+provides the corresponding evidence flag; its default result is not ready.
+
+The current report is `docs/develop/period44/parity-report.md`.
 
 ## Capability Expectations
 
@@ -88,7 +111,7 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | Full-texture mipmap generation | Native image blits | Native `generateMipmapsForTexture` | Available through blit encoder |
-| Partial mip/layer mipmap generation | Deferred | Deferred | Period 32+ validation matrix parity decision |
+| Partial mip/layer mipmap generation | Deferred | Deferred | Typed unsupported; tracked in the Period 44 parity report |
 | Unaligned `fillBuffer` | Staging-copy fallback | Native byte-range fill | Public API accepts unaligned ranges |
 | Texture copy array layers | Native `layer_count` | Per-slice fallback loop | `slice_count` is public |
 | Compatible color-format copies | Native compatible copy class | Native compatible copy class | unorm/sRGB pairs in same channel order |
@@ -96,7 +119,7 @@ conservative until the relevant backend period lands.
 | Packed depth/stencil exact copy/readback | Native depth or stencil aspect when queried | Typed unsupported | Never uses an implicit packed buffer layout |
 | MSAA copies/readback | Typed unsupported | Typed unsupported | Color resolve is the explicit single-sample conversion |
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
-| Custom sampler border colors | Deferred | Deferred | Period 32+ validation matrix parity decision |
+| Custom sampler border colors | Deferred | Deferred | Native-extension-only; tracked in the Period 44 parity report |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
 | Heap aliasing planning | Portable runtime object | Portable runtime object | `HeapAliasingDescriptor` validates overlapping ranges and lifetimes |
 | Native heap-backed resources | Deferred | Deferred | Period 32+ driver parity plan native integration |
@@ -163,7 +186,7 @@ conservative until the relevant backend period lands.
 | Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `runtimeDiagnostics()` |
 | Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
 | Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
-| GPU-backed soak loops | Deferred | Deferred | Period 32+ validation matrix native long-run validation |
+| Common GPU-backed soak | Windowed portable command path | Windowed portable command path | `run-gpu-soak`; advanced native pressure lanes remain separate gates |
 
 ## Period 38 Resource Table And Pipeline Artifact Expectations
 

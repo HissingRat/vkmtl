@@ -39,6 +39,8 @@ hatches.
   English.
 - [Diagnostics en_US](docs/usage/en_us/diagnostics.md): capture, profiling, and
   issue-report guidance in English.
+- [Current parity report](docs/develop/period44/parity-report.md): observed,
+  configured, and missing backend/device evidence.
 
 ## Examples
 
@@ -58,6 +60,10 @@ zig build run-rainbow-cube
 zig build run-compute-readback
 zig build run-capability-dump
 zig build run-profiling-plan
+zig build run-validation-plan
+zig build run-pixel-regression
+zig build run-gpu-soak -- --iterations=120
+zig build run-release-readiness
 ```
 
 On macOS, `.auto` selects Metal when available. Vulkan can be forced for
