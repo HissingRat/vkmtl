@@ -178,6 +178,8 @@ pub const DeviceLimits = struct {
     max_compute_total_threads_per_threadgroup: u32 = 1024,
     max_compute_threadgroup_memory_bytes: u32 = 0,
     dispatch_indirect_alignment: u64 = 4,
+    buffer_texture_copy_offset_alignment: u64 = 1,
+    buffer_texture_copy_row_pitch_alignment: u32 = 1,
     max_bindless_descriptors_per_range: u32 = 0,
     max_bindless_ranges_per_layout: u32 = 0,
     max_tessellation_control_points: u32 = 0,
@@ -207,6 +209,14 @@ pub const FormatCapabilities = struct {
     blendable: bool = false,
     copy_source: bool = false,
     copy_destination: bool = false,
+    blit_source: bool = false,
+    blit_destination: bool = false,
+    presentation: bool = false,
+    depth_copy: bool = false,
+    stencil_copy: bool = false,
+    color_resolve: bool = false,
+    depth_resolve: bool = false,
+    stencil_resolve: bool = false,
 
     pub fn supportsTextureUsage(self: FormatCapabilities, usage: TextureUsage) bool {
         return (!usage.shader_read or self.sampled) and
@@ -220,6 +230,25 @@ pub const FormatCapabilities = struct {
         if (!self.supportsTextureUsage(descriptor.usage)) return false;
         if (descriptor.mip_level_count > 1 and !self.mipmapped) return false;
         return true;
+    }
+
+    pub fn supportsCopyAspect(self: FormatCapabilities, format: TextureFormat, aspect: TextureAspect) bool {
+        if (!self.copy_source and !self.copy_destination) return false;
+        return switch (resolveTextureAspect(format, aspect) catch return false) {
+            .all => false,
+            .color => isColorFormat(format),
+            .depth => self.depth_copy,
+            .stencil => self.stencil_copy,
+        };
+    }
+
+    pub fn supportsResolveAspect(self: FormatCapabilities, format: TextureFormat, aspect: TextureAspect) bool {
+        return switch (resolveTextureAspect(format, aspect) catch return false) {
+            .all => self.depth_resolve and self.stencil_resolve,
+            .color => self.color_resolve,
+            .depth => self.depth_resolve,
+            .stencil => self.stencil_resolve,
+        };
     }
 };
 
@@ -397,6 +426,155 @@ pub const ResourceUsageState = struct {
             .hazard = resourceHazard(before, after),
             .requires_barrier = true,
         };
+    }
+};
+
+pub const TextureSubresourceRange = struct {
+    base_mip_level: u32 = 0,
+    mip_level_count: u32 = 0,
+    base_array_layer: u32 = 0,
+    array_layer_count: u32 = 0,
+
+    pub fn resolve(self: TextureSubresourceRange, texture: TextureDescriptor) CommandEncodingError!TextureSubresourceRange {
+        texture.validate() catch return CommandEncodingError.InvalidResourceBarrierRange;
+        if (self.base_mip_level >= texture.mip_level_count) return CommandEncodingError.InvalidResourceBarrierRange;
+        const mip_count = if (self.mip_level_count == 0)
+            texture.mip_level_count - self.base_mip_level
+        else
+            self.mip_level_count;
+        const mip_end = std.math.add(u32, self.base_mip_level, mip_count) catch {
+            return CommandEncodingError.InvalidResourceBarrierRange;
+        };
+        if (mip_count == 0 or mip_end > texture.mip_level_count) return CommandEncodingError.InvalidResourceBarrierRange;
+
+        const layer_limit: u32 = if (texture.dimension == .three_d) 1 else texture.depth_or_array_layers;
+        if (self.base_array_layer >= layer_limit) return CommandEncodingError.InvalidResourceBarrierRange;
+        const layer_count = if (self.array_layer_count == 0)
+            layer_limit - self.base_array_layer
+        else
+            self.array_layer_count;
+        const layer_end = std.math.add(u32, self.base_array_layer, layer_count) catch {
+            return CommandEncodingError.InvalidResourceBarrierRange;
+        };
+        if (layer_count == 0 or layer_end > layer_limit) return CommandEncodingError.InvalidResourceBarrierRange;
+        return .{
+            .base_mip_level = self.base_mip_level,
+            .mip_level_count = mip_count,
+            .base_array_layer = self.base_array_layer,
+            .array_layer_count = layer_count,
+        };
+    }
+};
+
+pub const TextureUsageTransitionSummary = struct {
+    subresource_count: usize = 0,
+    hazard_count: usize = 0,
+    required_barrier_count: usize = 0,
+};
+
+pub const TextureSubresourceUsageTracker = struct {
+    allocator: std.mem.Allocator,
+    texture: TextureDescriptor,
+    layer_count: u32,
+    states: []ResourceUsageState,
+
+    pub fn init(allocator: std.mem.Allocator, texture: TextureDescriptor) !TextureSubresourceUsageTracker {
+        try texture.validate();
+        const layer_count: u32 = if (texture.dimension == .three_d) 1 else texture.depth_or_array_layers;
+        const state_count = try std.math.mul(usize, texture.mip_level_count, layer_count);
+        const states = try allocator.alloc(ResourceUsageState, state_count);
+        @memset(states, .{});
+        return .{
+            .allocator = allocator,
+            .texture = texture,
+            .layer_count = layer_count,
+            .states = states,
+        };
+    }
+
+    pub fn deinit(self: *TextureSubresourceUsageTracker) void {
+        self.allocator.free(self.states);
+        self.* = undefined;
+    }
+
+    pub fn transition(
+        self: *TextureSubresourceUsageTracker,
+        range: TextureSubresourceRange,
+        next: ResourceUsageKind,
+    ) CommandEncodingError!TextureUsageTransitionSummary {
+        const resolved = try range.resolve(self.texture);
+        var summary = TextureUsageTransitionSummary{};
+        var mip_offset: u32 = 0;
+        while (mip_offset < resolved.mip_level_count) : (mip_offset += 1) {
+            var layer_offset: u32 = 0;
+            while (layer_offset < resolved.array_layer_count) : (layer_offset += 1) {
+                const state = &self.states[
+                    self.index(
+                        resolved.base_mip_level + mip_offset,
+                        resolved.base_array_layer + layer_offset,
+                    )
+                ];
+                const state_transition = state.transitionTo(next);
+                summary.subresource_count += 1;
+                if (state_transition.hazard != .none) summary.hazard_count += 1;
+                if (state_transition.requires_barrier) summary.required_barrier_count += 1;
+            }
+        }
+        return summary;
+    }
+
+    pub fn applyExplicitBarrier(
+        self: *TextureSubresourceUsageTracker,
+        range: TextureSubresourceRange,
+        before: ResourceUsageKind,
+        after: ResourceUsageKind,
+    ) CommandEncodingError!TextureUsageTransitionSummary {
+        const resolved = try range.resolve(self.texture);
+        if (before == after) return CommandEncodingError.RedundantResourceBarrier;
+
+        var validation_mip_offset: u32 = 0;
+        while (validation_mip_offset < resolved.mip_level_count) : (validation_mip_offset += 1) {
+            var validation_layer_offset: u32 = 0;
+            while (validation_layer_offset < resolved.array_layer_count) : (validation_layer_offset += 1) {
+                const state = self.states[
+                    self.index(
+                        resolved.base_mip_level + validation_mip_offset,
+                        resolved.base_array_layer + validation_layer_offset,
+                    )
+                ];
+                if (state.current) |current| {
+                    if (current != before) return CommandEncodingError.InvalidResourceBarrierState;
+                }
+            }
+        }
+
+        var summary = TextureUsageTransitionSummary{};
+        var mip_offset: u32 = 0;
+        while (mip_offset < resolved.mip_level_count) : (mip_offset += 1) {
+            var layer_offset: u32 = 0;
+            while (layer_offset < resolved.array_layer_count) : (layer_offset += 1) {
+                const state = &self.states[
+                    self.index(
+                        resolved.base_mip_level + mip_offset,
+                        resolved.base_array_layer + layer_offset,
+                    )
+                ];
+                const state_transition = try state.applyExplicitBarrier(before, after);
+                summary.subresource_count += 1;
+                if (state_transition.hazard != .none) summary.hazard_count += 1;
+                summary.required_barrier_count += 1;
+            }
+        }
+        return summary;
+    }
+
+    pub fn currentUsage(self: TextureSubresourceUsageTracker, mip_level: u32, array_layer: u32) ?ResourceUsageKind {
+        if (mip_level >= self.texture.mip_level_count or array_layer >= self.layer_count) return null;
+        return self.states[self.index(mip_level, array_layer)].current;
+    }
+
+    fn index(self: TextureSubresourceUsageTracker, mip_level: u32, array_layer: u32) usize {
+        return @as(usize, mip_level) * @as(usize, self.layer_count) + @as(usize, array_layer);
     }
 };
 
@@ -645,6 +823,15 @@ pub const TextureBarrierDescriptor = struct {
     base_array_layer: u32 = 0,
     array_layer_count: u32 = 1,
 
+    pub fn subresourceRange(self: TextureBarrierDescriptor) TextureSubresourceRange {
+        return .{
+            .base_mip_level = self.base_mip_level,
+            .mip_level_count = self.mip_level_count,
+            .base_array_layer = self.base_array_layer,
+            .array_layer_count = self.array_layer_count,
+        };
+    }
+
     pub fn validate(
         self: TextureBarrierDescriptor,
         texture: TextureDescriptor,
@@ -654,22 +841,7 @@ pub const TextureBarrierDescriptor = struct {
             return CommandEncodingError.UnsupportedExplicitResourceBarrier;
         }
         if (self.before == self.after) return CommandEncodingError.RedundantResourceBarrier;
-        texture.validate() catch return CommandEncodingError.InvalidResourceBarrierRange;
-        if (self.mip_level_count == 0 or self.array_layer_count == 0) {
-            return CommandEncodingError.InvalidResourceBarrierRange;
-        }
-        const mip_end = std.math.add(u32, self.base_mip_level, self.mip_level_count) catch {
-            return CommandEncodingError.InvalidResourceBarrierRange;
-        };
-        if (mip_end > texture.mip_level_count) return CommandEncodingError.InvalidResourceBarrierRange;
-        const layer_limit: u32 = switch (texture.dimension) {
-            .three_d => 1,
-            else => texture.depth_or_array_layers,
-        };
-        const layer_end = std.math.add(u32, self.base_array_layer, self.array_layer_count) catch {
-            return CommandEncodingError.InvalidResourceBarrierRange;
-        };
-        if (layer_end > layer_limit) return CommandEncodingError.InvalidResourceBarrierRange;
+        _ = try self.subresourceRange().resolve(texture);
     }
 };
 
@@ -1564,6 +1736,7 @@ fn saturatingMulU64(a: u64, b: u64) u64 {
 
 pub const ParitySemanticStatus = enum {
     portable_runtime,
+    capability_gated,
     typed_unsupported,
     native_extension_only,
     deferred_native_validation,
@@ -1578,11 +1751,11 @@ pub const BackendParitySemanticsDescriptor = struct {
 pub const BackendParitySemanticsPlan = struct {
     backend: Backend,
     partial_mip_layer_ranges: ParitySemanticStatus = .portable_runtime,
-    depth_stencil_texture_copies: ParitySemanticStatus = .typed_unsupported,
+    depth_stencil_texture_copies: ParitySemanticStatus = .capability_gated,
     msaa_texture_copies: ParitySemanticStatus = .typed_unsupported,
     custom_sampler_border_colors: ParitySemanticStatus = .native_extension_only,
     gpu_soak_validation: ParitySemanticStatus = .deferred_native_validation,
-    deferred_to: []const u8 = "Period 31+ validation matrix",
+    deferred_to: []const u8 = "Period 44 device matrix",
     backend_private_validation_ready: bool = true,
     period31_plus_driver_validation: bool = true,
     stability_plan: ?StabilityRunPlan = null,
@@ -1844,8 +2017,11 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSurfaceProvider,
         error.UnsupportedBackendForPresentation,
         error.UnsupportedSampleCount,
+        error.UnsupportedTextureUsage,
         error.UnsupportedTextureUploadFormat,
         error.UnsupportedTextureCopyFormat,
+        error.UnsupportedTextureBlit,
+        error.UnsupportedTextureResolve,
         error.UnsupportedTextureViewDimension,
         error.UnsupportedTextureViewFormat,
         error.UnsupportedMipmapGeneration,
@@ -1971,7 +2147,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidCopyBufferRange,
         error.InvalidCopyTextureRegion,
         error.InvalidCopyTextureSlice,
+        error.InvalidCopyTextureAspect,
         error.InvalidCopyBufferLayout,
+        error.InvalidCopyBufferUsage,
+        error.InvalidCopyTextureUsage,
         error.RedundantResourceBarrier,
         error.RedundantQueueOwnershipTransfer,
         error.InvalidResourceBarrierState,
@@ -2220,6 +2399,13 @@ pub const TextureFormat = enum {
     depth32_float_stencil8,
 };
 
+pub const TextureAspect = enum {
+    all,
+    color,
+    depth,
+    stencil,
+};
+
 pub const TextureFormatKind = enum {
     invalid,
     color,
@@ -2357,6 +2543,9 @@ pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
             .blendable = true,
             .copy_source = true,
             .copy_destination = true,
+            .blit_source = true,
+            .blit_destination = true,
+            .color_resolve = true,
         },
         .rgba8_unorm => .{
             .sampled = true,
@@ -2369,17 +2558,19 @@ pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
             .blendable = true,
             .copy_source = true,
             .copy_destination = true,
+            .blit_source = true,
+            .blit_destination = true,
+            .color_resolve = true,
         },
         .depth32_float => .{
             .depth_stencil_attachment = true,
             .mipmapped = true,
             .copy_source = true,
             .copy_destination = true,
+            .depth_copy = true,
         },
         .depth32_float_stencil8 => .{
             .depth_stencil_attachment = true,
-            .copy_source = true,
-            .copy_destination = true,
         },
     };
 }
@@ -5578,8 +5769,18 @@ pub const BlitCommandEncoderDebugState = struct {
         source_length: usize,
         destination: TextureDescriptor,
     ) CommandEncodingError!ResolvedBufferTextureCopy {
+        return try self.copyBufferToTextureWithRequirements(descriptor, source_length, destination, .{});
+    }
+
+    pub fn copyBufferToTextureWithRequirements(
+        self: *BlitCommandEncoderDebugState,
+        descriptor: CopyBufferToTextureDescriptor,
+        source_length: usize,
+        destination: TextureDescriptor,
+        requirements: TextureCopyLayoutRequirements,
+    ) CommandEncodingError!ResolvedBufferTextureCopy {
         try self.requireEncoding();
-        return try descriptor.resolve(source_length, destination);
+        return try descriptor.resolveWithRequirements(source_length, destination, requirements);
     }
 
     pub fn copyTextureToBuffer(
@@ -5588,8 +5789,18 @@ pub const BlitCommandEncoderDebugState = struct {
         source: TextureDescriptor,
         destination_length: usize,
     ) CommandEncodingError!ResolvedBufferTextureCopy {
+        return try self.copyTextureToBufferWithRequirements(descriptor, source, destination_length, .{});
+    }
+
+    pub fn copyTextureToBufferWithRequirements(
+        self: *BlitCommandEncoderDebugState,
+        descriptor: CopyTextureToBufferDescriptor,
+        source: TextureDescriptor,
+        destination_length: usize,
+        requirements: TextureCopyLayoutRequirements,
+    ) CommandEncodingError!ResolvedBufferTextureCopy {
         try self.requireEncoding();
-        return try descriptor.resolve(source, destination_length);
+        return try descriptor.resolveWithRequirements(source, destination_length, requirements);
     }
 
     pub fn copyTextureToTexture(
@@ -5600,6 +5811,18 @@ pub const BlitCommandEncoderDebugState = struct {
     ) CommandEncodingError!ResolvedTextureTextureCopy {
         try self.requireEncoding();
         return try descriptor.resolve(source, destination);
+    }
+
+    pub fn blitTexture(
+        self: *BlitCommandEncoderDebugState,
+        descriptor: BlitTextureDescriptor,
+        source: TextureDescriptor,
+        destination: TextureDescriptor,
+        source_caps: FormatCapabilities,
+        destination_caps: FormatCapabilities,
+    ) CommandEncodingError!ResolvedBlitTexture {
+        try self.requireEncoding();
+        return try descriptor.resolve(source, destination, source_caps, destination_caps);
     }
 
     pub fn fillBuffer(
@@ -5803,9 +6026,12 @@ pub const CommandEncodingError = error{
     InvalidCopyBufferLayout,
     InvalidCopyBufferUsage,
     InvalidCopyTextureUsage,
+    InvalidCopyTextureAspect,
     InvalidFillBufferRange,
     InvalidThreadgroupCount,
     UnsupportedTextureCopyFormat,
+    UnsupportedTextureBlit,
+    UnsupportedTextureResolve,
     TextureCopySizeOverflow,
 };
 
@@ -7394,16 +7620,38 @@ pub const BufferTextureCopyLayout = struct {
     bytes_per_image: usize = 0,
 };
 
+pub const TextureCopyLayoutRequirements = struct {
+    buffer_offset_alignment: u64 = 1,
+    bytes_per_row_alignment: usize = 1,
+
+    pub fn fromLimits(limits: DeviceLimits) TextureCopyLayoutRequirements {
+        return .{
+            .buffer_offset_alignment = limits.buffer_texture_copy_offset_alignment,
+            .bytes_per_row_alignment = limits.buffer_texture_copy_row_pitch_alignment,
+        };
+    }
+};
+
 pub const CopyBufferToTextureDescriptor = struct {
     source: BufferTextureCopyLayout = .{},
     destination_region: Region3D,
     destination_mip_level: u32 = 0,
     destination_slice: u32 = 0,
+    aspect: TextureAspect = .all,
 
     pub fn resolve(
         self: CopyBufferToTextureDescriptor,
         source_length: usize,
         destination: TextureDescriptor,
+    ) CommandEncodingError!ResolvedBufferTextureCopy {
+        return try self.resolveWithRequirements(source_length, destination, .{});
+    }
+
+    pub fn resolveWithRequirements(
+        self: CopyBufferToTextureDescriptor,
+        source_length: usize,
+        destination: TextureDescriptor,
+        requirements: TextureCopyLayoutRequirements,
     ) CommandEncodingError!ResolvedBufferTextureCopy {
         return try resolveBufferTextureCopy(
             source_length,
@@ -7412,6 +7660,8 @@ pub const CopyBufferToTextureDescriptor = struct {
             self.destination_mip_level,
             self.destination_slice,
             self.source,
+            self.aspect,
+            requirements,
         );
     }
 };
@@ -7421,11 +7671,21 @@ pub const CopyTextureToBufferDescriptor = struct {
     source_mip_level: u32 = 0,
     source_slice: u32 = 0,
     destination: BufferTextureCopyLayout = .{},
+    aspect: TextureAspect = .all,
 
     pub fn resolve(
         self: CopyTextureToBufferDescriptor,
         source: TextureDescriptor,
         destination_length: usize,
+    ) CommandEncodingError!ResolvedBufferTextureCopy {
+        return try self.resolveWithRequirements(source, destination_length, .{});
+    }
+
+    pub fn resolveWithRequirements(
+        self: CopyTextureToBufferDescriptor,
+        source: TextureDescriptor,
+        destination_length: usize,
+        requirements: TextureCopyLayoutRequirements,
     ) CommandEncodingError!ResolvedBufferTextureCopy {
         return try resolveBufferTextureCopy(
             destination_length,
@@ -7434,6 +7694,8 @@ pub const CopyTextureToBufferDescriptor = struct {
             self.source_mip_level,
             self.source_slice,
             self.destination,
+            self.aspect,
+            requirements,
         );
     }
 };
@@ -7446,6 +7708,7 @@ pub const CopyTextureToTextureDescriptor = struct {
     destination_origin: Origin3D = .{},
     destination_mip_level: u32 = 0,
     destination_slice: u32 = 0,
+    aspect: TextureAspect = .all,
 
     pub fn resolve(
         self: CopyTextureToTextureDescriptor,
@@ -7465,6 +7728,7 @@ pub const ResolvedBufferTextureCopy = struct {
     region: Region3D,
     mip_level: u32,
     slice: u32,
+    aspect: TextureAspect,
 };
 
 pub const ResolvedTextureTextureCopy = struct {
@@ -7475,6 +7739,96 @@ pub const ResolvedTextureTextureCopy = struct {
     destination_origin: Origin3D,
     destination_mip_level: u32,
     destination_slice: u32,
+    aspect: TextureAspect,
+};
+
+pub const BlitFilter = enum {
+    nearest,
+    linear,
+};
+
+pub const BlitTextureDescriptor = struct {
+    source_region: Region3D,
+    source_mip_level: u32 = 0,
+    source_slice: u32 = 0,
+    destination_region: Region3D,
+    destination_mip_level: u32 = 0,
+    destination_slice: u32 = 0,
+    slice_count: u32 = 1,
+    filter: BlitFilter = .nearest,
+
+    pub fn resolve(
+        self: BlitTextureDescriptor,
+        source: TextureDescriptor,
+        destination: TextureDescriptor,
+        source_caps: FormatCapabilities,
+        destination_caps: FormatCapabilities,
+    ) CommandEncodingError!ResolvedBlitTexture {
+        if (!isColorFormat(source.format) or !textureFormatsCopyCompatible(source.format, destination.format)) {
+            return CommandEncodingError.UnsupportedTextureBlit;
+        }
+        if (!source_caps.blit_source or !destination_caps.blit_destination) {
+            return CommandEncodingError.UnsupportedTextureBlit;
+        }
+        if (self.filter == .linear and !source_caps.linear_filter) {
+            return CommandEncodingError.UnsupportedTextureBlit;
+        }
+        if (source.sample_count != 1 or destination.sample_count != 1) {
+            return CommandEncodingError.UnsupportedTextureBlit;
+        }
+        if (source.dimension != destination.dimension) return CommandEncodingError.UnsupportedTextureBlit;
+        if (self.slice_count == 0) return CommandEncodingError.InvalidCopyTextureSlice;
+        try validateTextureCopyRegion(source, self.source_region, self.source_mip_level, self.source_slice);
+        try validateTextureCopyRegion(destination, self.destination_region, self.destination_mip_level, self.destination_slice);
+        try validateTextureCopySliceCount(source, self.source_slice, self.slice_count);
+        try validateTextureCopySliceCount(destination, self.destination_slice, self.slice_count);
+        return .{
+            .source_region = self.source_region,
+            .source_mip_level = self.source_mip_level,
+            .source_slice = self.source_slice,
+            .destination_region = self.destination_region,
+            .destination_mip_level = self.destination_mip_level,
+            .destination_slice = self.destination_slice,
+            .slice_count = self.slice_count,
+            .filter = self.filter,
+        };
+    }
+};
+
+pub const ResolvedBlitTexture = struct {
+    source_region: Region3D,
+    source_mip_level: u32,
+    source_slice: u32,
+    destination_region: Region3D,
+    destination_mip_level: u32,
+    destination_slice: u32,
+    slice_count: u32,
+    filter: BlitFilter,
+};
+
+pub const TextureResolveDescriptor = struct {
+    aspect: TextureAspect = .color,
+
+    pub fn validate(
+        self: TextureResolveDescriptor,
+        source: TextureDescriptor,
+        destination: TextureDescriptor,
+        capabilities: FormatCapabilities,
+    ) CommandEncodingError!void {
+        if (source.sample_count == 1 or destination.sample_count != 1) {
+            return CommandEncodingError.UnsupportedTextureResolve;
+        }
+        if (source.format != destination.format or
+            source.width != destination.width or
+            source.height != destination.height or
+            source.depth_or_array_layers != destination.depth_or_array_layers)
+        {
+            return CommandEncodingError.UnsupportedTextureResolve;
+        }
+        if (!capabilities.supportsResolveAspect(source.format, self.aspect)) {
+            return CommandEncodingError.UnsupportedTextureResolve;
+        }
+    }
 };
 
 pub const TextureError = error{
@@ -7483,6 +7837,7 @@ pub const TextureError = error{
     InvalidMipLevelCount,
     InvalidSampleCount,
     UnsupportedSampleCount,
+    UnsupportedTextureUsage,
     InvalidTextureViewRange,
     UnsupportedTextureViewDimension,
     UnsupportedTextureViewFormat,
@@ -8468,6 +8823,37 @@ pub fn textureFormatBytesPerPixel(format: TextureFormat) usize {
     };
 }
 
+pub fn resolveTextureAspect(format: TextureFormat, requested: TextureAspect) CommandEncodingError!TextureAspect {
+    return switch (requested) {
+        .all => switch (textureFormatKind(format)) {
+            .color => .color,
+            .depth => .depth,
+            .stencil => .stencil,
+            .depth_stencil => .all,
+            .invalid, .compressed => return CommandEncodingError.InvalidCopyTextureAspect,
+        },
+        .color => if (isColorFormat(format)) .color else return CommandEncodingError.InvalidCopyTextureAspect,
+        .depth => if (isDepthFormat(format)) .depth else return CommandEncodingError.InvalidCopyTextureAspect,
+        .stencil => if (isStencilFormat(format)) .stencil else return CommandEncodingError.InvalidCopyTextureAspect,
+    };
+}
+
+pub fn textureFormatAspectBytes(format: TextureFormat, aspect: TextureAspect) CommandEncodingError!usize {
+    const resolved = try resolveTextureAspect(format, aspect);
+    return switch (resolved) {
+        .color => textureFormatBytesPerPixel(format),
+        .depth => switch (format) {
+            .depth32_float, .depth32_float_stencil8 => 4,
+            else => return CommandEncodingError.InvalidCopyTextureAspect,
+        },
+        .stencil => switch (format) {
+            .depth32_float_stencil8 => 1,
+            else => return CommandEncodingError.InvalidCopyTextureAspect,
+        },
+        .all => return CommandEncodingError.UnsupportedTextureCopyFormat,
+    };
+}
+
 pub fn textureFormatKind(format: TextureFormat) TextureFormatKind {
     return switch (format) {
         .automatic => .invalid,
@@ -8541,6 +8927,13 @@ fn textureFormatCopyClass(format: TextureFormat) TextureCopyClass {
         .depth32_float,
         .depth32_float_stencil8,
         => .none,
+    };
+}
+
+fn copyAspectCompatible(source: TextureFormat, destination: TextureFormat, aspect: TextureAspect) bool {
+    return switch (aspect) {
+        .color => textureFormatsCopyCompatible(source, destination),
+        .depth, .stencil, .all => source == destination,
     };
 }
 
@@ -8619,11 +9012,17 @@ fn resolveTextureTextureCopy(
     source: TextureDescriptor,
     destination: TextureDescriptor,
 ) CommandEncodingError!ResolvedTextureTextureCopy {
+    if (source.sample_count != 1 or destination.sample_count != 1) {
+        return CommandEncodingError.UnsupportedTextureCopyFormat;
+    }
     source.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
     destination.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
     if (!textureFormatsCopyCompatible(source.format, destination.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
-    if (!isColorFormat(source.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
-    if (source.sample_count != 1 or destination.sample_count != 1) {
+    const aspect = try resolveTextureAspect(source.format, descriptor.aspect);
+    const destination_aspect = try resolveTextureAspect(destination.format, descriptor.aspect);
+    if (aspect != destination_aspect) return CommandEncodingError.InvalidCopyTextureAspect;
+    if (aspect == .all) return CommandEncodingError.InvalidCopyTextureAspect;
+    if (!copyAspectCompatible(source.format, destination.format, aspect)) {
         return CommandEncodingError.UnsupportedTextureCopyFormat;
     }
     if (source.dimension != destination.dimension) return CommandEncodingError.UnsupportedTextureCopyFormat;
@@ -8657,6 +9056,7 @@ fn resolveTextureTextureCopy(
         .destination_origin = descriptor.destination_origin,
         .destination_mip_level = descriptor.destination_mip_level,
         .destination_slice = descriptor.destination_slice,
+        .aspect = aspect,
     };
 }
 
@@ -8680,18 +9080,31 @@ fn resolveBufferTextureCopy(
     mip_level: u32,
     slice: u32,
     layout: BufferTextureCopyLayout,
+    requested_aspect: TextureAspect,
+    requirements: TextureCopyLayoutRequirements,
 ) CommandEncodingError!ResolvedBufferTextureCopy {
-    texture.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
-    if (!isColorFormat(texture.format)) return CommandEncodingError.UnsupportedTextureCopyFormat;
     if (texture.sample_count != 1) return CommandEncodingError.UnsupportedTextureCopyFormat;
+    texture.validate() catch return CommandEncodingError.InvalidCopyTextureRegion;
     try validateTextureCopyRegion(texture, region, mip_level, slice);
 
-    const bytes_per_pixel = textureFormatBytesPerPixel(texture.format);
+    const aspect = try resolveTextureAspect(texture.format, requested_aspect);
+    const bytes_per_pixel = try textureFormatAspectBytes(texture.format, aspect);
+    if (requirements.buffer_offset_alignment == 0 or requirements.bytes_per_row_alignment == 0) {
+        return CommandEncodingError.InvalidCopyBufferLayout;
+    }
+    if (layout.buffer_offset % requirements.buffer_offset_alignment != 0 or
+        layout.buffer_offset % bytes_per_pixel != 0)
+    {
+        return CommandEncodingError.InvalidCopyBufferLayout;
+    }
     const tight_row_bytes = checkedMul(usize, region.size.width, bytes_per_pixel) catch {
         return CommandEncodingError.TextureCopySizeOverflow;
     };
     const bytes_per_row = if (layout.bytes_per_row == 0) tight_row_bytes else layout.bytes_per_row;
-    if (bytes_per_row < tight_row_bytes or bytes_per_row % bytes_per_pixel != 0) {
+    if (bytes_per_row < tight_row_bytes or
+        bytes_per_row % bytes_per_pixel != 0 or
+        bytes_per_row % requirements.bytes_per_row_alignment != 0)
+    {
         return CommandEncodingError.InvalidCopyBufferLayout;
     }
 
@@ -8725,6 +9138,7 @@ fn resolveBufferTextureCopy(
         .region = region,
         .mip_level = mip_level,
         .slice = slice,
+        .aspect = aspect,
     };
 }
 
@@ -9674,7 +10088,10 @@ test "capture names format backend and frame context" {
 
 test "error classifier groups public error categories" {
     try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.InvalidBufferLength));
+    try std.testing.expectEqual(ErrorCategory.validation, classifyError(error.InvalidCopyTextureAspect));
     try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedSampleCount));
+    try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedTextureBlit));
+    try std.testing.expectEqual(ErrorCategory.unsupported_feature, classifyError(error.UnsupportedTextureResolve));
     try std.testing.expectEqual(ErrorCategory.backend, classifyError(error.VulkanUnavailable));
     try std.testing.expectEqual(ErrorCategory.surface_lost, classifyError(error.SurfaceLost));
     try std.testing.expectEqual(ErrorCategory.device_lost, classifyError(error.DeviceLost));
@@ -10333,6 +10750,7 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     });
     try std.testing.expectEqual(Backend.metal, parity_plan.backend);
     try std.testing.expectEqual(ParitySemanticStatus.portable_runtime, parity_plan.partial_mip_layer_ranges);
+    try std.testing.expectEqual(ParitySemanticStatus.capability_gated, parity_plan.depth_stencil_texture_copies);
     try std.testing.expect(parity_plan.hasTypedUnsupportedCopies());
     try std.testing.expect(parity_plan.hasNativeExtensionOnlySemantics());
     try std.testing.expect(parity_plan.hasDeferredStressWork());
@@ -10340,7 +10758,7 @@ test "driver pipeline cache descriptors validate identity and backend gates" {
     try std.testing.expect(parity_plan.requiresPeriod31PlusDriverValidation());
     try std.testing.expect(parity_plan.hasStabilityPlan());
     try std.testing.expect(parity_plan.hasStabilityDiagnostics());
-    try std.testing.expectEqualStrings("Period 31+ validation matrix", parity_plan.deferred_to);
+    try std.testing.expectEqualStrings("Period 44 device matrix", parity_plan.deferred_to);
     try std.testing.expectEqual(@as(u64, 120 * 1024), parity_plan.stability_plan.?.upload_bytes);
 
     try std.testing.expectError(StabilityRunError.InvalidCopySize, BackendParitySemanticsPlan.fromDescriptor(.{
@@ -11622,6 +12040,288 @@ test "copy descriptors validate ranges and texture layouts" {
         .height = 4,
         .usage = .{ .copy_destination = true },
     }));
+}
+
+test "Period 42 format capabilities separate copy blit resolve and presentation" {
+    const color = defaultFormatCapabilities(.rgba8_unorm);
+    try std.testing.expect(color.copy_source);
+    try std.testing.expect(color.copy_destination);
+    try std.testing.expect(color.blit_source);
+    try std.testing.expect(color.blit_destination);
+    try std.testing.expect(color.color_resolve);
+    try std.testing.expect(!color.presentation);
+    try std.testing.expect(color.supportsCopyAspect(.rgba8_unorm, .all));
+    try std.testing.expect(color.supportsResolveAspect(.rgba8_unorm, .color));
+
+    const depth = defaultFormatCapabilities(.depth32_float);
+    try std.testing.expect(depth.depth_copy);
+    try std.testing.expect(depth.supportsCopyAspect(.depth32_float, .depth));
+    try std.testing.expect(!depth.supportsResolveAspect(.depth32_float, .depth));
+
+    const depth_stencil = defaultFormatCapabilities(.depth32_float_stencil8);
+    try std.testing.expect(!depth_stencil.supportsCopyAspect(.depth32_float_stencil8, .depth));
+    try std.testing.expect(!depth_stencil.supportsCopyAspect(.depth32_float_stencil8, .stencil));
+}
+
+test "Period 42 buffer texture copies validate backend alignment and aspects" {
+    const depth = TextureDescriptor{
+        .format = .depth32_float,
+        .width = 4,
+        .height = 2,
+        .usage = .{ .copy_source = true, .copy_destination = true },
+    };
+    const requirements = TextureCopyLayoutRequirements{
+        .buffer_offset_alignment = 16,
+        .bytes_per_row_alignment = 16,
+    };
+    const resolved = try (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 4, .height = 2 } },
+        .destination = .{ .buffer_offset = 16, .bytes_per_row = 16 },
+        .aspect = .depth,
+    }).resolveWithRequirements(depth, 64, requirements);
+    try std.testing.expectEqual(TextureAspect.depth, resolved.aspect);
+    try std.testing.expectEqual(@as(usize, 4), resolved.bytes_per_pixel);
+    try std.testing.expectEqual(@as(usize, 32), resolved.required_bytes);
+
+    try std.testing.expectError(CommandEncodingError.InvalidCopyBufferLayout, (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 4, .height = 2 } },
+        .destination = .{ .buffer_offset = 4, .bytes_per_row = 16 },
+        .aspect = .depth,
+    }).resolveWithRequirements(depth, 64, requirements));
+    try std.testing.expectError(CommandEncodingError.InvalidCopyBufferLayout, (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 4, .height = 2 } },
+        .destination = .{ .buffer_offset = 16, .bytes_per_row = 20 },
+        .aspect = .depth,
+    }).resolveWithRequirements(depth, 64, requirements));
+    try std.testing.expectError(CommandEncodingError.InvalidCopyBufferLayout, (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+        .destination = .{ .buffer_offset = 2 },
+        .aspect = .depth,
+    }).resolve(depth, 16));
+
+    const depth_stencil_texture = TextureDescriptor{
+        .format = .depth32_float_stencil8,
+        .width = 2,
+        .height = 2,
+        .usage = .{ .copy_source = true },
+    };
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureCopyFormat, (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 2, .height = 2 } },
+    }).resolve(depth_stencil_texture, 64));
+    const stencil = try (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 2, .height = 2 } },
+        .aspect = .stencil,
+    }).resolve(depth_stencil_texture, 8);
+    try std.testing.expectEqual(@as(usize, 1), stencil.bytes_per_pixel);
+}
+
+test "Period 42 blit validation separates scaling and filtering support" {
+    const source = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 4,
+        .height = 4,
+        .usage = .{ .copy_source = true },
+    };
+    const destination = TextureDescriptor{
+        .format = .rgba8_unorm_srgb,
+        .width = 8,
+        .height = 8,
+        .usage = .{ .copy_destination = true },
+    };
+    const descriptor = BlitTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 4, .height = 4 } },
+        .destination_region = .{ .size = .{ .width = 8, .height = 8 } },
+        .filter = .linear,
+    };
+    const resolved = try descriptor.resolve(
+        source,
+        destination,
+        defaultFormatCapabilities(source.format),
+        defaultFormatCapabilities(destination.format),
+    );
+    try std.testing.expectEqual(BlitFilter.linear, resolved.filter);
+    try std.testing.expectEqual(@as(u32, 8), resolved.destination_region.size.width);
+
+    var no_blit = defaultFormatCapabilities(source.format);
+    no_blit.blit_source = false;
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureBlit, descriptor.resolve(
+        source,
+        destination,
+        no_blit,
+        defaultFormatCapabilities(destination.format),
+    ));
+}
+
+test "Period 42 subresource usage tracking keeps mips and layers independent" {
+    const texture = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .depth_or_array_layers = 2,
+        .mip_level_count = 3,
+        .usage = .{ .shader_read = true, .copy_destination = true },
+    };
+    var tracker = try TextureSubresourceUsageTracker.init(std.testing.allocator, texture);
+    defer tracker.deinit();
+
+    const write_summary = try tracker.transition(.{
+        .base_mip_level = 0,
+        .mip_level_count = 1,
+        .base_array_layer = 0,
+        .array_layer_count = 1,
+    }, .copy_destination);
+    try std.testing.expectEqual(@as(usize, 1), write_summary.subresource_count);
+    try std.testing.expectEqual(ResourceUsageKind.copy_destination, tracker.currentUsage(0, 0).?);
+    try std.testing.expect(tracker.currentUsage(1, 1) == null);
+
+    const read_summary = try tracker.transition(.{
+        .base_mip_level = 1,
+        .mip_level_count = 1,
+        .base_array_layer = 1,
+        .array_layer_count = 1,
+    }, .sampled_texture);
+    try std.testing.expectEqual(@as(usize, 0), read_summary.hazard_count);
+    try std.testing.expectEqual(ResourceUsageKind.sampled_texture, tracker.currentUsage(1, 1).?);
+
+    const hazard_summary = try tracker.transition(.{
+        .base_mip_level = 0,
+        .mip_level_count = 1,
+        .base_array_layer = 0,
+        .array_layer_count = 1,
+    }, .sampled_texture);
+    try std.testing.expectEqual(@as(usize, 1), hazard_summary.hazard_count);
+    try std.testing.expectEqual(@as(usize, 1), hazard_summary.required_barrier_count);
+    try std.testing.expectError(CommandEncodingError.InvalidResourceBarrierState, tracker.applyExplicitBarrier(
+        .{ .base_mip_level = 1, .mip_level_count = 1, .base_array_layer = 1, .array_layer_count = 1 },
+        .copy_destination,
+        .sampled_texture,
+    ));
+
+    _ = try tracker.transition(
+        .{ .base_mip_level = 2, .mip_level_count = 1, .base_array_layer = 0, .array_layer_count = 1 },
+        .copy_destination,
+    );
+    _ = try tracker.transition(
+        .{ .base_mip_level = 2, .mip_level_count = 1, .base_array_layer = 1, .array_layer_count = 1 },
+        .sampled_texture,
+    );
+    try std.testing.expectError(CommandEncodingError.InvalidResourceBarrierState, tracker.applyExplicitBarrier(
+        .{ .base_mip_level = 2, .mip_level_count = 1, .base_array_layer = 0, .array_layer_count = 2 },
+        .copy_destination,
+        .sampled_texture,
+    ));
+    try std.testing.expectEqual(ResourceUsageKind.copy_destination, tracker.currentUsage(2, 0).?);
+}
+
+test "Period 42 exact texture copies cover depth 3D slices and MSAA rejection" {
+    const depth = TextureDescriptor{
+        .format = .depth32_float,
+        .width = 8,
+        .height = 8,
+        .usage = .{ .copy_source = true, .copy_destination = true },
+    };
+    const depth_copy = try (CopyTextureToTextureDescriptor{
+        .source_region = .{ .origin = .{ .x = 2, .y = 1 }, .size = .{ .width = 4, .height = 3 } },
+        .destination_origin = .{ .x = 1, .y = 2 },
+        .aspect = .depth,
+    }).resolve(depth, depth);
+    try std.testing.expectEqual(TextureAspect.depth, depth_copy.aspect);
+    try std.testing.expectError(CommandEncodingError.InvalidCopyTextureAspect, (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 1, .height = 1 } },
+        .aspect = .stencil,
+    }).resolve(depth, depth));
+
+    const depth_stencil = TextureDescriptor{
+        .format = .depth32_float_stencil8,
+        .width = 4,
+        .height = 4,
+        .usage = .{ .copy_source = true, .copy_destination = true },
+    };
+    try std.testing.expectError(CommandEncodingError.InvalidCopyTextureAspect, (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 4, .height = 4 } },
+    }).resolve(depth_stencil, depth_stencil));
+    const stencil_copy = try (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 4, .height = 4 } },
+        .aspect = .stencil,
+    }).resolve(depth_stencil, depth_stencil);
+    try std.testing.expectEqual(TextureAspect.stencil, stencil_copy.aspect);
+
+    const volume = TextureDescriptor{
+        .dimension = .three_d,
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .depth_or_array_layers = 8,
+        .mip_level_count = 2,
+        .usage = .{ .copy_source = true, .copy_destination = true },
+    };
+    const volume_copy = try (CopyTextureToTextureDescriptor{
+        .source_region = .{
+            .origin = .{ .x = 1, .y = 1, .z = 1 },
+            .size = .{ .width = 2, .height = 2, .depth = 2 },
+        },
+        .source_mip_level = 1,
+        .destination_origin = .{ .z = 1 },
+    }).resolve(volume, volume);
+    try std.testing.expectEqual(@as(u32, 2), volume_copy.source_region.size.depth);
+
+    const multisampled = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .sample_count = 4,
+        .usage = .{ .render_attachment = true },
+        .storage_mode = .private,
+    };
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureCopyFormat, (CopyTextureToTextureDescriptor{
+        .source_region = .{ .size = .{ .width = 8, .height = 8 } },
+    }).resolve(multisampled, multisampled));
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureCopyFormat, (CopyTextureToBufferDescriptor{
+        .source_region = .{ .size = .{ .width = 8, .height = 8 } },
+    }).resolve(multisampled, 256));
+}
+
+test "Period 42 resolve validation rejects unsupported depth and invalid sample counts" {
+    const color_source = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 16,
+        .height = 16,
+        .sample_count = 4,
+        .usage = .{ .render_attachment = true },
+    };
+    const color_destination = TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 16,
+        .height = 16,
+        .usage = .{ .render_attachment = true },
+    };
+    try (TextureResolveDescriptor{}).validate(
+        color_source,
+        color_destination,
+        defaultFormatCapabilities(.rgba8_unorm),
+    );
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureResolve, (TextureResolveDescriptor{}).validate(
+        color_destination,
+        color_destination,
+        defaultFormatCapabilities(.rgba8_unorm),
+    ));
+
+    const depth_source = TextureDescriptor{
+        .format = .depth32_float,
+        .width = 16,
+        .height = 16,
+        .sample_count = 4,
+        .usage = .{ .render_attachment = true },
+    };
+    const depth_destination = TextureDescriptor{
+        .format = .depth32_float,
+        .width = 16,
+        .height = 16,
+        .usage = .{ .render_attachment = true },
+    };
+    try std.testing.expectError(CommandEncodingError.UnsupportedTextureResolve, (TextureResolveDescriptor{
+        .aspect = .depth,
+    }).validate(depth_source, depth_destination, defaultFormatCapabilities(.depth32_float)));
 }
 
 test "query descriptors validate feature gates and ranges" {

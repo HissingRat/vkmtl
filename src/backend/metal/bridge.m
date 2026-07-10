@@ -1040,8 +1040,11 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
         out_capabilities->max_threads_per_threadgroup_width = (unsigned int)max_threads.width;
         out_capabilities->max_threads_per_threadgroup_height = (unsigned int)max_threads.height;
         out_capabilities->max_threads_per_threadgroup_depth = (unsigned int)max_threads.depth;
+        // These are independent per-axis ceilings, so their product is not a
+        // valid threadgroup size. The exact total is pipeline-specific; before
+        // a pipeline exists, report the largest guaranteed one-axis group.
         out_capabilities->max_threads_per_threadgroup_total =
-            (unsigned int)(max_threads.width * max_threads.height * max_threads.depth);
+            (unsigned int)MAX(max_threads.width, MAX(max_threads.height, max_threads.depth));
 
         if ([device respondsToSelector:@selector(argumentBuffersSupport)]) {
             MTLArgumentBuffersTier tier = [device argumentBuffersSupport];

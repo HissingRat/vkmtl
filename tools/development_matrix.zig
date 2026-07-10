@@ -415,7 +415,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .macos,
         .backend = .metal,
         .required = true,
-        .command = "zig build test && zig build",
+        .command = "zig build test && zig build && zig build run-capability-dump",
         .expectation = "default Apple path builds tests and examples through Metal-capable runtime",
     },
     .{
@@ -432,7 +432,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .linux,
         .backend = .vulkan,
         .required = true,
-        .command = "zig build test && zig build -Dvulkan",
+        .command = "zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan",
         .expectation = "Linux Vulkan builds tests and examples with a system Vulkan loader",
     },
     .{
@@ -440,7 +440,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .windows,
         .backend = .vulkan,
         .required = true,
-        .command = "zig build test && zig build -Dvulkan",
+        .command = "zig build test && zig build -Dvulkan && zig build run-capability-dump -Dvulkan",
         .expectation = "Windows Vulkan builds tests and examples with a system Vulkan loader",
     },
     .{
@@ -481,7 +481,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test",
-        .expectation = "mipmap generation, fill fallback, texture copy, sampler border color, and heap planning regressions pass",
+        .expectation = "mipmaps, fill fallback, copy alignment and subresources, aspect copies, blit gates, MSAA semantics, subresource state, sampler borders, and heap planning regressions pass",
     },
     .{
         .name = "platform_interop_regression",
@@ -1475,8 +1475,8 @@ pub const validation_cases = [_]ValidationCase{
     .{
         .name = "resource_utilities",
         .kind = .resource_utilities,
-        .test_location = "src/core.zig and src/runtime/window_context.zig Period 24 resource utility tests",
-        .expectation = "mipmaps, fills, texture copies, sampler borders, heaps, and transient diagnostics keep typed validation",
+        .test_location = "src/core.zig, src/runtime/window_context.zig, and backend command/capability modules Period 24 and Period 42 resource utility tests",
+        .expectation = "mipmaps, fills, copy alignment and subresources, depth/stencil aspects, blit gates, MSAA semantics, subresource state, sampler borders, heaps, and transient diagnostics keep typed validation",
     },
     .{
         .name = "platform_interop",

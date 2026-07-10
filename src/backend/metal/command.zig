@@ -267,6 +267,7 @@ pub const BlitCommandEncoder = struct {
         destination: *const MetalTexture,
         resolved: core.ResolvedBufferTextureCopy,
     ) !void {
+        try validateMetalCopyAspect(destination.descriptor.format, resolved.aspect);
         try check(metal.vkmtl_metal_blit_command_encoder_copy_buffer_to_texture(
             self.handle,
             source.handle,
@@ -291,6 +292,7 @@ pub const BlitCommandEncoder = struct {
         destination: *const MetalBuffer,
         resolved: core.ResolvedBufferTextureCopy,
     ) !void {
+        try validateMetalCopyAspect(source.descriptor.format, resolved.aspect);
         try check(metal.vkmtl_metal_blit_command_encoder_copy_texture_to_buffer(
             self.handle,
             source.handle,
@@ -315,6 +317,8 @@ pub const BlitCommandEncoder = struct {
         destination: *const MetalTexture,
         resolved: core.ResolvedTextureTextureCopy,
     ) !void {
+        try validateMetalCopyAspect(source.descriptor.format, resolved.aspect);
+        try validateMetalCopyAspect(destination.descriptor.format, resolved.aspect);
         var slice_offset: u32 = 0;
         while (slice_offset < resolved.slice_count) : (slice_offset += 1) {
             try check(metal.vkmtl_metal_blit_command_encoder_copy_texture_to_texture(
@@ -336,6 +340,27 @@ pub const BlitCommandEncoder = struct {
                 if (destination.descriptor.dimension == .three_d) 0 else resolved.destination_slice + slice_offset,
             ));
         }
+    }
+
+    fn validateMetalCopyAspect(format: core.TextureFormat, aspect: core.TextureAspect) !void {
+        switch (aspect) {
+            .color => if (!core.isColorFormat(format)) return core.CommandEncodingError.InvalidCopyTextureAspect,
+            .depth => if (format != .depth32_float) return core.CommandEncodingError.UnsupportedTextureCopyFormat,
+            .stencil, .all => return core.CommandEncodingError.UnsupportedTextureCopyFormat,
+        }
+    }
+
+    pub fn blitTexture(
+        self: *BlitCommandEncoder,
+        source: *const MetalTexture,
+        destination: *const MetalTexture,
+        resolved: core.ResolvedBlitTexture,
+    ) !void {
+        _ = self;
+        _ = source;
+        _ = destination;
+        _ = resolved;
+        return core.CommandEncodingError.UnsupportedTextureBlit;
     }
 
     pub fn fillBuffer(

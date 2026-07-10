@@ -1053,6 +1053,35 @@ pub const BlitCommandEncoder = struct {
         destination.layout = .shader_read_only_optimal;
     }
 
+    pub fn blitTexture(
+        self: *BlitCommandEncoder,
+        source: *VulkanTexture,
+        destination: *VulkanTexture,
+        resolved: core.ResolvedBlitTexture,
+    ) !void {
+        const old_source_layout = source.layout;
+        const old_destination_layout = destination.layout;
+        source.transitionLayout(self.cmdbuf, old_source_layout, .transfer_src_optimal);
+        destination.transitionLayout(self.cmdbuf, old_destination_layout, .transfer_dst_optimal);
+        var slice_offset: u32 = 0;
+        while (slice_offset < resolved.slice_count) : (slice_offset += 1) {
+            const blit = textureBlit(source, destination, resolved, slice_offset);
+            self.gc.dev.cmdBlitImage(
+                self.cmdbuf,
+                source.handle,
+                .transfer_src_optimal,
+                destination.handle,
+                .transfer_dst_optimal,
+                &.{blit},
+                if (resolved.filter == .linear) .linear else .nearest,
+            );
+        }
+        source.transitionLayout(self.cmdbuf, .transfer_src_optimal, old_source_layout);
+        destination.transitionLayout(self.cmdbuf, .transfer_dst_optimal, .shader_read_only_optimal);
+        source.layout = old_source_layout;
+        destination.layout = .shader_read_only_optimal;
+    }
+
     pub fn fillBuffer(
         self: *BlitCommandEncoder,
         buffer: *const VulkanBuffer,
@@ -1431,7 +1460,7 @@ fn bufferImageCopy(texture: *const VulkanTexture, resolved: core.ResolvedBufferT
         .buffer_row_length = @intCast(resolved.bytes_per_row / resolved.bytes_per_pixel),
         .buffer_image_height = @intCast(resolved.bytes_per_image / resolved.bytes_per_row),
         .image_subresource = .{
-            .aspect_mask = .{ .color_bit = true },
+            .aspect_mask = imageAspectMaskForAspect(resolved.aspect),
             .mip_level = resolved.mip_level,
             .base_array_layer = if (texture.descriptor.dimension == .three_d) 0 else resolved.slice,
             .layer_count = 1,
@@ -1455,17 +1484,23 @@ fn imageCopy(
     resolved: core.ResolvedTextureTextureCopy,
 ) vk.ImageCopy {
     return .{
-        .src_subresource = imageCopySubresource(source, resolved.source_mip_level, resolved.source_slice, resolved.slice_count),
+        .src_subresource = imageCopySubresource(source, resolved.source_mip_level, resolved.source_slice, resolved.slice_count, resolved.aspect),
         .src_offset = imageCopyOffset(source.descriptor.dimension, resolved.source_region.origin),
-        .dst_subresource = imageCopySubresource(destination, resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count),
+        .dst_subresource = imageCopySubresource(destination, resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count, resolved.aspect),
         .dst_offset = imageCopyOffset(destination.descriptor.dimension, resolved.destination_origin),
         .extent = imageCopyExtent(source.descriptor.dimension, resolved.source_region.size),
     };
 }
 
-fn imageCopySubresource(texture: *const VulkanTexture, mip_level: u32, slice: u32, slice_count: u32) vk.ImageSubresourceLayers {
+fn imageCopySubresource(
+    texture: *const VulkanTexture,
+    mip_level: u32,
+    slice: u32,
+    slice_count: u32,
+    aspect: core.TextureAspect,
+) vk.ImageSubresourceLayers {
     return .{
-        .aspect_mask = .{ .color_bit = true },
+        .aspect_mask = imageAspectMaskForAspect(aspect),
         .mip_level = mip_level,
         .base_array_layer = if (texture.descriptor.dimension == .three_d) 0 else slice,
         .layer_count = if (texture.descriptor.dimension == .three_d) 1 else slice_count,
@@ -1480,11 +1515,51 @@ fn imageCopyOffset(dimension: core.TextureDimension, origin: core.Origin3D) vk.O
     };
 }
 
-fn imageCopyExtent(dimension: core.TextureDimension, size: core.Extent3D) vk.Extent3D {
+fn imageCopyExtent(dimension: core.TextureDimension, size: core.Size3D) vk.Extent3D {
     return .{
         .width = size.width,
         .height = if (dimension == .one_d) 1 else size.height,
         .depth = if (dimension == .three_d) size.depth else 1,
+    };
+}
+
+fn textureBlit(
+    source: *const VulkanTexture,
+    destination: *const VulkanTexture,
+    resolved: core.ResolvedBlitTexture,
+    slice_offset: u32,
+) vk.ImageBlit {
+    return .{
+        .src_subresource = imageCopySubresource(
+            source,
+            resolved.source_mip_level,
+            resolved.source_slice + slice_offset,
+            1,
+            .color,
+        ),
+        .src_offsets = .{
+            imageCopyOffset(source.descriptor.dimension, resolved.source_region.origin),
+            imageCopyOffset(source.descriptor.dimension, .{
+                .x = resolved.source_region.origin.x + resolved.source_region.size.width,
+                .y = resolved.source_region.origin.y + resolved.source_region.size.height,
+                .z = resolved.source_region.origin.z + resolved.source_region.size.depth,
+            }),
+        },
+        .dst_subresource = imageCopySubresource(
+            destination,
+            resolved.destination_mip_level,
+            resolved.destination_slice + slice_offset,
+            1,
+            .color,
+        ),
+        .dst_offsets = .{
+            imageCopyOffset(destination.descriptor.dimension, resolved.destination_region.origin),
+            imageCopyOffset(destination.descriptor.dimension, .{
+                .x = resolved.destination_region.origin.x + resolved.destination_region.size.width,
+                .y = resolved.destination_region.origin.y + resolved.destination_region.size.height,
+                .z = resolved.destination_region.origin.z + resolved.destination_region.size.depth,
+            }),
+        },
     };
 }
 
@@ -1731,6 +1806,15 @@ fn imageAspectMask(format: core.TextureFormat) vk.ImageAspectFlags {
         .color_bit = !core.isDepthFormat(format) and !core.isStencilFormat(format),
         .depth_bit = core.isDepthFormat(format),
         .stencil_bit = core.isStencilFormat(format),
+    };
+}
+
+fn imageAspectMaskForAspect(aspect: core.TextureAspect) vk.ImageAspectFlags {
+    return switch (aspect) {
+        .all => .{ .depth_bit = true, .stencil_bit = true },
+        .color => .{ .color_bit = true },
+        .depth => .{ .depth_bit = true },
+        .stencil => .{ .stencil_bit = true },
     };
 }
 

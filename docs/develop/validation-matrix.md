@@ -25,8 +25,11 @@ Current cases:
 - `query_readback`: timestamp and occlusion query sets validate availability,
   type, range, readback, and resolve paths before native work.
 - `resource_utilities`: mipmap generation, fill fallback selection, texture
-  copy compatibility, sampler border colors, heap planning, heap aliasing,
-  memory-pressure reports, and transient diagnostics keep typed validation.
+  copy compatibility, backend alignment, mip/layer/3D-slice ranges,
+  depth/stencil aspects, scaled blit gates, MSAA resolve/copy behavior,
+  per-subresource state transitions, sampler border colors, heap planning,
+  heap aliasing, memory-pressure reports, and transient diagnostics keep typed
+  validation.
 - `platform_interop`: surface registries, present-mode diagnostics, external
   interop capability matrices, memory/buffer/texture wrappers, external sync
   wrappers, and native insertion gates keep typed validation.

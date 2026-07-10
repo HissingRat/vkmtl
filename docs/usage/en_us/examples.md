@@ -228,7 +228,10 @@ layouts, and byte validation before process exit.
 
 `examples/capability_dump` prints the selected backend, adapter identity,
 capability source, usable features, native queried features, selected limits,
-and representative format capabilities.
+and representative format capabilities. Period 42 output includes
+buffer/texture copy alignment plus exact-copy, scaled-blit, presentation,
+resolve, depth-copy, and stencil-copy flags for color, depth, and packed
+depth/stencil formats.
 
 Run it with:
 

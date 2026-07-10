@@ -129,6 +129,8 @@ readback、reflection-derived bind group layout，以及退出前的 byte valida
 
 `examples/capability_dump` 会打印当前选择的 backend、adapter 信息、capability source、可用
 features、native queried features、limits，以及几个代表性 texture format capabilities。
+Period 42 输出还包含 buffer/texture copy alignment，以及 color、depth、packed depth/stencil
+format 的 exact-copy、scaled-blit、presentation、resolve、depth-copy 和 stencil-copy flag。
 
 运行：
 

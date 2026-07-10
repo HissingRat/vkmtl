@@ -1,6 +1,7 @@
 # Period 43: Profiling, Capture, And Debug Markers
 
-Status: planned after Period42.
+Status: active. Phase 1 label lifetime and naming rules are the current
+implementation priority.
 
 Goal: make vkmtl debuggable in native tools by providing stable labels,
 markers, capture scopes, timestamps, and issue-report diagnostics.

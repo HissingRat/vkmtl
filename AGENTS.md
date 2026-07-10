@@ -29,6 +29,29 @@ rewriting the rest of the library.
   descriptors, command queues, command buffers, render command encoders, and
   pipeline state objects. Keep Vulkan complexity behind the backend boundary.
 
+## Public API Evolution
+
+`docs/develop/public-api-rules.md` is the authoritative policy for public API
+changes. Read it before adding, removing, renaming, or moving any declaration
+reachable through `src/vkmtl.zig`, and before changing public methods, fields,
+enum tags, errors, defaults, ownership, lifetime, capability, or limit meaning.
+`docs/develop/public-api-inventory.md` is the current surface snapshot and
+canonical namespace assignment; update it in the same change whenever the
+public surface changes.
+
+In particular:
+
+- Do not add advanced declarations to the flat root merely because existing
+  declarations are flat.
+- New public declarations need one canonical domain namespace and must satisfy
+  the documented root admission rules before receiving a root alias.
+- Do not add new `WindowContext` compatibility forwards without a documented
+  design decision.
+- Examples and user-facing docs must use canonical APIs rather than temporary
+  compatibility aliases.
+- Breaking cleanup must follow the documented migration and release-gate
+  process; it must not happen incidentally during backend work.
+
 ## Intended Module Boundaries
 
 Suggested dependency direction:
@@ -132,6 +155,9 @@ Before starting work on any phase, read `docs/develop/checklist.md` and
 complete the checklist items that define or unblock that phase. If a checklist
 item is a design decision, make the decision explicit in docs before
 implementing code that depends on it.
+
+Before changing public API during a phase, also read and apply
+`docs/develop/public-api-rules.md`.
 
 Current priority follows the active phase in `docs/develop/checklist.md`. Keep
 work in small vertical slices and do not jump to broad engine features before

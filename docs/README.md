@@ -26,6 +26,10 @@ vkmtl documentation is organized by audience and purpose.
 
 ## Development
 
+- `develop/public-api-rules.md`: authoritative public API evolution,
+  namespacing, compatibility, and removal rules
+- `develop/public-api-inventory.md`: current root export, owner method,
+  namespace, and compatibility inventory
 - `develop/roadmap.md`: route, stages, and what comes next
 - `develop/checklist.md`: checkable tasks and phase gates
 - `develop/period1/`: core library slice, phases 0 through 9

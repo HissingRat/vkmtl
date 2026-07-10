@@ -11,7 +11,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, synchronization commit descriptors, logical queue planning, ownership transfer validation, and query readback/resolve validation.
-- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, broader texture copy validation, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
+- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation draw plans, and mesh/task dispatch plans.
@@ -91,7 +91,9 @@ conservative until the relevant backend period lands.
 | Unaligned `fillBuffer` | Staging-copy fallback | Native byte-range fill | Public API accepts unaligned ranges |
 | Texture copy array layers | Native `layer_count` | Per-slice fallback loop | `slice_count` is public |
 | Compatible color-format copies | Native compatible copy class | Native compatible copy class | unorm/sRGB pairs in same channel order |
-| Depth/stencil and MSAA copies | Deferred | Deferred | Period 32+ validation matrix semantic decision |
+| `depth32_float` exact copy/readback | Native depth-aspect copy | Native depth texture copy | Capability-gated through format caps |
+| Packed depth/stencil exact copy/readback | Native depth or stencil aspect when queried | Typed unsupported | Never uses an implicit packed buffer layout |
+| MSAA copies/readback | Typed unsupported | Typed unsupported | Color resolve is the explicit single-sample conversion |
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
 | Custom sampler border colors | Deferred | Deferred | Period 32+ validation matrix parity decision |
 | Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
@@ -99,6 +101,19 @@ conservative until the relevant backend period lands.
 | Native heap-backed resources | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Reports requested units, peak live units, max alignment, aliasable pairs, and savings |
 | Memory budget/pressure report | Fallback runtime report until native query is wired | Fallback runtime report until native query is wired | `Device.memoryBudgetReport(...)` classifies pressure and source |
+
+## Period 42 Format, Copy, And Attachment Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Format capabilities | Optimal-tiling format properties plus selected-surface format query | Explicit portable-format table | `Device.getFormatCaps(...)`; issue dumps include copy, blit, present, resolve, depth, and stencil flags |
+| Buffer/texture alignment | Native optimal-copy offset and row-pitch limits | Portable limit of 1 | Runtime also validates texel-size offset and row-pitch alignment before native encoding |
+| Exact color copy | Same channel-order copy classes, including unorm/sRGB pairs | Same portable copy classes | Mip, array-layer, and 3D-slice ranges validated |
+| Scaled color blit | `vkCmdBlitImage` when source/destination caps allow it | `UnsupportedTextureBlit` | Nearest or linear; linear also requires source linear filtering |
+| Resource state | Per-mip/per-layer portable tracker plus backend image layouts | Per-mip/per-layer portable tracker; native encoder state remains private | Texture views share state; partial explicit barriers are transactional |
+| Color MSAA resolve | Native render-pass resolve | Native render-pass resolve | Source must be multisampled; destination must be matching single-sample texture |
+| Depth/stencil resolve | Typed unsupported | Typed unsupported | Capability flags remain false until validated lowering exists |
+| View format reinterpretation | Typed unsupported | Typed unsupported | Views currently keep the texture's exact format |
 
 ## Period 25 Platform And Interop Expectations
 

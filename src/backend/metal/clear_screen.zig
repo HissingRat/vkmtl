@@ -96,7 +96,19 @@ pub fn nativeFeatures(self: *const MetalClearScreen) core.DeviceFeatures {
 
 pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFormat) core.FormatCapabilities {
     _ = self;
-    return core.defaultFormatCapabilities(format);
+    var capabilities = core.defaultFormatCapabilities(format);
+    capabilities.blit_source = false;
+    capabilities.blit_destination = false;
+    capabilities.presentation = format == .bgra8_unorm;
+    capabilities.depth_resolve = false;
+    capabilities.stencil_resolve = false;
+    if (format == .depth32_float_stencil8) {
+        capabilities.copy_source = false;
+        capabilities.copy_destination = false;
+        capabilities.depth_copy = false;
+        capabilities.stencil_copy = false;
+    }
+    return capabilities;
 }
 
 pub fn nativeHandles(self: *const MetalClearScreen) !core.NativeHandles {
@@ -293,10 +305,10 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .ray_tracing = 1,
         .sparse_textures = 1,
         .binary_archive = 1,
-        .max_threads_per_threadgroup_width = 16,
-        .max_threads_per_threadgroup_height = 16,
-        .max_threads_per_threadgroup_depth = 1,
-        .max_threads_per_threadgroup_total = 256,
+        .max_threads_per_threadgroup_width = 1024,
+        .max_threads_per_threadgroup_height = 1024,
+        .max_threads_per_threadgroup_depth = 64,
+        .max_threads_per_threadgroup_total = 1024,
         .max_buffer_argument_table_entries = 128,
         .max_texture_argument_table_entries = 128,
         .max_sampler_argument_table_entries = 16,
@@ -311,6 +323,27 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.metal_binary_archive);
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
-    try std.testing.expectEqual(@as(u32, 256), queried_limits.max_compute_total_threads_per_threadgroup);
+    try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);
     try std.testing.expectEqual(@as(u32, 128), queried_limits.max_bindless_descriptors_per_range);
+}
+
+test "Metal format capabilities keep presentation and scaled blit truthful" {
+    const screen = MetalClearScreen{
+        .handle = undefined,
+        .extent = .{ .width = 1, .height = 1 },
+    };
+    const presentable = screen.formatCapabilities(.bgra8_unorm);
+    try std.testing.expect(presentable.presentation);
+    try std.testing.expect(!presentable.blit_source);
+    try std.testing.expect(!presentable.blit_destination);
+    try std.testing.expect(presentable.color_resolve);
+
+    const srgb = screen.formatCapabilities(.bgra8_unorm_srgb);
+    try std.testing.expect(!srgb.presentation);
+    const depth = screen.formatCapabilities(.depth32_float);
+    try std.testing.expect(depth.depth_copy);
+    try std.testing.expect(!depth.depth_resolve);
+    const depth_stencil = screen.formatCapabilities(.depth32_float_stencil8);
+    try std.testing.expect(!depth_stencil.copy_source);
+    try std.testing.expect(!depth_stencil.stencil_copy);
 }

@@ -94,8 +94,12 @@ Cube texture 当前表示为每个 cube 六层的 2D texture；cube-specific vie
 阶段。
 
 Format helper 包括 `textureFormatKind(...)`、`isColorFormat(...)`、`isDepthFormat(...)`、
-`isSrgbFormat(...)` 和 `textureFormatBytesPerPixel(...)`。`FormatCapabilities` 会报告当前已实现
-portable format 的 sampled、storage、attachment、filter、mip、blend 和 copy 支持。
+`isSrgbFormat(...)` 和 `textureFormatBytesPerPixel(...)`。新代码应从 canonical
+`vkmtl.resource` 和 `vkmtl.diagnostics` namespace 使用 format type 与 capability report。
+`FormatCapabilities` 会分别报告 sampling、storage、attachment、filter、mip、blend、exact copy、
+scaled blit、presentation、depth/stencil copy 以及 color/depth/stencil resolve 支持。
+`Device.getFormatCaps(format)` 会查询当前选中的 backend；vkmtl 还没有验证执行路径时，不会把
+native feature 报告成可用能力。
 
 Mipmap helper 包括 `mipDimension(...)`、`maxMipLevelCountForExtent(...)`、
 `TextureDescriptor.maxMipLevelCount()` 和 `TextureDescriptor.mipExtent(level)`。Texture descriptor
@@ -534,7 +538,9 @@ attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。De
 lowering 支持 texture-backed MRT render pass；current drawable render pass 仍保持单个
 color attachment。`transient` 目前作为 no-op 性能 hint 保留。Combined depth/stencil
 attachment 会通过 depth attachment 路径下沉；独立 stencil-only attachment 仍会返回
-typed unsupported error。
+typed unsupported error。Multisampled texture 的普通 copy/readback 会被拒绝；color resolve
+是显式转换到 single-sample target 的路径。Depth 和 stencil resolve target 已有公开 shape，
+但在两个 backend 都完成验证 lowering 前会返回 `UnsupportedTextureResolve`。
 
 Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`、
 `StencilReference` 和 `DepthBiasDescriptor`。`RenderCommandEncoder` 暴露对应 setter。
@@ -569,7 +575,17 @@ try command_buffer.commit();
 当前 lowered blit slice 支持 buffer-to-buffer、buffer-to-texture、texture-to-buffer 和
 texture-to-texture。Texture-to-texture copy 可以指定 mip level，并用 `slice_count` 一次复制多个
 array layer。Color format 可以在同一 copy class 内复制，例如 `rgba8_unorm` 到
-`rgba8_unorm_srgb`；channel order 不同、depth/stencil format 和 MSAA texture 仍会拒绝。
+`rgba8_unorm_srgb`；channel order 不同和 MSAA texture 仍会拒绝。Copy descriptor 现在带有
+`TextureAspect`：`depth32_float` 支持显式 `.depth` copy 和 buffer readback；packed
+depth/stencil copy 则按 aspect 通过 capability gate。单 aspect format 省略的 `.all` 会解析为
+color 或 depth；packed depth/stencil 的 combined buffer layout 会被拒绝。Runtime 会在 backend
+encoding 前应用 `DeviceLimits.buffer_texture_copy_offset_alignment` 和
+`buffer_texture_copy_row_pitch_alignment`。
+
+缩放 copy 使用独立的 `BlitCommandEncoder.blitTexture(...)` 和
+`vkmtl.transfer.BlitTextureDescriptor`。Vulkan 对支持的 format 下沉到 `vkCmdBlitImage`；Metal
+当前返回 `UnsupportedTextureBlit`。Linear filter 还要求 source format 报告 linear-filter 能力。
+Command error type 的 canonical 路径是 `vkmtl.command.CommandEncodingError`。
 `BlitCommandEncoder.fillBuffer(...)` 也会下沉到 native backend；
 Metal 支持任意 byte range。Vulkan 对 4-byte aligned range 继续使用 native
 `vkCmdFillBuffer`，对 unaligned range 使用 staging-copy fallback。
@@ -581,6 +597,9 @@ generation。Partial mip/layer range 仍保持 unsupported，等 backend parity 
 
 高级用户可以在 blit encoder 上通过 `bufferBarrier(...)` 和 `textureBarrier(...)`
 插入显式 barrier。这些方法会先用 tracked resource state 校验 descriptor，再进入 backend。
+Texture state 会按 mip 和 array layer 独立追踪，并由同一 texture 创建的 view 共享。
+`Texture.subresourceUsage(mip, layer)` 暴露 portable tracked state；Vulkan layout 和 Metal
+encoder/resource state 继续留在 backend 内。Partial explicit barrier 会先事务式校验整个 range。
 
 Compute 使用 Metal 风格的 compute encoder：
 
@@ -748,3 +767,4 @@ command-encoder native handle view 接好之前，backend 会保持这个 featur
 `BackendParitySemanticsDescriptor`、`BackendParitySemanticsPlan` 和
 `Device.planBackendParitySemantics(...)` 会暴露当前 parity decision：partial mip/layer range、
 depth/stencil 与 MSAA copy、custom sampler border color，以及 opt-in GPU soak planning。
+Depth/stencil copy 现在报告为 capability-gated；普通 MSAA copy 继续保持 typed unsupported。

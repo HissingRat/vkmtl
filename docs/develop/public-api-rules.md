@@ -1,0 +1,218 @@
+# Public API Evolution Rules
+
+This document is the authoritative policy for adding, changing, moving, or
+removing vkmtl public API. Read it before editing `src/vkmtl.zig`, adding public
+methods to runtime objects, or changing public descriptors, errors, defaults,
+ownership, or lifetime behavior.
+
+The current flat root surface predates this policy. Existing root exports are
+not automatically stable. They must be classified and migrated deliberately
+before the first tagged compatibility release.
+
+## Goals
+
+- Keep the common rendering path small, portable, and Metal-inspired.
+- Keep advanced and backend-sensitive features out of the flat root namespace.
+- Let Vulkan and Metal implementations evolve without changing ordinary user
+  code.
+- Preserve working vertical slices while the public surface is reorganized.
+- Make compatibility breaks explicit, reviewable, and tied to a release gate.
+
+API size is not controlled by a numeric target alone. The working target is a
+root module with roughly 50 to 80 common names, but the admission rules below
+decide whether a declaration belongs there.
+
+## What Counts As Public API
+
+All of the following are public API when reachable through the `vkmtl` module:
+
+- declarations exported by `src/vkmtl.zig` or a public namespace below it
+- public methods and fields on exported types
+- enum tags, flag fields, error names, descriptor defaults, and validation
+  behavior
+- ownership, destruction order, borrowing, and synchronization rules
+- capability and limit meanings
+- example code and documented command sequences presented as supported usage
+
+Changing a default, error, lifetime rule, or capability meaning can be a
+breaking change even when the Zig declaration keeps the same name.
+
+Backend-private declarations, generated shader artifacts, test helpers, and
+implementation records must not become reachable from the public module by
+accident.
+
+## Public API Lanes
+
+Every public declaration must belong to one primary lane.
+
+### Portable Core
+
+Portable core names describe the ordinary path shared by Vulkan and Metal.
+They may be exported at the root only when they satisfy the root admission
+rules. Examples include backend selection, adapters, devices, queues, surfaces,
+common resources, pipelines, and command objects.
+
+### Domain Namespaces
+
+Descriptors, helpers, and less common objects belong to a domain namespace.
+The intended namespace map is:
+
+| Namespace | Owns |
+| --- | --- |
+| `resource` | formats, usage, buffers, textures, views, samplers, heaps, and sparse resource descriptors |
+| `shader` | shader declarations, reflection, specialization, and compilation descriptors |
+| `binding` | bind group layouts, bind groups, resource tables, dynamic offsets, and constants |
+| `render` | render passes, render pipelines, attachments, raster state, and draw descriptors |
+| `compute` | compute pipelines, dispatch, atomics, and threadgroup memory |
+| `transfer` | copy, fill, blit, mipmap, and readback descriptors |
+| `command` | command buffer lifecycle, encoder state, and command errors |
+| `sync` | barriers, fences, events, queue selection, and ownership transfer |
+| `presentation` | surfaces, swapchains, present modes, resize, and frame pacing |
+| `ray_tracing` | acceleration structures, ray pipelines, shader binding tables, and ray queries |
+| `interop` | external resources, platform sharing, and explicit import/export contracts |
+| `diagnostics` | capability reports, validation classification, profiling, capture, and debug data |
+| `native` | explicit backend-native handle escape hatches |
+
+A declaration should have one canonical home. Compatibility aliases may exist
+temporarily, but documentation and examples must use the canonical name.
+
+### Capability-Gated Advanced API
+
+Advanced features may be portable in shape while remaining optional in
+execution. They must:
+
+- live in the relevant domain namespace rather than expanding the flat root
+- validate through `DeviceFeatures`, `DeviceLimits`, or format capabilities
+- return typed unsupported errors before backend work begins
+- document whether support is executable, planning-only, or native-only
+
+A backend planning record is not automatically a portable user-facing API.
+
+### Native Escape Hatches
+
+Backend-specific handles and operations belong under `native` or an explicitly
+backend-specific subnamespace. Vulkan or Metal types must not appear in portable
+descriptors, ordinary resource methods, or the flat root.
+
+### Compatibility Surface
+
+Compatibility aliases and forwarding methods are temporary migration tools,
+not preferred API. They must have a canonical replacement and must not be used
+by new examples or documentation.
+
+Existing `WindowContext.make*` and related forwarding methods may remain until
+the planned pre-release cleanup, but new resource or pipeline APIs must be
+owned by `Device`, `Queue`, `Surface`, or `Swapchain`. Do not add new
+`WindowContext` compatibility forwards without a documented design decision.
+
+## Root Module Admission Rules
+
+A new root export is allowed only when all of these are true:
+
+1. It is part of the common quick-start path, not an advanced planning helper.
+2. It has backend-neutral semantics on both Vulkan and Metal.
+3. Its ownership and lifetime belong to a stable public owner.
+4. Its name and default behavior are expected to survive the first tagged
+   compatibility release.
+5. Keeping it only in a domain namespace would make ordinary use materially
+   harder.
+
+If any condition is uncertain, place the declaration in its domain namespace.
+Do not add a root alias merely because older declarations are flat.
+
+The common owner methods may remain direct and Metal-inspired, such as
+`Device.makeBuffer`, `Device.makeTexture`, `Device.makeRenderPipelineState`,
+and `Queue.makeCommandBuffer`. Specialized planning, interop, diagnostics, and
+advanced backend work should not continuously enlarge these common owners.
+
+## Naming And Boundary Rules
+
+- Prefer backend-neutral concepts and Metal-like object usage where practical.
+- Use `Descriptor` for explicit creation or encoding inputs.
+- Use typed enums and flags instead of stringly-typed options.
+- Keep native backend names inside `native`, backend diagnostics, or an
+  explicitly backend-specific advanced namespace.
+- Do not expose backend-private record layouts or generated binding types.
+- Keep public errors specific to the operation and failure category.
+- Do not report a native feature as usable until the public execution path is
+  implemented and validated.
+- Public facade modules may import core/runtime modules, but must not import raw
+  Vulkan bindings, Metal bridge declarations, GLFW internals, or platform
+  Objective-C details.
+
+## Required Workflow For Public API Changes
+
+Before implementation:
+
+1. Identify the declaration's lane and canonical namespace.
+2. Decide its owner, lifetime, capability gate, and typed error behavior.
+3. Check whether an existing declaration can be extended without changing its
+   established meaning.
+4. Record a design decision in the active phase docs when a new root export,
+   compatibility alias, or breaking change is proposed.
+
+During implementation:
+
+1. Add the declaration at its canonical location.
+2. Add focused validation tests and backend compile coverage.
+3. Keep ordinary examples on portable APIs and canonical names.
+4. Add compatibility forwarding only when an existing supported path would
+   otherwise break.
+
+Before completion:
+
+1. Update API and usage docs for user-visible behavior.
+2. Update `public-api-inventory.md`.
+3. Confirm public files do not import backend-private dependencies.
+4. Run `zig fmt --check build.zig src examples tools`, `zig build test`,
+   `zig build`, and `git diff --check` for API or backend changes.
+
+## Compatibility And Removal Process
+
+Until the first tagged compatibility release, breaking cleanup is allowed only
+as a deliberate API migration, not as incidental phase work.
+
+Removing or renaming an existing public declaration requires this sequence:
+
+1. Define the canonical replacement and document the reason for the change.
+2. Migrate all in-tree examples, tests, and user-facing docs.
+3. Keep a compatibility alias or forwarding method when practical.
+4. Record the removal in the pre-release API cleanup checklist.
+5. Remove compatibility declarations together at the planned release boundary.
+
+Do not mix broad public renaming with backend implementation changes. Public
+facade migration and internal file decomposition should be separate reviewable
+changes.
+
+## Current Migration Plan
+
+The current sequence is:
+
+1. Maintain `public-api-inventory.md` and keep uncontrolled root growth frozen.
+2. Keep the initial `resource`, `transfer`, `render`, `command`, `sync`,
+   `presentation`, and `diagnostics` facades established by Period 42 as the
+   canonical homes for their new declarations.
+3. Migrate examples/docs toward those facades and add the remaining domain
+   facades while splitting the large core/runtime implementation files by
+   domain in separate reviewable changes.
+4. During Period 43, place new diagnostics API in the `diagnostics` namespace.
+5. Before the first tagged compatibility release, remove approved legacy root
+   aliases and obsolete `WindowContext` forwards in one explicit breaking
+   cleanup.
+
+## Review Checklist
+
+For every public API change, verify:
+
+- [ ] The declaration has one canonical lane and namespace.
+- [ ] A root export, if any, satisfies every root admission rule.
+- [ ] Portable descriptors contain no Vulkan, Metal, GLFW, or platform-private
+  types.
+- [ ] Ownership, lifetime, and destruction order are explicit.
+- [ ] Optional behavior has truthful feature, limit, or format gates.
+- [ ] Failures use typed validation, unsupported, backend, device, or surface
+  errors as appropriate.
+- [ ] Examples and documentation use the canonical API rather than a
+  compatibility alias.
+- [ ] Compatibility impact and removal timing are documented.
+- [ ] Focused tests and the validation commands appropriate to the change pass.

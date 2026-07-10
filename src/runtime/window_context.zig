@@ -806,6 +806,39 @@ pub const MappedBufferRange = struct {
     }
 };
 
+const SharedTextureUsageTracker = struct {
+    allocator: std.mem.Allocator,
+    reference_count: usize = 1,
+    value: core.TextureSubresourceUsageTracker,
+
+    fn init(
+        allocator: std.mem.Allocator,
+        descriptor: core.TextureDescriptor,
+    ) !*SharedTextureUsageTracker {
+        const shared = try allocator.create(SharedTextureUsageTracker);
+        errdefer allocator.destroy(shared);
+        shared.* = .{
+            .allocator = allocator,
+            .value = try core.TextureSubresourceUsageTracker.init(allocator, descriptor),
+        };
+        return shared;
+    }
+
+    fn retain(self: *SharedTextureUsageTracker) void {
+        std.debug.assert(self.reference_count > 0);
+        self.reference_count += 1;
+    }
+
+    fn release(self: *SharedTextureUsageTracker) void {
+        std.debug.assert(self.reference_count > 0);
+        self.reference_count -= 1;
+        if (self.reference_count != 0) return;
+        const allocator = self.allocator;
+        self.value.deinit();
+        allocator.destroy(self);
+    }
+};
+
 pub const Texture = struct {
     backend: core.Backend,
     tracker: *ResourceTracker,
@@ -816,6 +849,7 @@ pub const Texture = struct {
     usage_value: core.TextureUsage,
     sample_count_value: u32,
     usage_state: core.ResourceUsageState = .{},
+    subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
     owner_queue_value: core.QueueKind = .graphics,
     alive: bool = true,
     impl: Impl,
@@ -831,6 +865,10 @@ pub const Texture = struct {
         switch (self.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
+        }
+        if (self.subresource_usage_tracker) |subresource_tracker| {
+            subresource_tracker.release();
+            self.subresource_usage_tracker = null;
         }
         self.tracker.release(.texture);
     }
@@ -874,7 +912,31 @@ pub const Texture = struct {
     }
 
     fn recordUsage(self: *Texture, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
-        return self.usage_state.transitionTo(next_usage);
+        const transition = self.usage_state.transitionTo(next_usage);
+        if (self.subresource_usage_tracker) |subresource_tracker| {
+            _ = subresource_tracker.value.transition(.{}, next_usage) catch {};
+        }
+        return transition;
+    }
+
+    fn recordSubresourceUsage(
+        self: *Texture,
+        range: core.TextureSubresourceRange,
+        next_usage: core.ResourceUsageKind,
+    ) core.CommandEncodingError!core.TextureUsageTransitionSummary {
+        const subresource_tracker = self.subresource_usage_tracker orelse {
+            _ = self.usage_state.transitionTo(next_usage);
+            return .{};
+        };
+        const summary = try subresource_tracker.value.transition(range, next_usage);
+        self.usage_state.current = if (textureSubresourceRangeIsFull(range, self.textureDescriptor())) next_usage else null;
+        if (summary.required_barrier_count != 0) self.usage_state.barrier_count += 1;
+        return summary;
+    }
+
+    pub fn subresourceUsage(self: Texture, mip_level: u32, array_layer: u32) ?core.ResourceUsageKind {
+        const subresource_tracker = self.subresource_usage_tracker orelse return null;
+        return subresource_tracker.value.currentUsage(mip_level, array_layer);
     }
 
     pub fn sampleCount(self: Texture) u32 {
@@ -947,6 +1009,7 @@ pub const Texture = struct {
                 .dimension_value = resolved.dimension,
                 .usage_value = self.usage_value,
                 .sample_count_value = self.sample_count_value,
+                .subresource_usage_tracker = self.subresource_usage_tracker,
                 .width_value = mipDimension(self.width(), resolved.base_mip_level),
                 .height_value = mipDimension(self.height(), resolved.base_mip_level),
                 .base_mip_level_value = resolved.base_mip_level,
@@ -965,6 +1028,7 @@ pub const Texture = struct {
                 .dimension_value = resolved.dimension,
                 .usage_value = self.usage_value,
                 .sample_count_value = self.sample_count_value,
+                .subresource_usage_tracker = self.subresource_usage_tracker,
                 .width_value = mipDimension(self.width(), resolved.base_mip_level),
                 .height_value = mipDimension(self.height(), resolved.base_mip_level),
                 .base_mip_level_value = resolved.base_mip_level,
@@ -975,6 +1039,7 @@ pub const Texture = struct {
                 .impl = impl,
             },
         };
+        if (self.subresource_usage_tracker) |subresource_tracker| subresource_tracker.retain();
         view.setLabel(descriptor.label);
         return view;
     }
@@ -1362,6 +1427,7 @@ pub const TextureView = struct {
     array_layer_count_value: u32 = 1,
     owner_queue_value: core.QueueKind = .graphics,
     usage_state: core.ResourceUsageState = .{},
+    subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
     alive: bool = true,
     impl: Impl,
 
@@ -1376,6 +1442,10 @@ pub const TextureView = struct {
         switch (self.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
+        }
+        if (self.subresource_usage_tracker) |subresource_tracker| {
+            subresource_tracker.release();
+            self.subresource_usage_tracker = null;
         }
         self.tracker.release(.texture_view);
     }
@@ -1451,7 +1521,16 @@ pub const TextureView = struct {
     }
 
     fn recordUsage(self: *TextureView, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
-        return self.usage_state.transitionTo(next_usage);
+        const transition = self.usage_state.transitionTo(next_usage);
+        if (self.subresource_usage_tracker) |subresource_tracker| {
+            _ = subresource_tracker.value.transition(.{
+                .base_mip_level = self.base_mip_level_value,
+                .mip_level_count = self.mip_level_count_value,
+                .base_array_layer = self.base_array_layer_value,
+                .array_layer_count = self.array_layer_count_value,
+            }, next_usage) catch {};
+        }
+        return transition;
     }
 
     pub fn sampleCount(self: TextureView) u32 {
@@ -3138,15 +3217,11 @@ pub const RenderPassColorAttachmentDescriptor = struct {
                     if (!resolve_target.usage().render_attachment or !core.isColorFormat(resolve_target.format())) {
                         return RuntimeError.InvalidRenderPassAttachment;
                     }
-                    if (texture_view.sampleCount() == 1 or resolve_target.sampleCount() != 1) {
-                        return RuntimeError.InvalidRenderPassAttachment;
-                    }
-                    if (texture_view.format() != resolve_target.format() or
-                        texture_view.width() != resolve_target.width() or
-                        texture_view.height() != resolve_target.height())
-                    {
-                        return RuntimeError.InvalidRenderPassAttachment;
-                    }
+                    (core.TextureResolveDescriptor{ .aspect = .color }).validate(
+                        textureViewTextureDescriptor(texture_view),
+                        textureViewTextureDescriptor(resolve_target),
+                        defaultCommandFormatCapabilities(backend, texture_view.format()),
+                    ) catch return RuntimeError.InvalidRenderPassAttachment;
                 } else if (texture_view.sampleCount() != 1) {
                     return RuntimeError.InvalidRenderPassAttachment;
                 }
@@ -3176,6 +3251,7 @@ pub const RenderPassDepthAttachmentTarget = union(enum) {
 
 pub const RenderPassDepthAttachmentDescriptor = struct {
     target: RenderPassDepthAttachmentTarget = .current_drawable,
+    resolve_target: ?*TextureView = null,
     load_action: core.LoadAction = .clear,
     store_action: core.StoreAction = .dont_care,
     clear_depth: f32 = 1.0,
@@ -3183,6 +3259,7 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
 
     fn validateRuntime(self: RenderPassDepthAttachmentDescriptor, backend: core.Backend) !void {
         try self.toCore().validate();
+        if (self.resolve_target != null) return core.CommandEncodingError.UnsupportedTextureResolve;
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
@@ -3216,6 +3293,7 @@ pub const RenderPassStencilAttachmentTarget = union(enum) {
 
 pub const RenderPassStencilAttachmentDescriptor = struct {
     target: RenderPassStencilAttachmentTarget = .current_drawable,
+    resolve_target: ?*TextureView = null,
     load_action: core.LoadAction = .clear,
     store_action: core.StoreAction = .dont_care,
     clear_stencil: u32 = 0,
@@ -3223,6 +3301,7 @@ pub const RenderPassStencilAttachmentDescriptor = struct {
 
     fn validateRuntime(self: RenderPassStencilAttachmentDescriptor, backend: core.Backend) !void {
         try self.toCore().validate();
+        if (self.resolve_target != null) return core.CommandEncodingError.UnsupportedTextureResolve;
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
@@ -3300,6 +3379,18 @@ fn validateColorAttachmentCompatibility(color_attachments: []const RenderPassCol
             return RuntimeError.InvalidRenderPassAttachment;
         }
     }
+}
+
+fn textureViewTextureDescriptor(view: *const TextureView) core.TextureDescriptor {
+    return .{
+        .format = view.format(),
+        .width = view.width(),
+        .height = view.height(),
+        .depth_or_array_layers = view.arrayLayerCount(),
+        .mip_level_count = view.mipLevelCount(),
+        .sample_count = view.sampleCount(),
+        .usage = view.usage(),
+    };
 }
 
 fn validateAttachmentExtents(
@@ -3465,11 +3556,13 @@ fn insertNativeCommandsForEncoder(
 pub const CommandBuffer = struct {
     backend: core.Backend,
     tracker: ?*ResourceTracker = null,
+    runtime_impl: ?*BackendRuntime = null,
     label_value: ?[]const u8 = null,
     alive: bool = true,
     uses_current_drawable_pass: bool = false,
     queue_kind_value: core.QueueKind = .graphics,
     features_value: core.DeviceFeatures = .{},
+    limits_value: core.DeviceLimits = .{},
     native_handle_view: ?core.NativeHandleView = null,
     debug: core.CommandBufferDebugState = .{},
     debug_groups: core.DebugGroupStack = .{},
@@ -3958,9 +4051,17 @@ pub const BlitCommandEncoder = struct {
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
         try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, source);
         try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        const resolved = try self.debug.copyBufferToTexture(descriptor, source.length(), destination.textureDescriptor());
+        const resolved = try self.debug.copyBufferToTextureWithRequirements(
+            descriptor,
+            source.length(),
+            destination.textureDescriptor(),
+            core.TextureCopyLayoutRequirements.fromLimits(self.command_buffer.limits_value),
+        );
         _ = source.recordUsage(.copy_source);
-        _ = destination.recordUsage(.copy_destination);
+        _ = try destination.recordSubresourceUsage(
+            copySubresourceRange(destination.textureDescriptor(), resolved.mip_level, resolved.slice, 1),
+            .copy_destination,
+        );
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.copyBufferToTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
             .metal => |*metal| try metal.copyBufferToTexture(&source.impl.metal, &destination.impl.metal, resolved),
@@ -3982,8 +4083,16 @@ pub const BlitCommandEncoder = struct {
         if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
         try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
         try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        const resolved = try self.debug.copyTextureToBuffer(descriptor, source.textureDescriptor(), destination.length());
-        _ = source.recordUsage(.copy_source);
+        const resolved = try self.debug.copyTextureToBufferWithRequirements(
+            descriptor,
+            source.textureDescriptor(),
+            destination.length(),
+            core.TextureCopyLayoutRequirements.fromLimits(self.command_buffer.limits_value),
+        );
+        _ = try source.recordSubresourceUsage(
+            copySubresourceRange(source.textureDescriptor(), resolved.mip_level, resolved.slice, 1),
+            .copy_source,
+        );
         _ = destination.recordUsage(.copy_destination);
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.copyTextureToBuffer(&source.impl.vulkan, &destination.impl.vulkan, resolved),
@@ -4011,11 +4120,55 @@ pub const BlitCommandEncoder = struct {
             source.textureDescriptor(),
             destination.textureDescriptor(),
         );
-        _ = source.recordUsage(.copy_source);
-        _ = destination.recordUsage(.copy_destination);
+        _ = try source.recordSubresourceUsage(
+            copySubresourceRange(source.textureDescriptor(), resolved.source_mip_level, resolved.source_slice, resolved.slice_count),
+            .copy_source,
+        );
+        _ = try destination.recordSubresourceUsage(
+            copySubresourceRange(destination.textureDescriptor(), resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count),
+            .copy_destination,
+        );
         if (self.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.copyTextureToTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
             .metal => |*metal| try metal.copyTextureToTexture(&source.impl.metal, &destination.impl.metal, resolved),
+        };
+    }
+
+    pub fn blitTexture(
+        self: *BlitCommandEncoder,
+        source: *Texture,
+        destination: *Texture,
+        descriptor: core.BlitTextureDescriptor,
+    ) !void {
+        assertObjectAlive(self.alive, "blit_command_encoder");
+        assertAlive(source.alive, .texture);
+        assertAlive(destination.alive, .texture);
+        try expectSameBackend(self.backend, source.backend);
+        try expectSameBackend(self.backend, destination.backend);
+        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
+        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
+        const source_caps = commandFormatCapabilities(self.command_buffer, source.format());
+        const destination_caps = commandFormatCapabilities(self.command_buffer, destination.format());
+        const resolved = try self.debug.blitTexture(
+            descriptor,
+            source.textureDescriptor(),
+            destination.textureDescriptor(),
+            source_caps,
+            destination_caps,
+        );
+        _ = try source.recordSubresourceUsage(
+            copySubresourceRange(source.textureDescriptor(), resolved.source_mip_level, resolved.source_slice, resolved.slice_count),
+            .copy_source,
+        );
+        _ = try destination.recordSubresourceUsage(
+            copySubresourceRange(destination.textureDescriptor(), resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count),
+            .copy_destination,
+        );
+        if (self.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.blitTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
+            .metal => |*metal| try metal.blitTexture(&source.impl.metal, &destination.impl.metal, resolved),
         };
     }
 
@@ -4216,6 +4369,52 @@ fn isFullGenerateMipmapsRange(
         descriptor.mip_level_count == texture.mip_level_count and
         descriptor.base_array_layer == 0 and
         descriptor.array_layer_count == layer_count;
+}
+
+fn commandFormatCapabilities(command_buffer: *const CommandBuffer, format: core.TextureFormat) core.FormatCapabilities {
+    if (command_buffer.runtime_impl) |runtime_impl| {
+        return switch (runtime_impl.*) {
+            .vulkan => |*vulkan| vulkan.formatCapabilities(format),
+            .metal => |*metal| metal.formatCapabilities(format),
+        };
+    }
+
+    return defaultCommandFormatCapabilities(command_buffer.backend, format);
+}
+
+fn defaultCommandFormatCapabilities(backend: core.Backend, format: core.TextureFormat) core.FormatCapabilities {
+    var capabilities = core.defaultFormatCapabilities(format);
+    if (backend == .metal) {
+        capabilities.blit_source = false;
+        capabilities.blit_destination = false;
+    }
+    return capabilities;
+}
+
+fn copySubresourceRange(
+    texture: core.TextureDescriptor,
+    mip_level: u32,
+    slice: u32,
+    slice_count: u32,
+) core.TextureSubresourceRange {
+    return .{
+        .base_mip_level = mip_level,
+        .mip_level_count = 1,
+        .base_array_layer = if (texture.dimension == .three_d) 0 else slice,
+        .array_layer_count = if (texture.dimension == .three_d) 1 else slice_count,
+    };
+}
+
+fn textureSubresourceRangeIsFull(
+    range: core.TextureSubresourceRange,
+    texture: core.TextureDescriptor,
+) bool {
+    const resolved = range.resolve(texture) catch return false;
+    const layer_count: u32 = if (texture.dimension == .three_d) 1 else texture.depth_or_array_layers;
+    return resolved.base_mip_level == 0 and
+        resolved.mip_level_count == texture.mip_level_count and
+        resolved.base_array_layer == 0 and
+        resolved.array_layer_count == layer_count;
 }
 
 pub const ComputeCommandEncoder = struct {
@@ -4932,6 +5131,7 @@ pub const Queue = struct {
     impl: *BackendRuntime,
     label_value: ?[]const u8 = null,
     features_value: core.DeviceFeatures,
+    limits_value: core.DeviceLimits = .{},
     kind_value: core.QueueKind = .graphics,
 
     pub fn selectedBackend(self: Queue) core.Backend {
@@ -4965,9 +5165,11 @@ pub const Queue = struct {
         var command_buffer = CommandBuffer{
             .backend = self.backend,
             .tracker = self.tracker,
+            .runtime_impl = self.impl,
             .label_value = descriptor.label,
             .queue_kind_value = self.kind_value,
             .features_value = self.features_value,
+            .limits_value = self.limits_value,
             .debug = debug,
             .impl = impl,
         };
@@ -5693,6 +5895,7 @@ pub const Device = struct {
             .tracker = self.tracker,
             .impl = self.impl,
             .features_value = self.features(),
+            .limits_value = self.limits(),
         };
     }
 
@@ -6023,6 +6226,12 @@ pub const Device = struct {
     }
 
     pub fn makeTexture(self: *Device, descriptor: core.TextureDescriptor) !Texture {
+        try descriptor.validate();
+        if (!self.getFormatCaps(descriptor.format).supportsTextureDescriptor(descriptor)) {
+            return core.TextureError.UnsupportedTextureUsage;
+        }
+        const subresource_usage_tracker = try SharedTextureUsageTracker.init(self.allocator, descriptor);
+        errdefer subresource_usage_tracker.release();
         const impl = switch (self.impl.*) {
             .vulkan => |*vulkan| Texture.Impl{ .vulkan = try vulkan.makeTexture(descriptor) },
             .metal => |*metal| Texture.Impl{ .metal = try metal.makeTexture(descriptor) },
@@ -6037,6 +6246,7 @@ pub const Device = struct {
             .format_value = descriptor.format,
             .usage_value = descriptor.usage,
             .sample_count_value = descriptor.sample_count,
+            .subresource_usage_tracker = subresource_usage_tracker,
             .impl = impl,
         };
         texture.setLabel(descriptor.label);
@@ -6370,6 +6580,7 @@ pub const WindowContext = struct {
             .tracker = self.tracker,
             .impl = &self.impl,
             .features_value = self.capability_report.features,
+            .limits_value = self.capability_report.limits,
         };
     }
 
@@ -6647,8 +6858,22 @@ fn recordTextureBarrier(
 ) !void {
     assertAlive(texture.alive, .texture);
     try expectSameBackend(backend, texture.backend);
-    try descriptor.validate(texture.textureDescriptor(), features);
-    _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    const texture_descriptor = texture.textureDescriptor();
+    try descriptor.validate(texture_descriptor, features);
+    if (texture.subresource_usage_tracker) |subresource_tracker| {
+        const summary = try subresource_tracker.value.applyExplicitBarrier(
+            descriptor.subresourceRange(),
+            descriptor.before,
+            descriptor.after,
+        );
+        texture.usage_state.current = if (textureSubresourceRangeIsFull(descriptor.subresourceRange(), texture_descriptor))
+            descriptor.after
+        else
+            null;
+        if (summary.required_barrier_count != 0) texture.usage_state.barrier_count += 1;
+    } else {
+        _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    }
 }
 
 fn recordBufferOwnershipTransfer(
@@ -6671,7 +6896,13 @@ fn recordTextureOwnershipTransfer(
     assertAlive(texture.alive, .texture);
     try descriptor.validate(features);
     if (texture.owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-    _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    if (texture.subresource_usage_tracker) |subresource_tracker| {
+        const summary = try subresource_tracker.value.applyExplicitBarrier(.{}, descriptor.before, descriptor.after);
+        texture.usage_state.current = descriptor.after;
+        if (summary.required_barrier_count != 0) texture.usage_state.barrier_count += 1;
+    } else {
+        _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    }
     texture.owner_queue_value = descriptor.destination;
 }
 
@@ -7238,6 +7469,74 @@ test "runtime blit encoder records buffer usage transitions" {
 
     try std.testing.expectEqual(core.ResourceUsageKind.copy_source, source.currentUsage().?);
     try std.testing.expectEqual(core.ResourceUsageKind.copy_destination, destination.currentUsage().?);
+}
+
+test "runtime texture views share subresource usage across passes" {
+    const descriptor = core.TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .height = 8,
+        .depth_or_array_layers = 2,
+        .mip_level_count = 2,
+        .usage = .{ .shader_read = true, .render_attachment = true },
+    };
+    var subresource_tracker = SharedTextureUsageTracker{
+        .allocator = std.testing.allocator,
+        .value = try core.TextureSubresourceUsageTracker.init(std.testing.allocator, descriptor),
+    };
+    defer subresource_tracker.value.deinit();
+    var tracker = ResourceTracker{};
+    var mip_zero = TextureView{
+        .backend = .metal,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = descriptor.usage,
+        .sample_count_value = 1,
+        .width_value = 8,
+        .height_value = 8,
+        .base_mip_level_value = 0,
+        .mip_level_count_value = 1,
+        .base_array_layer_value = 0,
+        .array_layer_count_value = 1,
+        .subresource_usage_tracker = &subresource_tracker,
+        .impl = undefined,
+    };
+    var mip_one = TextureView{
+        .backend = .metal,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = descriptor.usage,
+        .sample_count_value = 1,
+        .width_value = 4,
+        .height_value = 4,
+        .base_mip_level_value = 1,
+        .mip_level_count_value = 1,
+        .base_array_layer_value = 1,
+        .array_layer_count_value = 1,
+        .subresource_usage_tracker = &subresource_tracker,
+        .impl = undefined,
+    };
+
+    _ = mip_zero.recordUsage(.render_attachment_write);
+    _ = mip_one.recordUsage(.sampled_texture);
+    try std.testing.expectEqual(core.ResourceUsageKind.render_attachment_write, subresource_tracker.value.currentUsage(0, 0).?);
+    try std.testing.expectEqual(core.ResourceUsageKind.sampled_texture, subresource_tracker.value.currentUsage(1, 1).?);
+    try std.testing.expect(subresource_tracker.value.currentUsage(0, 1) == null);
+}
+
+test "Period 42 shared texture usage state outlives its source owner" {
+    const shared = try SharedTextureUsageTracker.init(std.testing.allocator, .{
+        .format = .rgba8_unorm,
+        .width = 4,
+        .height = 4,
+        .usage = .{ .shader_read = true, .copy_destination = true },
+    });
+    shared.retain();
+    shared.release();
+    defer shared.release();
+
+    _ = try shared.value.transition(.{}, .copy_destination);
+    try std.testing.expectEqual(core.ResourceUsageKind.copy_destination, shared.value.currentUsage(0, 0).?);
 }
 
 test "runtime compute encoder lowers valid dispatch indirect and validates usage" {
@@ -10868,6 +11167,59 @@ test "runtime render pass descriptor validates msaa resolve targets" {
     resolve_view.sample_count_value = 4;
     try std.testing.expectError(RuntimeError.InvalidRenderPassAttachment, (RenderPassDescriptor{
         .color_attachments = color_attachments[0..],
+    }).validateRuntime(.vulkan));
+}
+
+test "Period 42 runtime depth and stencil resolve targets fail with typed unsupported errors" {
+    var tracker = ResourceTracker{};
+    var depth_source = TextureView{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .depth32_float,
+        .usage_value = .{ .render_attachment = true },
+        .sample_count_value = 4,
+        .width_value = 32,
+        .height_value = 32,
+        .impl = undefined,
+    };
+    var depth_destination = TextureView{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .depth32_float,
+        .usage_value = .{ .render_attachment = true },
+        .sample_count_value = 1,
+        .width_value = 32,
+        .height_value = 32,
+        .impl = undefined,
+    };
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedTextureResolve, (RenderPassDepthAttachmentDescriptor{
+        .target = .{ .texture_view = &depth_source },
+        .resolve_target = &depth_destination,
+    }).validateRuntime(.vulkan));
+
+    var stencil_source = TextureView{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .depth32_float_stencil8,
+        .usage_value = .{ .render_attachment = true },
+        .sample_count_value = 4,
+        .width_value = 32,
+        .height_value = 32,
+        .impl = undefined,
+    };
+    var stencil_destination = TextureView{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .depth32_float_stencil8,
+        .usage_value = .{ .render_attachment = true },
+        .sample_count_value = 1,
+        .width_value = 32,
+        .height_value = 32,
+        .impl = undefined,
+    };
+    try std.testing.expectError(core.CommandEncodingError.UnsupportedTextureResolve, (RenderPassStencilAttachmentDescriptor{
+        .target = .{ .texture_view = &stencil_source },
+        .resolve_target = &stencil_destination,
     }).validateRuntime(.vulkan));
 }
 

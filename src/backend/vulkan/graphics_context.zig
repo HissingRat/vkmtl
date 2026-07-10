@@ -198,7 +198,23 @@ pub fn rayTracingDiagnostics(self: GraphicsContext) core.RayTracingCapabilityDia
 pub fn formatCapabilities(self: GraphicsContext, format: core.TextureFormat) core.FormatCapabilities {
     if (format == .automatic) return .{};
     const props = self.instance.getPhysicalDeviceFormatProperties(self.pdev, imageFormat(format));
-    return formatCapabilitiesFromVulkanFeatures(props.optimal_tiling_features);
+    var capabilities = formatCapabilitiesFromVulkanFeatures(format, props.optimal_tiling_features);
+    capabilities.presentation = self.supportsPresentationFormat(imageFormat(format));
+    return capabilities;
+}
+
+fn supportsPresentationFormat(self: GraphicsContext, format: vk.Format) bool {
+    const formats = self.instance.getPhysicalDeviceSurfaceFormatsAllocKHR(
+        self.pdev,
+        self.surface,
+        self.allocator,
+    ) catch return false;
+    defer self.allocator.free(formats);
+    if (formats.len == 1 and formats[0].format == .undefined) return true;
+    for (formats) |surface_format| {
+        if (surface_format.format == format) return true;
+    }
+    return false;
 }
 
 pub fn setDebugName(self: GraphicsContext, object_type: vk.ObjectType, object_handle: u64, label_value: ?[]const u8) void {
@@ -420,6 +436,8 @@ fn queryLimits(
     result.max_compute_threads_per_threadgroup_z = props.limits.max_compute_work_group_size[2];
     result.max_compute_total_threads_per_threadgroup = props.limits.max_compute_work_group_invocations;
     result.max_compute_threadgroup_memory_bytes = props.limits.max_compute_shared_memory_size;
+    result.buffer_texture_copy_offset_alignment = props.limits.optimal_buffer_copy_offset_alignment;
+    result.buffer_texture_copy_row_pitch_alignment = @intCast(@max(1, props.limits.optimal_buffer_copy_row_pitch_alignment));
     result.max_ray_tracing_recursion_depth = ray_tracing.max_recursion_depth;
     result.shader_binding_table_alignment = ray_tracing.shader_group_handle_alignment;
     result.max_driver_cache_identity_bytes = 4096;
@@ -691,7 +709,9 @@ fn vertexAttributeDivisorFeatureSupported(
     return divisor_features.vertex_attribute_instance_rate_divisor == .true;
 }
 
-fn formatCapabilitiesFromVulkanFeatures(format_features: vk.FormatFeatureFlags) core.FormatCapabilities {
+fn formatCapabilitiesFromVulkanFeatures(format: core.TextureFormat, format_features: vk.FormatFeatureFlags) core.FormatCapabilities {
+    const copy_source = format_features.transfer_src_bit;
+    const copy_destination = format_features.transfer_dst_bit;
     return .{
         .sampled = format_features.sampled_image_bit,
         .storage = format_features.storage_image_bit,
@@ -702,8 +722,13 @@ fn formatCapabilitiesFromVulkanFeatures(format_features: vk.FormatFeatureFlags) 
         .mipmapped = format_features.blit_src_bit and format_features.blit_dst_bit,
         .mipmap_generation = format_features.blit_src_bit and format_features.blit_dst_bit,
         .blendable = format_features.color_attachment_blend_bit,
-        .copy_source = format_features.transfer_src_bit or format_features.blit_src_bit,
-        .copy_destination = format_features.transfer_dst_bit or format_features.blit_dst_bit,
+        .copy_source = copy_source,
+        .copy_destination = copy_destination,
+        .blit_source = format_features.blit_src_bit,
+        .blit_destination = format_features.blit_dst_bit,
+        .depth_copy = core.isDepthFormat(format) and copy_source and copy_destination,
+        .stencil_copy = core.isStencilFormat(format) and copy_source and copy_destination,
+        .color_resolve = core.isColorFormat(format) and format_features.color_attachment_bit,
     };
 }
 
@@ -1043,7 +1068,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
 }
 
 test "Vulkan format feature mapping keeps copy and attachment caps separate" {
-    const caps = formatCapabilitiesFromVulkanFeatures(.{
+    const caps = formatCapabilitiesFromVulkanFeatures(.rgba8_unorm, .{
         .sampled_image_bit = true,
         .storage_image_bit = true,
         .color_attachment_bit = true,
@@ -1057,7 +1082,19 @@ test "Vulkan format feature mapping keeps copy and attachment caps separate" {
     try std.testing.expect(caps.blendable);
     try std.testing.expect(caps.copy_source);
     try std.testing.expect(caps.copy_destination);
+    try std.testing.expect(!caps.blit_source);
+    try std.testing.expect(!caps.blit_destination);
+    try std.testing.expect(caps.color_resolve);
     try std.testing.expect(!caps.depth_stencil_attachment);
+
+    const blit_only = formatCapabilitiesFromVulkanFeatures(.rgba8_unorm, .{
+        .blit_src_bit = true,
+        .blit_dst_bit = true,
+    });
+    try std.testing.expect(!blit_only.copy_source);
+    try std.testing.expect(!blit_only.copy_destination);
+    try std.testing.expect(blit_only.blit_source);
+    try std.testing.expect(blit_only.blit_destination);
 }
 
 fn debugCallback(

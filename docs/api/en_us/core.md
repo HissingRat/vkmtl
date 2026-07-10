@@ -114,9 +114,13 @@ cube; cube-specific view dimensions are reserved for the texture-view phase.
 
 Format helpers include `textureFormatKind(...)`, `isColorFormat(...)`,
 `isDepthFormat(...)`, `isSrgbFormat(...)`, and
-`textureFormatBytesPerPixel(...)`. `FormatCapabilities` reports sampled,
-storage, attachment, filter, mip, blend, and copy support for the currently
-implemented portable formats.
+`textureFormatBytesPerPixel(...)`. New code should use the canonical
+`vkmtl.resource` and `vkmtl.diagnostics` namespaces for format types and
+capability reports. `FormatCapabilities` independently reports sampling,
+storage, attachment, filtering, mip, blend, exact-copy, scaled-blit,
+presentation, depth/stencil copy, and color/depth/stencil resolve support.
+`Device.getFormatCaps(format)` is queried from the selected backend; a native
+feature is not reported as usable before vkmtl has a validated execution path.
 
 Mipmap helpers include `mipDimension(...)`,
 `maxMipLevelCountForExtent(...)`, `TextureDescriptor.maxMipLevelCount()`, and
@@ -643,7 +647,11 @@ attachments. Texture-backed MRT render passes lower to Vulkan and Metal, while
 current-drawable render passes remain single-color. `transient` is currently
 preserved as a no-op performance hint. Combined depth/stencil attachments lower
 through the depth attachment path; separate stencil-only attachments still
-return typed unsupported errors.
+return typed unsupported errors. Ordinary copy/readback of multisampled
+textures is rejected; color resolve is the explicit path to a single-sample
+target. Depth and stencil resolve targets are represented in the public shape
+but return `UnsupportedTextureResolve` until both backends have validated
+lowering.
 
 Dynamic render state descriptors include `Viewport`, `ScissorRect`,
 `BlendColor`, `StencilReference`, and `DepthBiasDescriptor`.
@@ -684,8 +692,20 @@ The lowered blit slice supports buffer-to-buffer, buffer-to-texture,
 texture-to-buffer, and texture-to-texture copies. Texture-to-texture copies can
 address mip levels and copy multiple array layers with `slice_count`. Color
 formats can copy across the same copy class, such as `rgba8_unorm` to
-`rgba8_unorm_srgb`; copies still reject channel-order changes, depth/stencil
-formats, and MSAA textures.
+`rgba8_unorm_srgb`; copies still reject channel-order changes and MSAA
+textures. Copy descriptors now carry `TextureAspect`: `depth32_float` supports
+explicit `.depth` copies and buffer readback, while packed depth/stencil copies
+are capability-gated per aspect. An omitted `.all` resolves to color or depth
+for single-aspect formats and is rejected for packed depth/stencil buffer
+layouts. Runtime validation applies
+`DeviceLimits.buffer_texture_copy_offset_alignment` and
+`buffer_texture_copy_row_pitch_alignment` before backend encoding.
+
+Scaled copies use the separate `BlitCommandEncoder.blitTexture(...)` path and
+`vkmtl.transfer.BlitTextureDescriptor`. Vulkan lowers supported formats to
+`vkCmdBlitImage`; Metal currently returns `UnsupportedTextureBlit`. Linear
+filtering additionally requires the source format's linear-filter capability.
+The canonical command error type is `vkmtl.command.CommandEncodingError`.
 `BlitCommandEncoder.fillBuffer(...)` also lowers to the native backend. Metal
 supports arbitrary byte ranges. Vulkan keeps native `vkCmdFillBuffer` for
 4-byte-aligned ranges and uses a staging-copy fallback for unaligned ranges.
@@ -699,6 +719,10 @@ differences.
 Advanced users can insert explicit barriers from blit encoders with
 `bufferBarrier(...)` and `textureBarrier(...)`. These methods validate the
 descriptor against the tracked resource state before touching the backend.
+Texture state is tracked per mip and array layer and shared by views of the same
+texture. `Texture.subresourceUsage(mip, layer)` exposes the portable tracked
+state; Vulkan layouts and Metal encoder/resource state remain backend-private.
+Partial explicit barriers validate the complete range transactionally.
 
 Compute work uses a Metal-style compute encoder:
 
@@ -894,4 +918,5 @@ distinguishes public runtime contracts from backend-private native lowering.
 `BackendParitySemanticsDescriptor`, `BackendParitySemanticsPlan`, and
 `Device.planBackendParitySemantics(...)` expose current parity decisions for
 partial mip/layer ranges, depth/stencil and MSAA copies, custom sampler border
-colors, and opt-in GPU soak planning.
+colors, and opt-in GPU soak planning. Depth/stencil copies are now reported as
+capability-gated; ordinary MSAA copies remain typed unsupported.

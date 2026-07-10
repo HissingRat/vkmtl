@@ -32,8 +32,10 @@ pub fn main() !void {
     dumpAdapter(device.adapterInfo());
     dumpReport(device.capabilityReport());
     dumpFormatCaps(&device, .rgba8_unorm);
+    dumpFormatCaps(&device, .bgra8_unorm);
     dumpFormatCaps(&device, .bgra8_unorm_srgb);
     dumpFormatCaps(&device, .depth32_float);
+    dumpFormatCaps(&device, .depth32_float_stencil8);
 }
 
 fn dumpAdapter(adapter: vkmtl.AdapterInfo) void {
@@ -43,7 +45,7 @@ fn dumpAdapter(adapter: vkmtl.AdapterInfo) void {
     std.debug.print("device type: {s}\n", .{@tagName(adapter.device_type)});
 }
 
-fn dumpReport(report: vkmtl.DeviceCapabilityReport) void {
+fn dumpReport(report: vkmtl.diagnostics.DeviceCapabilityReport) void {
     std.debug.print("capability source: {s}\n", .{@tagName(report.source)});
     std.debug.print("usable features:\n", .{});
     dumpFeatureSet(report.features);
@@ -55,11 +57,13 @@ fn dumpReport(report: vkmtl.DeviceCapabilityReport) void {
     std.debug.print("  max color attachments: {}\n", .{report.limits.max_color_attachments});
     std.debug.print("  max sample count: {}\n", .{report.limits.max_sample_count});
     std.debug.print("  max compute threads/threadgroup: {}\n", .{report.limits.max_compute_total_threads_per_threadgroup});
+    std.debug.print("  buffer/texture copy offset alignment: {}\n", .{report.limits.buffer_texture_copy_offset_alignment});
+    std.debug.print("  buffer/texture copy row-pitch alignment: {}\n", .{report.limits.buffer_texture_copy_row_pitch_alignment});
     std.debug.print("  max bindless descriptors/range: {}\n", .{report.limits.max_bindless_descriptors_per_range});
     dumpRayTracingDiagnostics(report.ray_tracing);
 }
 
-fn dumpFeatureSet(features: vkmtl.DeviceFeatures) void {
+fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  runtime slang: {}\n", .{features.runtime_slang});
     std.debug.print("  shader reflection: {}\n", .{features.shader_reflection});
     std.debug.print("  render pipelines: {}\n", .{features.render_pipelines});
@@ -99,9 +103,9 @@ fn dumpRayTracingDiagnostics(diagnostics: vkmtl.RayTracingCapabilityDiagnostics)
     }
 }
 
-fn dumpFormatCaps(device: *vkmtl.Device, format: vkmtl.TextureFormat) void {
+fn dumpFormatCaps(device: *vkmtl.Device, format: vkmtl.resource.TextureFormat) void {
     const caps = device.getFormatCaps(format);
-    std.debug.print("format {s}: sampled={}, storage={}, color={}, depth_stencil={}, filterable={}, blendable={}, copy_src={}, copy_dst={}\n", .{
+    std.debug.print("format {s}: sampled={}, storage={}, color={}, depth_stencil={}, filterable={}, blendable={}, copy_src={}, copy_dst={}, blit_src={}, blit_dst={}, present={}, color_resolve={}, depth_resolve={}, stencil_resolve={}, depth_copy={}, stencil_copy={}\n", .{
         @tagName(format),
         caps.sampled,
         caps.storage,
@@ -111,5 +115,13 @@ fn dumpFormatCaps(device: *vkmtl.Device, format: vkmtl.TextureFormat) void {
         caps.blendable,
         caps.copy_source,
         caps.copy_destination,
+        caps.blit_source,
+        caps.blit_destination,
+        caps.presentation,
+        caps.color_resolve,
+        caps.depth_resolve,
+        caps.stencil_resolve,
+        caps.depth_copy,
+        caps.stencil_copy,
     });
 }

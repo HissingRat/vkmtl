@@ -4,6 +4,14 @@ pub const ShaderReflection = @import("shader/reflection.zig");
 
 const runtime = @import("runtime/window_context.zig");
 
+pub const resource = @import("api/resource.zig");
+pub const transfer = @import("api/transfer.zig");
+pub const render = @import("api/render.zig");
+pub const sync = @import("api/sync.zig");
+pub const presentation = @import("api/presentation.zig");
+pub const diagnostics = @import("api/diagnostics.zig");
+pub const command = @import("api/command.zig");
+
 pub const BackendPreference = core.BackendPreference;
 pub const Backend = core.Backend;
 pub const AdapterDeviceType = core.AdapterDeviceType;

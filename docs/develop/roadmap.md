@@ -6,6 +6,10 @@ major work. Detailed phase notes live under `docs/develop/period*/`.
 Use these companion documents for the other views:
 
 - `docs/develop/checklist.md` tracks checkable work and phase gates.
+- `docs/develop/public-api-rules.md` defines public API admission,
+  namespacing, compatibility, and removal rules.
+- `docs/develop/public-api-inventory.md` tracks the current root surface,
+  owner-method pressure, canonical namespaces, and compatibility candidates.
 - `docs/develop/backend-completion-roadmap.md` tracks native Vulkan / Metal
   backend catch-up work after API shapes exist.
 - `docs/api/zh_cn/core.md` and `docs/api/en_us/core.md` describe the public API.
@@ -59,7 +63,9 @@ period notes with the phase checklist. Each phase should identify:
 
 ## Period 1: Core Library Slice
 
-Status: current core slice, with remaining polish tracked in the checklist.
+Status: completed functional core slice. Remaining pre-tag release polish is
+tracked in the checklist and does not make this the active implementation
+period.
 
 Goal: preserve the historical minimum vertical slice that proved vkmtl can route
 the same public examples through Vulkan and Metal.
@@ -79,7 +85,7 @@ See `docs/develop/period1/`.
 
 ## Period 2: Runtime Architecture And Specs
 
-Status: planned next major period.
+Status: completed.
 
 Goal: turn the working vertical slice into the long-term API foundation before
 expanding broad resource and pipeline coverage.
@@ -426,7 +432,7 @@ See `docs/develop/period21/`.
 
 ## Period 22: Binding ABI And Shader Variant Closure
 
-Status: planned after Period 21.
+Status: completed.
 
 Goal: close the binding and shader backend items that Period 21 intentionally
 left as explicit follow-up work.
@@ -616,7 +622,8 @@ See `docs/develop/period32/`.
 
 ## Period 33: Native RT Mesh Scene
 
-Status: planned after Period 32 validation/docs closure.
+Status: closed for the mesh-scene slice. Original multi-instance and shared
+scene-layout follow-ups remain routed to later ray-tracing periods.
 
 Goal: expand the first native Metal and Vulkan RT smoke paths into a full
 native RT mesh scene. The reference `examples/ray_traced_scene` visual target
@@ -782,7 +789,7 @@ See `docs/develop/period41/`.
 
 ## Period 42: Format, Copy, Layout, And Attachment Edge Semantics
 
-Status: planned after Period41.
+Status: complete.
 
 Goal: close the edge cases that decide whether vkmtl behaves like a serious
 graphics abstraction: format capabilities, layout/state transitions,
@@ -798,7 +805,8 @@ See `docs/develop/period42/`.
 
 ## Period 43: Profiling, Capture, And Debug Markers
 
-Status: planned after Period42.
+Status: active. Phase 1 label lifetime and naming rules are the current
+implementation priority.
 
 Goal: make vkmtl debuggable in native tools by providing stable labels,
 markers, capture scopes, timestamps, and issue-report diagnostics.
@@ -840,14 +848,19 @@ See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
+- Period 42 is complete; Period 43 Phase 1 is the active implementation phase.
+- Period 32 Phases 6-7 remain a carry-over validation gate: the Vulkan RT path
+  still needs a supported-hardware run and its visible/unsupported behavior
+  documented. This does not block portable contract work in later periods.
+- Period 33 is closed for the mesh-scene slice; its original multi-instance,
+  shared scene-layout, and cross-backend parity follow-ups are owned by the
+  later ray-tracing completeness and device-matrix work.
 - Period 30 is complete as backend-private runtime record work. It does not
   claim driver-level ray tracing pixels or full native parity.
 - Period 31 has made the Metal ray traced scene visibly render in the window
   through a first native Metal RT command path.
-- Period 32 follows Period31 and must present pixels produced by the Vulkan ray
-  tracing shader on supported Vulkan ray tracing devices.
-- Period 33 turns the first Metal/Vulkan RT paths into a full native mesh RT
-  scene.
+- Period 32 implemented the Vulkan driver path, but supported-hardware evidence
+  and documentation are still open.
 - Period 34 adds Vulkan procedural sphere/custom intersection support and
   validates it through the full native `ray_traced_scene` example.
 - Period 35 owns shared RT scene data and precise ownership for the remaining

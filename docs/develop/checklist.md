@@ -15,6 +15,20 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Public API style should be Metal-inspired where backend-neutral design
   allows it.
 
+## Current Priority
+
+- Active implementation phase: Period 43 Phase 1, label lifetime and naming
+  rules.
+- Carry-over validation gate: Period 32 Phases 6-7 still require a supported
+  Vulkan RT hardware run plus visible-result and unsupported-runtime docs.
+- Period 33 is closed for its mesh-scene slice; remaining original
+  multi-instance and shared scene-layout items are routed to later RT
+  completeness/device-matrix work.
+- Period 42 is complete. Period 44 owns CI, device-matrix, visual, and soak
+  validation after Period 43.
+- Period 1 Phase 9 pre-tag API and release-polish items remain open, but are not
+  the active feature phase.
+
 ## Open Design Decisions
 
 - [x] Choose the backend dispatch model.
@@ -199,6 +213,10 @@ closed one by one as vkmtl moves from prototype to library.
   core.
 - [x] Add small non-breaking API polish for common shader and bind-group naming
   patterns.
+- [x] Define public API admission, namespace, compatibility, and removal rules,
+  and make them required guidance in `AGENTS.md`.
+- [x] Establish the initial public API inventory, canonical namespace map, root
+  candidate set, and compatibility-forward list.
 - [ ] Audit public root exports and remove or rename remaining unstable aliases
   before a tagged release.
 - [x] Decide which `WindowContext` entry points stay for early users and which
@@ -1964,8 +1982,8 @@ obvious render and binding blockers.
 
 ## Period 32 Phase 6 Checklist
 
-- [ ] Keep `zig build test` passing.
-- [ ] Keep `zig build` passing.
+- [x] Keep `zig build test` passing.
+- [x] Keep `zig build` passing.
 - [ ] Run `zig build run-ray-traced-scene -Dvulkan` on supported Vulkan ray
   tracing hardware.
 - [ ] Document visible-result and unsupported-runtime behavior.
@@ -2372,33 +2390,33 @@ obvious render and binding blockers.
 
 ## Period 42 Phase 1 Checklist
 
-- [ ] Expand format capability queries for sampling, storage, render target,
+- [x] Expand format capability queries for sampling, storage, render target,
   copy, depth/stencil, blend, and presentation usage.
-- [ ] Add docs for backend-specific format limitations.
+- [x] Add docs for backend-specific format limitations.
 
 ## Period 42 Phase 2 Checklist
 
-- [ ] Validate buffer/texture copy alignment and row-pitch rules.
-- [ ] Validate mip, layer, and slice partial copies.
-- [ ] Define blit/filtering behavior where supported.
+- [x] Validate buffer/texture copy alignment and row-pitch rules.
+- [x] Validate mip, layer, and slice partial copies.
+- [x] Define blit/filtering behavior where supported.
 
 ## Period 42 Phase 3 Checklist
 
-- [ ] Tighten resource usage transition tracking.
-- [ ] Validate implicit and explicit barriers across queues and passes.
-- [ ] Keep Vulkan layouts and Metal state hidden behind public states.
+- [x] Tighten resource usage transition tracking.
+- [x] Validate implicit and explicit barriers across queues and passes.
+- [x] Keep Vulkan layouts and Metal state hidden behind public states.
 
 ## Period 42 Phase 4 Checklist
 
-- [ ] Define depth and stencil copy/readback support.
-- [ ] Define depth resolve and stencil resolve behavior where supported.
-- [ ] Add focused tests for unsupported combinations.
+- [x] Define depth and stencil copy/readback support.
+- [x] Define depth resolve and stencil resolve behavior where supported.
+- [x] Add focused tests for unsupported combinations.
 
 ## Period 42 Phase 5 Checklist
 
-- [ ] Add MSAA resolve/copy/readback regression cases.
-- [ ] Add mip/layer/slice texture view and copy cases.
-- [ ] Add format reinterpretation validation where supported.
+- [x] Add MSAA resolve/copy/readback regression cases.
+- [x] Add mip/layer/slice texture view and copy cases.
+- [x] Add format reinterpretation validation where supported.
 
 ## Period 43 Phase 1 Checklist
 

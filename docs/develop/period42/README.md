@@ -1,6 +1,6 @@
 # Period 42: Format, Copy, Layout, And Attachment Edge Semantics
 
-Status: planned after Period41.
+Status: complete.
 
 Goal: close the edge cases that decide whether vkmtl behaves like a serious
 graphics abstraction: format capabilities, layout/state transitions,
@@ -51,3 +51,27 @@ Vulkan and Metal.
   diagnostics.
 - Depth-stencil and MSAA semantics are documented.
 - Backend differences stay behind public capability and state models.
+
+## Implemented Backend Matrix
+
+| Area | Vulkan | Metal |
+| --- | --- | --- |
+| Format query | Optimal-tiling features plus surface formats | Explicit portable-format table |
+| Exact color copy | Native copy for matching copy classes | Native copy for matching copy classes |
+| Scaled color blit | `vkCmdBlitImage`, capability-gated | Typed `UnsupportedTextureBlit` |
+| Depth copy/readback | Capability-gated depth aspect | `depth32_float` depth aspect |
+| Packed depth/stencil copy | Capability-gated depth or stencil aspect | Typed unsupported |
+| MSAA ordinary copy/readback | Typed unsupported | Typed unsupported |
+| Color resolve | Native render-pass resolve | Native render-pass resolve |
+| Depth/stencil resolve | Typed unsupported | Typed unsupported |
+| State/layout tracking | Per mip/layer portable state plus private Vulkan layouts | Per mip/layer portable state plus private Metal encoder state |
+| View reinterpretation | Exact format only | Exact format only |
+
+Buffer/texture copies apply the selected device's offset and row-pitch limits.
+Partial mip, array-layer, and 3D-slice regions are validated before backend
+encoding. Texture views share subresource state with their source texture, and
+partial explicit barriers validate the complete range before mutating state.
+
+The Period 42 additions are canonically exposed through the `resource`,
+`transfer`, `render`, `command`, `sync`, `presentation`, and `diagnostics`
+facades. No new flat type alias was added.

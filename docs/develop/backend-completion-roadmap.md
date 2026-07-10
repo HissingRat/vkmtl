@@ -117,8 +117,10 @@ Tracked in `docs/develop/period24/`.
 - [x] Fixed sampler border-color lowering where supported.
 - [x] Heap planning and reservation diagnostics.
 - [x] Transient allocation diagnostics.
-- [ ] Partial mipmap ranges, depth/stencil/MSAA copies, custom border colors,
-  and native heap-backed resource creation.
+- [x] Capability-gated depth/stencil copy aspects and typed MSAA-copy
+  rejection/resolve semantics.
+- [ ] Partial mipmap generation ranges, custom border colors, and native
+  heap-backed resource creation.
 
 Expected result: texture tools, streaming systems, and memory-sensitive
 applications need fewer app-side workarounds.
@@ -445,10 +447,10 @@ descriptor wrappers.
 
 Tracked in `docs/develop/period42/`.
 
-- [ ] Format capability matrix.
-- [ ] Copy/blit edge semantics.
-- [ ] Resource state/layout transition validation.
-- [ ] Depth-stencil and MSAA copy/resolve/readback behavior.
+- [x] Format capability matrix.
+- [x] Copy/blit edge semantics.
+- [x] Resource state/layout transition validation.
+- [x] Depth-stencil and MSAA copy/resolve/readback behavior.
 
 Expected result: vkmtl has tested edge semantics for formats, copies,
 attachments, mips, layers, and slices across Vulkan and Metal.

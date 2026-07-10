@@ -49,8 +49,9 @@ first or keep the example scoped to existing public API.
 ```sh
 zig build
 zig build run-triangle
-zig build run-sampled-texture
+zig build run-offscreen-texture
 zig build run-rainbow-cube
+zig build run-compute-readback
 ```
 
 On macOS, `.auto` selects Metal when available. Vulkan can be forced for
