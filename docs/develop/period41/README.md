@@ -1,6 +1,6 @@
 # Period 41: External Interop Matrix
 
-Status: Phase 4 complete.
+Status: Phase 5 complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
@@ -98,6 +98,17 @@ Phase 4 result:
 - Add examples/tests for external wait/signal paths.
 - Validate ordering across imported objects and vkmtl command submission.
 - Report unsupported platform combinations precisely.
+
+Phase 5 result:
+
+- `ExternalSynchronizationPlan` records external wait/signal counts for
+  semaphores and events, plus how many waits/signals require native interop.
+- `ExternalSynchronizationDescriptor.plan(...)` validates object lifetime,
+  backend consistency, and submission ordering before command-buffer commit.
+- `CommandBuffer.commitWithExternalSynchronization(...)` now uses the same plan
+  path users can query before submitting work.
+- Tests cover external wait/signal planning, native interop counts, and typed
+  backend mismatch diagnostics.
 
 ### Phase 6: Safety, Lifetime, And Platform Docs
 

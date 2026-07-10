@@ -450,6 +450,7 @@ pub const ExternalMemory = runtime.ExternalMemory;
 pub const ExternalBuffer = runtime.ExternalBuffer;
 pub const ExternalSemaphore = runtime.ExternalSemaphore;
 pub const ExternalEvent = runtime.ExternalEvent;
+pub const ExternalSynchronizationPlan = runtime.ExternalSynchronizationPlan;
 pub const ExternalSynchronizationDescriptor = runtime.ExternalSynchronizationDescriptor;
 pub const FenceWaitOperation = runtime.FenceWaitOperation;
 pub const FenceSignalOperation = runtime.FenceSignalOperation;

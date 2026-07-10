@@ -2360,9 +2360,9 @@ obvious render and binding blockers.
 
 ## Period 41 Phase 5 Checklist
 
-- [ ] Add examples/tests for external wait/signal paths.
-- [ ] Validate ordering across imported objects and vkmtl submission.
-- [ ] Report unsupported platform combinations precisely.
+- [x] Add examples/tests for external wait/signal paths.
+- [x] Validate ordering across imported objects and vkmtl submission.
+- [x] Report unsupported platform combinations precisely.
 
 ## Period 41 Phase 6 Checklist
 

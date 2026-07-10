@@ -766,7 +766,7 @@ See `docs/develop/period40/`.
 
 ## Period 41: External Interop Matrix
 
-Status: Phase 4 complete.
+Status: Phase 5 complete.
 
 Goal: make external memory, external textures, and external synchronization
 usable through an explicit platform matrix instead of descriptor-only probes.
@@ -775,7 +775,7 @@ usable through an explicit platform matrix instead of descriptor-only probes.
 - Phase 2: Vulkan external memory/image/semaphore import planning
 - Phase 3: Metal shared texture/event import planning
 - Phase 4: external texture presentation and sampling planning example
-- Phase 5: external synchronization validation
+- Phase 5: external synchronization validation and order planning
 - Phase 6: safety, lifetime, and platform documentation
 
 See `docs/develop/period41/`.

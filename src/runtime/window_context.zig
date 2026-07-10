@@ -1158,6 +1158,35 @@ pub const ExternalEvent = struct {
     }
 };
 
+pub const ExternalSynchronizationPlan = struct {
+    backend: core.Backend,
+    wait_semaphore_count: usize = 0,
+    signal_semaphore_count: usize = 0,
+    wait_event_count: usize = 0,
+    signal_event_count: usize = 0,
+    native_wait_count: usize = 0,
+    native_signal_count: usize = 0,
+
+    pub fn isEmpty(self: ExternalSynchronizationPlan) bool {
+        return self.wait_semaphore_count == 0 and
+            self.signal_semaphore_count == 0 and
+            self.wait_event_count == 0 and
+            self.signal_event_count == 0;
+    }
+
+    pub fn hasWaits(self: ExternalSynchronizationPlan) bool {
+        return self.wait_semaphore_count != 0 or self.wait_event_count != 0;
+    }
+
+    pub fn hasSignals(self: ExternalSynchronizationPlan) bool {
+        return self.signal_semaphore_count != 0 or self.signal_event_count != 0;
+    }
+
+    pub fn requiresNativeInterop(self: ExternalSynchronizationPlan) bool {
+        return self.native_wait_count != 0 or self.native_signal_count != 0;
+    }
+};
+
 pub const ExternalSynchronizationDescriptor = struct {
     wait_semaphores: []const *ExternalSemaphore = &.{},
     signal_semaphores: []const *ExternalSemaphore = &.{},
@@ -1172,22 +1201,36 @@ pub const ExternalSynchronizationDescriptor = struct {
     }
 
     pub fn validate(self: ExternalSynchronizationDescriptor, backend: core.Backend) RuntimeError!void {
+        _ = try self.plan(backend);
+    }
+
+    pub fn plan(self: ExternalSynchronizationDescriptor, backend: core.Backend) RuntimeError!ExternalSynchronizationPlan {
+        var result = ExternalSynchronizationPlan{ .backend = backend };
         for (self.wait_semaphores) |semaphore| {
             assertAlive(semaphore.alive, .external_semaphore);
             try expectSameBackend(backend, semaphore.backend);
+            result.wait_semaphore_count += 1;
+            if (semaphore.importPlan().requiresNativeImport()) result.native_wait_count += 1;
         }
         for (self.signal_semaphores) |semaphore| {
             assertAlive(semaphore.alive, .external_semaphore);
             try expectSameBackend(backend, semaphore.backend);
+            result.signal_semaphore_count += 1;
+            if (semaphore.importPlan().requiresNativeImport()) result.native_signal_count += 1;
         }
         for (self.wait_events) |event| {
             assertAlive(event.alive, .external_event);
             try expectSameBackend(backend, event.backend);
+            result.wait_event_count += 1;
+            if (event.importPlan().requiresNativeImport()) result.native_wait_count += 1;
         }
         for (self.signal_events) |event| {
             assertAlive(event.alive, .external_event);
             try expectSameBackend(backend, event.backend);
+            result.signal_event_count += 1;
+            if (event.importPlan().requiresNativeImport()) result.native_signal_count += 1;
         }
+        return result;
     }
 };
 
@@ -3843,7 +3886,7 @@ pub const CommandBuffer = struct {
         self: *CommandBuffer,
         descriptor: ExternalSynchronizationDescriptor,
     ) !void {
-        try descriptor.validate(self.backend);
+        _ = try descriptor.plan(self.backend);
         try self.commit();
     }
 
@@ -9074,14 +9117,24 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, semaphore.importPlan().lane);
     try std.testing.expect(event.isShared());
     try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, event.importPlan().lane);
+    const external_sync = ExternalSynchronizationDescriptor{
+        .wait_semaphores = &.{&semaphore},
+        .signal_events = &.{&event},
+    };
+    const external_sync_plan = try external_sync.plan(.metal);
+    try std.testing.expect(external_sync_plan.hasWaits());
+    try std.testing.expect(external_sync_plan.hasSignals());
+    try std.testing.expect(external_sync_plan.requiresNativeInterop());
+    try std.testing.expectEqual(@as(usize, 1), external_sync_plan.wait_semaphore_count);
+    try std.testing.expectEqual(@as(usize, 1), external_sync_plan.signal_event_count);
+    try std.testing.expectEqual(@as(usize, 1), external_sync_plan.native_wait_count);
+    try std.testing.expectEqual(@as(usize, 1), external_sync_plan.native_signal_count);
+    try std.testing.expectError(RuntimeError.BackendMismatch, external_sync.plan(.vulkan));
     var command_buffer = CommandBuffer{
         .backend = .metal,
         .tracker = &tracker,
     };
-    try command_buffer.commitWithExternalSynchronization(.{
-        .wait_semaphores = &.{&semaphore},
-        .signal_events = &.{&event},
-    });
+    try command_buffer.commitWithExternalSynchronization(external_sync);
     try std.testing.expect(!command_buffer.alive);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_memories);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_buffers);
