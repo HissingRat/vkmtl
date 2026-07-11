@@ -902,9 +902,28 @@ fn stageName(stage: Stage) []const u8 {
 }
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    return try std.Io.Dir.cwd().readFileAlloc(
-        std.Options.debug_io,
+    return readFileUnchecked(allocator, path) catch |err| {
+        std.debug.print("unable to read shader build input {s}: {t}\n", .{ path, err });
+        return err;
+    };
+}
+
+fn readFileUnchecked(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const io = std.Options.debug_io;
+    const parent = std.fs.path.dirname(path) orelse return std.Io.Dir.cwd().readFileAlloc(
+        io,
         path,
+        allocator,
+        .limited(max_source_bytes),
+    );
+    var dir = if (std.fs.path.isAbsolute(parent))
+        try std.Io.Dir.openDirAbsolute(io, parent, .{})
+    else
+        try std.Io.Dir.cwd().openDir(io, parent, .{});
+    defer dir.close(io);
+    return dir.readFileAlloc(
+        io,
+        std.fs.path.basename(path),
         allocator,
         .limited(max_source_bytes),
     );
