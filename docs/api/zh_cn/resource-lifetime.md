@@ -4,9 +4,9 @@ vkmtl 资源是显式资源。任何 runtime resource handle 都应该在销毁 
 
 ## 当前 Owner
 
-`WindowContext` 仍拥有后端 presentation 状态和 debug tracker。Period 2 开始，
-`WindowContext.device()` 返回 runtime `Device` view，资源创建入口是 `Device`。
-当前 `WindowContext.make*` 方法仍保留为兼容转发。
+`WindowContext` 拥有后端 presentation 状态和 debug tracker。
+`WindowContext.device()` 返回 runtime `Device` view。资源通过 `Device` 创建，command buffer
+通过 `Queue` 创建，resize/clear 操作由 `Swapchain` 负责；`WindowContext` 不转发这些调用。
 
 `Device` 创建并由 tracker 追踪的资源包括：
 

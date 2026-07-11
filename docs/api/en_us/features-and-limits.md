@@ -1,0 +1,184 @@
+# Features, Limits, And Format Capabilities
+
+This document defines how applications interpret vkmtl capability data. It is
+an API contract, not a promise that every native feature is executable on every
+device.
+
+## Query Model
+
+```zig
+const report = device.capabilityReport();
+const usable = report.features;
+const native = report.native_features;
+const limits = report.limits;
+const rgba8 = device.getFormatCaps(.rgba8_unorm);
+```
+
+The canonical public types are `vkmtl.diagnostics.DeviceFeatures`,
+`vkmtl.diagnostics.DeviceLimits`,
+`vkmtl.diagnostics.DeviceCapabilityReport`, and
+`vkmtl.resource.FormatCapabilities`. Common feature, limit, and format aliases
+also remain available at the root for quick-start code.
+
+- `device.features()` and `report.features` describe usable vkmtl execution
+  paths. A feature is not set merely because the native API can expose it.
+- `device.nativeFeatures()` and `report.native_features` describe facts queried
+  from the selected native backend. They may be true while vkmtl still exposes
+  only planning, validation, or a native escape hatch.
+- `report.source` identifies whether capability data came from a runtime native
+  query or a fallback/default source.
+- `report.ray_tracing` adds the exact Vulkan/Metal RT blocker, requirement,
+  limits, and command-availability diagnostics.
+- `device.getFormatCaps(format)` is authoritative for operations that depend on
+  one concrete texture format.
+
+Applications must gate optional work with usable features, limits, and format
+capabilities together. Platform names and backend assumptions are not gates.
+
+## Status Vocabulary
+
+| Status | Meaning |
+| --- | --- |
+| executable | A public command path is implemented and validated on the selected backend. |
+| capability-gated | The API is executable only when the relevant feature/limit/format query permits it. |
+| validation-only | The public shape and validation exist, but no native command is claimed. |
+| planning-only | The API produces deterministic plans or diagnostics rather than GPU work. |
+| typed-unsupported | The selected backend rejects the operation before native work with a specific error. |
+| native escape hatch | The behavior is intentionally backend-specific under `vkmtl.native`. |
+
+## DeviceFeatures Fields
+
+All current `DeviceFeatures` fields are grouped below. `false` means the usable
+path is unavailable; callers must not infer a fallback unless the operation's
+documentation defines one.
+
+### Shader And Constants
+
+```text
+runtime_slang shader_reflection shader_specialization
+small_constants root_constants
+```
+
+Runtime APIs consume build-time embedded shader artifacts; `runtime_slang`
+does not mean that an executable may spawn `slangc`.
+
+### Resources And Storage
+
+```text
+buffers textures texture_1d texture_2d texture_3d texture_arrays
+cube_textures multisample_textures samplers sampler_compare
+sampler_anisotropy sampler_border_color heaps
+sparse_buffers sparse_textures tiled_textures memory_budget memory_pressure
+storage_buffers storage_textures
+```
+
+### Binding
+
+```text
+bind_groups descriptor_indexing argument_buffers static_samplers
+```
+
+### Rendering And Advanced Geometry
+
+```text
+render_pipelines wireframe_fill_mode depth_bias conservative_rasterization
+blend_state independent_blend stencil_state
+tessellation mesh_shaders task_shaders
+vertex_instance_step_rate draw_base_vertex draw_base_instance
+indirect_draw multi_draw depth_attachments offscreen_render_targets
+msaa_render_targets indexed_draw
+```
+
+### Compute
+
+```text
+compute_pipelines compute_dispatch_indirect
+compute_atomics compute_threadgroup_memory
+```
+
+### Ray Tracing
+
+```text
+acceleration_structures acceleration_structure_update
+acceleration_structure_refit acceleration_structure_compaction
+ray_tracing ray_query ray_tracing_procedural_geometry
+ray_tracing_custom_intersection ray_tracing_callable_shaders
+```
+
+### Queries And Driver Artifacts
+
+```text
+occlusion_queries timestamp_queries pipeline_statistics_queries
+driver_pipeline_cache metal_binary_archive
+```
+
+### Transfer, Presentation, Interop, And Native Access
+
+```text
+transfer_commands multi_surface
+external_memory external_textures external_semaphores
+native_command_insertion native_handles
+```
+
+### Command, Synchronization, And Diagnostics
+
+```text
+debug_labels debug_markers command_buffer_pooling command_buffer_reset
+explicit_resource_barriers fences events timeline_fences shared_events
+multi_queue dedicated_compute_queue dedicated_transfer_queue
+queue_ownership_transfer
+```
+
+## DeviceLimits Fields
+
+Limits constrain descriptors even when the matching feature is true.
+
+| Group | Fields |
+| --- | --- |
+| Render/binding | `max_vertex_buffer_slots`, `max_bind_group_slots`, `max_color_attachments`, `max_sample_count`, `max_sampler_anisotropy` |
+| Buffer/constants | `min_uniform_buffer_offset_alignment`, `min_storage_buffer_offset_alignment`, `max_small_constant_bytes`, `small_constant_alignment`, `max_root_constant_bytes`, `root_constant_alignment` |
+| Queries | `query_result_alignment` |
+| Compute | `max_compute_threadgroups_per_grid_x`, `max_compute_threadgroups_per_grid_y`, `max_compute_threadgroups_per_grid_z`, `max_compute_threads_per_threadgroup_x`, `max_compute_threads_per_threadgroup_y`, `max_compute_threads_per_threadgroup_z`, `max_compute_total_threads_per_threadgroup`, `max_compute_threadgroup_memory_bytes`, `dispatch_indirect_alignment` |
+| Transfer | `buffer_texture_copy_offset_alignment`, `buffer_texture_copy_row_pitch_alignment` |
+| Binding | `max_bindless_descriptors_per_range`, `max_bindless_ranges_per_layout` |
+| Advanced geometry | `max_tessellation_control_points`, `max_mesh_threads_per_threadgroup`, `max_task_threads_per_threadgroup` |
+| Ray tracing | `max_ray_tracing_recursion_depth`, `shader_binding_table_alignment`, `max_acceleration_structure_instances`, `max_shader_binding_table_records` |
+| Driver artifacts | `max_driver_cache_identity_bytes` |
+| Sparse resources | `sparse_buffer_page_size`, `sparse_texture_page_width`, `sparse_texture_page_height`, `sparse_texture_page_depth`, `max_sparse_regions_per_commit` |
+
+For optional feature families, a maximum or page-size value of zero means that
+the limit is unavailable or was not established; it is not an unlimited value.
+Always check the matching feature. Base alignments and baseline render/compute
+limits may have conservative nonzero defaults when the capability source is a
+fallback. `max_sampler_anisotropy == 1` does not enable anisotropy when
+`sampler_anisotropy` is false.
+
+## FormatCapabilities Fields
+
+Each texture format independently reports:
+
+```text
+sampled storage color_attachment depth_stencil_attachment
+filterable linear_filter mipmapped mipmap_generation blendable
+copy_source copy_destination blit_source blit_destination presentation
+depth_copy stencil_copy color_resolve depth_resolve stencil_resolve
+```
+
+Do not infer copy, blit, resolve, presentation, or depth/stencil behavior from
+format naming. Use the matching capability flag and the transfer alignment
+limits before encoding.
+
+## Evidence And Diagnostics
+
+Run the capability dump on the same device used for validation:
+
+```sh
+zig build run-capability-dump
+zig build run-capability-dump -Dvulkan
+```
+
+The Period 44 parity report records 9/9 hosted/Metal/Vulkan release-evidence
+gates. That result validates the documented smoke, pixel, and bounded-soak
+matrix; it does not turn planning-only native heap, sparse-page, physical
+multi-queue, or other deferred backend work into executable features. The
+capability report remains authoritative for each process and device.

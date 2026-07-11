@@ -5,9 +5,9 @@ removing vkmtl public API. Read it before editing `src/vkmtl.zig`, adding public
 methods to runtime objects, or changing public descriptors, errors, defaults,
 ownership, or lifetime behavior.
 
-The current flat root surface predates this policy. Existing root exports are
-not automatically stable. They must be classified and migrated deliberately
-before the first tagged compatibility release.
+The Period 1 Phase 9 migration applied this policy to the prototype surface.
+The resulting 68-name root, 34-method `Device`, and 10-method `WindowContext`
+are explicit allowlists rather than precedent for uncontrolled growth.
 
 ## Goals
 
@@ -59,7 +59,7 @@ The intended namespace map is:
 
 | Namespace | Owns |
 | --- | --- |
-| `resource` | formats, usage, buffers, textures, views, samplers, heaps, and sparse resource descriptors |
+| `resource` | formats, usage, buffers, textures, views, samplers, heaps, and portable sparse resource descriptors and residency plans |
 | `shader` | shader declarations, reflection, specialization, and compilation descriptors |
 | `binding` | bind group layouts, bind groups, resource tables, dynamic offsets, and constants |
 | `render` | render passes, render pipelines, attachments, raster state, and draw descriptors |
@@ -71,7 +71,7 @@ The intended namespace map is:
 | `ray_tracing` | acceleration structures, ray pipelines, shader binding tables, and ray queries |
 | `interop` | external resources, platform sharing, and explicit import/export contracts |
 | `diagnostics` | capability reports, validation classification, profiling, capture, and debug data |
-| `native` | explicit backend-native handle escape hatches |
+| `native` | explicit backend-native handles and backend-selected lowering records and operations |
 
 A declaration should have one canonical home. Compatibility aliases may exist
 temporarily, but documentation and examples must use the canonical name.
@@ -94,16 +94,45 @@ Backend-specific handles and operations belong under `native` or an explicitly
 backend-specific subnamespace. Vulkan or Metal types must not appear in portable
 descriptors, ordinary resource methods, or the flat root.
 
+`presentation.SurfaceSource.vulkan` is the one approved native callback
+exception in presentation integration. It accepts the callback-only
+`native.vulkan.SurfaceProvider` shape needed to create a Vulkan surface without
+importing raw Vulkan binding types into the portable descriptor. This exception
+does not admit other backend-specific fields into portable API. Any additional
+exception requires an explicit design decision, inventory update, and API guard
+change.
+
+Sparse resource descriptors, mappings, and residency plans remain portable
+under `resource`. `SparseBufferLoweringMode`, `SparseBufferLowering`,
+`SparseTextureLoweringMode`, `SparseTextureLowering`, and the two
+`planSparse*Lowering` operations are backend-selection results and therefore
+belong under `native`.
+
+### Runtime Handle Representation
+
+Exported runtime handle structs expose exactly one implementation-storage field
+named `_state`. Its type must be either inline opaque byte storage for a
+value-owned handle or `*anyopaque` for a heap-owned or borrowed runtime view.
+No backend union, `BackendRuntime`, `Impl`, `ResourceTracker`, debug record, or
+other private state type may be reachable through a public handle field.
+
+Callers create handles through documented factories and interact with them
+through public methods. Direct struct literals, reads or writes of `_state`, and
+dependencies on its size, alignment, or layout are unsupported. The `_state`
+name and storage are an implementation boundary, not an application extension
+point. The API guard locks the handle list and this one-field shape; changing it
+requires the same compatibility review as any other public layout change.
+
 ### Compatibility Surface
 
 Compatibility aliases and forwarding methods are temporary migration tools,
 not preferred API. They must have a canonical replacement and must not be used
 by new examples or documentation.
 
-Existing `WindowContext.make*` and related forwarding methods may remain until
-the planned pre-release cleanup, but new resource or pipeline APIs must be
-owned by `Device`, `Queue`, `Surface`, or `Swapchain`. Do not add new
-`WindowContext` compatibility forwards without a documented design decision.
+The prototype `WindowContext.make*` and related forwarding methods were removed
+in the Phase 9 pre-release cleanup. Resource and pipeline APIs must be owned by
+`Device`, `Queue`, `Surface`, `Swapchain`, or a canonical facade. Do not restore
+compatibility forwards without a documented, time-bounded migration decision.
 
 ## Root Module Admission Rules
 
@@ -133,6 +162,8 @@ advanced backend work should not continuously enlarge these common owners.
 - Keep native backend names inside `native`, backend diagnostics, or an
   explicitly backend-specific advanced namespace.
 - Do not expose backend-private record layouts or generated binding types.
+- Keep runtime handles on the guarded single-`_state` representation; do not
+  add a convenience field that makes implementation state reachable again.
 - Keep public errors specific to the operation and failure category.
 - Do not report a native feature as usable until the public execution path is
   implemented and validated.
@@ -164,8 +195,12 @@ Before completion:
 1. Update API and usage docs for user-visible behavior.
 2. Update `public-api-inventory.md`.
 3. Confirm public files do not import backend-private dependencies.
-4. Run `zig fmt --check build.zig src examples tools`, `zig build test`,
-   `zig build`, and `git diff --check` for API or backend changes.
+4. Confirm the runtime handle field allowlist and the sole
+   `SurfaceSource.vulkan` callback exception are unchanged or intentionally
+   updated.
+5. Run `zig fmt --check build.zig src examples tools`,
+   `zig build run-api-guard`, `zig build test`, `zig build`, and
+   `git diff --check` for API or backend changes.
 
 ## Compatibility And Removal Process
 
@@ -184,21 +219,24 @@ Do not mix broad public renaming with backend implementation changes. Public
 facade migration and internal file decomposition should be separate reviewable
 changes.
 
-## Current Migration Plan
+## Completed Migration Baseline
 
-The current sequence is:
+`api-migration-roadmap.md` records the completed execution, and
+`api-migration-map.md` records the approved allocation. The cutover:
 
-1. Maintain `public-api-inventory.md` and keep uncontrolled root growth frozen.
-2. Keep the initial `resource`, `transfer`, `render`, `command`, `sync`,
-   `presentation`, and `diagnostics` facades established by Period 42 as the
-   canonical homes for their new declarations.
-3. Migrate examples/docs toward those facades and add the remaining domain
-   facades while splitting the large core/runtime implementation files by
-   domain in separate reviewable changes.
-4. During Period 43, place new diagnostics API in the `diagnostics` namespace.
-5. Before the first tagged compatibility release, remove approved legacy root
-   aliases and obsolete `WindowContext` forwards in one explicit breaking
-   cleanup.
+1. freeze uncontrolled root and compatibility growth, then finalize the
+   allocation and migration map;
+2. add the remaining canonical facades without removing aliases;
+3. migrate examples, tests, tools, and docs to canonical paths;
+4. converge `WindowContext` and advanced `Device` owner surfaces;
+5. internalize implementation-shaped records and approve the exact public diff;
+6. remove approved aliases and forwards in one explicit breaking cleanup;
+7. complete release documentation, validation, and API freeze.
+
+All seven implementation phases plus release polish are complete. The final
+surface and counts are in `public-api-inventory.md`; caller changes are in
+`api-migration-guide.md`. Future compatibility removals must still establish a
+canonical destination and migrate in-tree callers before deleting an old path.
 
 ## Review Checklist
 
@@ -207,7 +245,9 @@ For every public API change, verify:
 - [ ] The declaration has one canonical lane and namespace.
 - [ ] A root export, if any, satisfies every root admission rule.
 - [ ] Portable descriptors contain no Vulkan, Metal, GLFW, or platform-private
-  types.
+  types other than the approved `SurfaceSource.vulkan` callback shape.
+- [ ] Runtime handles expose only their guarded `_state` storage field, and no
+  private implementation record is reachable through it.
 - [ ] Ownership, lifetime, and destruction order are explicit.
 - [ ] Optional behavior has truthful feature, limit, or format gates.
 - [ ] Failures use typed validation, unsupported, backend, device, or surface
@@ -215,4 +255,5 @@ For every public API change, verify:
 - [ ] Examples and documentation use the canonical API rather than a
   compatibility alias.
 - [ ] Compatibility impact and removal timing are documented.
+- [ ] The exact API guard allowlists are unchanged or intentionally updated.
 - [ ] Focused tests and the validation commands appropriate to the change pass.

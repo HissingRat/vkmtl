@@ -19,7 +19,7 @@ pub fn main(init: std.process.Init) !void {
 
     const capabilities = vkmtl.diagnostics.ProfilingCapabilities.fromFeatures(
         options.backend,
-        vkmtl.DeviceFeatures{
+        vkmtl.diagnostics.DeviceFeatures{
             .debug_labels = true,
             .debug_markers = true,
             .timestamp_queries = true,

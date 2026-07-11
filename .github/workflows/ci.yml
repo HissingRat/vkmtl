@@ -17,13 +17,13 @@ jobs:
         include:
           - name: macOS aarch64 build
             os: macos-15
-            command: zig fmt --check build.zig src examples tools && zig build test --summary all && zig build && zig build run-validation-plan
+            command: zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build && zig build run-validation-plan
           - name: Linux x86_64 build
             os: ubuntu-24.04
-            command: zig fmt --check build.zig src examples tools && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan
+            command: zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan
           - name: Windows x86_64 build
             os: windows-2025
-            command: zig fmt --check build.zig src examples tools && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan
+            command: zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

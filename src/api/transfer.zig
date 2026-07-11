@@ -1,8 +1,11 @@
 const core = @import("../core.zig");
 
+pub const TransferBatchDescriptor = core.TransferBatchDescriptor;
+pub const TransferBatchPlan = core.TransferBatchPlan;
 pub const TextureCopyLayoutRequirements = core.TextureCopyLayoutRequirements;
 pub const BufferTextureCopyLayout = core.BufferTextureCopyLayout;
 pub const CopyBufferToBufferDescriptor = core.CopyBufferToBufferDescriptor;
+pub const FillBufferDescriptor = core.FillBufferDescriptor;
 pub const CopyBufferToTextureDescriptor = core.CopyBufferToTextureDescriptor;
 pub const CopyTextureToBufferDescriptor = core.CopyTextureToBufferDescriptor;
 pub const CopyTextureToTextureDescriptor = core.CopyTextureToTextureDescriptor;
@@ -11,3 +14,8 @@ pub const ResolvedTextureTextureCopy = core.ResolvedTextureTextureCopy;
 pub const BlitFilter = core.BlitFilter;
 pub const BlitTextureDescriptor = core.BlitTextureDescriptor;
 pub const ResolvedBlitTexture = core.ResolvedBlitTexture;
+pub const TextureReplaceRegionDescriptor = core.TextureReplaceRegionDescriptor;
+pub const ResolvedTextureReplaceRegion = core.ResolvedTextureReplaceRegion;
+pub const TextureUpload2DDescriptor = core.TextureUpload2DDescriptor;
+pub const GenerateMipmapsDescriptor = core.GenerateMipmapsDescriptor;
+pub const ResolvedGenerateMipmapsDescriptor = core.ResolvedGenerateMipmapsDescriptor;

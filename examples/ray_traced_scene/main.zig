@@ -90,20 +90,20 @@ pub fn main(_: std.process.Init.Minimal) !void {
     });
     defer scene_vertex_buffer.deinit();
 
-    const geometry = [_]vkmtl.AccelerationStructureGeometryDescriptor{.{
+    const geometry = [_]vkmtl.ray_tracing.AccelerationStructureGeometryDescriptor{.{
         .kind = .triangles,
         .primitive_count = mesh_triangle_count,
         .vertex_count = @intCast(mesh_vertices.items.len),
         .vertex_stride = @sizeOf(RtVertex),
         .is_opaque = false,
     }};
-    const geometry_resources = [_]vkmtl.AccelerationStructureGeometryResources{.{
+    const geometry_resources = [_]vkmtl.ray_tracing.AccelerationStructureGeometryResources{.{
         .triangles = .{
             .descriptor = geometry[0],
             .vertex_buffer = &scene_vertex_buffer,
         },
     }};
-    const as_build = vkmtl.AccelerationStructureBuildDescriptor{
+    const as_build = vkmtl.ray_tracing.AccelerationStructureBuildDescriptor{
         .acceleration_structure = .{
             .kind = .bottom_level,
             .primitive_count = mesh_triangle_count,
@@ -116,7 +116,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     };
     defer acceleration_structure.deinit();
 
-    const as_plan = device.planAccelerationStructureBuild(as_build) catch |err| {
+    const as_plan = vkmtl.ray_tracing.planAccelerationStructureBuild(device, as_build) catch |err| {
         std.debug.print("ray tracing unsupported: {s}\n", .{@errorName(err)});
         return;
     };
@@ -128,7 +128,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     });
     defer scratch_buffer.deinit();
 
-    const groups = [_]vkmtl.RayTracingShaderGroupDescriptor{
+    const groups = [_]vkmtl.ray_tracing.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
         .{ .kind = .miss, .entry_point = "miss" },
         .{
@@ -141,7 +141,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         .intersection_entry = "intersect_sphere",
     });
     defer compiled_rt_shader.deinit();
-    var pipeline = vkmtl.RayTracingPipelineDescriptor{
+    var pipeline = vkmtl.ray_tracing.RayTracingPipelineDescriptor{
         .shader_groups = groups[0..],
         .max_recursion_depth = 1,
     };
@@ -152,7 +152,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     };
     defer pipeline_state.deinit();
 
-    const sbt = vkmtl.ShaderBindingTableDescriptor{
+    const sbt = vkmtl.ray_tracing.ShaderBindingTableDescriptor{
         .stride = @max(device.limits().shader_binding_table_alignment, 64),
         .ray_generation_count = 1,
         .miss_count = 1,
@@ -167,10 +167,10 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var metal_function_table_entries: u32 = 0;
     var metal_backend_tables = false;
     if (device.selectedBackend() == .metal) {
-        const intersections = [_]vkmtl.MetalIntersectionFunctionDescriptor{.{
+        const intersections = [_]vkmtl.native.metal.IntersectionFunctionDescriptor{.{
             .entry_point = "intersect_triangle",
         }};
-        var metal_mapping = device.makeMetalRayTracingExecutionMapping(.{
+        var metal_mapping = vkmtl.native.metal.makeRayTracingExecutionMapping(&device, .{
             .pipeline = pipeline,
             .intersections = intersections[0..],
         }) catch |err| {
@@ -209,19 +209,19 @@ pub fn main(_: std.process.Init.Minimal) !void {
         });
         defer procedural_aabb_buffer.deinit();
 
-        const procedural_geometry = [_]vkmtl.AccelerationStructureGeometryDescriptor{.{
+        const procedural_geometry = [_]vkmtl.ray_tracing.AccelerationStructureGeometryDescriptor{.{
             .kind = .aabbs,
             .primitive_count = procedural_sphere_count,
             .aabb_stride = @sizeOf(RtAabb),
             .is_opaque = false,
         }};
-        const procedural_geometry_resources = [_]vkmtl.AccelerationStructureGeometryResources{.{
+        const procedural_geometry_resources = [_]vkmtl.ray_tracing.AccelerationStructureGeometryResources{.{
             .aabbs = .{
                 .descriptor = procedural_geometry[0],
                 .buffer = &procedural_aabb_buffer,
             },
         }};
-        const procedural_as_build = vkmtl.AccelerationStructureBuildDescriptor{
+        const procedural_as_build = vkmtl.ray_tracing.AccelerationStructureBuildDescriptor{
             .acceleration_structure = .{
                 .kind = .bottom_level,
                 .primitive_count = procedural_sphere_count,
@@ -234,7 +234,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         };
         defer procedural_acceleration_structure.deinit();
 
-        const procedural_as_plan = device.planAccelerationStructureBuild(procedural_as_build) catch |err| {
+        const procedural_as_plan = vkmtl.ray_tracing.planAccelerationStructureBuild(device, procedural_as_build) catch |err| {
             std.debug.print("procedural acceleration structure unsupported: {s}\n", .{@errorName(err)});
             return;
         };
@@ -260,11 +260,11 @@ pub fn main(_: std.process.Init.Minimal) !void {
             return err;
         };
 
-        const instance_geometry = [_]vkmtl.AccelerationStructureGeometryDescriptor{.{
+        const instance_geometry = [_]vkmtl.ray_tracing.AccelerationStructureGeometryDescriptor{.{
             .kind = .instances,
             .primitive_count = 1,
         }};
-        const top_level_build = vkmtl.AccelerationStructureBuildDescriptor{
+        const top_level_build = vkmtl.ray_tracing.AccelerationStructureBuildDescriptor{
             .acceleration_structure = .{
                 .kind = .top_level,
                 .primitive_count = 1,
@@ -277,7 +277,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         };
         defer top_level_acceleration_structure.deinit();
 
-        const top_level_plan = device.planAccelerationStructureBuild(top_level_build) catch |err| {
+        const top_level_plan = vkmtl.ray_tracing.planAccelerationStructureBuild(device, top_level_build) catch |err| {
             std.debug.print("top-level acceleration structure unsupported: {s}\n", .{@errorName(err)});
             return;
         };
@@ -432,7 +432,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
 
                 var texture = try device.makeTexture(.{
                     .label = "metal ray traced scene output",
-                    .format = .bgra8_unorm,
+                    .format = .rgba8_unorm,
                     .width = extent.width,
                     .height = extent.height,
                     .usage = .{
@@ -708,7 +708,7 @@ fn appendVertex(allocator: std.mem.Allocator, vertices: *std.ArrayList(RtVertex)
     });
 }
 
-fn printRayTracingUnsupported(diagnostics: vkmtl.RayTracingCapabilityDiagnostics) void {
+fn printRayTracingUnsupported(diagnostics: vkmtl.diagnostics.RayTracingCapabilityDiagnostics) void {
     std.debug.print("vulkan ray tracing unsupported: blocker={s}", .{@tagName(diagnostics.blocker)});
     if (diagnostics.requirement.len != 0) {
         std.debug.print(", requirement={s}", .{diagnostics.requirement});

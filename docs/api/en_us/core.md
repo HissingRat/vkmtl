@@ -4,12 +4,11 @@ vkmtl exposes backend-neutral descriptors and runtime wrappers through the
 public `vkmtl` module. User code should not import `backend/vulkan`,
 `backend/metal`, raw Vulkan bindings, or Metal bridge headers.
 
-Windowed examples still use `WindowContext` to assemble backend selection,
-surfaces, presentation, and shader-cache configuration. Starting in Period 2,
-the long-term resource entry point is `Device`, and the long-term
-command-buffer / submit entry point is `Queue`. `WindowContext` remains a
-window convenience owner and forwards resource and command helpers to those
-views.
+Windowed examples use `WindowContext` to assemble backend selection, surfaces,
+and presentation. Resource creation belongs to `Device`, command-buffer
+creation and submission belong to `Queue`, and presentation resize/clear
+belongs to `Swapchain`. `WindowContext` provides access to those owners but
+does not forward their operations.
 
 ## Backend Selection
 
@@ -31,38 +30,36 @@ public descriptors:
 - `SurfaceDescriptor`
 - `PresentationDescriptor`
 
-For Vulkan, that glue also supplies a `VulkanSurfaceProvider` with the instance
-extensions, proc-address lookup, and surface-creation callback required by the
-backend. Examples pass the resulting descriptors to `WindowContext.init(...)`.
+For Vulkan, that glue also supplies a
+`vkmtl.native.vulkan.SurfaceProvider` with the instance extensions,
+proc-address lookup, and surface-creation callback required by the backend.
+Examples pass the resulting descriptors to `WindowContext.init(...)`.
 
 Starting in Period 2, `WindowContext.surface()` and
 `WindowContext.swapchain()` expose runtime views. `Surface` keeps the
 window/provider descriptor information. `Swapchain` owns presentation-chain
 resize, and the current clear-screen helper lives at `Swapchain.clear(...)`.
-`WindowContext.resize(...)` and `WindowContext.clear(...)` remain compatibility
-forwards.
 
-`SurfaceCollection` is the first multi-surface management shape. It can track
+`vkmtl.presentation.SurfaceCollection` is the first multi-surface management shape. It can track
 multiple neutral surface presentation states for one selected backend and uses
 generation handles for resize/remove validation. It does not create multiple
 native swapchains yet; complete native multi-window support is gated by
 `DeviceFeatures.multi_surface`.
 
-Presentation helpers include `PresentModeSupport`,
+Presentation helpers under `vkmtl.presentation` include `PresentModeSupport`,
 `PresentModeResolution`, `defaultPresentModeSupport(...)`, and
-`FramePacingDiagnostics`. `Device.presentModeSupport()` and
-`WindowContext.presentModeSupport()` expose the conservative support table for
-the selected backend, while `resolvePresentMode(...)` reports whether a
+`FramePacingDiagnostics`.
+`vkmtl.presentation.presentModeSupport(device)` exposes the conservative
+support table for the selected backend, while
+`vkmtl.presentation.resolvePresentMode(device, requested)` reports whether a
 requested present mode fell back. `SurfaceCollection.framePacingDiagnostics(...)`
 reports per-surface configured state, selected mode, vsync intent, generation,
 frame-in-flight state, and submitted/completed frame serials.
 
 ## Resources
 
-Starting in Period 2, the long-term resource creation entry point is the runtime
-`Device`. `WindowContext.device()` returns a device view for the current
-context. Existing `WindowContext.make*` methods remain as compatibility
-forwards.
+The runtime `Device` is the resource creation entry point.
+`WindowContext.device()` returns a device view for the current context.
 
 - `makeBuffer(BufferDescriptor)`
 - `makeTexture(TextureDescriptor)`
@@ -150,31 +147,31 @@ future heap-backed resource aliasing. Default resource creation still owns
 memory internally; native Vulkan `VkDeviceMemory` suballocation and Metal
 `MTLHeap`-backed buffer/texture creation are future backend work.
 
-Memory diagnostics use `MemoryBudgetDescriptor` and
-`Device.memoryBudgetReport(...)`. The report distinguishes native and fallback
+Memory diagnostics use `vkmtl.diagnostics.MemoryBudgetDescriptor` and
+`vkmtl.diagnostics.memoryBudgetReport(device, descriptor)`. The report distinguishes native and fallback
 sources, totals explicit usage, heap reservations, transient peak bytes, and
 sparse residency bytes, and classifies pressure as unknown, nominal, warning,
 critical, or over-budget. Until backends provide native budget queries, reports
 remain fallback diagnostics.
 
 Sparse and tiled resource shapes are represented by
-`SparseBufferMappingDescriptor`, `SparseTextureMappingDescriptor`, and
+`vkmtl.resource.SparseBufferMappingDescriptor`, `SparseTextureMappingDescriptor`, and
 `SparseMappingCommitDescriptor`. They validate page size, region alignment, and
 residency intent behind `DeviceFeatures.sparse_buffers`,
 `DeviceFeatures.sparse_textures`, and `DeviceFeatures.tiled_textures`. Native
 residency management is future backend work. Period 27 adds
-`SparseBufferLowering`, `SparseTextureLowering`,
-`Device.planSparseBufferLowering(...)`, and
-`Device.planSparseTextureLowering(...)` so advanced applications can inspect
+`vkmtl.native.SparseBufferLowering`, `vkmtl.native.SparseTextureLowering`,
+`vkmtl.native.planSparseBufferLowering(device, descriptor)`, and
+`vkmtl.native.planSparseTextureLowering(device, descriptor)` so advanced applications can inspect
 native page size, texture page grids, page counts, and backend mapping before
 runtime sparse object creation is enabled. `SparseMappingCommitPlan` and
-`Device.planSparseMappingCommit(...)` summarize commit/evict counts, buffer
+`vkmtl.resource.planSparseMappingCommit(device, descriptor)` summarize commit/evict counts, buffer
 bytes, and texture pages for residency update batches.
 `SparseResidencyChurnDescriptor`, `SparseResidencyMap.runChurn(...)`, and
-`Device.planSparseResidencyChurn(...)` provide deterministic repeated
+`vkmtl.resource.planSparseResidencyChurn(device, descriptor)` provide deterministic repeated
 commit/evict pressure diagnostics before native page binding is available.
 
-External interop shapes are represented by `ExternalHandleDescriptor`,
+External interop shapes under `vkmtl.interop` are represented by `ExternalHandleDescriptor`,
 `ExternalMemoryDescriptor`, `ExternalBufferDescriptor`,
 `ExternalTextureDescriptor`, and `ExternalSemaphoreDescriptor`. They validate
 handle kind, selected backend compatibility, resource shape, ownership, and
@@ -183,7 +180,8 @@ and `ExternalTexture`, created with `Device.makeExternalMemory(...)`,
 `Device.makeExternalBuffer(...)`, and `Device.makeExternalTexture(...)`.
 `ExternalInteropImportPlan` records the backend/platform lane, process/device
 scope, feature gate, and ownership for each wrapper.
-`ExternalTextureUsageDescriptor` and `Device.planExternalTextureUsage(...)`
+`ExternalTextureUsageDescriptor` and
+`vkmtl.interop.planExternalTextureUsage(device, descriptor)`
 validate sampling, copy, and presentation intent before a texture wrapper is
 used.
 External synchronization wrappers include `ExternalSemaphore` and
@@ -194,10 +192,10 @@ planned with `ExternalSynchronizationDescriptor.plan(...)` or passed to
 backend/lifetime/order validation before native wait/signal lowering exists.
 Native handle import/export remains explicit future backend work.
 `ExternalInteropCapabilityMatrix`, `ExternalInteropCapabilityEntry`, and
-`Device.externalInteropCapabilityMatrix(...)` list handle kinds by
+`vkmtl.interop.externalInteropCapabilityMatrix(device)` list handle kinds by
 backend/platform and classify each path as `portable`, `capability_gated`,
 `native_only`, or `unsupported`. This gives diagnostics a stable source before
-native import code runs. `Device.diagnoseExternalInteropImport(...)` returns an
+native import code runs. `vkmtl.interop.diagnoseExternalInteropImport(device, descriptor)` returns an
 `ExternalInteropImportDiagnostic` for issue reports when an import cannot be
 planned.
 
@@ -227,7 +225,7 @@ timeline fences remain gated by `DeviceFeatures.timeline_fences`.
 `reset()`, and `isSignaled()`. Shared events remain gated by
 `DeviceFeatures.shared_events`.
 
-`Device.syncCapabilities()` and `WindowContext.syncCapabilities()` summarize
+`vkmtl.sync.syncCapabilities(device)` summarizes
 fence, timeline-fence, event, shared-event, host wait/signal, queue wait/signal,
 and native support gates as `SyncCapabilities`. `SynchronizationDescriptor`
 can be passed to `CommandBuffer.commitWithSynchronization(...)` to perform
@@ -277,12 +275,12 @@ used for runtime shader compilation or shader artifact export.
 Programmable stages can optionally attach reflection data with
 `ProgrammableStageDescriptor.reflection`. Runtime pipeline creation validates
 reflection artifacts or inline reflection data against the explicit
-`bind_group_layouts` before creating backend pipelines. `ShaderReflection`
-also exposes helpers that derive bind group layout descriptors from attached
-stage reflection:
+`bind_group_layouts` before creating backend pipelines.
+`vkmtl.shader.Reflection` also exposes helpers that derive bind group layout
+descriptors from attached stage reflection:
 
 ```zig
-var layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
+var layouts = try vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(
     allocator,
     stages.vertex,
     stages.fragment,
@@ -295,7 +293,7 @@ stage's `vertex_inputs`; the caller still supplies stride because the current
 reflection artifact records attribute layout but not host vertex struct size:
 
 ```zig
-var vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescriptor(
+var vertex_descriptor = try vkmtl.shader.Reflection.deriveSingleBufferVertexDescriptor(
     allocator,
     stages.vertex,
     .{ .stride = @sizeOf(Vertex) },
@@ -344,37 +342,38 @@ invalid strides/offsets, and zero instance step rates. Non-default
 Vulkan vertex binding divisors when the selected device exposes
 `vertex_instance_step_rate`.
 
-`TessellationDescriptor` represents future tessellation pipeline extension
+`vkmtl.render.TessellationDescriptor` represents future tessellation pipeline extension
 state. It is gated by `DeviceFeatures.tessellation`, validates patch control
 point counts and required stage presence, and is intentionally separate from the
 base render pipeline path until backend lowering is fully executable.
-`TessellationPatchDrawDescriptor` and `Device.planTessellationPatchDraw(...)`
-describe neutral patch-list draw plans; `Device.planVulkanTessellationPatchDraw(...)`
-and `Device.planMetalTessellationPatchDraw(...)` produce Vulkan draw metadata
-or Metal factor-buffer metadata.
+`TessellationPatchDrawDescriptor` and
+`vkmtl.render.planTessellationPatchDraw(device, descriptor)` describe neutral
+patch-list draw plans. Backend-specific inspection is explicit through
+`vkmtl.native.vulkan.planTessellationPatchDraw(...)` and
+`vkmtl.native.metal.planTessellationPatchDraw(...)`.
 
-`MeshPipelineDescriptor` represents future mesh/task shader pipeline metadata.
+`vkmtl.render.MeshPipelineDescriptor` represents future mesh/task shader pipeline metadata.
 It is gated by `DeviceFeatures.mesh_shaders` and `DeviceFeatures.task_shaders`,
 validates mesh and optional task entry points plus workgroup limits, and remains
 outside the base render pipeline until backend execution is enabled.
-`MeshDispatchDescriptor` and `Device.planMeshDispatch(...)` describe neutral
-mesh/task dispatch plans; `Device.planVulkanMeshDispatch(...)` and
-`Device.planMetalMeshDispatch(...)` produce Vulkan task/mesh metadata or Metal
-object/mesh metadata.
+`MeshDispatchDescriptor` and `vkmtl.render.planMeshDispatch(device, descriptor)`
+describe neutral mesh/task dispatch plans. Backend-specific inspection uses
+`vkmtl.native.vulkan.planMeshDispatch(...)` or
+`vkmtl.native.metal.planMeshDispatch(...)`.
 
-Ray tracing is isolated in advanced descriptors:
+Ray tracing is isolated under `vkmtl.ray_tracing` through
 `AccelerationStructureDescriptor`, `RayTracingPipelineDescriptor`, and
-`ShaderBindingTableDescriptor`. They validate acceleration structure shape,
+`ShaderBindingTableDescriptor`. These declarations validate acceleration structure shape,
 ray-generation shader group presence, recursion depth, and shader binding table
 alignment behind `DeviceFeatures.acceleration_structures` and
 `DeviceFeatures.ray_tracing`. Period 28 adds
 `AccelerationStructureBuildDescriptor`, `AccelerationStructureBuildPlan`, and
-`Device.planAccelerationStructureBuild(...)` so applications can inspect
+`vkmtl.ray_tracing.planAccelerationStructureBuild(device, descriptor)` so applications can inspect
 geometry counts, build/update mode, result size, scratch size, and compaction
 intent before native acceleration-structure objects are executable.
 Period 39 adds `AccelerationStructureMaintenanceDescriptor`,
 `AccelerationStructureMaintenancePlan`, and
-`Device.planAccelerationStructureMaintenance(...)` for update, refit, and
+`vkmtl.ray_tracing.planAccelerationStructureMaintenance(device, descriptor)` for update, refit, and
 compaction planning. Update/refit require
 `DeviceFeatures.acceleration_structure_update` or
 `DeviceFeatures.acceleration_structure_refit` plus an update-capable AS;
@@ -382,29 +381,29 @@ compaction requires `DeviceFeatures.acceleration_structure_compaction` and a
 separate destination AS.
 `TopLevelAccelerationStructureInstanceDescriptor`,
 `TopLevelAccelerationStructureLayoutDescriptor`, and
-`Device.planTopLevelAccelerationStructureLayout(...)` describe backend-neutral
+`vkmtl.ray_tracing.planTopLevelAccelerationStructureLayout(device, descriptor)` describe backend-neutral
 TLAS instance metadata: transforms, masks, custom indices, SBT record offsets,
 material indices, triangle instances, procedural AABB instances, and mixed
 geometry requirements.
-`RayQueryDescriptor`, `RayQueryPlan`, and `Device.planRayQuery(...)` describe
+`RayQueryDescriptor`, `RayQueryPlan`, and
+`vkmtl.ray_tracing.planRayQuery(device, descriptor)` describe
 Vulkan ray-query shader requirements. vkmtl currently reports Metal ray query
 as unsupported because Metal has no direct equivalent shader feature in this
 abstraction layer.
-`RayTracingPipelineLowering` and `Device.planRayTracingPipelineLowering(...)`
-expose Vulkan shader-group counts or Metal function-table metadata from native
-feature reports before executable ray tracing pipelines are enabled.
-`RayDispatchDescriptor`, `RayDispatchPlan`, and `Device.planRayDispatch(...)`
-combine shader binding table layout with dispatch dimensions and total ray
-counts before native ray dispatch commands are available. Metal-specific ray
-tracing differences are explicit through `MetalRayTracingMappingDescriptor`,
-`MetalRayTracingMappingPlan`, and `Device.planMetalRayTracingMapping(...)`.
+Backend pipeline lowering remains internal to runtime pipeline creation.
+`RayDispatchDescriptor`, `RayDispatchPlan`, and
+`vkmtl.ray_tracing.planRayDispatch(device, sbt, descriptor)` combine shader
+binding table layout with dispatch dimensions and total ray counts.
+Metal-specific ray tracing inspection is explicit through
+`vkmtl.native.metal.RayTracingMappingDescriptor`, `RayTracingMappingPlan`, and
+`vkmtl.native.metal.planRayTracingMapping(device, descriptor)`.
 `ComplexShaderBindingTableDescriptor`,
 `ShaderBindingTableHitGroupRangeDescriptor`, and
-`Device.planComplexShaderBindingTable(...)` validate larger miss/hit/callable
+`vkmtl.ray_tracing.planComplexShaderBindingTable(device, descriptor)` validates larger miss/hit/callable
 record layouts, hit-group ranges, procedural hit ranges, total SBT record
 limits, and callable shader feature requirements.
 `RayTracingStressDescriptor`, `RayTracingStressPlan`, and
-`Device.planRayTracingStress(...)` combine AS maintenance, TLAS instance
+`vkmtl.ray_tracing.planRayTracingStress(device, descriptor)` combines AS maintenance, TLAS instance
 metadata, complex SBT layout, optional ray query, dispatch dimensions, and
 iteration count into one deterministic stress plan.
 
@@ -414,10 +413,13 @@ Period 29 adds public runtime contracts for those advanced paths:
 `RayTracingPipelineState` and `Device.makeRayTracingPipelineState(...)`,
 `ShaderBindingTable` and `Device.makeShaderBindingTable(...)`,
 `CommandBuffer.dispatchRays(...)`, and
-`MetalRayTracingExecutionMapping` /
-`Device.makeMetalRayTracingExecutionMapping(...)`. These APIs are gated by
+`vkmtl.native.metal.RayTracingExecutionMapping` /
+`vkmtl.native.metal.makeRayTracingExecutionMapping(&device, descriptor)`.
+These APIs are gated by
 native feature reports and validate ownership, resource ranges, and command
-intent.
+intent. Supported Metal and Vulkan RT devices have both produced visible
+physical-device output; the 9/9 release evidence does not promote unrelated
+planning-only native pressure features.
 
 Period 30 adds backend-private runtime records to those objects: acceleration
 structure handles/build records, ray tracing pipeline metadata, SBT records,
@@ -483,8 +485,8 @@ binding through `setResourceTable(...)`. Ordinary `BindGroup` remains the
 portable path; resource tables are the advanced descriptor-indexing /
 argument-buffer path.
 
-`ResourceTablePressureDescriptor` and
-`Device.planResourceTablePressure(...)` summarize large table pressure before
+`vkmtl.binding.ResourceTablePressureDescriptor` and
+`vkmtl.binding.planResourceTablePressure(device, descriptor)` summarize large table pressure before
 allocation. The returned `ResourceTablePressurePlan` reports total descriptors,
 per-resource descriptor counts, expected bound/unbound descriptors,
 partially-bound and update-after-bind requirements, and worst-case updates in
@@ -506,11 +508,11 @@ storage textures, samplers, and compare samplers. A single binding uses
 must provide exactly `BindGroupLayoutEntry.array_count` resources:
 
 ```zig
-const texture_resources = [_]vkmtl.BindGroupResource{
+const texture_resources = [_]vkmtl.binding.BindGroupResource{
     .{ .sampled_texture = &albedo_view },
     .{ .sampled_texture = &normal_view },
 };
-const sampler_resources = [_]vkmtl.BindGroupResource{
+const sampler_resources = [_]vkmtl.binding.BindGroupResource{
     .{ .sampler = &linear_sampler },
     .{ .sampler = &nearest_sampler },
 };
@@ -573,15 +575,14 @@ validated against the selected device. Render and compute encoders expose
 lowers writes through `set*Bytes` on a reserved root-constant buffer slot.
 
 `BindGroupDescriptor` is the runtime descriptor that points at live resources.
-For pure descriptor validation or tests, root exports also expose the shape-only
-aliases `BindGroupResourceDescriptor`, `BindGroupEntryDescriptor`, and
-`BindGroupDescriptorShape`.
+Pure descriptor validation uses the canonical `vkmtl.binding` declarations;
+the former shape-only root aliases are no longer public.
 
 Pipelines that use shader resources should include matching
 `bind_group_layouts` in their render or compute pipeline descriptor. Those
 layouts can be written manually or derived from reflection with
-`ShaderReflection.deriveRenderPipelineBindGroupLayouts(...)` and
-`ShaderReflection.deriveComputePipelineBindGroupLayouts(...)`. Vulkan uses the
+`vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(...)` and
+`vkmtl.shader.Reflection.deriveComputePipelineBindGroupLayouts(...)`. Vulkan uses the
 layouts to build the native pipeline layout, allocate descriptor sets, write
 descriptors, and bind them during command encoding.
 
@@ -618,10 +619,11 @@ Command buffers are still one-shot after `commit()`; pooled or reusable command
 buffers are represented by descriptor fields and rejected by feature gates until
 native reset/pooling is implemented.
 
-`QueueKind`, `QueueCapabilities`, `QueueDescriptor`, and `QueueSelectionPlan`
-define the multi-queue selection vocabulary. `Device.queueCapabilities()`
-returns the current device's logical queue capabilities, and
-`Device.planQueue(...)` reports the requested kind, resolved kind, graphics
+`vkmtl.sync.QueueKind`, `QueueCapabilities`, `QueueDescriptor`, and
+`QueueSelectionPlan` define the multi-queue selection vocabulary.
+`vkmtl.command.queueCapabilities(device)` returns the current device's logical
+queue capabilities, and `vkmtl.command.planQueue(device, descriptor)` reports
+the requested kind, resolved kind, graphics
 fallback state, dedicated logical queue state, and ownership-transfer support.
 `Device.queue()` still returns the default graphics queue, and
 `Device.queueWithDescriptor(.{})` is the explicit form of that default. A
@@ -670,7 +672,7 @@ stride into multiple single indirect draw commands. Explicit
 repeated direct draws for now, with room to replace that loop with a true
 backend-native multi-draw path later.
 
-Runtime query support starts with portable `QuerySet` objects. Timestamp queries
+Runtime query support starts with portable `vkmtl.diagnostics.QuerySet` objects. Timestamp queries
 can be written from blit, compute, and render encoders, occlusion queries can be
 begun and ended from render encoders, and query data can be read back directly
 or resolved into a buffer. Query ranges, result alignment, resource ownership,
@@ -787,8 +789,8 @@ diagnostics, or records diagnostics only. Cacheable object descriptors carry a
 defaulted `cache_policy` field. `ObjectCacheDiagnostics` reports lookup hits,
 misses, creation attempts, equivalent recreation attempts, bypassed reuse,
 suppressed diagnostics, and total creation time. Read snapshots with
-`device.objectCacheDiagnostics()` or `context.objectCacheDiagnostics()`.
-`device.runtimeDiagnostics()` and `context.runtimeDiagnostics()` return the
+`vkmtl.diagnostics.objectCacheDiagnostics(device)`.
+`vkmtl.diagnostics.runtimeDiagnostics(device)` returns the
 same object-cache snapshot together with live resource count, deferred
 retirement count, and submitted/completed work serials.
 
@@ -803,14 +805,14 @@ pipeline cache and Metal binary archive support are gated by
 `DeviceFeatures.driver_pipeline_cache` and `DeviceFeatures.metal_binary_archive`.
 Identity includes backend, device, driver, shader hash, and schema version so
 future disk cache invalidation can be explicit.
-`Device.planDriverPipelineCache(...)` validates against native feature reports
+`vkmtl.diagnostics.planDriverPipelineCache(device, descriptor)` validates against native feature reports
 and returns `DriverPipelineCachePlan`, including whether the path already exists
 and whether shutdown should store a new blob. Pipeline creation does not consume
 native driver cache objects yet.
 
 Pipeline artifact compatibility is represented by
 `PipelineArtifactManifestDescriptor` and `PipelineArtifactCachePlanDescriptor`.
-`Device.planPipelineArtifactCache(...)` classifies cache entries as compatible,
+`vkmtl.diagnostics.planPipelineArtifactCache(device, descriptor)` classifies cache entries as compatible,
 missing, stale schema, backend mismatch, shader hash mismatch, entry point
 mismatch, reflection mismatch, format mismatch, or toolchain mismatch. This is
 the portable invalidation contract for generated SPIR-V, MSL, and reflection
@@ -819,17 +821,17 @@ consumption remains backend work.
 
 ## Stability Diagnostics
 
-`StabilityRunDescriptor` describes opt-in long-run checks without forcing them
+`vkmtl.diagnostics.StabilityRunDescriptor` describes opt-in long-run checks without forcing them
 into default tests. It can plan resource churn, presentation resize/recreate
 cycles, shader-cache warm/cold cycles, upload/readback cycles, and Vulkan
 unaligned `fillBuffer(...)` fallback checks:
 
 ```zig
-const plan = try vkmtl.StabilityRunDescriptor{
+const plan = try vkmtl.diagnostics.StabilityRunDescriptor{
     .iterations = 120,
 }.plan();
 
-const diagnostics = vkmtl.StabilityRunDiagnostics.fromPlan(plan);
+const diagnostics = vkmtl.diagnostics.StabilityRunDiagnostics.fromPlan(plan);
 ```
 
 `StabilityRunPlan` contains expected counters. `StabilityRunDiagnostics` can
@@ -864,14 +866,13 @@ NUL bytes; object setters remain infallible for compatibility and do not
 forward invalid encoding to native tools.
 
 Capture-friendly names can be built with
-`vkmtl.diagnostics.CaptureNameDescriptor` or the runtime
-helpers `device.writeCaptureName(...)` / `context.writeCaptureName(...)`.
-If the descriptor omits `backend`, the runtime helper fills in the selected
-backend:
+`vkmtl.diagnostics.CaptureNameDescriptor` and
+`vkmtl.diagnostics.writeCaptureName(device, descriptor, buffer)`. If the
+descriptor omits `backend`, the helper fills in the selected backend:
 
 ```zig
 var name_buffer: [96]u8 = undefined;
-const capture_name = try device.writeCaptureName(.{
+const capture_name = try vkmtl.diagnostics.writeCaptureName(device, .{
     .scope = "frame",
     .name = "main-pass",
     .frame_index = frame_index,
@@ -906,7 +907,7 @@ and must finish before `WindowContext` is destroyed. The current destination is
 Apple developer tools. Vulkan reports `UnsupportedCapture`; capture-manager
 startup failures report `CaptureFailed`.
 
-Timestamp `QuerySet` values currently preserve command order only.
+Timestamp `vkmtl.diagnostics.QuerySet` values currently preserve command order only.
 `QuerySet.resultSource()` reports `logical_sequence`; those values are not GPU
 ticks and cannot produce a GPU duration. Use
 `vkmtl.diagnostics.planProfiling(device, descriptor)` to select CPU wall-clock
@@ -925,7 +926,7 @@ vkmtl keeps precise Zig error names. Applications that need broader handling can
 call:
 
 ```zig
-const category = vkmtl.classifyError(err);
+const category = vkmtl.diagnostics.classifyError(err);
 ```
 
 Current categories include validation, unsupported feature, backend, device
@@ -943,18 +944,17 @@ them is no longer backend-neutral.
 
 Native command insertion is similarly explicit. Render, compute, and blit
 encoders expose `insertNativeCommands(...)` with
-`NativeCommandInsertionDescriptor`. The descriptor validates the feature gate,
+`vkmtl.native.CommandInsertionDescriptor`. The descriptor validates the feature gate,
 callback, and encoder kind before invoking user code. Backends keep the feature
 disabled until real command-buffer / command-encoder native handle views are
 available.
 
-`NativeAdvancedClosureDescriptor`, `NativeAdvancedClosurePlan`, and
-`Device.planNativeAdvancedClosure(...)` expose the current native-advanced
-implementation backlog as data for tooling and roadmap checks. The plan
-distinguishes public runtime contracts from backend-private native lowering.
+The native-advanced closure inventory is internal planning data rather than a
+supported public API.
 
-`BackendParitySemanticsDescriptor`, `BackendParitySemanticsPlan`, and
-`Device.planBackendParitySemantics(...)` expose current parity decisions for
+`vkmtl.diagnostics.BackendParitySemanticsDescriptor`,
+`BackendParitySemanticsPlan`, and
+`vkmtl.diagnostics.planBackendParitySemantics(device, descriptor)` expose current parity decisions for
 partial mip/layer ranges, depth/stencil and MSAA copies, custom sampler border
 colors, and opt-in GPU soak planning. Depth/stencil copies are now reported as
 capability-gated; ordinary MSAA copies remain typed unsupported.

@@ -28,8 +28,12 @@ closed one by one as vkmtl moves from prototype to library.
   completeness/device-matrix work.
 - Periods 42 through 44 are complete as implementation slices. Period 44's
   explicit readiness evaluator reports 9/9, `release ready: true`.
-- Period 1 Phase 9 pre-tag API and release-polish items remain open, but are not
-  the active feature phase.
+- Period 1 Phase 9 and the staged pre-tag API migration are complete. The
+  frozen baseline is 68 root declarations, 34 public `Device` methods, and 10
+  public `WindowContext` methods, enforced by `zig build run-api-guard`.
+- The next mainline decision is release review for the first tagged
+  compatibility surface; later feature work must use the canonical facades and
+  public API admission rules.
 
 ## Open Design Decisions
 
@@ -219,17 +223,27 @@ closed one by one as vkmtl moves from prototype to library.
   and make them required guidance in `AGENTS.md`.
 - [x] Establish the initial public API inventory, canonical namespace map, root
   candidate set, and compatibility-forward list.
-- [ ] Audit public root exports and remove or rename remaining unstable aliases
+- [x] Publish the staged API migration roadmap and measurable phase exit gates.
+- [x] Complete the final allocation and migration map for all 492 root exports.
+- [x] Add the remaining canonical domain and native facades without removing
+  compatibility aliases.
+- [x] Migrate examples, tests, tools, and user-facing docs to canonical names.
+- [x] Migrate `WindowContext` callers to natural runtime owners and audit
+  advanced `Device.plan*` / `Device.validate*` methods.
+- [x] Internalize implementation-shaped lowering, planning, and debug records
+  that have no supported public consumer.
+- [x] Audit public root exports and remove or rename remaining unstable aliases
   before a tagged release.
 - [x] Decide which `WindowContext` entry points stay for early users and which
   should move to future `Device` / `Queue` owners.
 - [x] Add backend object debug labels where native APIs support them.
-- [ ] Add a CI build matrix for macOS and Linux.
-- [ ] Document optional Vulkan validation layer setup.
-- [ ] Document Metal API validation notes for Xcode/local runs.
-- [ ] Add an explicit limits/features document for current resource, shader,
-  render target, transfer, and compute coverage.
-- [ ] Review example names, run commands, and expected output/screenshots.
+- [x] Add a CI build matrix for macOS and Linux. Period 44 records hosted
+  macOS, Linux, and Windows evidence.
+- [x] Document optional Vulkan validation layer setup.
+- [x] Document Metal API validation notes for Xcode/local runs.
+- [x] Add an explicit limits/features document for current resource, shader,
+  render target, transfer, compute, and advanced coverage.
+- [x] Review example names, run commands, and expected output/screenshots.
 
 ## Period 2 Phase 0 Checklist
 

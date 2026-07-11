@@ -22,7 +22,7 @@ pub fn main(init: std.process.Init) !void {
     run(init) catch |err| {
         std.debug.print("gpu soak failed: {s} category={s}\n", .{
             @errorName(err),
-            @tagName(vkmtl.classifyError(err)),
+            @tagName(vkmtl.diagnostics.classifyError(err)),
         });
         return err;
     };
@@ -60,7 +60,7 @@ fn run(init: std.process.Init) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
-    var residency_map = vkmtl.SparseResidencyMap.init(allocator);
+    var residency_map = vkmtl.resource.SparseResidencyMap.init(allocator);
     defer residency_map.deinit();
     const row_alignment: usize = @max(
         1,
@@ -144,7 +144,7 @@ fn run(init: std.process.Init) !void {
             });
             defer texture_readback.deinit();
 
-            max_live_resources = @max(max_live_resources, device.runtimeDiagnostics().live_resources);
+            max_live_resources = @max(max_live_resources, vkmtl.diagnostics.runtimeDiagnostics(device).live_resources);
 
             var command_buffer = try queue.makeCommandBuffer();
             var blit = try command_buffer.makeBlitCommandEncoder();
@@ -178,20 +178,20 @@ fn run(init: std.process.Init) !void {
             upload_readbacks += 1;
         }
 
-        const diagnostics = device.runtimeDiagnostics();
+        const diagnostics = vkmtl.diagnostics.runtimeDiagnostics(device);
         if (diagnostics.live_resources != 0) return error.GpuSoakLiveResourceLeak;
         if (diagnostics.pending_retirements != 0) return error.GpuSoakPendingRetirements;
         if (diagnostics.completed_work_serial < diagnostics.submitted_work_serial) return error.GpuSoakIncompleteWork;
         if (diagnostics.submitted_work_serial < last_submitted_serial) return error.GpuSoakWorkSerialRegression;
         last_submitted_serial = diagnostics.submitted_work_serial;
 
-        const resident = [_]vkmtl.SparseBufferMappingDescriptor{.{
+        const resident = [_]vkmtl.resource.SparseBufferMappingDescriptor{.{
             .offset = 0,
             .size = 4096,
             .page_size = 4096,
             .residency = .resident,
         }};
-        const evicted = [_]vkmtl.SparseBufferMappingDescriptor{.{
+        const evicted = [_]vkmtl.resource.SparseBufferMappingDescriptor{.{
             .offset = 0,
             .size = 4096,
             .page_size = 4096,
@@ -207,11 +207,11 @@ fn run(init: std.process.Init) !void {
         glfw.pollEvents();
     }
 
-    const budget = try device.memoryBudgetReport(.{
+    const budget = try vkmtl.diagnostics.memoryBudgetReport(device, .{
         .budget_bytes = 64 * 1024 * 1024,
         .explicit_usage_bytes = transfer_bytes * 4,
     });
-    const diagnostics = device.runtimeDiagnostics();
+    const diagnostics = vkmtl.diagnostics.runtimeDiagnostics(device);
     std.debug.print("gpu soak ok\n", .{});
     std.debug.print("backend: {s}\n", .{@tagName(context.selectedBackend())});
     std.debug.print("iterations: {}\n", .{options.iterations});

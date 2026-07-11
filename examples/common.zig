@@ -27,7 +27,7 @@ pub fn framebufferExtent(window: glfw.Window) vkmtl.Extent2D {
     };
 }
 
-fn vulkanSurfaceProvider(window: glfw.Window) vkmtl.VulkanSurfaceProvider {
+fn vulkanSurfaceProvider(window: glfw.Window) vkmtl.native.vulkan.SurfaceProvider {
     return .{
         .context = glfw.rawWindow(window),
         .get_instance_proc_addr = getInstanceProcAddress,

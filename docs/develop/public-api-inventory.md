@@ -1,89 +1,79 @@
 # Public API Inventory
 
-Status: initial inventory established and refreshed through Period 44 Phase 5
-on 2026-07-10.
+Status: final pre-tag API migration inventory, refreshed on 2026-07-11.
 
-This document records the current public surface and assigns every flat root
-export a canonical API domain. It is an inventory and migration input, not a
-claim that every existing declaration is stable.
+This document records the public surface reachable through `src/vkmtl.zig`
+after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
+the first intentional compatibility surface; `public-api-rules.md` remains the
+authoritative admission policy and `api-migration-guide.md` records how callers
+move from the prototype surface.
 
-Use this document together with `public-api-rules.md`. Update it whenever a
-public declaration is added, removed, renamed, moved to a namespace, or changes
-compatibility status.
+The cutover is intentionally breaking. It changes public reachability and
+method ownership, not backend behavior. Some declarations below the public
+module remain declared `pub` in `src/core.zig` or implementation modules so
+vkmtl internals can share them. An internal declaration is not public library
+API unless it is reachable through `src/vkmtl.zig` or one of its facades.
 
-## Scope And Counting Rules
+## Counting Rules And Measured Baseline
 
-The baseline covers:
-
-- every `pub const` reachable directly from `src/vkmtl.zig`
-- public methods on runtime types exported by the root module
-- root names used by in-tree examples
-- known compatibility aliases and `WindowContext` forwarding methods
-
-The root count is produced by:
+Root declarations are counted with:
 
 ```sh
 rg -c '^pub const ' src/vkmtl.zig
 ```
 
-The current result is 492. It includes the seven initial domain namespace facades
-and the separate `ShaderReflection` module export. Tests declared in
-`src/vkmtl.zig` are not API entries.
+The result is 68:
 
-`src/runtime/window_context.zig` currently contains 526 `pub fn` declarations.
-Six are module-level diagnostics operations exposed through the diagnostics
-facade, fourteen belong to module-private or non-public helper types, and 506
-are methods on runtime types reachable through root or domain exports.
+- 13 domain facade entry points;
+- 27 portable root declarations;
+- 28 approved common aliases whose canonical definitions remain in facades.
 
-## Snapshot Summary
+Runtime public functions are counted independently because methods on exported
+objects are also API:
 
-| Surface | Count | Decision |
-| --- | ---: | --- |
-| Flat root exports | 492 | Frozen against uncontrolled growth; seven are domain namespace facades |
-| Provisional root-core candidates | 30 | Keep at root unless the detailed audit finds a conflict |
-| Common domain aliases to review for root retention | 28 | Decide during namespace facade work |
-| Distinct root names referenced by examples | 41 | Migration regression set; capability dump now uses two facades |
-| `Device` public methods | 108 | Split common owner operations from advanced domain planning |
-| `WindowContext` public methods | 56 | Keep 10 owner/lifecycle methods; review 46 compatibility forwards |
-| Command and render/compute/blit encoder methods | 87 | Keep operation methods on their natural encoder owners |
-| Diagnostics module operations | 6 | Canonical namespace-only queries, capture, profiling, and issue reports |
+```sh
+rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
+```
 
-The inventory does not set a hard root count by subtraction. A declaration may
-have a canonical domain namespace and retain a root alias only when it satisfies
-the root admission rules.
+The current result is 405: six module-level operations and 399 methods. Facade
+free functions are declared as `pub const` aliases and therefore are not part
+of that 405 count.
 
-## Complete Root Allocation
+The two owner surfaces targeted by the migration now measure:
 
-This table assigns all 492 current root exports to one canonical domain. Source
-line ranges refer to the post-Period-42 snapshot of `src/vkmtl.zig`.
+```text
+Device         34 public methods
+WindowContext  10 public methods
+```
 
-| Canonical domain | Count | Current source lines | Disposition |
-| --- | ---: | --- | --- |
-| root namespace facades | 7 | 7-13 | Canonical domain entry points; expand without new flat type aliases |
-| root portable core | 30 | 15-21, 29-31, 112-115, 433-434, 447-448, 457-459, 472-473, 478-480, 496-499 | Provisional root keep |
-| `diagnostics` | 56 | 22-23, 25-28, 32-60, 69-73, 91-95, 245, 270-276, 435, 476, 495 | Namespace; selected common aliases may remain |
-| `resource` | 79 | 24, 61-68, 120-121, 301-305, 334-377, 425-432, 436-445, 477 | Namespace; common resource aliases reviewed separately |
-| `sync` | 22 | 74-87, 90, 466-470, 474-475 | Namespace |
-| `transfer` | 10 | 88-89, 284-291 | Namespace |
-| `native` | 16 | 96-111 | Namespace; backend-lowering helpers require visibility review |
-| `presentation` | 17 | 116-119, 411-423 | Namespace; common surface aliases reviewed separately |
-| `shader` | 32 | 3, 122-144, 244, 449-455 | Namespace |
-| `render` | 72 | 145-177, 229-241, 246-269, 424, 456 | Namespace; includes advanced geometry planning |
-| `ray_tracing` | 51 | 178-228 | Namespace; backend-specific lowering records require review |
-| `compute` | 8 | 242-243, 277-282 | Namespace |
-| `command` | 14 | 283, 292-300, 491-494 | Namespace; runtime command objects remain root candidates |
-| `interop` | 35 | 306-333, 460-465, 471 | Namespace |
-| `binding` | 43 | 378-410, 481-490 | Namespace; common bind group objects reviewed separately |
-| **Total** | **492** | | |
+## Complete Root Name Set
 
-`presentation` and `command` were added to the namespace plan while building
-this inventory because surface/presentation contracts and command lifecycle
-state did not fit cleanly in the earlier domain list.
+The following sets are explicit and replace the former source-line allocation.
+No declaration outside these sets may be added to the flat root without a new
+root-admission decision.
 
-## Provisional Root-Core Candidates
+### Domain Facades: 13
 
-These 30 names form the initial root keep set. They are common owners,
-selection types, or runtime objects rather than advanced descriptors.
+```text
+resource
+transfer
+render
+sync
+presentation
+diagnostics
+command
+shader
+binding
+compute
+ray_tracing
+interop
+native
+```
+
+`native.vulkan` and `native.metal` are nested under `native`; they are not
+additional root declarations.
+
+### Portable Root: 27
 
 ```text
 BackendPreference
@@ -96,9 +86,6 @@ AdapterList
 BackendAvailability
 BackendSelectionOptions
 BackendSelectionError
-ContextOptions
-Context
-Adapter
 Extent2D
 selectBackend
 enumerateAdapters
@@ -118,16 +105,16 @@ Surface
 Swapchain
 ```
 
-This is provisional rather than a stability promise. In particular,
-`Context`, `ContextOptions`, and `Adapter` must be compared with the runtime
-owner API before the first compatibility release.
+These names are common owners, backend selection concepts, or ordinary runtime
+objects. The prototype `Context`, `ContextOptions`, and opaque `Adapter` are not
+part of the final root.
 
-## Common Root Alias Review Set
+### Approved Common Aliases: 28
 
-These 28 domain declarations are common enough to consider retaining as root
-aliases. Their canonical definitions should still live in the listed domain.
+These names remain at root for the quick-start path, but the listed facade is
+their canonical definition and must preserve exact type identity.
 
-| Canonical domain | Names |
+| Canonical facade | Root aliases |
 | --- | --- |
 | `diagnostics` | `DeviceFeatures`, `DeviceLimits` |
 | `presentation` | `SurfaceProvider`, `SurfaceSource`, `SurfaceDescriptor`, `PresentMode`, `PresentationDescriptor` |
@@ -138,45 +125,135 @@ aliases. Their canonical definitions should still live in the listed domain.
 | `binding` | `BindGroupLayoutDescriptor`, `BindGroupDescriptor`, `BindGroupEntry` |
 | `command` | `CommandBufferDescriptor` |
 
-Retaining all 28 would produce a 58-name root before any additional decisions,
-which is within the working target. Retention still depends on actual quick-start
-value and long-term naming stability; this table is not an automatic allowlist.
+## Canonical Facade Inventory
 
-## Namespace-Only And Visibility Review
+The declaration count is the number of `pub const` entries in the facade file.
+The operation count is the subset that aliases callable functions; module and
+data constants are excluded. Counts are not intended to be summed into a
+unique-type total because facades intentionally share type identity with root
+aliases and with types used by other domains.
 
-All current exports outside the two sets above should migrate toward their
-canonical domain without a permanent flat alias unless a later review records a
-specific root-admission justification.
+| Facade file | Declarations | Operations | Primary ownership |
+| --- | ---: | ---: | --- |
+| `api/resource.zig` | 74 | 18 | formats, buffers, textures, samplers, heaps, portable sparse resources, transient allocation |
+| `api/transfer.zig` | 19 | 0 | copy, fill, upload, blit, mipmap, and resolved transfer descriptors |
+| `api/render.zig` | 65 | 6 | pipeline, pass, draw, tessellation, and mesh rendering |
+| `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
+| `api/presentation.zig` | 19 | 4 | surfaces, present modes, frame pacing, surface collections |
+| `api/diagnostics.zig` | 80 | 16 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets |
+| `api/command.zig` | 16 | 2 | command lifecycle, encoders, labels, queue capability and selection planning |
+| `api/shader.zig` | 33 | 2 | source, reflection, specialization, compiler inputs and results |
+| `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
+| `api/compute.zig` | 8 | 0 | compute pipeline and dispatch descriptors, atomics, threadgroup memory |
+| `api/ray_tracing.zig` | 53 | 11 | acceleration structures, RT pipelines, SBTs, dispatch, queries, stress plans |
+| `api/interop.zig` | 49 | 21 | external resource contracts, platform import planning and diagnostics |
+| `api/native.zig` | 20 | 4 | neutral native handles, insertion, sparse lowering, and backend-lowering escape hatches |
 
-The following groups need extra scrutiny because their current names expose
-backend lowering, migration scaffolding, or implementation-shaped data:
+The nested native modules are measured separately:
 
-### Backend And Lowering Records
+| Native facade | Declarations | Operations |
+| --- | ---: | ---: |
+| `api/native/vulkan.zig` | 9 | 2 |
+| `api/native/metal.zig` | 15 | 4 |
+
+Across the 13 top-level facades, this is 508 declarations and 87 callable
+operation aliases. Moving sparse lowering from `resource` to `native` changes
+the ownership distribution without changing the operation total;
+removing the public `RayQueryLoweringMode` removes one type declaration.
+
+Semantic corrections applied during the migration include:
+
+- programmable stages are canonical under `shader`, not `render`;
+- resource usage state and hazards are canonical under `sync`;
+- command label/group/signpost data is canonical under `command`;
+- `PipelineError` is canonical under `render`;
+- replace-region, upload, and mipmap descriptors are canonical under
+  `transfer`;
+- bind-group and resource-table encoder bindings are canonical under
+  `binding`;
+- `VulkanSurfaceProvider` moved to the explicit native Vulkan facade;
+- portable sparse descriptors and residency work remain under `resource`, but
+  backend-selected sparse lowering records and operations moved to `native`;
+- `RayQueryPlan` no longer exposes a backend lowering mode;
+- runtime render-pass descriptors use the runtime object-bearing shapes, not
+  the earlier core-only planning shapes.
+
+Compile-time facade assertions in `src/vkmtl.zig` lock the sparse lowering
+ownership and reject a reintroduced `ray_tracing.RayQueryLoweringMode` route.
+
+## Native Namespace Shape
+
+Backend prefixes are unnecessary after entering an explicit backend namespace.
+The canonical native names are:
 
 ```text
-VulkanSurfaceProvider
-VulkanTessellationLowering
-MetalTessellationLowering
-VulkanTessellationDrawLowering
-MetalTessellationFactorBufferOwnership
-MetalTessellationDrawLowering
-VulkanMeshPipelineLowering
-MetalMeshPipelineLowering
-VulkanMeshDispatchLowering
-MetalMeshDispatchLowering
-VulkanRayTracingPipelineLowering
-MetalIntersectionFunctionDescriptor
-MetalRayTracingLowering
-MetalRayTracingMappingDescriptor
-MetalRayTracingMappingPlan
-MetalRayTracingExecutionMapping
+native.Handles
+native.HandleLifetime
+native.HandleView
+native.CommandEncoderKind
+native.CommandInsertionPoint
+native.CommandCallback
+native.CommandInsertionDescriptor
+native.TessellationLowering
+native.MeshPipelineLowering
+native.RayTracingPipelineLowering
+native.SparseBufferLoweringMode
+native.SparseBufferLowering
+native.SparseTextureLoweringMode
+native.SparseTextureLowering
+native.handleView
+native.validateCommandInsertionDescriptor
+native.planSparseBufferLowering
+native.planSparseTextureLowering
+
+native.vulkan.Handles
+native.vulkan.SurfaceProvider
+native.vulkan.TessellationLowering
+native.vulkan.TessellationDrawLowering
+native.vulkan.MeshPipelineLowering
+native.vulkan.MeshDispatchLowering
+native.vulkan.RayTracingPipelineLowering
+native.vulkan.planTessellationPatchDraw
+native.vulkan.planMeshDispatch
+
+native.metal.Handles
+native.metal.TessellationLowering
+native.metal.TessellationFactorBufferOwnership
+native.metal.TessellationDrawLowering
+native.metal.MeshPipelineLowering
+native.metal.MeshDispatchLowering
+native.metal.IntersectionFunctionDescriptor
+native.metal.RayTracingLowering
+native.metal.RayTracingMappingDescriptor
+native.metal.RayTracingMappingPlan
+native.metal.RayTracingExecutionMapping
+native.metal.planTessellationPatchDraw
+native.metal.planMeshDispatch
+native.metal.planRayTracingMapping
+native.metal.makeRayTracingExecutionMapping
 ```
 
-Disposition: move to `native.vulkan`, `native.metal`, or an explicitly
-backend-specific advanced subnamespace if users genuinely need them. Otherwise
-internalize them after their public planning consumers are migrated.
+`SurfaceSource.vulkan` still carries the Vulkan surface callback shape. It is
+the only approved native callback exception in presentation integration and is
+named through `native.vulkan`. The callback record uses opaque values rather
+than raw Vulkan binding types; it is not precedent for another backend field in
+a portable descriptor.
 
-### Native Closure Planning
+## Internalized Compatibility And Prototype Names
+
+The following 20 root names are no longer reachable through `vkmtl`. Their
+underlying implementation declarations may remain in non-public modules; this
+list records public reachability, not physical source deletion.
+
+### Prototype Owners: 3
+
+```text
+ContextOptions
+Context
+Adapter
+```
+
+### Native Closure Roadmap Scaffolding: 6
 
 ```text
 NativeAdvancedClosureFeature
@@ -187,10 +264,7 @@ NativeAdvancedClosureDescriptor
 NativeAdvancedClosurePlan
 ```
 
-Disposition: treat as diagnostics/roadmap scaffolding until a user-facing use
-case proves it belongs in supported API. Do not retain flat aliases.
-
-### Shape Compatibility Aliases
+### Shape Compatibility Aliases: 6
 
 ```text
 BindGroupResourceDescriptor
@@ -199,57 +273,144 @@ BindGroupDescriptorShape
 BindGroupShapeResource
 BindGroupShapeEntry
 BindGroupShapeDescriptor
-ClearColorLike
 ```
 
-Disposition: compatibility-only. Migrate examples and docs to canonical runtime
-or domain names, then remove these aliases at the planned compatibility cleanup.
+### Superseded Color And Debug Records: 5
 
-### Resolved And Debug State Types
+```text
+ClearColorLike
+CommandBufferDebugState
+RenderCommandEncoderDebugState
+BlitCommandEncoderDebugState
+ComputeCommandEncoderDebugState
+```
 
-`Resolved*`, `*DebugState`, encoder state, cache-plan, parity-plan, pressure-plan,
-and lowering-plan types remain public only when a public method returns them or
-users need them for deterministic validation. They belong in their domain or
-`diagnostics`, never as new root aliases. Unreferenced records should be
-internalized during the detailed namespace migration.
+Users should use `WindowContext`, `WindowContextOptions`, `AdapterInfo`, the
+canonical `binding` runtime shapes, and `render.ClearColor`. The debug-state
+records and native-closure roadmap inventory have no supported replacement.
 
-## Runtime Owner Method Inventory
+`ray_tracing.RayQueryLoweringMode` was also removed from its former facade
+path. `RayQueryPlan` retains the portable backend, shader-stage, depth, and
+requirement fields but no longer exposes `lowering`. There is no replacement
+public lowering-mode enum; backend selection stays internal to query planning.
 
-The root alias count understates the public surface because exported runtime
-objects expose many methods.
+## Runtime Handle Representation
 
-| Owner | Public methods | Current direction |
+All 35 guarded exported runtime handles now expose one implementation-storage
+field named `_state` and no other field. Value-owned resources, pipelines, binding
+objects, synchronization objects, command buffers, encoders, queues, and
+similar wrappers use inline opaque byte storage. `WindowContext` owns a
+heap-allocated runtime state, while `Device`, `Surface`, and `Swapchain` expose
+borrowed `*anyopaque` views into it.
+
+Consequently, the public field graph no longer reaches `BackendRuntime`, a
+backend `Impl` union, `ResourceTracker`, debug state, or a private state record.
+Construction, queries, mutation, and destruction go through documented public
+methods. Direct struct literals and reads or writes of `_state` are unsupported
+even though Zig can spell the field name. `zig build run-api-guard` locks the
+35-name handle set and this single-field representation alongside the root and
+owner-method allowlists.
+
+## Runtime Owner Inventory
+
+The current major runtime owner counts are:
+
+| Owner | Public methods | Direction |
 | --- | ---: | --- |
-| `Device` | 108 | Keep common creation/query methods; move advanced planning and validation behind domains |
-| `WindowContext` | 56 | Reduce to lifecycle and owner access; compatibility forwards stop growing |
-| `RenderCommandEncoder` | 28 | Natural owner; retain command methods |
-| `ComputeCommandEncoder` | 20 | Natural owner; retain command methods |
-| `BlitCommandEncoder` | 21 | Natural owner; retain command methods |
-| `CommandBuffer` | 18 | Natural owner; retain lifecycle and encoder creation |
-| `Texture` | 19 | Natural owner; review utility breadth during resource namespace work |
-| `TextureView` | 18 | Natural owner; retain view lifetime/query operations |
-| `AccelerationStructure` | 15 | `ray_tracing`; advanced capability-gated owner |
-| `Buffer` | 14 | Natural owner; retain mapping/read/write operations |
-| `ShaderBindingTable` | 13 | `ray_tracing`; advanced capability-gated owner |
-| `ResourceTable` | 13 | `binding`; advanced capability-gated owner |
+| `Device` | 34 | creation, compilation, common queries, and queue access |
+| `WindowContext` | 10 | lifecycle, identity, native-view, and owner access only |
+| `RenderCommandEncoder` | 28 | natural render command owner |
+| `ComputeCommandEncoder` | 20 | natural compute command owner |
+| `BlitCommandEncoder` | 21 | natural transfer command owner |
+| `CommandBuffer` | 18 | lifecycle and encoder creation |
+| `Texture` | 19 | resource lifetime and texture operations |
+| `TextureView` | 18 | view lifetime and queries |
+| `AccelerationStructure` | 14 | capability-gated RT owner |
+| `Buffer` | 14 | mapping, read, write, and lifetime |
+| `ShaderBindingTable` | 13 | capability-gated RT owner |
+| `ResourceTable` | 13 | advanced binding owner |
 
-`Device` currently contains:
+### Device: 34 Retained Methods
 
-- 40 `plan*` methods
-- 19 `validate*` methods
-- 24 `make*` methods
-- 3 `compile*` methods
-- 22 other query, diagnostics, queue, presentation, and utility methods
+Queries:
 
-The 59 planning/validation methods are the main owner-surface migration target.
-Do not add another advanced `Device.plan*` or `Device.validate*` method without a
-documented exception. Period 42 common format queries may remain direct when
-they satisfy the root and owner admission rules.
+```text
+selectedBackend
+adapterInfo
+features
+nativeFeatures
+limits
+capabilityReport
+getFormatCaps
+```
 
-## WindowContext Compatibility Inventory
+Creation:
 
-The following 10 `WindowContext` methods are provisional lifecycle, identity,
-or owner-access methods:
+```text
+makeAccelerationStructure
+makeRayTracingPipelineState
+makeShaderBindingTable
+makeFence
+makeEvent
+makeQuerySet
+makeHeap
+makeBuffer
+makeShaderModule
+makeRenderPipelineState
+makeComputePipelineState
+makeBindGroupLayout
+makeAdvancedBindGroupLayout
+makeResourceTable
+makeBindGroup
+makeTexture
+makeExternalMemory
+makeExternalBuffer
+makeExternalSemaphore
+makeExternalEvent
+makeExternalTexture
+makeSamplerState
+```
+
+Compilation and queue access:
+
+```text
+compileRenderShader
+compileComputeShader
+compileRayTracingShader
+queue
+queueWithDescriptor
+```
+
+The other 74 former methods left `Device`: 69 are facade free functions and
+five implementation/planning methods were removed from the supported surface.
+
+| Canonical facade | Migrated Device operations | Count |
+| --- | --- | ---: |
+| `binding` | descriptor-indexing validation, resource-table pressure planning | 2 |
+| `resource` | portable sparse validation/residency planning and transient-allocation diagnostics | 6 |
+| `interop` | all external validation, platform and selected-platform planning, import diagnostics, capability matrices | 21 |
+| `render` | portable tessellation and mesh validation/draw or dispatch planning | 6 |
+| `ray_tracing` | acceleration-structure, pipeline, SBT, dispatch, query, and stress validation/planning | 10 |
+| `diagnostics` | driver/runtime/artifact cache planning, parity planning, cache/runtime snapshots, capture naming, memory budget | 9 |
+| `command` | queue capabilities and queue planning | 2 |
+| `sync` | synchronization capabilities | 1 |
+| `presentation` | present-mode support/resolution and surface collections | 3 |
+| `native` | native command insertion validation and sparse backend lowering | 3 |
+| `native.vulkan` | Vulkan tessellation and mesh planning | 2 |
+| `native.metal` | Metal tessellation, mesh, RT mapping planning and RT mapping creation | 4 |
+| **Total facade operations** |  | **69** |
+
+The five removed Device methods are:
+
+```text
+planTessellationLowering
+planMeshPipelineLowering
+planRayTracingPipelineLowering
+validateNativeDriverPipelineCacheDescriptor
+planNativeAdvancedClosure
+```
+
+### WindowContext: 10 Retained Methods
 
 ```text
 init
@@ -264,242 +425,120 @@ surface
 swapchain
 ```
 
-The remaining 46 methods are compatibility forwards or convenience APIs that
-must not be used as precedent for new methods:
-
-```text
-objectCacheDiagnostics
-runtimeDiagnostics
-writeCaptureName
-planDriverPipelineCache
-planRuntimeCache
-planPipelineArtifactCache
-planAccelerationStructureMaintenance
-planTopLevelAccelerationStructureLayout
-planRayQuery
-planComplexShaderBindingTable
-planRayTracingStress
-queueWithDescriptor
-queueCapabilities
-syncCapabilities
-presentModeSupport
-resolvePresentMode
-makeSurfaceCollection
-compileRenderShader
-compileComputeShader
-compileRayTracingShader
-resize
-clear
-makeCommandBuffer
-makeCommandBufferWithDescriptor
-makeFence
-makeEvent
-makeQuerySet
-makeHeap
-memoryBudgetReport
-transientAllocationDiagnostics
-makeBuffer
-makeShaderModule
-makeRenderPipelineState
-makeComputePipelineState
-makeBindGroupLayout
-makeAdvancedBindGroupLayout
-planResourceTablePressure
-makeResourceTable
-makeBindGroup
-makeTexture
-makeExternalMemory
-makeExternalBuffer
-makeExternalSemaphore
-makeExternalEvent
-makeExternalTexture
-makeSamplerState
-```
-
-Canonical owners are `Device`, `Queue`, `Surface`, `Swapchain`, or the relevant
-domain facade. In-tree examples already use `Device` and `Queue` for most common
-creation and command paths; migration must finish before these forwards are
-removed.
+Its former 46 creation, compilation, queue, swapchain, diagnostics, and planning
+forwards were removed. Their final replacements are natural `Device`, `Queue`,
+or `Swapchain` methods, or the facade operations summarized above and detailed
+in `api-migration-guide.md`.
 
 ## Example Regression Set
 
-In-tree examples reference 41 distinct root names directly. This is the minimum
-source migration and compatibility regression set:
+Examples currently reference 26 distinct first-level `vkmtl` names. This is the
+source regression set after migration:
 
 ```text
-AccelerationStructureBuildDescriptor
-AccelerationStructureGeometryDescriptor
-AccelerationStructureGeometryResources
 AdapterInfo
-AdvancedBindingModel
 Backend
 BindGroupEntry
 BindGroupLayoutDescriptor
-DescriptorIndexingRange
 Device
 Extent2D
-ExternalHandleKind
-ExternalTextureDescriptor
-MeshDispatchDescriptor
-MeshPipelineDescriptor
-MetalIntersectionFunctionDescriptor
 PresentMode
 PresentationDescriptor
 ProgrammableStageDescriptor
-RayTracingCapabilityDiagnostics
-RayTracingPipelineDescriptor
-RayTracingShaderGroupDescriptor
+Queue
 RenderPipelineColorAttachmentDescriptor
 RenderPipelineDescriptor
-ShaderBindingTableDescriptor
-ShaderReflection
-Size3D
-SparseResidencyMap
-SparseTextureKind
-SurfaceCollection
 SurfaceDescriptor
-SurfaceInfo
-TessellationDescriptor
-TessellationPatchDrawDescriptor
 Texture
 TextureView
 VertexDescriptor
-VulkanSurfaceProvider
 WindowContext
+binding
 diagnostics
+interop
+native
+presentation
+ray_tracing
+render
 resource
+shader
 ```
 
-Example use does not automatically justify a root alias. Advanced examples must
-migrate to canonical domain or native namespaces. Ordinary examples define the
-strongest root-retention evidence.
+Advanced examples now use canonical nested paths, including
+`shader.Reflection`, `ray_tracing.*`, `interop.*`, `render.*`,
+`resource.*`, `native.vulkan.*`, and `native.metal.*`. Example use remains
+regression evidence, not automatic root-admission justification.
 
-## Period 42 Guardrail
+## Compatibility Impact
 
-Period 42 added and refined format, copy, attachment, and resource-state API in
-these canonical destinations:
+This is an intentional pre-tag breaking migration:
 
-- format classification and format capabilities: `resource`
-- buffer/texture copies, row pitch, blits, and readback: `transfer`
-- attachments, resolve behavior, and render-pass semantics: `render`
-- command lifecycle and encoding errors: `command`
-- resource state and layout transitions: `sync`
-- surface presentation format behavior: `presentation`
-- capability reports and unsupported diagnostics: `diagnostics`
+- unapproved flat aliases were removed;
+- advanced types moved to domain or native namespaces;
+- `ShaderReflection` moved to `shader.Reflection`;
+- backend-prefixed native names became short names inside backend namespaces;
+- sparse lowering records and operations moved from `resource` to `native`;
+- `RayQueryPlan.lowering` and the public `RayQueryLoweringMode` were removed;
+- 46 `WindowContext` forwards were removed;
+- 74 specialized `Device` methods left the owner surface;
+- prototype, compatibility-shape, debug-state, and roadmap-only names stopped
+  being reachable through `vkmtl`;
+- runtime objects stopped exposing their backend unions, trackers, descriptors,
+  and debug/private records as directly mutable fields.
 
-The implementation added seven namespace facades and no new flat type alias.
-Future declarations in these areas continue to use the same destinations; a
-temporary root alias requires an explicit compatibility reason in the active
-phase docs.
+The migration does not claim that matching declarations vanished from
+`src/core.zig`; it only removes their supported public route. Retained common
+root aliases preserve exact type identity with their canonical facade types.
+No backend execution, capability, descriptor-default, or lifetime semantics
+were intentionally changed by this namespace and owner cutover. Code that used
+runtime struct literals or implementation fields must move to public factories
+and methods; there is intentionally no raw-layout compatibility layer.
 
-The Period 42 namespace additions are:
+## Verification Commands
 
-| Namespace | New canonical declarations or behavior |
-| --- | --- |
-| `resource` | `TextureAspect`, aspect-byte and aspect-resolution helpers |
-| `transfer` | copy layout requirements, aspect-aware copy descriptors, scaled blit descriptors |
-| `render` | `TextureResolveDescriptor` and resolve validation |
-| `command` | command lifecycle state and typed command-encoding errors |
-| `sync` | texture subresource ranges, summaries, and per-subresource tracker |
-| `presentation` | canonical presentation descriptor and present-mode facade |
-| `diagnostics` | copy-alignment limits and capability-report fields |
+```sh
+zig build run-api-guard
+# API guard passed: root=68 (facades=13 core=27 aliases=28),
+# Device methods=34, WindowContext methods=10, runtime handles=35
 
-Compatibility impact: existing flat aliases and owner methods remain. Copy
-descriptors gained defaulted fields, capability records and limits gained
-defaulted fields, and new failures are typed validation/unsupported errors.
+awk '
+  /^pub const Device = struct \{/ { active=1; next }
+  /^pub const CaptureScope = struct \{/ { active=0 }
+  active && /^    pub fn / { count++ }
+  END { print count }
+' src/runtime/window_context.zig
+# 34
 
-## Period 43 Guardrail
+awk '
+  /^pub const WindowContext = struct \{/ { active=1; next }
+  active && /^    pub fn / { count++ }
+  END { print count }
+' src/runtime/window_context.zig
+# 10
 
-Debug label and marker behavior remains canonical under `command`, while
-capture-name and issue-report data belong under `diagnostics`.
+for file in src/api/*.zig src/api/native/*.zig; do
+  printf '%-38s ' "$file"
+  rg -c '^pub const ' "$file"
+done
 
-Phase 1 added no root export or runtime owner method. It added the
-`InvalidDebugLabelEncoding` tag to the existing `CommandEncodingError` type and
-adds canonical facade aliases for label/group/signpost descriptors under
-`command` and `CaptureNameDescriptor` under `diagnostics`. It also
-clarifies public behavior that already counted as API:
-
-- object labels are borrowed until replacement, clear, or object destruction
-- marker labels are borrowed only for the call
-- valid labels are UTF-8 without embedded NUL bytes
-- command-buffer marker mutation is ready-state-only; groups may surround
-  complete encoders but encoder-local groups cannot escape their encoder
-- capture-name length is exact for the selected backend and frame value
-
-Compatibility impact: valid existing labels and marker sequences keep their
-behavior. Invalid encoding and command-buffer marker mutation during an active
-encoder now fail deterministically before native calls.
-
-Phases 2 through 5 keep all new declarations under `diagnostics`; the flat root
-count remains 492. Canonical additions are:
-
-```text
-NativeDiagnosticSupport
-DebugMarkerCapabilities
-CaptureCapabilities
-CaptureDestination
-CaptureScopeDescriptor
-CaptureError
-CaptureScope
-TimestampQuerySource
-ProfilingMode
-ProfilingCapabilities
-ProfilingPlanDescriptor
-ProfilingPlan
-IssueReportDescriptor
-IssueReportSnapshot
-debugMarkerCapabilities
-captureCapabilities
-beginCaptureScope
-profilingCapabilities
-planProfiling
-issueReport
+zig fmt --check build.zig src examples tools
+zig build test --summary all
+zig build
+git diff --check
 ```
-
-The diagnostics facade is the owner because all of these declarations are
-specialized capability, capture, profiling, or report data. They do not satisfy
-flat root admission. Capture scope lifetime is borrowed from `Device`/
-`WindowContext`, capture failures are typed, and unsupported Vulkan capture is
-reported before backend work.
-
-`QuerySet.resultSource()` is the only added method on an existing root runtime
-object. It closes an existing semantic ambiguity: current timestamp results are
-`logical_sequence`, not GPU time. `CaptureScope` contributes five methods on a
-namespace-only public type, and six module-level operations are re-exported by
-the diagnostics facade. No `Device` planning/validation method and no
-`WindowContext` compatibility forward was added.
-
-Compatibility impact: existing query values keep their deterministic numeric
-behavior, but their non-GPU meaning is now explicit. Metal gains opt-in native
-capture; Vulkan receives a typed unsupported result. Capability dump output is
-expanded additively.
-
-## Period 44 Guardrail
-
-Period 44 adds validation infrastructure, build steps, workflows, scripts,
-pixel checks inside an existing example, and opt-in tools. It adds no reachable
-public declaration in `src/vkmtl.zig`, `src/api/`, `src/core.zig`, or exported
-runtime types.
-
-The flat root count remains 492 and
-`src/runtime/window_context.zig` remains at 526 `pub fn` declarations. The new
-validation-plan, release-readiness, pixel-regression, and GPU-soak commands are
-repository tooling, not library API. No `Device` method, `WindowContext`
-compatibility forward, root alias, descriptor field, error tag, ownership rule,
-or capability meaning changed.
-
-Compatibility impact: none for library callers. `offscreen_texture` gains an
-opt-in `VKMTL_PIXEL_REGRESSION` execution mode and its texture usage adds
-copy-source capability; ordinary interactive behavior is unchanged.
 
 ## Update Checklist
 
 When the public surface changes:
 
-- [ ] Recount root exports and runtime public methods.
-- [ ] Assign each new declaration one canonical domain.
-- [ ] Record any root alias and its admission justification.
-- [ ] Update compatibility and visibility-review lists.
-- [ ] Update the example regression set when examples adopt new public names.
-- [ ] Keep the category total equal to the root export count.
+- [ ] Assign each declaration one canonical lane and namespace.
+- [ ] Record and justify any new flat root name.
+- [ ] Recount the 68-name root and all changed facades.
+- [ ] Recount affected runtime owner methods.
+- [ ] Confirm every guarded runtime handle still has exactly one `_state`
+  storage field and exposes no private implementation type.
+- [ ] Update the example regression set.
+- [ ] Update `api-migration-guide.md` for compatibility changes.
+- [ ] Update the exact-name API guard after an approved allowlist change.
+- [ ] Confirm public facades do not import backend-private bindings.
 - [ ] Run the validation required by `public-api-rules.md`.

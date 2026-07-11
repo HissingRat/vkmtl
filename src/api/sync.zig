@@ -1,4 +1,5 @@
 const core = @import("../core.zig");
+const runtime = @import("../runtime/window_context.zig");
 
 pub const ResourceAccess = core.ResourceAccess;
 pub const ResourceUsageKind = core.ResourceUsageKind;
@@ -10,3 +11,25 @@ pub const TextureUsageTransitionSummary = core.TextureUsageTransitionSummary;
 pub const TextureSubresourceUsageTracker = core.TextureSubresourceUsageTracker;
 pub const BufferBarrierDescriptor = core.BufferBarrierDescriptor;
 pub const TextureBarrierDescriptor = core.TextureBarrierDescriptor;
+pub const FenceKind = core.FenceKind;
+pub const FenceDescriptor = core.FenceDescriptor;
+pub const FenceSignalDescriptor = core.FenceSignalDescriptor;
+pub const FenceWaitDescriptor = core.FenceWaitDescriptor;
+pub const EventDescriptor = core.EventDescriptor;
+pub const EventSignalDescriptor = core.EventSignalDescriptor;
+pub const EventWaitDescriptor = core.EventWaitDescriptor;
+pub const SyncCapabilities = core.SyncCapabilities;
+pub const QueueKind = core.QueueKind;
+pub const QueueCapabilities = core.QueueCapabilities;
+pub const QueueDescriptor = core.QueueDescriptor;
+pub const QueueSelectionPlan = core.QueueSelectionPlan;
+pub const QueueOwnershipTransferDescriptor = core.QueueOwnershipTransferDescriptor;
+pub const FenceWaitOperation = runtime.FenceWaitOperation;
+pub const FenceSignalOperation = runtime.FenceSignalOperation;
+pub const EventWaitOperation = runtime.EventWaitOperation;
+pub const EventSignalOperation = runtime.EventSignalOperation;
+pub const SynchronizationDescriptor = runtime.SynchronizationDescriptor;
+pub const Fence = runtime.Fence;
+pub const Event = runtime.Event;
+
+pub const syncCapabilities = runtime.syncCapabilities;

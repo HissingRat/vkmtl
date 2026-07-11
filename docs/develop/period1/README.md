@@ -12,6 +12,8 @@ Use the main docs as the current source of truth:
 
 - `../roadmap.md` for route and stage boundaries
 - `../checklist.md` for active and completed checklists
+- `../api-migration-roadmap.md` for the completed Phase 9 pre-tag API migration
+- `../api-migration-guide.md` for updating prototype-surface callers
 - `../../api/zh_cn/core.md` and `../../api/en_us/core.md` for the current
   public API
 - `../../usage/zh_cn/quick-start.md` and `../../usage/en_us/quick-start.md` for

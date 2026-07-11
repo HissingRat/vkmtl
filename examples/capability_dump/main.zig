@@ -134,7 +134,7 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  Metal binary archive: {}\n", .{features.metal_binary_archive});
 }
 
-fn dumpRayTracingDiagnostics(diagnostics: vkmtl.RayTracingCapabilityDiagnostics) void {
+fn dumpRayTracingDiagnostics(diagnostics: vkmtl.diagnostics.RayTracingCapabilityDiagnostics) void {
     std.debug.print("ray tracing diagnostics:\n", .{});
     std.debug.print("  supported: {}\n", .{diagnostics.supported});
     std.debug.print("  blocker: {s}\n", .{@tagName(diagnostics.blocker)});

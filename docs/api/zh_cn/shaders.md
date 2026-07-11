@@ -142,6 +142,9 @@ RWStructuredBuffer<uint> output_values : register(u1, space0);
 
 Storage texture 需要显式 Vulkan image format annotation，这样 Slang 才能为 SPIR-V 生成 storage
 image format。当前示例使用 binding 0 作为 storage texture，binding 1 作为 storage buffer。
+Slang 会把 `RWTexture2D` 下沉为 Metal `access::read_write`，所以即使 shader body 只写入，
+texture descriptor 也要同时声明 `shader_read` 和 `shader_write` usage。Metal API
+Validation 会把 native usage 与这个 access qualifier 一起检查。
 
 Compiled shader handle 会给每个 programmable stage 绑定运行时生成的 reflection JSON：
 
@@ -154,7 +157,7 @@ shader visibility 是否匹配 pipeline descriptor 提供的 `bind_group_layouts
 pipeline 创建前派生 bind group layout descriptor：
 
 ```zig
-var layouts = try vkmtl.ShaderReflection.deriveComputePipelineBindGroupLayouts(
+var layouts = try vkmtl.shader.Reflection.deriveComputePipelineBindGroupLayouts(
     allocator,
     compute_stage,
 );
@@ -165,7 +168,7 @@ Vertex-stage reflection 包含 `vertex_inputs`，记录 location、format 和 of
 派生单 buffer 的 `VertexDescriptor`；调用方需要显式提供 stride：
 
 ```zig
-var vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescriptor(
+var vertex_descriptor = try vkmtl.shader.Reflection.deriveSingleBufferVertexDescriptor(
     allocator,
     stages.vertex,
     .{ .stride = @sizeOf(Vertex) },

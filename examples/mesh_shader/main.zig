@@ -29,18 +29,18 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
-    const descriptor = vkmtl.MeshPipelineDescriptor{
+    const descriptor = vkmtl.render.MeshPipelineDescriptor{
         .mesh_entry_point = "mesh_main",
         .mesh_threads_per_threadgroup = 32,
     };
-    const dispatch = vkmtl.MeshDispatchDescriptor{
+    const dispatch = vkmtl.render.MeshDispatchDescriptor{
         .pipeline = descriptor,
         .threadgroup_count_x = 8,
         .threadgroup_count_y = 1,
         .threadgroup_count_z = 1,
     };
 
-    const dispatch_plan = device.planMeshDispatch(dispatch) catch |err| {
+    const dispatch_plan = vkmtl.render.planMeshDispatch(device, dispatch) catch |err| {
         std.debug.print("mesh shader dispatch unsupported: {s}\n", .{@errorName(err)});
         return;
     };
@@ -53,7 +53,7 @@ pub fn main() !void {
 
     switch (device.selectedBackend()) {
         .vulkan => {
-            const lowering = try device.planVulkanMeshDispatch(dispatch);
+            const lowering = try vkmtl.native.vulkan.planMeshDispatch(device, dispatch);
             std.debug.print("Vulkan mesh dispatch plan ok: mesh_entry={s}, threads={}, groups={}x{}x{}, total={}\n", .{
                 lowering.mesh_entry_point,
                 lowering.mesh_threads_per_threadgroup,
@@ -64,7 +64,7 @@ pub fn main() !void {
             });
         },
         .metal => {
-            const lowering = try device.planMetalMeshDispatch(dispatch);
+            const lowering = try vkmtl.native.metal.planMeshDispatch(device, dispatch);
             std.debug.print("Metal mesh dispatch plan ok: mesh_entry={s}, object_stage={}, groups={}x{}x{}, total={}\n", .{
                 lowering.mesh_entry_point,
                 lowering.hasObjectStage(),

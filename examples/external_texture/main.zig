@@ -29,11 +29,11 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
-    const handle_kind: vkmtl.ExternalHandleKind = switch (device.selectedBackend()) {
+    const handle_kind: vkmtl.interop.ExternalHandleKind = switch (device.selectedBackend()) {
         .vulkan => .vulkan_image,
         .metal => .metal_texture,
     };
-    const interop_matrix = device.externalInteropCapabilityMatrix();
+    const interop_matrix = vkmtl.interop.externalInteropCapabilityMatrix(device);
     if (interop_matrix.find(.texture, handle_kind)) |entry| {
         std.debug.print("external texture capability: backend={s}, platform={s}, handle={s}, lane={s}, enabled={}\n", .{
             @tagName(device.selectedBackend()),
@@ -44,7 +44,7 @@ pub fn main() !void {
         });
     }
 
-    const external_texture_descriptor = vkmtl.ExternalTextureDescriptor{
+    const external_texture_descriptor = vkmtl.interop.ExternalTextureDescriptor{
         .label = "example external texture",
         .handle = .{
             .kind = handle_kind,
@@ -61,7 +61,7 @@ pub fn main() !void {
             .render_attachment = true,
         },
     };
-    const usage_plan = device.planExternalTextureUsage(.{
+    const usage_plan = vkmtl.interop.planExternalTextureUsage(device, .{
         .texture = external_texture_descriptor,
         .sample = true,
         .copy_source = true,

@@ -90,7 +90,7 @@ conservative until the relevant backend period lands.
 | Shared events | Capability-gated runtime object | Capability-gated runtime object | Portable validation and runtime state; native/shared-handle integration remains backend work |
 | Logical compute/transfer queues | Logical queue views with graphics fallback until native queue families are exposed | Logical queue views with graphics fallback until dedicated queue use is exposed | `QueueSelectionPlan` reports requested/resolved/fallback state |
 | Queue ownership transfers | Validated logical ownership; deferred native queue-family lowering | Validation/no-op markers | Advanced escape hatch, feature-gated |
-| Command-buffer synchronization descriptor | Portable wait-before-submit / signal-after-submit validation | Portable wait-before-submit / signal-after-submit validation | `commitWithSynchronization(...)` entry point; native submit wait/signal remains backend work |
+| Command-buffer synchronization descriptor | Portable wait-before-submit / signal-after-submit validation | Portable wait-before-submit / signal-after-submit validation | `CommandBuffer.commitWithSynchronization(...)`; native submit wait/signal remains backend work |
 | Timestamp queries | Portable runtime query set | Portable runtime query set | Available by default |
 | Occlusion queries | Portable runtime query set | Portable runtime query set | Available by default |
 | Pipeline statistics queries | Capability-gated | Capability-gated | Deferred native query lowering |
@@ -99,10 +99,10 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Sync capability report | Derived from usable features | Derived from usable features | `Device.syncCapabilities()` / `WindowContext.syncCapabilities()` |
-| Queue capability report | Derived from usable features | Derived from usable features | `Device.queueCapabilities()` |
-| Queue planning | Resolves requested queue to logical dedicated queue or graphics fallback | Resolves requested queue to logical dedicated queue or graphics fallback | `Device.planQueue(...)` returns `QueueSelectionPlan` |
-| Portable command synchronization | Runtime fence/event wait and signal around `commit()` | Runtime fence/event wait and signal around `commit()` | `SynchronizationDescriptor` validates lifetimes, backend identity, and fence values |
+| Sync capability report | Derived from usable features | Derived from usable features | `vkmtl.sync.syncCapabilities(device)` |
+| Queue capability report | Derived from usable features | Derived from usable features | `vkmtl.command.queueCapabilities(device)` |
+| Queue planning | Resolves requested queue to logical dedicated queue or graphics fallback | Resolves requested queue to logical dedicated queue or graphics fallback | `vkmtl.command.planQueue(device, descriptor)` returns `vkmtl.sync.QueueSelectionPlan` |
+| Portable command synchronization | Runtime fence/event wait and signal around `commit()` | Runtime fence/event wait and signal around `commit()` | `vkmtl.sync.SynchronizationDescriptor` validates lifetimes, backend identity, and fence values |
 | Native timeline/shared-event submit | Deferred | Deferred | Must be implemented and validated before parity claims |
 | Physical async compute/transfer queues | Deferred | Deferred | Must be implemented and validated before parity claims |
 
@@ -124,7 +124,7 @@ conservative until the relevant backend period lands.
 | Heap aliasing planning | Portable runtime object | Portable runtime object | `HeapAliasingDescriptor` validates overlapping ranges and lifetimes |
 | Native heap-backed resources | Deferred | Deferred | Period 32+ driver parity plan native integration |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Reports requested units, peak live units, max alignment, aliasable pairs, and savings |
-| Memory budget/pressure report | Fallback runtime report until native query is wired | Fallback runtime report until native query is wired | `Device.memoryBudgetReport(...)` classifies pressure and source |
+| Memory budget/pressure report | Fallback runtime report until native query is wired | Fallback runtime report until native query is wired | `vkmtl.diagnostics.memoryBudgetReport(device, descriptor)` classifies pressure and source |
 
 ## Period 42 Format, Copy, And Attachment Expectations
 
@@ -153,17 +153,17 @@ conservative until the relevant backend period lands.
 | Native capture | Typed `UnsupportedCapture` | Opt-in developer-tools capture scope | `CaptureScope` borrows the backend owner and ends explicitly |
 | Timestamp source | Logical command-order sequence | Logical command-order sequence | Not GPU time; `require_gpu_timestamps` returns typed unsupported |
 | Profiling fallback | CPU wall clock or markers only | CPU wall clock or markers only | `run-profiling-plan` prints the selected truthful plan |
-| Issue snapshot | Backend, adapter, features, limits, operations, errors, runtime counters | Same portable bundle | `issueReport(...)` plus expanded capability dump |
+| Issue snapshot | Backend, adapter, features, limits, operations, errors, runtime counters | Same portable bundle | `vkmtl.diagnostics.issueReport(device, descriptor)` plus expanded capability dump |
 
 ## Period 25 Platform And Interop Expectations
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Surface registry | Portable runtime state | Portable runtime state | `Device.makeSurfaceCollection(...)` |
+| Surface registry | Portable runtime state | Portable runtime state | `vkmtl.presentation.makeSurfaceCollection(device)` |
 | Native multi-surface presentation | Deferred | Deferred | Period 32+ driver parity plan native escape hatch |
 | Present-mode resolution | Portable runtime fallback | Portable runtime fallback | `PresentModeSupport` and `FramePacingDiagnostics` |
 | Native present-mode query | Deferred | Deferred | Period 32+ driver parity plan platform query |
-| External interop capability matrix | Platform handle matrix | Platform handle matrix | `Device.externalInteropCapabilityMatrix(...)` classifies portable, capability-gated, native-only, and unsupported lanes |
+| External interop capability matrix | Platform handle matrix | Platform handle matrix | `vkmtl.interop.externalInteropCapabilityMatrix(device)` classifies portable, capability-gated, native-only, and unsupported lanes |
 | External memory / buffer wrappers | Portable runtime wrappers | Portable runtime wrappers | Feature-gated descriptors and lifetime tracking |
 | Native external memory import | Deferred | Deferred | Period 32+ driver parity plan native import |
 | External texture wrapper | Portable runtime wrapper | Portable runtime wrapper | `ExternalTexture` wrapper |
@@ -177,25 +177,25 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Object-cache lookup diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | `cache_policy` and `objectCacheDiagnostics()` |
+| Object-cache lookup diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | `cache_policy` and `vkmtl.diagnostics.objectCacheDiagnostics(device)` |
 | Native object handle pooling | Deferred | Deferred | Period 32+ driver parity plan native pools |
-| Driver cache planning | Portable runtime planning | Portable runtime planning | `Device.planDriverPipelineCache(...)` |
+| Driver cache planning | Portable runtime planning | Portable runtime planning | `vkmtl.diagnostics.planDriverPipelineCache(device, descriptor)` |
 | Native driver cache lowering | Deferred | Deferred | Period 32+ driver parity plan `VkPipelineCache` / `MTLBinaryArchive` consumption |
-| Runtime cache manifest planning | Portable runtime planning | Portable runtime planning | `Device.planRuntimeCache(...)` |
+| Runtime cache manifest planning | Portable runtime planning | Portable runtime planning | `vkmtl.diagnostics.planRuntimeCache(device, descriptor)` |
 | Runtime cache manifest I/O | Deferred | Deferred | Period 32+ driver parity plan automatic manifest read/write |
-| Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `runtimeDiagnostics()` |
-| Capture name helpers | Portable runtime helper | Portable runtime helper | `CaptureNameDescriptor` and `writeCaptureName(...)` |
-| Stability run planning | Portable runtime planning | Portable runtime planning | `StabilityRunDescriptor.plan()` and `run-stability-plan` |
+| Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `vkmtl.diagnostics.runtimeDiagnostics(device)` |
+| Capture name helpers | Portable runtime helper | Portable runtime helper | `vkmtl.diagnostics.CaptureNameDescriptor` and `vkmtl.diagnostics.writeCaptureName(device, descriptor, buffer)` |
+| Stability run planning | Portable runtime planning | Portable runtime planning | `vkmtl.diagnostics.StabilityRunDescriptor.plan()` and `run-stability-plan` |
 | Common GPU-backed soak | Windowed portable command path | Windowed portable command path | `run-gpu-soak`; advanced native pressure lanes remain separate gates |
 
 ## Period 38 Resource Table And Pipeline Artifact Expectations
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Resource-table pressure planning | Portable descriptor-indexing pressure summary | Portable argument-buffer pressure summary | `Device.planResourceTablePressure(...)` |
+| Resource-table pressure planning | Portable descriptor-indexing pressure summary | Portable argument-buffer pressure summary | `vkmtl.binding.planResourceTablePressure(device, descriptor)` |
 | Partially-bound table requirements | Capability / opt-in validation | Capability / opt-in validation | `ResourceTablePressurePlan.canCreateTable()` |
 | Update-after-bind table requirements | Capability / opt-in validation | Capability / opt-in validation | `ResourceTablePressurePlan.canCreateTable()` plus runtime table update tests |
-| Pipeline artifact compatibility | Shader, entry point, reflection, format, schema, backend, and toolchain compatibility plan | Same compatibility plan for MSL / reflection artifacts | `Device.planPipelineArtifactCache(...)` |
+| Pipeline artifact compatibility | Shader, entry point, reflection, format, schema, backend, and toolchain compatibility plan | Same compatibility plan for MSL / reflection artifacts | `vkmtl.diagnostics.planPipelineArtifactCache(device, descriptor)` |
 | Native pipeline cache/library persistence | Deferred | N/A | Period44 device-matrix evidence after backend lowering exists |
 | Native binary archive persistence | N/A | Deferred | Period44 device-matrix evidence after backend lowering exists |
 
@@ -203,14 +203,14 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Sparse buffer planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseBufferLowering(...)` |
-| Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `Device.planSparseTextureLowering(...)` |
-| Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `Device.planSparseMappingCommit(...)` |
-| Residency churn planning | Runtime commit/evict cycle summary | Runtime commit/evict cycle summary | `Device.planSparseResidencyChurn(...)` and `SparseResidencyMap.runChurn(...)` |
+| Sparse buffer planning | Runtime plan from native features | Runtime plan from native features | `vkmtl.native.planSparseBufferLowering(device, descriptor)` |
+| Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `vkmtl.native.planSparseTextureLowering(device, descriptor)` |
+| Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `vkmtl.resource.planSparseMappingCommit(device, descriptor)` |
+| Residency churn planning | Runtime commit/evict cycle summary | Runtime commit/evict cycle summary | `vkmtl.resource.planSparseResidencyChurn(device, descriptor)` and `vkmtl.resource.SparseResidencyMap.runChurn(...)` |
 | Native sparse/tiled page binding | Deferred | Deferred | Period 32+ driver parity plan native integration |
-| Tessellation draw planning | Runtime patch-list draw metadata plan | Runtime factor-buffer metadata plan | `Device.planTessellationPatchDraw(...)` |
+| Tessellation draw planning | Runtime patch-list draw metadata plan | Runtime factor-buffer metadata plan | `vkmtl.render.planTessellationPatchDraw(device, descriptor)` |
 | Native tessellation pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
-| Mesh/task dispatch planning | Runtime task/mesh dispatch metadata plan | Runtime object/mesh dispatch metadata plan | `Device.planMeshDispatch(...)` |
+| Mesh/task dispatch planning | Runtime task/mesh dispatch metadata plan | Runtime object/mesh dispatch metadata plan | `vkmtl.render.planMeshDispatch(device, descriptor)` |
 | Native mesh/task pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
 | Advanced geometry examples | Feature-gated planning examples | Feature-gated planning examples | `examples/tessellation` and `examples/mesh_shader` |
 
@@ -218,15 +218,15 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `Device.planAccelerationStructureBuild(...)` |
+| Acceleration-structure build planning | Runtime plan from native features | Runtime plan from native features | `vkmtl.ray_tracing.planAccelerationStructureBuild(device, descriptor)` |
 | Native acceleration-structure builds | Backend-private command records | Backend-private command records | Period 30 Phase 1 runtime native boundary; first-triangle Metal handles in Period 31, Vulkan handles in Period 32, full scene mesh BLAS/TLAS in Period33, procedural AS geometry in Period34 |
-| Ray tracing pipeline planning | Runtime shader-group plan | Runtime function-table metadata plan | `Device.planRayTracingPipelineLowering(...)` |
+| Ray tracing pipeline planning | Internal shader-group lowering inventory | Internal function-table lowering inventory | Internalized implementation detail; not public API |
 | Native ray tracing pipelines | Backend-private pipeline metadata | First native Metal RT compute pipeline | Period 31 implements the first visible Metal pipeline path; Vulkan pipeline in Period 32, full-scene pipelines in Period33, procedural/custom-intersection pipelines in Period34 |
-| SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `Device.planRayDispatch(...)` |
+| SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `vkmtl.ray_tracing.planRayDispatch(device, sbt, descriptor)` |
 | Native ray dispatch commands | Backend-private dispatch records | First native Metal RT dispatch to drawable | Period 31 implements first-triangle Metal dispatch; Vulkan dispatch in Period 32, full-scene dispatch in Period33, procedural dispatch in Period34 |
-| Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `Device.planMetalRayTracingMapping(...)` |
+| Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `vkmtl.native.metal.planRayTracingMapping(device, descriptor)` |
 | Native Metal ray tracing execution | Validation no-op | First native Metal RT AS/build/dispatch path plus table metadata | Period 31 implements first-triangle Metal dispatch binding; mesh scene support is Period33, function-table procedural support is Period35 |
-| Native advanced closure inventory | Runtime roadmap data | Runtime roadmap data | `Device.planNativeAdvancedClosure(...)` |
+| Native advanced closure inventory | Internal roadmap data | Internal roadmap data | Internalized planning inventory; not public API |
 | Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, mesh scene driver execution in Period33, procedural driver execution in Period34 |
 | Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period32+ |
 | Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make first ray traced scenes pixel-producing; Period33/34 own the full mesh/procedural scene examples |
@@ -237,11 +237,11 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| AS maintenance | Update/refit/compaction planning from native features | Update/refit/compaction planning from native features | `Device.planAccelerationStructureMaintenance(...)` |
-| Many-instance TLAS metadata | Backend-neutral instance layout plan | Backend-neutral instance layout plan | `Device.planTopLevelAccelerationStructureLayout(...)` |
-| Ray query | Vulkan ray query planning | Typed unsupported | `Device.planRayQuery(...)` |
-| Complex SBT and callable records | Complex SBT record/range planning | Complex SBT record/range planning | `Device.planComplexShaderBindingTable(...)` |
-| RT stress planning | Deterministic stress plan | Deterministic stress plan without ray query | `Device.planRayTracingStress(...)` |
+| AS maintenance | Update/refit/compaction planning from native features | Update/refit/compaction planning from native features | `vkmtl.ray_tracing.planAccelerationStructureMaintenance(device, descriptor)` |
+| Many-instance TLAS metadata | Backend-neutral instance layout plan | Backend-neutral instance layout plan | `vkmtl.ray_tracing.planTopLevelAccelerationStructureLayout(device, descriptor)` |
+| Ray query | Vulkan ray query planning | Typed unsupported | `vkmtl.ray_tracing.planRayQuery(device, descriptor)` |
+| Complex SBT and callable records | Complex SBT record/range planning | Complex SBT record/range planning | `vkmtl.ray_tracing.planComplexShaderBindingTable(device, descriptor)` |
+| RT stress planning | Deterministic stress plan | Deterministic stress plan without ray query | `vkmtl.ray_tracing.planRayTracingStress(device, descriptor)` |
 | Native GPU stress evidence | Deferred | Deferred | Period44 device-matrix runs |
 
 ## Period 37 Memory, Heaps, And Residency Expectations

@@ -10,6 +10,8 @@ Use these companion documents for the other views:
   namespacing, compatibility, and removal rules.
 - `docs/develop/public-api-inventory.md` tracks the current root surface,
   owner-method pressure, canonical namespaces, and compatibility candidates.
+- `docs/develop/api-migration-roadmap.md` records the completed staged pre-tag
+  API migration and its exit gates.
 - `docs/develop/backend-completion-roadmap.md` tracks native Vulkan / Metal
   backend catch-up work after API shapes exist.
 - `docs/api/zh_cn/core.md` and `docs/api/en_us/core.md` describe the public API.
@@ -63,9 +65,8 @@ period notes with the phase checklist. Each phase should identify:
 
 ## Period 1: Core Library Slice
 
-Status: completed functional core slice. Remaining pre-tag release polish is
-tracked in the checklist and does not make this the active implementation
-period.
+Status: complete, including the Phase 9 pre-tag API migration and release
+polish that followed the Period 44 release-evidence gate.
 
 Goal: preserve the historical minimum vertical slice that proved vkmtl can route
 the same public examples through Vulkan and Metal.
@@ -852,6 +853,10 @@ See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
+- Period 1 Phase 9 staged API migration is complete. The frozen baseline is 68
+  root declarations, 34 public `Device` methods, and 10 public
+  `WindowContext` methods; the next decision is review of the first tagged
+  compatibility release.
 - Periods 42 through 44 and all nine Period 44 release-evidence gates are
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.

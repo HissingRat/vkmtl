@@ -3,6 +3,11 @@
 Phase 9 closes Period 1 by turning the completed core vertical slice into a
 library that is easier to consume, document, validate, and distribute.
 
+Status: complete. The pre-tag API migration, compatibility boundary, release
+documentation, and validation gates are recorded in
+`../api-migration-roadmap.md`, with caller changes in
+`../api-migration-guide.md`.
+
 ## Scope
 
 - Keep docs separated by purpose:

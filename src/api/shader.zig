@@ -1,0 +1,37 @@
+const core = @import("../core.zig");
+const compiler = @import("../shader/compiler.zig");
+
+pub const Reflection = @import("../shader/reflection.zig");
+pub const shader_reflection_schema_version = core.shader_reflection_schema_version;
+pub const ShaderSourceLanguage = core.ShaderSourceLanguage;
+pub const ShaderArtifact = core.ShaderArtifact;
+pub const ShaderSource = core.ShaderSource;
+pub const ShaderModuleDescriptor = core.ShaderModuleDescriptor;
+pub const ShaderStage = core.ShaderStage;
+pub const ShaderCompileProfile = core.ShaderCompileProfile;
+pub const ShaderLibraryEntryDescriptor = core.ShaderLibraryEntryDescriptor;
+pub const ShaderLibraryDescriptor = core.ShaderLibraryDescriptor;
+pub const ShaderLibraryCacheKeyDescriptor = core.ShaderLibraryCacheKeyDescriptor;
+pub const ShaderModuleCacheKeyDescriptor = core.ShaderModuleCacheKeyDescriptor;
+pub const ShaderSpecializationValueKind = core.ShaderSpecializationValueKind;
+pub const ShaderSpecializationValue = core.ShaderSpecializationValue;
+pub const ShaderSpecializationConstant = core.ShaderSpecializationConstant;
+pub const ShaderSpecializationDescriptor = core.ShaderSpecializationDescriptor;
+pub const ShaderReflectionArtifact = core.ShaderReflectionArtifact;
+pub const ShaderReflectionBinding = core.ShaderReflectionBinding;
+pub const ShaderReflectionBindGroup = core.ShaderReflectionBindGroup;
+pub const ShaderReflectionVertexInput = core.ShaderReflectionVertexInput;
+pub const ShaderStageReflection = core.ShaderStageReflection;
+pub const ShaderReflectionSource = core.ShaderReflectionSource;
+pub const ProgrammableStageDescriptor = core.ProgrammableStageDescriptor;
+pub const ShaderError = core.ShaderError;
+pub const RenderShaderCompileOptions = compiler.RenderShaderOptions;
+pub const ComputeShaderCompileOptions = compiler.ComputeShaderOptions;
+pub const RayTracingShaderCompileOptions = compiler.RayTracingShaderOptions;
+pub const RenderShaderStages = compiler.RenderShaderStages;
+pub const CompiledRenderShader = compiler.CompiledRenderShader;
+pub const CompiledComputeShader = compiler.CompiledComputeShader;
+pub const CompiledRayTracingShader = compiler.CompiledRayTracingShader;
+
+pub const descriptorIndexingRangeCountForReflection = core.descriptorIndexingRangeCountForReflection;
+pub const deriveDescriptorIndexingLayoutFromReflection = core.deriveDescriptorIndexingLayoutFromReflection;

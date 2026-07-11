@@ -25,7 +25,8 @@ debug copy under `zig-out/shaders` on the next `zig build`.
 
 Create buffers, textures, samplers, bind group layouts, shader modules, and
 pipelines during setup where possible. Period 8 exposes object-cache keys and
-`objectCacheDiagnostics()` so applications can detect repeated equivalent
+`vkmtl.diagnostics.objectCacheDiagnostics(device)` so applications can detect
+repeated equivalent
 creation attempts before native object reuse is fully implemented.
 
 ## Resource Updates

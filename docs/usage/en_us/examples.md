@@ -29,6 +29,37 @@ from reflection. Shader-resource examples also derive bind group layouts from
 reflection. Inspectable build-time artifacts are installed under
 `zig-out/shaders/`.
 
+## Reviewed Gallery Contract
+
+The names and commands below match the current `build.zig` run steps. “Window”
+means the process stays interactive until the window is closed; “auto-exit”
+cases still create a small GLFW surface for backend initialization but finish
+after their deterministic check.
+
+| Example | Command | Mode | Expected result |
+| --- | --- | --- | --- |
+| Clear screen | `zig build run-clear-screen` | Window | Selected backend name and a stable solid-color drawable. |
+| Triangle | `zig build run-triangle` | Window | Selected backend name and a colored triangle. |
+| Offscreen texture | `zig build run-offscreen-texture` | Window | Offscreen triangle sampled onto the presented quad; pixel mode prints `render pixel regression ok backend=... max_channel_delta=...`. |
+| MSAA triangle | `zig build run-msaa-triangle` | Window | Multisampled triangle resolved and sampled into the drawable. |
+| Rainbow cube | `zig build run-rainbow-cube` | Window | Rotating textured cube with depth and indexed drawing. |
+| Transfer readback | `zig build run-transfer-readback` | Auto-exit | Exact copies pass and print `transfer readback ok`. |
+| Compute readback | `zig build run-compute-readback` | Auto-exit | Storage buffer/texture bytes match and print `compute readback ok`. |
+| Capability dump | `zig build run-capability-dump` | Auto-exit | Console report starts with backend/adapter and includes features, limits, formats, and diagnostics. |
+| Bindless textures | `zig build run-bindless-textures` | Auto-exit probe | Prints `bindless texture table ok: ...` or `bindless textures unsupported: ...`. |
+| Multi-window | `zig build run-multi-window` | Two-window probe | Prints both surface records, then availability or the expected feature-gate line. |
+| External texture | `zig build run-external-texture` | Auto-exit probe | Prints `external texture wrapper ok: ...` or an explicit unsupported line. |
+| Streaming texture | `zig build run-streaming-texture` | Auto-exit probe | Prints residency success or `streaming texture unsupported: ...`. |
+| Tessellation | `zig build run-tessellation` | Auto-exit plan probe | Prints the portable and selected native plan, or a typed unsupported line. |
+| Mesh shader | `zig build run-mesh-shader` | Auto-exit plan probe | Prints the portable and selected native plan, or a typed unsupported line. |
+| Ray-traced scene | `zig build run-ray-traced-scene` | Window when supported | Visible RT scene plus the backend-specific `driver_pixels=visible_...` marker, or an actionable unsupported diagnostic. |
+
+The repository does not commit screenshot image assets. Visual evidence is
+recorded in the Period 32 Vulkan RT validation notes and the Period 44 9/9
+parity report; deterministic transfer, compute, and render pixels are also
+covered by `zig build run-pixel-regression`. These records document observed
+output without fabricating or embedding unavailable images.
+
 ## Triangle
 
 `examples/triangle` is the first backend-independent rendering sample. It
@@ -293,7 +324,7 @@ The broader tracked cases are:
 - `multi_window_resize`
 - `surface_lost_recovery`
 
-Current public `SurfaceCollection` can track multiple neutral surface states,
+Current public `vkmtl.presentation.SurfaceCollection` can track multiple neutral surface states,
 but native multiple swapchain execution remains gated by
 `DeviceFeatures.multi_surface`.
 
@@ -302,12 +333,12 @@ but native multiple swapchain execution remains gated by
 Native interop examples are explicit advanced samples, not ordinary example
 dependencies.
 
-`examples/external_texture` exercises explicit external texture descriptor
+`examples/external_texture` exercises explicit `vkmtl.interop` external texture
 validation, `ExternalTextureUsageDescriptor`, and the runtime `ExternalTexture`
-wrapper. Period 41 also exposes `ExternalInteropImportPlan`,
+wrapper. The interop facade also exposes `ExternalInteropImportPlan`,
 `ExternalTextureUsagePlan`, `ExternalSynchronizationPlan`, and
 `ExternalInteropImportDiagnostic` for advanced interop validation. The example
-uses `Device.externalInteropCapabilityMatrix(...)` to explain which handle
+uses `vkmtl.interop.externalInteropCapabilityMatrix(device)` to explain which handle
 kinds are portable wrappers, capability-gated native imports, native-only
 objects, or unsupported on the selected backend/platform.
 
@@ -332,8 +363,8 @@ Period 28 Phase 5.
 
 ## Streaming Texture
 
-`examples/streaming_texture` exercises the sparse/tiled texture descriptor and
-residency map path. It prints an unsupported-feature message until the selected
+`examples/streaming_texture` exercises the `vkmtl.resource` sparse/tiled
+texture descriptor and residency map path. It prints an unsupported-feature message until the selected
 backend exposes sparse or tiled textures.
 
 Run it with:
@@ -344,9 +375,9 @@ zig build run-streaming-texture
 
 ## Advanced Geometry
 
-`examples/tessellation` and `examples/mesh_shader` exercise tessellation patch
-draw planning and mesh dispatch planning, then print the corresponding public
-Vulkan / Metal lowering metadata. They print unsupported-feature messages until
+`examples/tessellation` and `examples/mesh_shader` exercise portable
+`vkmtl.render` planning and explicitly selected `vkmtl.native.vulkan` or
+`vkmtl.native.metal` inspection. They print unsupported-feature messages until
 the selected backend exposes the required advanced geometry features.
 
 Run them with:
@@ -358,31 +389,34 @@ zig build run-mesh-shader
 
 ## Ray Tracing
 
-`examples/ray_traced_scene` validates the ray tracing runtime contract and
-the Period 30 backend-private runtime records: acceleration-structure objects,
-scratch-buffer validation, ray tracing pipeline state, shader binding table
-creation, ray dispatch records, and Metal table metadata when Metal is
-selected. The example calls `Device.compileRayTracingShader(...)` once and lets
-the compiled shader fill `RayTracingPipelineDescriptor` for the selected
+`examples/ray_traced_scene` validates the public `vkmtl.ray_tracing` runtime
+contract: acceleration-structure objects, scratch-buffer validation, ray
+tracing pipeline state, shader binding table creation, and ray dispatch. Metal
+mapping is explicit through `vkmtl.native.metal`. The example calls
+`Device.compileRayTracingShader(...)` once and lets the compiled shader fill
+`vkmtl.ray_tracing.RayTracingPipelineDescriptor` for the selected
 backend. Vulkan consumes the Slang RT SPIR-V stages; Metal consumes the
 build-time precompiled Metal ray-generation artifact through the same vkmtl
 compiled-shader object. On supported Metal devices it now opens a window, creates a real
 `MTLAccelerationStructure`, builds a full mesh RT scene from a user-provided
 mesh vertex buffer, and presents a room with multiple spheres through the
-backend-private Metal intersector dispatch. It prints
+native Metal intersector dispatch. It prints
 `driver_pixels=visible_metal_full_mesh_rt_scene` after the first visible frame.
 The Vulkan path now uses procedural sphere AABBs, Slang intersection SPIR-V,
 procedural hit groups, and native `vkCmdTraceRaysKHR` dispatch. On supported
 Vulkan RT hardware its success marker is
 `driver_pixels=visible_vulkan_procedural_rt_scene`. Metal procedural
-function-table parity and shared RT scene buffers are routed to Period35.
+function-table parity and shared RT scene buffers are routed to Period35. Both
+physical Metal and Vulkan RT output are observed; the Period 44 9/9 result does
+not imply completion of unrelated native-pressure lanes.
 
 The current procedural marker supersedes the original Period32
 `driver_pixels=visible_vulkan_rt_output` marker. It still proves the native
 Vulkan acceleration-structure, pipeline, SBT, `vkCmdTraceRaysKHR`, and
 output-presentation path, now as part of the later procedural scene. The
 [Period32 Phase 6 validation record](../../develop/period32/phase6.md) names
-the observed Windows/NVIDIA hardware, command, build gates, and screenshot.
+the observed Windows/NVIDIA hardware, command, build gates, and the local
+ignored screenshot evidence.
 
 When the Vulkan runtime lacks a required extension, feature, limit, or device
 procedure, the example exits before native ray tracing setup and reports an

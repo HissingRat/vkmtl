@@ -3197,7 +3197,11 @@ pub const TessellationPatchDrawDescriptor = struct {
 };
 
 pub const TessellationDrawPlan = struct {
-    lowering: TessellationLowering,
+    backend: Backend,
+    patch_control_points: u32,
+    domain: TessellationDomain,
+    partition_mode: TessellationPartitionMode,
+    requires_factor_buffer: bool,
     topology: TessellationPatchTopology,
     patch_count: u32,
     instance_count: u32,
@@ -3214,7 +3218,11 @@ pub const TessellationDrawPlan = struct {
     ) AdvancedFeatureError!TessellationDrawPlan {
         try descriptor.validate(features, limits);
         return .{
-            .lowering = try TessellationLowering.fromDescriptor(backend, descriptor.tessellation, features, limits),
+            .backend = backend,
+            .patch_control_points = descriptor.tessellation.control_point_count,
+            .domain = descriptor.tessellation.domain,
+            .partition_mode = descriptor.tessellation.partition_mode,
+            .requires_factor_buffer = backend == .metal,
             .topology = descriptor.topology,
             .patch_count = descriptor.patch_count,
             .instance_count = descriptor.instance_count,
@@ -3226,33 +3234,30 @@ pub const TessellationDrawPlan = struct {
     }
 
     pub fn patchControlPoints(self: TessellationDrawPlan) u32 {
-        return self.lowering.patchControlPoints();
+        return self.patch_control_points;
     }
 
     pub fn requiresFactorBuffer(self: TessellationDrawPlan) bool {
-        return self.lowering.requiresFactorBuffer();
+        return self.requires_factor_buffer;
     }
 
     pub fn hasFactorBuffer(self: TessellationDrawPlan) bool {
         return self.factor_buffer != null;
     }
 
-    pub fn vulkanLowering(self: TessellationDrawPlan) AdvancedFeatureError!VulkanTessellationDrawLowering {
-        const lowering = switch (self.lowering) {
-            .vulkan => |vulkan| vulkan,
-            .metal => return AdvancedFeatureError.UnsupportedTessellation,
-        };
-        return try VulkanTessellationDrawLowering.fromPlan(self, lowering);
+    fn vulkanLowering(self: TessellationDrawPlan) AdvancedFeatureError!VulkanTessellationDrawLowering {
+        if (self.backend != .vulkan) return AdvancedFeatureError.UnsupportedTessellation;
+        return try VulkanTessellationDrawLowering.fromPlan(self);
     }
 
-    pub fn metalLowering(self: TessellationDrawPlan) AdvancedFeatureError!MetalTessellationDrawLowering {
-        const lowering = switch (self.lowering) {
-            .vulkan => return AdvancedFeatureError.UnsupportedTessellation,
-            .metal => |metal| metal,
-        };
-        return MetalTessellationDrawLowering.fromPlan(self, lowering);
+    fn metalLowering(self: TessellationDrawPlan) AdvancedFeatureError!MetalTessellationDrawLowering {
+        if (self.backend != .metal) return AdvancedFeatureError.UnsupportedTessellation;
+        return MetalTessellationDrawLowering.fromPlan(self);
     }
 };
+
+pub const vulkanTessellationDrawLowering = TessellationDrawPlan.vulkanLowering;
+pub const metalTessellationDrawLowering = TessellationDrawPlan.metalLowering;
 
 pub const VulkanTessellationDrawLowering = struct {
     topology: TessellationPatchTopology = .patch_list,
@@ -3262,13 +3267,13 @@ pub const VulkanTessellationDrawLowering = struct {
     first_vertex: u32,
     first_instance: u32,
 
-    pub fn fromPlan(plan: TessellationDrawPlan, lowering: VulkanTessellationLowering) AdvancedFeatureError!VulkanTessellationDrawLowering {
+    pub fn fromPlan(plan: TessellationDrawPlan) AdvancedFeatureError!VulkanTessellationDrawLowering {
         return .{
             .topology = plan.topology,
-            .patch_control_points = lowering.patch_control_points,
-            .draw_vertex_count = try patchDrawVertexCount(plan.patch_count, lowering.patch_control_points),
+            .patch_control_points = plan.patch_control_points,
+            .draw_vertex_count = try patchDrawVertexCount(plan.patch_count, plan.patch_control_points),
             .draw_instance_count = plan.instance_count,
-            .first_vertex = try patchDrawVertexCount(plan.base_patch, lowering.patch_control_points),
+            .first_vertex = try patchDrawVertexCount(plan.base_patch, plan.patch_control_points),
             .first_instance = plan.base_instance,
         };
     }
@@ -3296,18 +3301,18 @@ pub const MetalTessellationDrawLowering = struct {
     factor_buffer_ownership: MetalTessellationFactorBufferOwnership,
     factor_buffer: TessellationFactorBufferDescriptor,
 
-    pub fn fromPlan(plan: TessellationDrawPlan, lowering: MetalTessellationLowering) AdvancedFeatureError!MetalTessellationDrawLowering {
-        if (!lowering.requires_factor_buffer) return AdvancedFeatureError.UnsupportedTessellation;
+    pub fn fromPlan(plan: TessellationDrawPlan) AdvancedFeatureError!MetalTessellationDrawLowering {
+        if (!plan.requires_factor_buffer) return AdvancedFeatureError.UnsupportedTessellation;
         const ownership: MetalTessellationFactorBufferOwnership = if (plan.factor_buffer == null) .vkmtl_generated else .application_provided;
         const factor_buffer = plan.factor_buffer orelse TessellationFactorBufferDescriptor{
             .patch_count = plan.patch_count,
-            .stride = defaultMetalTessellationFactorStride(lowering.domain),
+            .stride = defaultMetalTessellationFactorStride(plan.domain),
         };
         try factor_buffer.validate(plan.patch_count);
         return .{
-            .patch_control_points = lowering.patch_control_points,
-            .domain = lowering.domain,
-            .partition_mode = lowering.partition_mode,
+            .patch_control_points = plan.patch_control_points,
+            .domain = plan.domain,
+            .partition_mode = plan.partition_mode,
             .patch_count = plan.patch_count,
             .instance_count = plan.instance_count,
             .base_patch = plan.base_patch,
@@ -3455,7 +3460,11 @@ pub const MeshDispatchDescriptor = struct {
 };
 
 pub const MeshDispatchPlan = struct {
-    lowering: MeshPipelineLowering,
+    backend: Backend,
+    mesh_entry_point: []const u8,
+    task_entry_point: ?[]const u8,
+    mesh_threads_per_threadgroup: u32,
+    task_threads_per_threadgroup: u32,
     threadgroup_count_x: u32,
     threadgroup_count_y: u32,
     threadgroup_count_z: u32,
@@ -3469,7 +3478,14 @@ pub const MeshDispatchPlan = struct {
     ) AdvancedFeatureError!MeshDispatchPlan {
         try descriptor.validate(features, limits);
         return .{
-            .lowering = try MeshPipelineLowering.fromDescriptor(backend, descriptor.pipeline, features, limits),
+            .backend = backend,
+            .mesh_entry_point = descriptor.pipeline.mesh_entry_point,
+            .task_entry_point = descriptor.pipeline.task_entry_point,
+            .mesh_threads_per_threadgroup = descriptor.pipeline.mesh_threads_per_threadgroup,
+            .task_threads_per_threadgroup = if (descriptor.pipeline.task_entry_point != null)
+                descriptor.pipeline.task_threads_per_threadgroup
+            else
+                0,
             .threadgroup_count_x = descriptor.threadgroup_count_x,
             .threadgroup_count_y = descriptor.threadgroup_count_y,
             .threadgroup_count_z = descriptor.threadgroup_count_z,
@@ -3478,33 +3494,30 @@ pub const MeshDispatchPlan = struct {
     }
 
     pub fn meshThreadsPerThreadgroup(self: MeshDispatchPlan) u32 {
-        return self.lowering.meshThreadsPerThreadgroup();
+        return self.mesh_threads_per_threadgroup;
     }
 
     pub fn taskThreadsPerThreadgroup(self: MeshDispatchPlan) u32 {
-        return self.lowering.taskThreadsPerThreadgroup();
+        return self.task_threads_per_threadgroup;
     }
 
     pub fn hasTaskStage(self: MeshDispatchPlan) bool {
-        return self.lowering.hasTaskStage();
+        return self.task_entry_point != null;
     }
 
-    pub fn vulkanLowering(self: MeshDispatchPlan) AdvancedFeatureError!VulkanMeshDispatchLowering {
-        const lowering = switch (self.lowering) {
-            .vulkan => |vulkan| vulkan,
-            .metal => return AdvancedFeatureError.UnsupportedMeshShaders,
-        };
-        return VulkanMeshDispatchLowering.fromPlan(self, lowering);
+    fn vulkanLowering(self: MeshDispatchPlan) AdvancedFeatureError!VulkanMeshDispatchLowering {
+        if (self.backend != .vulkan) return AdvancedFeatureError.UnsupportedMeshShaders;
+        return VulkanMeshDispatchLowering.fromPlan(self);
     }
 
-    pub fn metalLowering(self: MeshDispatchPlan) AdvancedFeatureError!MetalMeshDispatchLowering {
-        const lowering = switch (self.lowering) {
-            .vulkan => return AdvancedFeatureError.UnsupportedMeshShaders,
-            .metal => |metal| metal,
-        };
-        return MetalMeshDispatchLowering.fromPlan(self, lowering);
+    fn metalLowering(self: MeshDispatchPlan) AdvancedFeatureError!MetalMeshDispatchLowering {
+        if (self.backend != .metal) return AdvancedFeatureError.UnsupportedMeshShaders;
+        return MetalMeshDispatchLowering.fromPlan(self);
     }
 };
+
+pub const vulkanMeshDispatchLowering = MeshDispatchPlan.vulkanLowering;
+pub const metalMeshDispatchLowering = MeshDispatchPlan.metalLowering;
 
 pub const VulkanMeshDispatchLowering = struct {
     mesh_entry_point: []const u8,
@@ -3516,12 +3529,12 @@ pub const VulkanMeshDispatchLowering = struct {
     group_count_z: u32,
     total_threadgroups: u64,
 
-    pub fn fromPlan(plan: MeshDispatchPlan, lowering: VulkanMeshPipelineLowering) VulkanMeshDispatchLowering {
+    pub fn fromPlan(plan: MeshDispatchPlan) VulkanMeshDispatchLowering {
         return .{
-            .mesh_entry_point = lowering.mesh_entry_point,
-            .task_entry_point = lowering.task_entry_point,
-            .mesh_threads_per_threadgroup = lowering.mesh_threads_per_threadgroup,
-            .task_threads_per_threadgroup = lowering.task_threads_per_threadgroup,
+            .mesh_entry_point = plan.mesh_entry_point,
+            .task_entry_point = plan.task_entry_point,
+            .mesh_threads_per_threadgroup = plan.mesh_threads_per_threadgroup,
+            .task_threads_per_threadgroup = plan.task_threads_per_threadgroup,
             .group_count_x = plan.threadgroup_count_x,
             .group_count_y = plan.threadgroup_count_y,
             .group_count_z = plan.threadgroup_count_z,
@@ -3544,12 +3557,12 @@ pub const MetalMeshDispatchLowering = struct {
     group_count_z: u32,
     total_threadgroups: u64,
 
-    pub fn fromPlan(plan: MeshDispatchPlan, lowering: MetalMeshPipelineLowering) MetalMeshDispatchLowering {
+    pub fn fromPlan(plan: MeshDispatchPlan) MetalMeshDispatchLowering {
         return .{
-            .mesh_entry_point = lowering.mesh_entry_point,
-            .object_entry_point = lowering.object_entry_point,
-            .mesh_threads_per_threadgroup = lowering.mesh_threads_per_threadgroup,
-            .object_threads_per_threadgroup = lowering.object_threads_per_threadgroup,
+            .mesh_entry_point = plan.mesh_entry_point,
+            .object_entry_point = plan.task_entry_point,
+            .mesh_threads_per_threadgroup = plan.mesh_threads_per_threadgroup,
+            .object_threads_per_threadgroup = plan.task_threads_per_threadgroup,
             .group_count_x = plan.threadgroup_count_x,
             .group_count_y = plan.threadgroup_count_y,
             .group_count_z = plan.threadgroup_count_z,
@@ -4474,10 +4487,6 @@ pub const RayDispatchPlan = struct {
     }
 };
 
-pub const RayQueryLoweringMode = enum {
-    vulkan_ray_query,
-};
-
 pub const RayQueryDescriptor = struct {
     shader_stage: ShaderStage = .compute,
     max_traversal_depth: u32 = 1,
@@ -4506,7 +4515,6 @@ pub const RayQueryDescriptor = struct {
 
 pub const RayQueryPlan = struct {
     backend: Backend,
-    lowering: RayQueryLoweringMode,
     shader_stage: ShaderStage,
     max_traversal_depth: u32,
     requires_acceleration_structure: bool = true,
@@ -4523,7 +4531,6 @@ pub const RayQueryPlan = struct {
         try descriptor.validate(backend, features, limits);
         return .{
             .backend = backend,
-            .lowering = .vulkan_ray_query,
             .shader_stage = descriptor.shader_stage,
             .max_traversal_depth = descriptor.max_traversal_depth,
             .requires_procedural_geometry = descriptor.uses_procedural_geometry,
@@ -14395,7 +14402,6 @@ test "ray query plan gates Vulkan support and shader requirements" {
         .uses_candidate_intersection = true,
     }, features, limits);
     try std.testing.expectEqual(Backend.vulkan, plan.backend);
-    try std.testing.expectEqual(RayQueryLoweringMode.vulkan_ray_query, plan.lowering);
     try std.testing.expectEqual(ShaderStage.compute, plan.shader_stage);
     try std.testing.expectEqual(@as(u32, 2), plan.max_traversal_depth);
     try std.testing.expect(plan.requires_acceleration_structure);

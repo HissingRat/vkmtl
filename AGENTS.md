@@ -37,7 +37,9 @@ reachable through `src/vkmtl.zig`, and before changing public methods, fields,
 enum tags, errors, defaults, ownership, lifetime, capability, or limit meaning.
 `docs/develop/public-api-inventory.md` is the current surface snapshot and
 canonical namespace assignment; update it in the same change whenever the
-public surface changes.
+public surface changes. `docs/develop/api-migration-guide.md` records the
+intentional Phase 9 break and is the compatibility reference for callers
+updating from the prototype surface.
 
 In particular:
 
@@ -51,6 +53,10 @@ In particular:
   compatibility aliases.
 - Breaking cleanup must follow the documented migration and release-gate
   process; it must not happen incidentally during backend work.
+- `zig build run-api-guard` enforces the exact root, `Device`, and
+  `WindowContext` allowlists. Any intentional change to those sets must update
+  the allocation decision, inventory, compatibility guidance when applicable,
+  and guard allowlist in the same change.
 
 ## Intended Module Boundaries
 
@@ -181,6 +187,8 @@ Use validation that matches the edit.
 - Build or package metadata changes should run `zig build --fetch` or the
   closest relevant build command.
 - API and backend changes should add or update focused tests when possible.
+- Public root, `Device`, or `WindowContext` changes must run
+  `zig build run-api-guard` in addition to the normal API validation.
 - Rendering behavior changes should keep at least one runnable example working.
 
 ## Style

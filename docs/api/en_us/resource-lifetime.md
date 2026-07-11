@@ -5,10 +5,10 @@ destroyed by calling `deinit()` before destroying its owner.
 
 ## Current Owner
 
-`WindowContext` still owns backend presentation state and the debug tracker.
-Starting in Period 2, `WindowContext.device()` returns a runtime `Device` view,
-and resource creation goes through `Device`. Existing `WindowContext.make*`
-methods remain as compatibility forwards.
+`WindowContext` owns backend presentation state and the debug tracker.
+`WindowContext.device()` returns a runtime `Device` view. Resource creation
+goes through `Device`, command buffers through `Queue`, and resize/clear
+operations through `Swapchain`; `WindowContext` does not forward those calls.
 
 Resources created through `Device` and tracked by the debug tracker include:
 

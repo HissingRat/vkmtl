@@ -63,6 +63,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         .height = texture_height,
         .usage = .{
             .copy_source = true,
+            .shader_read = true,
             .shader_write = true,
         },
         .storage_mode = .private,
@@ -85,7 +86,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     defer compiled_shader.deinit();
 
     const compute_stage = compiled_shader.stageDescriptor(context.selectedBackend());
-    var derived_bind_group_layouts = try vkmtl.ShaderReflection.deriveComputePipelineBindGroupLayouts(
+    var derived_bind_group_layouts = try vkmtl.shader.Reflection.deriveComputePipelineBindGroupLayouts(
         allocator,
         compute_stage,
     );

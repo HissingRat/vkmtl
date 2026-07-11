@@ -36,7 +36,7 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
-    var surfaces = vkmtl.SurfaceCollection.init(allocator, context.selectedBackend());
+    var surfaces = vkmtl.presentation.SurfaceCollection.init(allocator, context.selectedBackend());
     defer surfaces.deinit();
 
     const surface_a = try surfaces.add(.{
@@ -61,7 +61,7 @@ pub fn main() !void {
     });
 }
 
-fn dumpSurface(name: []const u8, info: vkmtl.SurfaceInfo) void {
+fn dumpSurface(name: []const u8, info: vkmtl.presentation.SurfaceInfo) void {
     const presentation = info.presentation orelse {
         std.debug.print("surface {s}: backend={s}, state={s}, unconfigured\n", .{
             name,

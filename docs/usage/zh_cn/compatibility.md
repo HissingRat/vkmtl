@@ -31,21 +31,20 @@ native timeline/shared-event submit、native dedicated queue、native queue-fami
 
 ## Advanced Features
 
-Advanced features 会继续放在 feature gate 后面。Period 22 的一部分 binding 路径已经有
-runtime object 和 command entry point；sparse resource、external texture interop、
-tessellation、mesh shader、ray tracing 和 driver-level pipeline cache 仍然保持 gated，直到
-native backend work 完成。
+Advanced features 会继续放在 feature gate 后面。一部分 binding 和 ray tracing 路径已经有
+可执行 runtime object 与 command entry point；sparse resource、native external import、
+tessellation、mesh shader 和 native driver-cache persistence 仍需要后续 backend work。
 
 Heap、memory-budget、transient-allocation 和 sparse-residency API 目前提供 portable planning
 与 diagnostics。Native heap-backed buffer/texture creation 和 native sparse/tiled page binding
 仍是后续 backend work。
 
 Descriptor indexing 映射到 Vulkan descriptor indexing，argument buffer 映射到 Metal
-argument buffer。两者通过 `DescriptorIndexingLayoutDescriptor`、
+argument buffer。两者通过 `vkmtl.binding.DescriptorIndexingLayoutDescriptor`、
 `AdvancedBindGroupLayout` 和 `ResourceTable` 表达。当所选后端声明所需 feature 时，
 resource table 可以 update、clear，并通过 render / compute encoder 绑定。
 
-大型 table 压力通过 `Device.planResourceTablePressure(...)` 规划。Plan 会在分配前明确
+大型 table 压力通过 `vkmtl.binding.planResourceTablePressure(device, descriptor)` 规划。Plan 会在分配前明确
 partially-bound 和 update-after-bind 要求；真实 GPU 压力证据仍属于后端 / 设备矩阵验证。
 
 Root constants 会在 pipeline 声明兼容 `root_constant_layout` 后下沉到 Vulkan push constants 和
@@ -62,28 +61,32 @@ platform/backend handle descriptor。Runtime wrapper 会校验 ownership 和 bac
 compatibility。Import plan 会分类 handle lane，texture usage plan 会校验
 sampling/copy/presentation intent，external synchronization plan 会在提交前校验
 wait/signal ordering。Native OS/Vulkan/Metal handle import 和 wait/signal lowering
-仍是 backend hook work。`ExternalInteropCapabilityMatrix` 和
-`Device.diagnoseExternalInteropImport(...)` 会在 import 前按 backend/platform 分类 handle
+仍是 backend hook work。`vkmtl.interop.ExternalInteropCapabilityMatrix` 和
+`vkmtl.interop.diagnoseExternalInteropImport(device, descriptor)` 会在 import 前按 backend/platform 分类 handle
 support。
 
-Tessellation 由 `TessellationDescriptor` 表示，仍然是 optional render pipeline extension，不是默认
-portable render path。`TessellationPatchDrawDescriptor` 可以生成 Vulkan / Metal 的 public
-planning metadata；可见 native 输出还需要 backend pipeline hook。
+Tessellation 由 `vkmtl.render.TessellationDescriptor` 表示，仍然是 optional render pipeline
+extension，不是默认 portable render path。`TessellationPatchDrawDescriptor` 有 portable render
+plan；显式 Vulkan/Metal lowering inspection 位于 `vkmtl.native.vulkan` 和
+`vkmtl.native.metal`。可见 native 输出仍需要 backend pipeline hook。
 
-Mesh/task shader 由 `MeshPipelineDescriptor` 表示。Vulkan mesh shader 和 Metal object/mesh-like
-path 都被视为 backend-gated advanced feature。`MeshDispatchDescriptor` 可以生成 Vulkan
-task/mesh 或 Metal object/mesh planning metadata。
+Mesh/task shader 由 `vkmtl.render.MeshPipelineDescriptor` 表示。Vulkan mesh shader 和 Metal object/mesh-like
+path 都被视为 backend-gated advanced feature。`MeshDispatchDescriptor` 有 portable render
+plan；backend-specific planning 位于对应的 `native` 子 namespace。
 
-Ray tracing descriptor 和普通 render pipeline 隔离，因为 Vulkan 和 Metal 在 acceleration
+`vkmtl.ray_tracing` 和普通 render pipeline 隔离，因为 Vulkan 和 Metal 在 acceleration
 structure、pipeline 和 shader table 细节上差异很大。
 Ray tracing completeness API 现在包括 AS maintenance planning、TLAS instance metadata
 planning、Vulkan ray query planning、complex SBT planning 和 deterministic RT stress
 planning。Metal ray query 会报告 unsupported，因为这一层没有直接等价的 Metal shader
-feature。Native GPU stress evidence 仍属于 backend / device validation matrix。
+feature。物理 Metal 与 Vulkan RT 运行都已经产生可见输出，包括 Vulkan procedural scene。
+Period 44 的 hosted、smoke、pixel 和 bounded-soak 九项 gate 也全部 observed。这不代表已经验证
+native memory pressure、sparse binding、dedicated queue、cache persistence 或多小时 RT stress。
 
 Driver-level pipeline cache 和 Metal binary archive 使用显式 cache identity descriptor。它们和
 Period 8 object-cache diagnostics 是分开的层。
-Shader / pipeline artifact compatibility 通过 `Device.planPipelineArtifactCache(...)` 规划；
+Shader / pipeline artifact compatibility 通过
+`vkmtl.diagnostics.planPipelineArtifactCache(device, descriptor)` 规划；
 当 shader hash、entry point、reflection、format、backend、schema 或 toolchain identity
 变化时会确定性失效。Native `VkPipelineCache`、pipeline library 和 `MTLBinaryArchive`
 持久化仍是 backend work。

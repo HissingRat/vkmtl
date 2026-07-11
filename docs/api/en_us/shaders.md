@@ -178,6 +178,10 @@ Storage textures require an explicit Vulkan image format annotation so Slang
 can emit a storage image format for SPIR-V. The current example uses binding 0
 for the storage texture and binding 1 for the storage buffer because Slang's
 Metal output places the texture at `texture(0)` and the buffer at `buffer(1)`.
+Slang lowers `RWTexture2D` to Metal `access::read_write`, so its texture
+descriptor declares both `shader_read` and `shader_write` usage even when the
+shader body only writes. Metal API Validation checks the declared native usage
+against that access qualifier.
 
 Compiled shader handles attach runtime-generated reflection JSON to each
 programmable stage:
@@ -192,7 +196,7 @@ pipeline descriptor. Reflection can also derive the bind group layout
 descriptors before pipeline creation:
 
 ```zig
-var layouts = try vkmtl.ShaderReflection.deriveComputePipelineBindGroupLayouts(
+var layouts = try vkmtl.shader.Reflection.deriveComputePipelineBindGroupLayouts(
     allocator,
     compute_stage,
 );
@@ -204,7 +208,7 @@ offset. The first helper can derive a single-buffer `VertexDescriptor`; callers
 provide the stride explicitly:
 
 ```zig
-var vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescriptor(
+var vertex_descriptor = try vkmtl.shader.Reflection.deriveSingleBufferVertexDescriptor(
     allocator,
     stages.vertex,
     .{ .stride = @sizeOf(Vertex) },

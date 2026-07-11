@@ -299,7 +299,9 @@ static vkmtl_metal_status vkmtl_make_acceleration_structure_descriptor(
         }
 
         vkmtl_fill_default_triangle((float *)[vertex_buffer contents], primitive_count);
-        [vertex_buffer didModifyRange:NSMakeRange(0, vertex_buffer_len)];
+        if ([vertex_buffer storageMode] == MTLStorageModeManaged) {
+            [vertex_buffer didModifyRange:NSMakeRange(0, vertex_buffer_len)];
+        }
 
         MTLAccelerationStructureTriangleGeometryDescriptor *geometry =
             [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
@@ -343,7 +345,9 @@ static vkmtl_metal_status vkmtl_make_acceleration_structure_descriptor(
     for (unsigned int i = 0; i < primitive_count; i += 1) {
         vkmtl_fill_identity_instance(&instances[i]);
     }
-    [instance_buffer didModifyRange:NSMakeRange(0, instance_buffer_len)];
+    if ([instance_buffer storageMode] == MTLStorageModeManaged) {
+        [instance_buffer didModifyRange:NSMakeRange(0, instance_buffer_len)];
+    }
 
     MTLInstanceAccelerationStructureDescriptor *descriptor =
         [MTLInstanceAccelerationStructureDescriptor descriptor];
@@ -2546,12 +2550,14 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
             for (unsigned int i = 0; i < acceleration_structure->primitive_count; i += 1) {
                 vkmtl_fill_identity_instance(&instances[i]);
             }
-            [acceleration_structure->instance_buffer didModifyRange:
-                NSMakeRange(
-                    0,
-                    (NSUInteger)acceleration_structure->primitive_count *
-                        sizeof(MTLAccelerationStructureInstanceDescriptor)
-                )];
+            if ([acceleration_structure->instance_buffer storageMode] == MTLStorageModeManaged) {
+                [acceleration_structure->instance_buffer didModifyRange:
+                    NSMakeRange(
+                        0,
+                        (NSUInteger)acceleration_structure->primitive_count *
+                            sizeof(MTLAccelerationStructureInstanceDescriptor)
+                    )];
+            }
         }
 
         id<MTLAccelerationStructureCommandEncoder> encoder =

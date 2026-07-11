@@ -37,7 +37,7 @@ try capture.end();
 ## Profiling 语义
 
 当前 timestamp query result 是确定性的 command-order sequence，不是 GPU clock tick。
-解释结果前先检查 `QuerySet.resultSource()`；`logical_sequence` 不能计算 GPU duration。
+解释结果前先检查 `vkmtl.diagnostics.QuerySet.resultSource()`；`logical_sequence` 不能计算 GPU duration。
 
 通过下面的 API 解析不会夸大能力的 profiling plan：
 
@@ -104,5 +104,7 @@ zig build run-release-readiness
 ```
 
 Readiness 命令默认把所有 evidence gate 设为 missing。只有审阅对应 hosted/self-hosted artifact
-后才能传入 gate flag。当前已经观察到和仍缺失的 lane 记录在
+后才能传入 gate flag。Period 44 report 已记录九项 release gate 全部 observed。更长 soak、
+device-loss injection、native memory pressure、physical async queue、sparse binding、native cache
+persistence 和 native RT stress 仍是独立 non-gate evidence，不能由 9/9 推导。详见
 `docs/develop/period44/parity-report.md`。

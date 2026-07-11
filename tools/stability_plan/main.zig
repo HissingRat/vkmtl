@@ -11,11 +11,11 @@ pub fn main(init: std.process.Init) !void {
     _ = args.skip();
 
     const iterations = try parseIterations(&args);
-    const descriptor = vkmtl.StabilityRunDescriptor{
+    const descriptor = vkmtl.diagnostics.StabilityRunDescriptor{
         .iterations = iterations,
     };
     const plan = try descriptor.plan();
-    const diagnostics = vkmtl.StabilityRunDiagnostics.fromPlan(plan);
+    const diagnostics = vkmtl.diagnostics.StabilityRunDiagnostics.fromPlan(plan);
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(init.io, &stdout_buffer);

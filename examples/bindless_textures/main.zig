@@ -29,11 +29,11 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
-    const model: vkmtl.AdvancedBindingModel = switch (device.selectedBackend()) {
+    const model: vkmtl.binding.AdvancedBindingModel = switch (device.selectedBackend()) {
         .vulkan => .descriptor_indexing,
         .metal => .argument_buffer,
     };
-    const ranges = [_]vkmtl.DescriptorIndexingRange{.{
+    const ranges = [_]vkmtl.binding.DescriptorIndexingRange{.{
         .binding = 0,
         .resource = .sampled_texture,
         .visibility = .{ .fragment = true },

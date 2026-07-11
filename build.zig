@@ -647,6 +647,34 @@ pub fn build(b: *std.Build) void {
     });
     const run_development_matrix_tests = b.addRunArtifact(development_matrix_tests);
 
+    const api_guard_files = b.addWriteFiles();
+    const api_guard_root = api_guard_files.addCopyFile(b.path("tools/api_guard/main.zig"), "main.zig");
+    _ = api_guard_files.addCopyFile(b.path("src/vkmtl.zig"), "src/vkmtl.zig");
+    _ = api_guard_files.addCopyFile(b.path("src/runtime/window_context.zig"), "src/runtime/window_context.zig");
+
+    const api_guard_module = b.createModule(.{
+        .root_source_file = api_guard_root,
+        .target = target,
+        .optimize = optimize,
+    });
+    const api_guard = b.addExecutable(.{
+        .name = "vkmtl-api-guard",
+        .root_module = api_guard_module,
+    });
+    const api_guard_cmd = b.addRunArtifact(api_guard);
+    const api_guard_step = b.step("run-api-guard", "Verify exact API allowlists and opaque runtime handle layouts");
+    api_guard_step.dependOn(&api_guard_cmd.step);
+
+    const api_guard_test_module = b.createModule(.{
+        .root_source_file = api_guard_root,
+        .target = target,
+        .optimize = optimize,
+    });
+    const api_guard_tests = b.addTest(.{
+        .root_module = api_guard_test_module,
+    });
+    const run_api_guard_tests = b.addRunArtifact(api_guard_tests);
+
     const validation_plan = b.addExecutable(.{
         .name = "vkmtl-validation-plan",
         .root_module = b.createModule(.{
@@ -699,6 +727,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_root_tests.step);
     test_step.dependOn(&run_development_matrix_tests.step);
+    test_step.dependOn(&run_api_guard_tests.step);
     test_step.dependOn(&run_backend_pipeline_tests.step);
 }
 

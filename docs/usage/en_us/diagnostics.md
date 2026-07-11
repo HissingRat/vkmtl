@@ -40,7 +40,7 @@ Vulkan returns `UnsupportedCapture`, and a capture-manager/tool failure returns
 ## Profiling Semantics
 
 Current timestamp query results are deterministic command-order sequence
-values, not GPU clock ticks. Check `QuerySet.resultSource()` before interpreting
+values, not GPU clock ticks. Check `vkmtl.diagnostics.QuerySet.resultSource()` before interpreting
 results. `logical_sequence` values cannot be used for GPU duration.
 
 Resolve an honest profiling plan through:
@@ -111,6 +111,9 @@ zig build run-release-readiness
 ```
 
 The readiness command defaults every evidence gate to missing. Pass a gate flag
-only after reviewing the corresponding hosted/self-hosted artifact. The current
-observed and missing lanes are recorded in
+only after reviewing the corresponding hosted/self-hosted artifact. The
+Period 44 report records all nine release gates as observed. Longer soak,
+device-loss injection, native memory pressure, physical async queues, sparse
+binding, native cache persistence, and native RT stress remain separate
+non-gate evidence rather than being implied by 9/9. See
 `docs/develop/period44/parity-report.md`.

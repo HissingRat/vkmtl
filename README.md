@@ -27,18 +27,28 @@ hatches.
 - [Roadmap](docs/develop/roadmap.md): route and stage boundaries.
 - [Checklist](docs/develop/checklist.md): checkable implementation and polish
   tasks.
+- [API migration guide](docs/develop/api-migration-guide.md): updating callers
+  from the prototype surface to the final pre-tag namespaces and owners.
 - [Core API zh_CN](docs/api/zh_cn/core.md): current public API surface in
   Chinese.
+- [Features and limits zh_CN](docs/api/zh_cn/features-and-limits.md): capability
+  and limit interpretation in Chinese.
 - [Quick Start zh_CN](docs/usage/zh_cn/quick-start.md): current usage path in
   Chinese.
 - [Diagnostics zh_CN](docs/usage/zh_cn/diagnostics.md): capture, profiling, and
   issue-report guidance in Chinese.
+- [Validation zh_CN](docs/usage/zh_cn/validation.md): Vulkan and Metal native
+  API validation setup in Chinese.
 - [Core API en_US](docs/api/en_us/core.md): current public API surface in
   English.
+- [Features and limits en_US](docs/api/en_us/features-and-limits.md): capability
+  and limit interpretation in English.
 - [Quick Start en_US](docs/usage/en_us/quick-start.md): current usage path in
   English.
 - [Diagnostics en_US](docs/usage/en_us/diagnostics.md): capture, profiling, and
   issue-report guidance in English.
+- [Validation en_US](docs/usage/en_us/validation.md): Vulkan and Metal native
+  API validation setup in English.
 - [Current parity report](docs/develop/period44/parity-report.md): observed,
   configured, and missing backend/device evidence.
 
@@ -54,6 +64,7 @@ first or keep the example scoped to existing public API.
 
 ```sh
 zig build
+zig build run-api-guard
 zig build run-triangle
 zig build run-offscreen-texture
 zig build run-rainbow-cube

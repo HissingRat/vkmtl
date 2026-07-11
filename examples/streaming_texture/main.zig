@@ -35,13 +35,13 @@ pub fn main() !void {
         return;
     }
 
-    const kind: vkmtl.SparseTextureKind = if (features.sparse_textures) .sparse_texture else .tiled_texture;
-    const page_extent = vkmtl.Size3D{
+    const kind: vkmtl.resource.SparseTextureKind = if (features.sparse_textures) .sparse_texture else .tiled_texture;
+    const page_extent = vkmtl.resource.Size3D{
         .width = @max(device.limits().sparse_texture_page_width, 64),
         .height = @max(device.limits().sparse_texture_page_height, 64),
         .depth = @max(device.limits().sparse_texture_page_depth, 1),
     };
-    try device.validateSparseTextureDescriptor(.{
+    try vkmtl.resource.validateSparseTextureDescriptor(device, .{
         .kind = kind,
         .texture = .{
             .format = .rgba8_unorm,
@@ -52,7 +52,7 @@ pub fn main() !void {
         .page_extent = page_extent,
     });
 
-    var residency = vkmtl.SparseResidencyMap.init(allocator);
+    var residency = vkmtl.resource.SparseResidencyMap.init(allocator);
     defer residency.deinit();
     try residency.apply(.{ .textures = &.{.{
         .kind = kind,

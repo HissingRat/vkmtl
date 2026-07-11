@@ -129,7 +129,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     defer screen_shader.deinit();
 
     const screen_stages = screen_shader.stageDescriptors(context.selectedBackend());
-    var derived_bind_group_layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
+    var derived_bind_group_layouts = try vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(
         allocator,
         screen_stages.vertex,
         screen_stages.fragment,
@@ -157,7 +157,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     defer bind_group.deinit();
 
     const offscreen_stages = offscreen_shader.stageDescriptors(context.selectedBackend());
-    var offscreen_vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescriptor(
+    var offscreen_vertex_descriptor = try vkmtl.shader.Reflection.deriveSingleBufferVertexDescriptor(
         allocator,
         offscreen_stages.vertex,
         .{ .stride = @sizeOf(ColorVertex) },
@@ -171,7 +171,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     ));
     defer offscreen_pipeline.deinit();
 
-    var screen_vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescriptor(
+    var screen_vertex_descriptor = try vkmtl.shader.Reflection.deriveSingleBufferVertexDescriptor(
         allocator,
         screen_stages.vertex,
         .{ .stride = @sizeOf(ScreenVertex) },

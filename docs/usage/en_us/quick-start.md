@@ -53,11 +53,10 @@ other desktop platforms it prefers Vulkan. Applications can request `.vulkan`
 or `.metal` explicitly, and examples also accept the build-time `-Dvulkan`
 override for backend testing.
 
-`Device` is the long-term resource creation entry point. `Queue` is the
-long-term command-buffer and submit entry point. `Swapchain` is the current
-drawable resize and presentation-chain helper entry point. Existing
-`WindowContext.make*`, `resize(...)`, and `clear(...)` methods still work, but
-they should gradually become compatibility helpers.
+`Device` is the resource creation entry point. `Queue` owns command-buffer
+creation and submission, while `Swapchain` owns drawable resize and clear
+operations. `WindowContext` is limited to backend identity, native-handle
+access, and access to those runtime owners.
 
 ## Use Precompiled Slang Shaders
 
@@ -152,7 +151,7 @@ The preferred path is to derive bind group layouts from shader reflection, then
 bind live runtime resources through `BindGroupDescriptor`.
 
 ```zig
-var layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
+var layouts = try vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(
     allocator,
     stages.vertex,
     stages.fragment,
@@ -245,8 +244,8 @@ create a cache directory. Inspect SPIR-V, MSL, or reflection JSON under
 
 ## Current Limits
 
-- `Device` and `Queue` are the long-term creation and command-entry views.
-  `WindowContext.make*` helpers remain compatibility forwards.
+- `Device`, `Queue`, and `Swapchain` are the creation, command, and
+  presentation owners. `WindowContext` does not forward their operations.
 - vkmtl does not decode images, load meshes, or render text. Applications should
   provide pixel data and higher-level asset systems.
 - GLFW is not part of vkmtl core. Use an external window adapter, like the

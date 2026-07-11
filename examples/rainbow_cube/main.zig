@@ -151,14 +151,14 @@ pub fn main(_: std.process.Init.Minimal) !void {
     defer compiled_shader.deinit();
 
     const stages = compiled_shader.stageDescriptors(context.selectedBackend());
-    var derived_vertex_descriptor = try vkmtl.ShaderReflection.deriveSingleBufferVertexDescriptor(
+    var derived_vertex_descriptor = try vkmtl.shader.Reflection.deriveSingleBufferVertexDescriptor(
         allocator,
         stages.vertex,
         .{ .stride = @sizeOf(Vertex) },
     );
     defer derived_vertex_descriptor.deinit();
 
-    var derived_bind_group_layouts = try vkmtl.ShaderReflection.deriveRenderPipelineBindGroupLayouts(
+    var derived_bind_group_layouts = try vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(
         allocator,
         stages.vertex,
         stages.fragment,

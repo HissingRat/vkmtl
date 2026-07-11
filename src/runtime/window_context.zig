@@ -664,124 +664,140 @@ fn pathExists(path: []const u8) bool {
 }
 
 pub const Buffer = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    length_value: usize,
-    usage_value: core.BufferUsage = .{},
-    storage_mode_value: core.ResourceStorageMode = .automatic,
-    usage_state: core.ResourceUsageState = .{},
-    owner_queue_value: core.QueueKind = .graphics,
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanBuffer,
         metal: MetalBuffer,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        length_value: usize,
+        usage_value: core.BufferUsage = .{},
+        storage_mode_value: core.ResourceStorageMode = .automatic,
+        usage_state: core.ResourceUsageState = .{},
+        owner_queue_value: core.QueueKind = .graphics,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) Buffer {
+        var result: Buffer = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const Buffer) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *Buffer) void {
-        assertAlive(self.alive, .buffer);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .buffer);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        self.tracker.release(.buffer);
+        state_value.tracker.release(.buffer);
     }
 
     pub fn selectedBackend(self: Buffer) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn length(self: Buffer) usize {
-        return self.length_value;
+        return self.state().length_value;
     }
 
     pub fn label(self: Buffer) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *Buffer, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .buffer);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .buffer);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
     }
 
     pub fn usage(self: Buffer) core.BufferUsage {
-        return self.usage_value;
+        return self.state().usage_value;
     }
 
     pub fn storageMode(self: Buffer) core.ResourceStorageMode {
-        return self.storage_mode_value;
+        return self.state().storage_mode_value;
     }
 
     pub fn cpuVisible(self: Buffer) bool {
-        return self.storage_mode_value.cpuVisible();
+        return self.state().storage_mode_value.cpuVisible();
     }
 
     pub fn currentUsage(self: Buffer) ?core.ResourceUsageKind {
-        return self.usage_state.current;
+        return self.state().usage_state.current;
     }
 
     pub fn usageBarrierCount(self: Buffer) usize {
-        return self.usage_state.barrier_count;
+        return self.state().usage_state.barrier_count;
     }
 
     pub fn ownerQueue(self: Buffer) core.QueueKind {
-        return self.owner_queue_value;
+        return self.state().owner_queue_value;
     }
 
     fn recordUsage(self: *Buffer, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
-        return self.usage_state.transitionTo(next_usage);
+        return self.state().usage_state.transitionTo(next_usage);
     }
 
     pub fn mapRange(self: *Buffer, descriptor: core.BufferMapDescriptor) !MappedBufferRange {
-        assertAlive(self.alive, .buffer);
+        assertAlive(self.state().alive, .buffer);
         if (!self.cpuVisible()) return core.BufferError.BufferNotCpuVisible;
         try descriptor.validate(self.length());
 
-        const impl = switch (self.impl) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| MappedBufferRange.Impl{ .vulkan = try vulkan.mapRange(descriptor) },
             .metal => |*metal| MappedBufferRange.Impl{ .metal = try metal.mapRange(descriptor) },
         };
-        return .{
-            .backend = self.backend,
+        return MappedBufferRange.init(.{
+            .backend = self.state().backend,
             .buffer = self,
             .bytes_value = switch (impl) {
                 .vulkan => |range| range.bytes,
                 .metal => |range| range.bytes,
             },
             .impl = impl,
-        };
+        });
     }
 
     pub fn replaceBytes(self: *Buffer, offset: usize, bytes: []const u8) !void {
-        assertAlive(self.alive, .buffer);
+        assertAlive(self.state().alive, .buffer);
         const descriptor = core.BufferWriteDescriptor{
             .offset = offset,
             .bytes = bytes,
         };
         try descriptor.validate(self.length());
-        switch (self.impl) {
+        switch (self.state().impl) {
             .vulkan => |*vulkan| try vulkan.replaceBytes(offset, bytes),
             .metal => |*metal| try metal.replaceBytes(offset, bytes),
         }
     }
 
     pub fn readBytes(self: *Buffer, offset: usize, destination: []u8) !void {
-        assertAlive(self.alive, .buffer);
+        assertAlive(self.state().alive, .buffer);
         const descriptor = core.BufferReadDescriptor{
             .offset = offset,
             .destination = destination,
         };
         try descriptor.validate(self.length());
-        switch (self.impl) {
+        switch (self.state().impl) {
             .vulkan => |*vulkan| try vulkan.readBytes(offset, destination),
             .metal => |*metal| try metal.readBytes(offset, destination),
         }
@@ -789,34 +805,49 @@ pub const Buffer = struct {
 };
 
 pub const MappedBufferRange = struct {
-    backend: core.Backend,
-    buffer: *Buffer,
-    bytes_value: []u8,
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanBuffer.MappedRange,
         metal: MetalBuffer.MappedRange,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        buffer: *Buffer,
+        bytes_value: []u8,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) MappedBufferRange {
+        var result: MappedBufferRange = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const MappedBufferRange) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn bytes(self: MappedBufferRange) []u8 {
-        assertObjectAlive(self.alive, "mapped_buffer_range");
-        return self.bytes_value;
+        assertObjectAlive(self.state().alive, "mapped_buffer_range");
+        return self.state().bytes_value;
     }
 
     pub fn deinit(self: *MappedBufferRange) void {
-        assertObjectAlive(self.alive, "mapped_buffer_range");
-        assertAlive(self.buffer.alive, .buffer);
-        switch (self.impl) {
-            .vulkan => |range| self.buffer.impl.vulkan.unmapRange(range),
-            .metal => |range| self.buffer.impl.metal.unmapRange(range) catch |err| {
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "mapped_buffer_range");
+        assertAlive(state_value.buffer.state().alive, .buffer);
+        switch (state_value.impl) {
+            .vulkan => |range| state_value.buffer.state().impl.vulkan.unmapRange(range),
+            .metal => |range| state_value.buffer.state().impl.metal.unmapRange(range) catch |err| {
                 if (builtin.mode == .Debug) {
                     std.debug.panic("vkmtl failed to unmap Metal buffer: {s}", .{@errorName(err)});
                 }
             },
         }
-        self.alive = false;
+        state_value.alive = false;
     }
 };
 
@@ -854,80 +885,96 @@ const SharedTextureUsageTracker = struct {
 };
 
 pub const Texture = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    dimension_value: core.TextureDimension = .two_d,
-    format_value: core.TextureFormat,
-    usage_value: core.TextureUsage,
-    sample_count_value: u32,
-    usage_state: core.ResourceUsageState = .{},
-    subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
-    owner_queue_value: core.QueueKind = .graphics,
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanTexture,
         metal: MetalTexture,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        dimension_value: core.TextureDimension = .two_d,
+        format_value: core.TextureFormat,
+        usage_value: core.TextureUsage,
+        sample_count_value: u32,
+        usage_state: core.ResourceUsageState = .{},
+        subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
+        owner_queue_value: core.QueueKind = .graphics,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) Texture {
+        var result: Texture = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const Texture) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *Texture) void {
-        assertAlive(self.alive, .texture);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .texture);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        if (self.subresource_usage_tracker) |subresource_tracker| {
+        if (state_value.subresource_usage_tracker) |subresource_tracker| {
             subresource_tracker.release();
-            self.subresource_usage_tracker = null;
+            state_value.subresource_usage_tracker = null;
         }
-        self.tracker.release(.texture);
+        state_value.tracker.release(.texture);
     }
 
     pub fn selectedBackend(self: Texture) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: Texture) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *Texture, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .texture);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .texture);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
     }
 
     pub fn format(self: Texture) core.TextureFormat {
-        return self.format_value;
+        return self.state().format_value;
     }
 
     pub fn usage(self: Texture) core.TextureUsage {
-        return self.usage_value;
+        return self.state().usage_value;
     }
 
     pub fn currentUsage(self: Texture) ?core.ResourceUsageKind {
-        return self.usage_state.current;
+        return self.state().usage_state.current;
     }
 
     pub fn usageBarrierCount(self: Texture) usize {
-        return self.usage_state.barrier_count;
+        return self.state().usage_state.barrier_count;
     }
 
     pub fn ownerQueue(self: Texture) core.QueueKind {
-        return self.owner_queue_value;
+        return self.state().owner_queue_value;
     }
 
     fn recordUsage(self: *Texture, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
-        const transition = self.usage_state.transitionTo(next_usage);
-        if (self.subresource_usage_tracker) |subresource_tracker| {
+        const transition = self.state().usage_state.transitionTo(next_usage);
+        if (self.state().subresource_usage_tracker) |subresource_tracker| {
             _ = subresource_tracker.value.transition(.{}, next_usage) catch {};
         }
         return transition;
@@ -938,48 +985,48 @@ pub const Texture = struct {
         range: core.TextureSubresourceRange,
         next_usage: core.ResourceUsageKind,
     ) core.CommandEncodingError!core.TextureUsageTransitionSummary {
-        const subresource_tracker = self.subresource_usage_tracker orelse {
-            _ = self.usage_state.transitionTo(next_usage);
+        const subresource_tracker = self.state().subresource_usage_tracker orelse {
+            _ = self.state().usage_state.transitionTo(next_usage);
             return .{};
         };
         const summary = try subresource_tracker.value.transition(range, next_usage);
-        self.usage_state.current = if (textureSubresourceRangeIsFull(range, self.textureDescriptor())) next_usage else null;
-        if (summary.required_barrier_count != 0) self.usage_state.barrier_count += 1;
+        self.state().usage_state.current = if (textureSubresourceRangeIsFull(range, self.textureDescriptor())) next_usage else null;
+        if (summary.required_barrier_count != 0) self.state().usage_state.barrier_count += 1;
         return summary;
     }
 
     pub fn subresourceUsage(self: Texture, mip_level: u32, array_layer: u32) ?core.ResourceUsageKind {
-        const subresource_tracker = self.subresource_usage_tracker orelse return null;
+        const subresource_tracker = self.state().subresource_usage_tracker orelse return null;
         return subresource_tracker.value.currentUsage(mip_level, array_layer);
     }
 
     pub fn sampleCount(self: Texture) u32 {
-        return self.sample_count_value;
+        return self.state().sample_count_value;
     }
 
     pub fn width(self: Texture) u32 {
-        return switch (self.impl) {
+        return switch (self.state().impl) {
             .vulkan => |vulkan| vulkan.width(),
             .metal => |metal| metal.width(),
         };
     }
 
     pub fn height(self: Texture) u32 {
-        return switch (self.impl) {
+        return switch (self.state().impl) {
             .vulkan => |vulkan| vulkan.height(),
             .metal => |metal| metal.height(),
         };
     }
 
     pub fn depthOrArrayLayers(self: Texture) u32 {
-        return switch (self.impl) {
+        return switch (self.state().impl) {
             .vulkan => |vulkan| vulkan.depthOrArrayLayers(),
             .metal => |metal| metal.depthOrArrayLayers(),
         };
     }
 
     pub fn mipLevelCount(self: Texture) u32 {
-        return switch (self.impl) {
+        return switch (self.state().impl) {
             .vulkan => |vulkan| vulkan.mipLevelCount(),
             .metal => |metal| metal.mipLevelCount(),
         };
@@ -987,73 +1034,52 @@ pub const Texture = struct {
 
     pub fn textureDescriptor(self: Texture) core.TextureDescriptor {
         return .{
-            .format = self.format_value,
-            .dimension = self.dimension_value,
+            .format = self.state().format_value,
+            .dimension = self.state().dimension_value,
             .width = self.width(),
             .height = self.height(),
             .depth_or_array_layers = self.depthOrArrayLayers(),
             .mip_level_count = self.mipLevelCount(),
-            .sample_count = self.sample_count_value,
-            .usage = self.usage_value,
+            .sample_count = self.state().sample_count_value,
+            .usage = self.state().usage_value,
         };
     }
 
     pub fn makeTextureView(self: *Texture, descriptor: core.TextureViewDescriptor) !TextureView {
-        assertAlive(self.alive, .texture);
+        assertAlive(self.state().alive, .texture);
         const resolved = try descriptor.resolveForTexture(.{
-            .format = self.format_value,
+            .format = self.state().format_value,
             .width = self.width(),
             .height = self.height(),
             .depth_or_array_layers = self.depthOrArrayLayers(),
             .mip_level_count = self.mipLevelCount(),
-            .usage = self.usage_value,
+            .usage = self.state().usage_value,
         });
-        const impl = switch (self.impl) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| TextureView.Impl{ .vulkan = try vulkan.makeTextureView(descriptor) },
             .metal => |*metal| TextureView.Impl{ .metal = try metal.makeTextureView(descriptor) },
         };
-        self.tracker.retain(.texture_view);
-        var view = switch (self.impl) {
-            .vulkan => TextureView{
-                .backend = .vulkan,
-                .tracker = self.tracker,
-                .label_value = descriptor.label,
-                .native_labels_enabled = true,
-                .format_value = resolved.format,
-                .dimension_value = resolved.dimension,
-                .usage_value = self.usage_value,
-                .sample_count_value = self.sample_count_value,
-                .subresource_usage_tracker = self.subresource_usage_tracker,
-                .width_value = mipDimension(self.width(), resolved.base_mip_level),
-                .height_value = mipDimension(self.height(), resolved.base_mip_level),
-                .base_mip_level_value = resolved.base_mip_level,
-                .mip_level_count_value = resolved.mip_level_count,
-                .base_array_layer_value = resolved.base_array_layer,
-                .array_layer_count_value = resolved.array_layer_count,
-                .owner_queue_value = self.owner_queue_value,
-                .impl = impl,
-            },
-            .metal => TextureView{
-                .backend = .metal,
-                .tracker = self.tracker,
-                .label_value = descriptor.label,
-                .native_labels_enabled = true,
-                .format_value = resolved.format,
-                .dimension_value = resolved.dimension,
-                .usage_value = self.usage_value,
-                .sample_count_value = self.sample_count_value,
-                .subresource_usage_tracker = self.subresource_usage_tracker,
-                .width_value = mipDimension(self.width(), resolved.base_mip_level),
-                .height_value = mipDimension(self.height(), resolved.base_mip_level),
-                .base_mip_level_value = resolved.base_mip_level,
-                .mip_level_count_value = resolved.mip_level_count,
-                .base_array_layer_value = resolved.base_array_layer,
-                .array_layer_count_value = resolved.array_layer_count,
-                .owner_queue_value = self.owner_queue_value,
-                .impl = impl,
-            },
-        };
-        if (self.subresource_usage_tracker) |subresource_tracker| subresource_tracker.retain();
+        self.state().tracker.retain(.texture_view);
+        var view = TextureView.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .label_value = descriptor.label,
+            .native_labels_enabled = true,
+            .format_value = resolved.format,
+            .dimension_value = resolved.dimension,
+            .usage_value = self.state().usage_value,
+            .sample_count_value = self.state().sample_count_value,
+            .subresource_usage_tracker = self.state().subresource_usage_tracker,
+            .width_value = mipDimension(self.width(), resolved.base_mip_level),
+            .height_value = mipDimension(self.height(), resolved.base_mip_level),
+            .base_mip_level_value = resolved.base_mip_level,
+            .mip_level_count_value = resolved.mip_level_count,
+            .base_array_layer_value = resolved.base_array_layer,
+            .array_layer_count_value = resolved.array_layer_count,
+            .owner_queue_value = self.state().owner_queue_value,
+            .impl = impl,
+        });
+        if (self.state().subresource_usage_tracker) |subresource_tracker| subresource_tracker.retain();
         view.setLabel(descriptor.label);
         return view;
     }
@@ -1063,8 +1089,8 @@ pub const Texture = struct {
         region: core.Region3D,
         descriptor: core.TextureReplaceRegionDescriptor,
     ) !void {
-        assertAlive(self.alive, .texture);
-        switch (self.impl) {
+        assertAlive(self.state().alive, .texture);
+        switch (self.state().impl) {
             .vulkan => |*vulkan| try vulkan.replaceRegion(region, descriptor),
             .metal => |*metal| try metal.replaceRegion(region, descriptor),
         }
@@ -1080,160 +1106,202 @@ pub const Texture = struct {
     }
 };
 
+fn ExternalResourceState(comptime Descriptor: type) type {
+    return struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        descriptor_value: Descriptor,
+        import_plan_value: core.ExternalInteropImportPlan,
+        alive: bool = true,
+    };
+}
+
 pub const ExternalMemory = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    descriptor_value: core.ExternalMemoryDescriptor,
-    import_plan_value: core.ExternalInteropImportPlan,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = ExternalResourceState(core.ExternalMemoryDescriptor);
+
+    fn init(state_value: State) ExternalMemory {
+        var result: ExternalMemory = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ExternalMemory) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *ExternalMemory) void {
-        assertAlive(self.alive, .external_memory);
-        self.alive = false;
-        self.tracker.release(.external_memory);
+        assertAlive(self.state().alive, .external_memory);
+        self.state().alive = false;
+        self.state().tracker.release(.external_memory);
     }
 
     pub fn selectedBackend(self: ExternalMemory) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn descriptor(self: ExternalMemory) core.ExternalMemoryDescriptor {
-        assertAlive(self.alive, .external_memory);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .external_memory);
+        return self.state().descriptor_value;
     }
 
     pub fn size(self: ExternalMemory) u64 {
-        assertAlive(self.alive, .external_memory);
-        return self.descriptor_value.size;
+        assertAlive(self.state().alive, .external_memory);
+        return self.state().descriptor_value.size;
     }
 
     pub fn ownership(self: ExternalMemory) core.ExternalResourceOwnership {
-        assertAlive(self.alive, .external_memory);
-        return self.descriptor_value.ownership;
+        assertAlive(self.state().alive, .external_memory);
+        return self.state().descriptor_value.ownership;
     }
 
     pub fn importPlan(self: ExternalMemory) core.ExternalInteropImportPlan {
-        assertAlive(self.alive, .external_memory);
-        return self.import_plan_value;
+        assertAlive(self.state().alive, .external_memory);
+        return self.state().import_plan_value;
     }
 };
 
 pub const ExternalBuffer = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    descriptor_value: core.ExternalBufferDescriptor,
-    import_plan_value: core.ExternalInteropImportPlan,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = ExternalResourceState(core.ExternalBufferDescriptor);
+
+    fn init(state_value: State) ExternalBuffer {
+        var result: ExternalBuffer = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ExternalBuffer) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *ExternalBuffer) void {
-        assertAlive(self.alive, .external_buffer);
-        self.alive = false;
-        self.tracker.release(.external_buffer);
+        assertAlive(self.state().alive, .external_buffer);
+        self.state().alive = false;
+        self.state().tracker.release(.external_buffer);
     }
 
     pub fn selectedBackend(self: ExternalBuffer) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn descriptor(self: ExternalBuffer) core.ExternalBufferDescriptor {
-        assertAlive(self.alive, .external_buffer);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .external_buffer);
+        return self.state().descriptor_value;
     }
 
     pub fn length(self: ExternalBuffer) u64 {
-        assertAlive(self.alive, .external_buffer);
-        return self.descriptor_value.length;
+        assertAlive(self.state().alive, .external_buffer);
+        return self.state().descriptor_value.length;
     }
 
     pub fn usage(self: ExternalBuffer) core.BufferUsage {
-        assertAlive(self.alive, .external_buffer);
-        return self.descriptor_value.usage;
+        assertAlive(self.state().alive, .external_buffer);
+        return self.state().descriptor_value.usage;
     }
 
     pub fn ownership(self: ExternalBuffer) core.ExternalResourceOwnership {
-        assertAlive(self.alive, .external_buffer);
-        return self.descriptor_value.ownership;
+        assertAlive(self.state().alive, .external_buffer);
+        return self.state().descriptor_value.ownership;
     }
 
     pub fn importPlan(self: ExternalBuffer) core.ExternalInteropImportPlan {
-        assertAlive(self.alive, .external_buffer);
-        return self.import_plan_value;
+        assertAlive(self.state().alive, .external_buffer);
+        return self.state().import_plan_value;
     }
 };
 
 pub const ExternalSemaphore = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    descriptor_value: core.ExternalSemaphoreDescriptor,
-    import_plan_value: core.ExternalInteropImportPlan,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = ExternalResourceState(core.ExternalSemaphoreDescriptor);
+
+    fn init(state_value: State) ExternalSemaphore {
+        var result: ExternalSemaphore = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ExternalSemaphore) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *ExternalSemaphore) void {
-        assertAlive(self.alive, .external_semaphore);
-        self.alive = false;
-        self.tracker.release(.external_semaphore);
+        assertAlive(self.state().alive, .external_semaphore);
+        self.state().alive = false;
+        self.state().tracker.release(.external_semaphore);
     }
 
     pub fn selectedBackend(self: ExternalSemaphore) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn descriptor(self: ExternalSemaphore) core.ExternalSemaphoreDescriptor {
-        assertAlive(self.alive, .external_semaphore);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .external_semaphore);
+        return self.state().descriptor_value;
     }
 
     pub fn isTimeline(self: ExternalSemaphore) bool {
-        assertAlive(self.alive, .external_semaphore);
-        return self.descriptor_value.timeline;
+        assertAlive(self.state().alive, .external_semaphore);
+        return self.state().descriptor_value.timeline;
     }
 
     pub fn ownership(self: ExternalSemaphore) core.ExternalResourceOwnership {
-        assertAlive(self.alive, .external_semaphore);
-        return self.descriptor_value.ownership;
+        assertAlive(self.state().alive, .external_semaphore);
+        return self.state().descriptor_value.ownership;
     }
 
     pub fn importPlan(self: ExternalSemaphore) core.ExternalInteropImportPlan {
-        assertAlive(self.alive, .external_semaphore);
-        return self.import_plan_value;
+        assertAlive(self.state().alive, .external_semaphore);
+        return self.state().import_plan_value;
     }
 };
 
 pub const ExternalEvent = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    descriptor_value: core.ExternalEventDescriptor,
-    import_plan_value: core.ExternalInteropImportPlan,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = ExternalResourceState(core.ExternalEventDescriptor);
+
+    fn init(state_value: State) ExternalEvent {
+        var result: ExternalEvent = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ExternalEvent) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *ExternalEvent) void {
-        assertAlive(self.alive, .external_event);
-        self.alive = false;
-        self.tracker.release(.external_event);
+        assertAlive(self.state().alive, .external_event);
+        self.state().alive = false;
+        self.state().tracker.release(.external_event);
     }
 
     pub fn selectedBackend(self: ExternalEvent) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn descriptor(self: ExternalEvent) core.ExternalEventDescriptor {
-        assertAlive(self.alive, .external_event);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .external_event);
+        return self.state().descriptor_value;
     }
 
     pub fn isShared(self: ExternalEvent) bool {
-        assertAlive(self.alive, .external_event);
-        return self.descriptor_value.shared;
+        assertAlive(self.state().alive, .external_event);
+        return self.state().descriptor_value.shared;
     }
 
     pub fn ownership(self: ExternalEvent) core.ExternalResourceOwnership {
-        assertAlive(self.alive, .external_event);
-        return self.descriptor_value.ownership;
+        assertAlive(self.state().alive, .external_event);
+        return self.state().descriptor_value.ownership;
     }
 
     pub fn importPlan(self: ExternalEvent) core.ExternalInteropImportPlan {
-        assertAlive(self.alive, .external_event);
-        return self.import_plan_value;
+        assertAlive(self.state().alive, .external_event);
+        return self.state().import_plan_value;
     }
 };
 
@@ -1286,26 +1354,26 @@ pub const ExternalSynchronizationDescriptor = struct {
     pub fn plan(self: ExternalSynchronizationDescriptor, backend: core.Backend) RuntimeError!ExternalSynchronizationPlan {
         var result = ExternalSynchronizationPlan{ .backend = backend };
         for (self.wait_semaphores) |semaphore| {
-            assertAlive(semaphore.alive, .external_semaphore);
-            try expectSameBackend(backend, semaphore.backend);
+            assertAlive(semaphore.state().alive, .external_semaphore);
+            try expectSameBackend(backend, semaphore.selectedBackend());
             result.wait_semaphore_count += 1;
             if (semaphore.importPlan().requiresNativeImport()) result.native_wait_count += 1;
         }
         for (self.signal_semaphores) |semaphore| {
-            assertAlive(semaphore.alive, .external_semaphore);
-            try expectSameBackend(backend, semaphore.backend);
+            assertAlive(semaphore.state().alive, .external_semaphore);
+            try expectSameBackend(backend, semaphore.selectedBackend());
             result.signal_semaphore_count += 1;
             if (semaphore.importPlan().requiresNativeImport()) result.native_signal_count += 1;
         }
         for (self.wait_events) |event| {
-            assertAlive(event.alive, .external_event);
-            try expectSameBackend(backend, event.backend);
+            assertAlive(event.state().alive, .external_event);
+            try expectSameBackend(backend, event.selectedBackend());
             result.wait_event_count += 1;
             if (event.importPlan().requiresNativeImport()) result.native_wait_count += 1;
         }
         for (self.signal_events) |event| {
-            assertAlive(event.alive, .external_event);
-            try expectSameBackend(backend, event.backend);
+            assertAlive(event.state().alive, .external_event);
+            try expectSameBackend(backend, event.selectedBackend());
             result.signal_event_count += 1;
             if (event.importPlan().requiresNativeImport()) result.native_signal_count += 1;
         }
@@ -1348,22 +1416,22 @@ pub const SynchronizationDescriptor = struct {
 
     pub fn validate(self: SynchronizationDescriptor, backend: core.Backend) !void {
         for (self.wait_fences) |operation| {
-            assertObjectAlive(operation.fence.alive, "fence");
-            try expectSameBackend(backend, operation.fence.backend);
-            try operation.descriptor.validate(operation.fence.descriptor_value);
+            assertObjectAlive(operation.fence.state().alive, "fence");
+            try expectSameBackend(backend, operation.fence.selectedBackend());
+            try operation.descriptor.validate(operation.fence.state().descriptor_value);
         }
         for (self.signal_fences) |operation| {
-            assertObjectAlive(operation.fence.alive, "fence");
-            try expectSameBackend(backend, operation.fence.backend);
-            try operation.descriptor.validate(operation.fence.descriptor_value);
+            assertObjectAlive(operation.fence.state().alive, "fence");
+            try expectSameBackend(backend, operation.fence.selectedBackend());
+            try operation.descriptor.validate(operation.fence.state().descriptor_value);
         }
         for (self.wait_events) |operation| {
-            assertObjectAlive(operation.event.alive, "event");
-            try expectSameBackend(backend, operation.event.backend);
+            assertObjectAlive(operation.event.state().alive, "event");
+            try expectSameBackend(backend, operation.event.selectedBackend());
         }
         for (self.signal_events) |operation| {
-            assertObjectAlive(operation.event.alive, "event");
-            try expectSameBackend(backend, operation.event.backend);
+            assertObjectAlive(operation.event.state().alive, "event");
+            try expectSameBackend(backend, operation.event.selectedBackend());
         }
     }
 
@@ -1387,215 +1455,255 @@ pub const SynchronizationDescriptor = struct {
 };
 
 pub const ExternalTexture = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    descriptor_value: core.ExternalTextureDescriptor,
-    import_plan_value: core.ExternalInteropImportPlan,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = ExternalResourceState(core.ExternalTextureDescriptor);
+
+    fn init(state_value: State) ExternalTexture {
+        var result: ExternalTexture = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ExternalTexture) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *ExternalTexture) void {
-        assertAlive(self.alive, .texture);
-        self.alive = false;
-        self.tracker.release(.texture);
+        assertAlive(self.state().alive, .texture);
+        self.state().alive = false;
+        self.state().tracker.release(.texture);
     }
 
     pub fn selectedBackend(self: ExternalTexture) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn descriptor(self: ExternalTexture) core.ExternalTextureDescriptor {
-        assertAlive(self.alive, .texture);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .texture);
+        return self.state().descriptor_value;
     }
 
     pub fn textureDescriptor(self: ExternalTexture) core.TextureDescriptor {
-        assertAlive(self.alive, .texture);
-        return self.descriptor_value.textureDescriptor();
+        assertAlive(self.state().alive, .texture);
+        return self.state().descriptor_value.textureDescriptor();
     }
 
     pub fn ownership(self: ExternalTexture) core.ExternalResourceOwnership {
-        assertAlive(self.alive, .texture);
-        return self.descriptor_value.ownership;
+        assertAlive(self.state().alive, .texture);
+        return self.state().descriptor_value.ownership;
     }
 
     pub fn importPlan(self: ExternalTexture) core.ExternalInteropImportPlan {
-        assertAlive(self.alive, .texture);
-        return self.import_plan_value;
+        assertAlive(self.state().alive, .texture);
+        return self.state().import_plan_value;
     }
 };
 
 pub const TextureView = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    format_value: core.TextureFormat,
-    dimension_value: core.TextureViewDimension = .automatic,
-    usage_value: core.TextureUsage,
-    sample_count_value: u32,
-    width_value: u32,
-    height_value: u32,
-    base_mip_level_value: u32 = 0,
-    mip_level_count_value: u32 = 1,
-    base_array_layer_value: u32 = 0,
-    array_layer_count_value: u32 = 1,
-    owner_queue_value: core.QueueKind = .graphics,
-    usage_state: core.ResourceUsageState = .{},
-    subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanTextureView,
         metal: MetalTextureView,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        format_value: core.TextureFormat,
+        dimension_value: core.TextureViewDimension = .automatic,
+        usage_value: core.TextureUsage,
+        sample_count_value: u32,
+        width_value: u32,
+        height_value: u32,
+        base_mip_level_value: u32 = 0,
+        mip_level_count_value: u32 = 1,
+        base_array_layer_value: u32 = 0,
+        array_layer_count_value: u32 = 1,
+        owner_queue_value: core.QueueKind = .graphics,
+        usage_state: core.ResourceUsageState = .{},
+        subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) TextureView {
+        var result: TextureView = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const TextureView) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *TextureView) void {
-        assertAlive(self.alive, .texture_view);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .texture_view);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        if (self.subresource_usage_tracker) |subresource_tracker| {
+        if (state_value.subresource_usage_tracker) |subresource_tracker| {
             subresource_tracker.release();
-            self.subresource_usage_tracker = null;
+            state_value.subresource_usage_tracker = null;
         }
-        self.tracker.release(.texture_view);
+        state_value.tracker.release(.texture_view);
     }
 
     pub fn selectedBackend(self: TextureView) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: TextureView) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *TextureView, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .texture_view);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .texture_view);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
     }
 
     pub fn format(self: TextureView) core.TextureFormat {
-        return self.format_value;
+        return self.state().format_value;
     }
 
     pub fn dimension(self: TextureView) core.TextureViewDimension {
-        return self.dimension_value;
+        return self.state().dimension_value;
     }
 
     pub fn baseMipLevel(self: TextureView) u32 {
-        return self.base_mip_level_value;
+        return self.state().base_mip_level_value;
     }
 
     pub fn mipLevelCount(self: TextureView) u32 {
-        return self.mip_level_count_value;
+        return self.state().mip_level_count_value;
     }
 
     pub fn baseArrayLayer(self: TextureView) u32 {
-        return self.base_array_layer_value;
+        return self.state().base_array_layer_value;
     }
 
     pub fn arrayLayerCount(self: TextureView) u32 {
-        return self.array_layer_count_value;
+        return self.state().array_layer_count_value;
     }
 
     pub fn descriptor(self: TextureView) core.ResolvedTextureViewDescriptor {
-        assertAlive(self.alive, .texture_view);
+        assertAlive(self.state().alive, .texture_view);
         return .{
-            .format = self.format_value,
-            .dimension = self.dimension_value,
-            .base_mip_level = self.base_mip_level_value,
-            .mip_level_count = self.mip_level_count_value,
-            .base_array_layer = self.base_array_layer_value,
-            .array_layer_count = self.array_layer_count_value,
+            .format = self.state().format_value,
+            .dimension = self.state().dimension_value,
+            .base_mip_level = self.state().base_mip_level_value,
+            .mip_level_count = self.state().mip_level_count_value,
+            .base_array_layer = self.state().base_array_layer_value,
+            .array_layer_count = self.state().array_layer_count_value,
         };
     }
 
     pub fn usage(self: TextureView) core.TextureUsage {
-        return self.usage_value;
+        return self.state().usage_value;
     }
 
     pub fn currentUsage(self: TextureView) ?core.ResourceUsageKind {
-        return self.usage_state.current;
+        return self.state().usage_state.current;
     }
 
     pub fn usageBarrierCount(self: TextureView) usize {
-        return self.usage_state.barrier_count;
+        return self.state().usage_state.barrier_count;
     }
 
     pub fn ownerQueue(self: TextureView) core.QueueKind {
-        return self.owner_queue_value;
+        return self.state().owner_queue_value;
     }
 
     fn recordUsage(self: *TextureView, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
-        const transition = self.usage_state.transitionTo(next_usage);
-        if (self.subresource_usage_tracker) |subresource_tracker| {
+        const transition = self.state().usage_state.transitionTo(next_usage);
+        if (self.state().subresource_usage_tracker) |subresource_tracker| {
             _ = subresource_tracker.value.transition(.{
-                .base_mip_level = self.base_mip_level_value,
-                .mip_level_count = self.mip_level_count_value,
-                .base_array_layer = self.base_array_layer_value,
-                .array_layer_count = self.array_layer_count_value,
+                .base_mip_level = self.state().base_mip_level_value,
+                .mip_level_count = self.state().mip_level_count_value,
+                .base_array_layer = self.state().base_array_layer_value,
+                .array_layer_count = self.state().array_layer_count_value,
             }, next_usage) catch {};
         }
         return transition;
     }
 
     pub fn sampleCount(self: TextureView) u32 {
-        return self.sample_count_value;
+        return self.state().sample_count_value;
     }
 
     pub fn width(self: TextureView) u32 {
-        return self.width_value;
+        return self.state().width_value;
     }
 
     pub fn height(self: TextureView) u32 {
-        return self.height_value;
+        return self.state().height_value;
     }
 };
 
 pub const SamplerState = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanSamplerState,
         metal: MetalSamplerState,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) SamplerState {
+        var result: SamplerState = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const SamplerState) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *SamplerState) void {
-        assertAlive(self.alive, .sampler_state);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .sampler_state);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        self.tracker.release(.sampler_state);
+        state_value.tracker.release(.sampler_state);
     }
 
     pub fn selectedBackend(self: SamplerState) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: SamplerState) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *SamplerState, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .sampler_state);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .sampler_state);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
@@ -1603,185 +1711,227 @@ pub const SamplerState = struct {
 };
 
 pub const Fence = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.FenceDescriptor,
-    current_value: u64,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.FenceDescriptor,
+        current_value: u64,
+        alive: bool = true,
+    };
+
+    fn init(state_value: State) Fence {
+        var result: Fence = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const Fence) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *Fence) void {
-        assertObjectAlive(self.alive, "fence");
-        self.alive = false;
-        self.tracker.release(.fence);
+        assertObjectAlive(self.state().alive, "fence");
+        self.state().alive = false;
+        self.state().tracker.release(.fence);
     }
 
     pub fn selectedBackend(self: Fence) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: Fence) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *Fence, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "fence");
-        self.label_value = label_value;
+        assertObjectAlive(self.state().alive, "fence");
+        self.state().label_value = label_value;
     }
 
     pub fn descriptor(self: Fence) core.FenceDescriptor {
-        assertObjectAlive(self.alive, "fence");
-        return self.descriptor_value;
+        assertObjectAlive(self.state().alive, "fence");
+        return self.state().descriptor_value;
     }
 
     pub fn currentValue(self: Fence) u64 {
-        assertObjectAlive(self.alive, "fence");
-        return self.current_value;
+        assertObjectAlive(self.state().alive, "fence");
+        return self.state().current_value;
     }
 
     pub fn isSignaled(self: Fence, value: u64) bool {
-        assertObjectAlive(self.alive, "fence");
-        return switch (self.descriptor_value.kind) {
-            .binary => self.current_value != 0 and value <= 1,
-            .timeline => self.current_value >= value,
+        assertObjectAlive(self.state().alive, "fence");
+        return switch (self.state().descriptor_value.kind) {
+            .binary => self.state().current_value != 0 and value <= 1,
+            .timeline => self.state().current_value >= value,
         };
     }
 
     pub fn signal(self: *Fence, signal_descriptor: core.FenceSignalDescriptor) !void {
-        assertObjectAlive(self.alive, "fence");
-        try signal_descriptor.validate(self.descriptor_value);
-        switch (self.descriptor_value.kind) {
-            .binary => self.current_value = 1,
+        assertObjectAlive(self.state().alive, "fence");
+        try signal_descriptor.validate(self.state().descriptor_value);
+        switch (self.state().descriptor_value.kind) {
+            .binary => self.state().current_value = 1,
             .timeline => {
-                if (signal_descriptor.value < self.current_value) return core.CommandEncodingError.InvalidFenceValue;
-                self.current_value = signal_descriptor.value;
+                if (signal_descriptor.value < self.state().current_value) return core.CommandEncodingError.InvalidFenceValue;
+                self.state().current_value = signal_descriptor.value;
             },
         }
     }
 
     pub fn wait(self: *Fence, wait_descriptor: core.FenceWaitDescriptor) !void {
-        assertObjectAlive(self.alive, "fence");
-        try wait_descriptor.validate(self.descriptor_value);
+        assertObjectAlive(self.state().alive, "fence");
+        try wait_descriptor.validate(self.state().descriptor_value);
         if (!self.isSignaled(wait_descriptor.value)) return core.CommandEncodingError.FenceWaitTimeout;
     }
 
     pub fn reset(self: *Fence) !void {
-        assertObjectAlive(self.alive, "fence");
-        switch (self.descriptor_value.kind) {
-            .binary => self.current_value = 0,
+        assertObjectAlive(self.state().alive, "fence");
+        switch (self.state().descriptor_value.kind) {
+            .binary => self.state().current_value = 0,
             .timeline => return core.CommandEncodingError.InvalidFenceValue,
         }
     }
 };
 
 pub const Event = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.EventDescriptor,
-    signaled_value: bool = false,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.EventDescriptor,
+        signaled_value: bool = false,
+        alive: bool = true,
+    };
+
+    fn init(state_value: State) Event {
+        var result: Event = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const Event) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *Event) void {
-        assertObjectAlive(self.alive, "event");
-        self.alive = false;
-        self.tracker.release(.event);
+        assertObjectAlive(self.state().alive, "event");
+        self.state().alive = false;
+        self.state().tracker.release(.event);
     }
 
     pub fn selectedBackend(self: Event) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: Event) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *Event, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "event");
-        self.label_value = label_value;
+        assertObjectAlive(self.state().alive, "event");
+        self.state().label_value = label_value;
     }
 
     pub fn descriptor(self: Event) core.EventDescriptor {
-        assertObjectAlive(self.alive, "event");
-        return self.descriptor_value;
+        assertObjectAlive(self.state().alive, "event");
+        return self.state().descriptor_value;
     }
 
     pub fn isSignaled(self: Event) bool {
-        assertObjectAlive(self.alive, "event");
-        return self.signaled_value;
+        assertObjectAlive(self.state().alive, "event");
+        return self.state().signaled_value;
     }
 
     pub fn signal(self: *Event, signal_descriptor: core.EventSignalDescriptor) !void {
-        assertObjectAlive(self.alive, "event");
-        self.signaled_value = signal_descriptor.signaled;
+        assertObjectAlive(self.state().alive, "event");
+        self.state().signaled_value = signal_descriptor.signaled;
     }
 
     pub fn wait(self: *Event, wait_descriptor: core.EventWaitDescriptor) !void {
-        assertObjectAlive(self.alive, "event");
+        assertObjectAlive(self.state().alive, "event");
         _ = wait_descriptor;
-        if (!self.signaled_value) return core.CommandEncodingError.EventWaitTimeout;
+        if (!self.state().signaled_value) return core.CommandEncodingError.EventWaitTimeout;
     }
 
     pub fn reset(self: *Event) void {
-        assertObjectAlive(self.alive, "event");
-        self.signaled_value = false;
+        assertObjectAlive(self.state().alive, "event");
+        self.state().signaled_value = false;
     }
 };
 
 pub const Heap = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.HeapDescriptor,
-    reserved_bytes: u64 = 0,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.HeapDescriptor,
+        reserved_bytes: u64 = 0,
+        alive: bool = true,
+    };
+
+    fn init(state_value: State) Heap {
+        var result: Heap = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const Heap) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *Heap) void {
-        assertObjectAlive(self.alive, "heap");
-        self.alive = false;
-        self.tracker.release(.heap);
+        assertObjectAlive(self.state().alive, "heap");
+        self.state().alive = false;
+        self.state().tracker.release(.heap);
     }
 
     pub fn selectedBackend(self: Heap) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: Heap) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *Heap, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "heap");
-        self.label_value = label_value;
+        assertObjectAlive(self.state().alive, "heap");
+        self.state().label_value = label_value;
     }
 
     pub fn descriptor(self: Heap) core.HeapDescriptor {
-        return self.descriptor_value;
+        return self.state().descriptor_value;
     }
 
     pub fn size(self: Heap) u64 {
-        return self.descriptor_value.size;
+        return self.state().descriptor_value.size;
     }
 
     pub fn storageMode(self: Heap) core.HeapStorageMode {
-        return self.descriptor_value.storage_mode;
+        return self.state().descriptor_value.storage_mode;
     }
 
     pub fn reservedBytes(self: Heap) u64 {
-        return self.reserved_bytes;
+        return self.state().reserved_bytes;
     }
 
     pub fn remainingBytes(self: Heap) u64 {
-        return self.size() - self.reserved_bytes;
+        return self.size() - self.state().reserved_bytes;
     }
 
     pub fn reserve(self: *Heap, allocation: core.HeapAllocationDescriptor) core.HeapError!core.HeapAllocationInfo {
-        assertObjectAlive(self.alive, "heap");
-        try allocation.validate(self.descriptor_value);
-        const offset = alignForwardU64(self.reserved_bytes, allocation.alignment) catch return core.HeapError.HeapOutOfMemory;
+        assertObjectAlive(self.state().alive, "heap");
+        try allocation.validate(self.state().descriptor_value);
+        const offset = alignForwardU64(self.state().reserved_bytes, allocation.alignment) catch return core.HeapError.HeapOutOfMemory;
         const end = std.math.add(u64, offset, allocation.size) catch return core.HeapError.HeapOutOfMemory;
         if (end > self.size()) return core.HeapError.HeapOutOfMemory;
-        self.reserved_bytes = end;
+        self.state().reserved_bytes = end;
         return .{
             .offset = offset,
             .size = allocation.size,
@@ -1790,8 +1940,8 @@ pub const Heap = struct {
     }
 
     pub fn aliasingPlan(self: Heap, aliasing_descriptor: core.HeapAliasingDescriptor) core.HeapError!core.HeapAliasingPlan {
-        assertObjectAlive(self.alive, "heap");
-        return try aliasing_descriptor.plan(self.descriptor_value);
+        assertObjectAlive(self.state().alive, "heap");
+        return try aliasing_descriptor.plan(self.state().descriptor_value);
     }
 };
 
@@ -1834,58 +1984,72 @@ const BackendPrivateAccelerationStructureBuildRecord = struct {
 };
 
 pub const AccelerationStructure = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.AccelerationStructureDescriptor,
-    sizes_value: core.AccelerationStructureBuildSizes,
-    native_handle: BackendPrivateAccelerationStructureHandle,
-    last_build_record: ?BackendPrivateAccelerationStructureBuildRecord = null,
-    build_count: u64 = 0,
-    built_value: bool = false,
-    alive: bool = true,
-    impl: ?Impl = null,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanAccelerationStructure,
         metal: MetalAccelerationStructure,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.AccelerationStructureDescriptor,
+        sizes_value: core.AccelerationStructureBuildSizes,
+        native_handle: BackendPrivateAccelerationStructureHandle,
+        last_build_record: ?BackendPrivateAccelerationStructureBuildRecord = null,
+        build_count: u64 = 0,
+        built_value: bool = false,
+        alive: bool = true,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: State) AccelerationStructure {
+        var result: AccelerationStructure = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const AccelerationStructure) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *AccelerationStructure) void {
-        assertAlive(self.alive, .acceleration_structure);
-        self.alive = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        assertAlive(self.state().alive, .acceleration_structure);
+        self.state().alive = false;
+        if (self.state().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
-        self.tracker.release(.acceleration_structure);
+        self.state().tracker.release(.acceleration_structure);
     }
 
     pub fn selectedBackend(self: AccelerationStructure) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: AccelerationStructure) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *AccelerationStructure, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .acceleration_structure);
-        self.label_value = label_value;
-        if (self.impl) |*impl| switch (impl.*) {
+        assertAlive(self.state().alive, .acceleration_structure);
+        self.state().label_value = label_value;
+        if (self.state().impl) |*impl| switch (impl.*) {
             .vulkan => {},
             .metal => |*metal| metal.setLabel(label_value),
         };
     }
 
     pub fn descriptor(self: AccelerationStructure) core.AccelerationStructureDescriptor {
-        assertAlive(self.alive, .acceleration_structure);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .acceleration_structure);
+        return self.state().descriptor_value;
     }
 
     pub fn buildSizes(self: AccelerationStructure) core.AccelerationStructureBuildSizes {
-        assertAlive(self.alive, .acceleration_structure);
-        return self.sizes_value;
+        assertAlive(self.state().alive, .acceleration_structure);
+        return self.state().sizes_value;
     }
 
     pub fn resultSize(self: AccelerationStructure) u64 {
@@ -1901,41 +2065,41 @@ pub const AccelerationStructure = struct {
     }
 
     pub fn isBuilt(self: AccelerationStructure) bool {
-        assertAlive(self.alive, .acceleration_structure);
-        return self.built_value;
+        assertAlive(self.state().alive, .acceleration_structure);
+        return self.state().built_value;
     }
 
     pub fn hasBackendPrivateHandle(self: AccelerationStructure) bool {
-        assertAlive(self.alive, .acceleration_structure);
-        if (self.impl) |impl| switch (impl) {
+        assertAlive(self.state().alive, .acceleration_structure);
+        if (self.state().impl) |impl| switch (impl) {
             .vulkan => |vulkan| return vulkan.hasDriverHandle(),
             .metal => |metal| return metal.hasDriverHandle(),
         };
-        return self.native_handle.matchesPlan(.{
-            .backend = self.backend,
-            .kind = self.descriptor_value.kind,
+        return self.state().native_handle.matchesPlan(.{
+            .backend = self.state().backend,
+            .kind = self.state().descriptor_value.kind,
             .mode = .build,
-            .primitive_count = self.descriptor_value.primitive_count,
+            .primitive_count = self.state().descriptor_value.primitive_count,
             .geometry_count = 1,
-            .result_size = self.sizes_value.result_size,
-            .scratch_size = self.sizes_value.scratch_size,
-            .scratch_alignment = self.native_handle.scratch_alignment,
+            .result_size = self.state().sizes_value.result_size,
+            .scratch_size = self.state().sizes_value.scratch_size,
+            .scratch_alignment = self.state().native_handle.scratch_alignment,
         });
     }
 
     pub fn backendPrivateBuildCount(self: AccelerationStructure) u64 {
-        assertAlive(self.alive, .acceleration_structure);
-        return self.build_count;
+        assertAlive(self.state().alive, .acceleration_structure);
+        return self.state().build_count;
     }
 
     pub fn lastBuildRecordedBackendCommand(self: AccelerationStructure) bool {
-        assertAlive(self.alive, .acceleration_structure);
-        return if (self.last_build_record) |record| record.command_recorded else false;
+        assertAlive(self.state().alive, .acceleration_structure);
+        return if (self.state().last_build_record) |record| record.command_recorded else false;
     }
 
     pub fn lastBuildSubmittedToDriver(self: AccelerationStructure) bool {
-        assertAlive(self.alive, .acceleration_structure);
-        return if (self.last_build_record) |record| record.driver_submitted else false;
+        assertAlive(self.state().alive, .acceleration_structure);
+        return if (self.state().last_build_record) |record| record.driver_submitted else false;
     }
 
     fn markBuilt(
@@ -1945,14 +2109,14 @@ pub const AccelerationStructure = struct {
         command_recorded: bool,
         driver_submitted: bool,
     ) core.AdvancedFeatureError!void {
-        assertAlive(self.alive, .acceleration_structure);
-        if (!self.native_handle.matchesPlan(plan)) {
+        assertAlive(self.state().alive, .acceleration_structure);
+        if (!self.state().native_handle.matchesPlan(plan)) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
-        self.built_value = true;
-        self.build_count += 1;
+        self.state().built_value = true;
+        self.state().build_count += 1;
         const required_scratch = if (plan.mode == .update and plan.update_scratch_size != 0) plan.update_scratch_size else plan.scratch_size;
-        self.last_build_record = .{
+        self.state().last_build_record = .{
             .backend = plan.backend,
             .mode = plan.mode,
             .scratch_offset = resources.scratch_offset,
@@ -2054,9 +2218,9 @@ pub const AccelerationStructureBuildResources = struct {
         backend: core.Backend,
         plan: core.AccelerationStructureBuildPlan,
     ) core.AdvancedFeatureError!void {
-        assertAlive(self.result.alive, .acceleration_structure);
-        assertAlive(self.scratch.alive, .buffer);
-        if (self.result.backend != backend or self.scratch.backend != backend) {
+        assertAlive(self.result.state().alive, .acceleration_structure);
+        assertAlive(self.scratch.state().alive, .buffer);
+        if (self.result.selectedBackend() != backend or self.scratch.selectedBackend() != backend) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         if (plan.kind == .top_level) {
@@ -2084,7 +2248,7 @@ pub const AccelerationStructureBuildResources = struct {
                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
             }
         }
-        if (!self.scratch.usage_value.acceleration_structure_scratch) {
+        if (!self.scratch.state().usage_value.acceleration_structure_scratch) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         if (plan.scratch_alignment != 0 and self.scratch_offset % plan.scratch_alignment != 0) {
@@ -2097,16 +2261,16 @@ pub const AccelerationStructureBuildResources = struct {
         if (scratch_end > @as(u64, @intCast(self.scratch.length()))) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
-        if (self.result.descriptor_value.kind != plan.kind or
-            self.result.descriptor_value.primitive_count != plan.primitive_count or
+        if (self.result.state().descriptor_value.kind != plan.kind or
+            self.result.state().descriptor_value.primitive_count != plan.primitive_count or
             self.result.resultSize() < plan.result_size)
         {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         if (plan.requiresUpdateSource()) {
             const source = self.update_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-            assertAlive(source.alive, .acceleration_structure);
-            if (source.backend != backend or source.descriptor_value.kind != plan.kind or !source.isBuilt()) {
+            assertAlive(source.state().alive, .acceleration_structure);
+            if (source.selectedBackend() != backend or source.state().descriptor_value.kind != plan.kind or !source.isBuilt()) {
                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
             }
         }
@@ -2117,9 +2281,9 @@ fn validateBottomLevelInstanceSource(
     backend: core.Backend,
     instance_source: *AccelerationStructure,
 ) core.AdvancedFeatureError!void {
-    assertAlive(instance_source.alive, .acceleration_structure);
-    if (instance_source.backend != backend or
-        instance_source.descriptor_value.kind != .bottom_level or
+    assertAlive(instance_source.state().alive, .acceleration_structure);
+    if (instance_source.selectedBackend() != backend or
+        instance_source.state().descriptor_value.kind != .bottom_level or
         !instance_source.isBuilt())
     {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -2130,8 +2294,8 @@ fn validateBuildInputBuffer(
     backend: core.Backend,
     buffer: *Buffer,
 ) core.AdvancedFeatureError!void {
-    assertAlive(buffer.alive, .buffer);
-    if (buffer.backend != backend or !buffer.usage_value.acceleration_structure_build_input) {
+    assertAlive(buffer.state().alive, .buffer);
+    if (buffer.selectedBackend() != backend or !buffer.state().usage_value.acceleration_structure_build_input) {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
     }
 }
@@ -2171,57 +2335,73 @@ const BackendPrivateRayTracingPipelineHandle = struct {
 };
 
 pub const RayTracingPipelineState = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.RayTracingPipelineDescriptor,
-    lowering_value: core.RayTracingPipelineLowering,
-    native_handle: BackendPrivateRayTracingPipelineHandle,
-    impl: ?Impl = null,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanRayTracingPipelineState,
         metal: MetalRayTracingPipelineState,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.RayTracingPipelineDescriptor,
+        alive: bool = true,
+        lowering: core.RayTracingPipelineLowering,
+        native_handle: BackendPrivateRayTracingPipelineHandle,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: State) RayTracingPipelineState {
+        var result: RayTracingPipelineState = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const RayTracingPipelineState) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *RayTracingPipelineState) void {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        self.alive = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .ray_tracing_pipeline_state);
+        state_value.alive = false;
+        if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
-        self.allocator.free(self.descriptor_value.shader_groups);
-        self.tracker.release(.ray_tracing_pipeline_state);
+        state_value.allocator.free(state_value.descriptor_value.shader_groups);
+        state_value.tracker.release(.ray_tracing_pipeline_state);
     }
 
     pub fn selectedBackend(self: RayTracingPipelineState) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: RayTracingPipelineState) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *RayTracingPipelineState, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        self.label_value = label_value;
-        if (self.impl) |*impl| switch (impl.*) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .ray_tracing_pipeline_state);
+        state_value.label_value = label_value;
+        if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         };
     }
 
     pub fn descriptor(self: RayTracingPipelineState) core.RayTracingPipelineDescriptor {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .ray_tracing_pipeline_state);
+        return self.state().descriptor_value;
     }
 
-    pub fn lowering(self: RayTracingPipelineState) core.RayTracingPipelineLowering {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        return self.lowering_value;
+    fn lowering(self: RayTracingPipelineState) core.RayTracingPipelineLowering {
+        assertAlive(self.state().alive, .ray_tracing_pipeline_state);
+        return self.state().lowering;
     }
 
     pub fn maxRecursionDepth(self: RayTracingPipelineState) u32 {
@@ -2233,29 +2413,30 @@ pub const RayTracingPipelineState = struct {
     }
 
     pub fn hasBackendPrivatePipelineHandle(self: RayTracingPipelineState) bool {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        if (self.impl) |impl| switch (impl) {
+        assertAlive(self.state().alive, .ray_tracing_pipeline_state);
+        const state_value = self.state();
+        if (state_value.impl) |impl| switch (impl) {
             .vulkan => {},
             .metal => |metal| return metal.hasDriverHandle(),
         };
-        return self.native_handle.backend == self.backend and
-            self.native_handle.shader_group_count == self.descriptor_value.shader_groups.len and
-            self.native_handle.function_table_entries == self.functionTableEntryCount() and
-            self.native_handle.max_recursion_depth == self.maxRecursionDepth();
+        return state_value.native_handle.backend == state_value.backend and
+            state_value.native_handle.shader_group_count == state_value.descriptor_value.shader_groups.len and
+            state_value.native_handle.function_table_entries == self.functionTableEntryCount() and
+            state_value.native_handle.max_recursion_depth == self.maxRecursionDepth();
     }
 
     pub fn backendPrivateShaderGroupCount(self: RayTracingPipelineState) u32 {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        return self.native_handle.shader_group_count;
+        assertAlive(self.state().alive, .ray_tracing_pipeline_state);
+        return self.state().native_handle.shader_group_count;
     }
 
     pub fn backendPrivatePipelineBoundToDriver(self: RayTracingPipelineState) bool {
-        assertAlive(self.alive, .ray_tracing_pipeline_state);
-        return self.native_handle.driver_bound;
+        assertAlive(self.state().alive, .ray_tracing_pipeline_state);
+        return self.state().native_handle.driver_bound;
     }
 
     fn vulkanImpl(self: *RayTracingPipelineState) ?*VulkanRayTracingPipelineState {
-        if (self.impl) |*impl| return switch (impl.*) {
+        if (self.state().impl) |*impl| return switch (impl.*) {
             .vulkan => |*vulkan| vulkan,
             .metal => null,
         };
@@ -2263,7 +2444,7 @@ pub const RayTracingPipelineState = struct {
     }
 
     fn metalImpl(self: *RayTracingPipelineState) ?*MetalRayTracingPipelineState {
-        if (self.impl) |*impl| return switch (impl.*) {
+        if (self.state().impl) |*impl| return switch (impl.*) {
             .vulkan => null,
             .metal => |*metal| metal,
         };
@@ -2309,44 +2490,58 @@ const BackendPrivateRayDispatchRecord = struct {
 };
 
 pub const ShaderBindingTable = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.ShaderBindingTableDescriptor,
-    layout_value: core.ShaderBindingTableLayout,
-    limits_value: core.DeviceLimits,
-    native_records: BackendPrivateShaderBindingTableRecords,
-    last_dispatch_record: ?BackendPrivateRayDispatchRecord = null,
-    dispatch_count: u64 = 0,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.ShaderBindingTableDescriptor,
+        layout_value: core.ShaderBindingTableLayout,
+        limits_value: core.DeviceLimits,
+        native_records: BackendPrivateShaderBindingTableRecords,
+        last_dispatch_record: ?BackendPrivateRayDispatchRecord = null,
+        dispatch_count: u64 = 0,
+        alive: bool = true,
+    };
+
+    fn init(state_value: State) ShaderBindingTable {
+        var result: ShaderBindingTable = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ShaderBindingTable) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *ShaderBindingTable) void {
-        assertAlive(self.alive, .shader_binding_table);
-        self.alive = false;
-        self.tracker.release(.shader_binding_table);
+        assertAlive(self.state().alive, .shader_binding_table);
+        self.state().alive = false;
+        self.state().tracker.release(.shader_binding_table);
     }
 
     pub fn selectedBackend(self: ShaderBindingTable) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: ShaderBindingTable) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *ShaderBindingTable, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .shader_binding_table);
-        self.label_value = label_value;
+        assertAlive(self.state().alive, .shader_binding_table);
+        self.state().label_value = label_value;
     }
 
     pub fn descriptor(self: ShaderBindingTable) core.ShaderBindingTableDescriptor {
-        assertAlive(self.alive, .shader_binding_table);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return self.state().descriptor_value;
     }
 
     pub fn layout(self: ShaderBindingTable) core.ShaderBindingTableLayout {
-        assertAlive(self.alive, .shader_binding_table);
-        return self.layout_value;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return self.state().layout_value;
     }
 
     pub fn size(self: ShaderBindingTable) u64 {
@@ -2354,35 +2549,35 @@ pub const ShaderBindingTable = struct {
     }
 
     pub fn dispatchCount(self: ShaderBindingTable) u64 {
-        assertAlive(self.alive, .shader_binding_table);
-        return self.dispatch_count;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return self.state().dispatch_count;
     }
 
     pub fn hasBackendPrivateRecords(self: ShaderBindingTable) bool {
-        assertAlive(self.alive, .shader_binding_table);
-        return self.native_records.backend == self.backend and
-            self.native_records.stride == self.descriptor_value.stride and
-            self.native_records.total_size == self.layout_value.total_size;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return self.state().native_records.backend == self.state().backend and
+            self.state().native_records.stride == self.state().descriptor_value.stride and
+            self.state().native_records.total_size == self.state().layout_value.total_size;
     }
 
     pub fn backendPrivateRecordCount(self: ShaderBindingTable) u32 {
-        assertAlive(self.alive, .shader_binding_table);
-        return self.native_records.record_count;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return self.state().native_records.record_count;
     }
 
     pub fn backendPrivateRecordsBoundToDriver(self: ShaderBindingTable) bool {
-        assertAlive(self.alive, .shader_binding_table);
-        return self.native_records.driver_bound;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return self.state().native_records.driver_bound;
     }
 
     pub fn lastDispatchRecordedBackendCommand(self: ShaderBindingTable) bool {
-        assertAlive(self.alive, .shader_binding_table);
-        return if (self.last_dispatch_record) |record| record.command_recorded else false;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return if (self.state().last_dispatch_record) |record| record.command_recorded else false;
     }
 
     pub fn lastDispatchSubmittedToDriver(self: ShaderBindingTable) bool {
-        assertAlive(self.alive, .shader_binding_table);
-        return if (self.last_dispatch_record) |record| record.driver_submitted else false;
+        assertAlive(self.state().alive, .shader_binding_table);
+        return if (self.state().last_dispatch_record) |record| record.driver_submitted else false;
     }
 
     fn validateForPipeline(
@@ -2390,7 +2585,7 @@ pub const ShaderBindingTable = struct {
         pipeline: RayTracingPipelineState,
     ) core.AdvancedFeatureError!void {
         const lowering = pipeline.lowering();
-        const sbt_descriptor = self.descriptor_value;
+        const sbt_descriptor = self.state().descriptor_value;
         if (sbt_descriptor.ray_generation_count < lowering.rayGenerationGroupCount() or
             sbt_descriptor.miss_count < lowering.missGroupCount() or
             sbt_descriptor.hit_count < lowering.hitGroupCount() or
@@ -2407,10 +2602,10 @@ pub const ShaderBindingTable = struct {
     ) core.AdvancedFeatureError!core.RayDispatchPlan {
         try self.validateForPipeline(pipeline);
         return try core.RayDispatchPlan.fromDescriptors(
-            self.descriptor_value,
+            self.state().descriptor_value,
             dispatch_descriptor,
             .{ .ray_tracing = true },
-            self.limits_value,
+            self.state().limits_value,
         );
     }
 
@@ -2420,9 +2615,9 @@ pub const ShaderBindingTable = struct {
         command_recorded: bool,
         driver_submitted: bool,
     ) void {
-        self.dispatch_count += 1;
-        self.last_dispatch_record = .{
-            .backend = self.backend,
+        self.state().dispatch_count += 1;
+        self.state().last_dispatch_record = .{
+            .backend = self.state().backend,
             .width = plan.width,
             .height = plan.height,
             .depth = plan.depth,
@@ -2431,7 +2626,7 @@ pub const ShaderBindingTable = struct {
             .command_recorded = command_recorded,
             .driver_submitted = driver_submitted,
         };
-        if (driver_submitted) self.native_records.driver_bound = true;
+        if (driver_submitted) self.state().native_records.driver_bound = true;
     }
 };
 
@@ -2443,15 +2638,15 @@ pub const RayTracingDrawableResources = struct {
         self: RayTracingDrawableResources,
         backend: core.Backend,
     ) core.AdvancedFeatureError!void {
-        assertAlive(self.acceleration_structure.alive, .acceleration_structure);
-        assertAlive(self.output.alive, .texture_view);
-        if (self.acceleration_structure.backend != backend or self.output.backend != backend) {
+        assertAlive(self.acceleration_structure.state().alive, .acceleration_structure);
+        assertAlive(self.output.state().alive, .texture_view);
+        if (self.acceleration_structure.selectedBackend() != backend or self.output.selectedBackend() != backend) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         const valid_kind = switch (backend) {
-            .vulkan => self.acceleration_structure.descriptor_value.kind == .top_level,
-            .metal => self.acceleration_structure.descriptor_value.kind == .bottom_level or
-                self.acceleration_structure.descriptor_value.kind == .top_level,
+            .vulkan => self.acceleration_structure.state().descriptor_value.kind == .top_level,
+            .metal => self.acceleration_structure.state().descriptor_value.kind == .bottom_level or
+                self.acceleration_structure.state().descriptor_value.kind == .top_level,
         };
         if (!valid_kind or !self.acceleration_structure.isBuilt()) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -2479,39 +2674,53 @@ const BackendPrivateMetalRayTracingTables = struct {
 };
 
 pub const MetalRayTracingExecutionMapping = struct {
-    backend: core.Backend = .metal,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.MetalRayTracingMappingDescriptor,
-    plan_value: core.MetalRayTracingMappingPlan,
-    native_tables: BackendPrivateMetalRayTracingTables,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        backend: core.Backend = .metal,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.MetalRayTracingMappingDescriptor,
+        plan_value: core.MetalRayTracingMappingPlan,
+        native_tables: BackendPrivateMetalRayTracingTables,
+        alive: bool = true,
+    };
+
+    fn init(state_value: State) MetalRayTracingExecutionMapping {
+        var result: MetalRayTracingExecutionMapping = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const MetalRayTracingExecutionMapping) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *MetalRayTracingExecutionMapping) void {
-        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
-        self.alive = false;
-        self.allocator.free(self.descriptor_value.pipeline.shader_groups);
-        self.allocator.free(self.descriptor_value.intersections);
-        self.tracker.release(.metal_ray_tracing_execution_mapping);
+        assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
+        self.state().alive = false;
+        self.state().allocator.free(self.state().descriptor_value.pipeline.shader_groups);
+        self.state().allocator.free(self.state().descriptor_value.intersections);
+        self.state().tracker.release(.metal_ray_tracing_execution_mapping);
     }
 
     pub fn selectedBackend(self: MetalRayTracingExecutionMapping) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: MetalRayTracingExecutionMapping) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn descriptor(self: MetalRayTracingExecutionMapping) core.MetalRayTracingMappingDescriptor {
-        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
-        return self.descriptor_value;
+        assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
+        return self.state().descriptor_value;
     }
 
     pub fn plan(self: MetalRayTracingExecutionMapping) core.MetalRayTracingMappingPlan {
-        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
-        return self.plan_value;
+        assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
+        return self.state().plan_value;
     }
 
     pub fn functionTableEntryCount(self: MetalRayTracingExecutionMapping) u32 {
@@ -2527,19 +2736,19 @@ pub const MetalRayTracingExecutionMapping = struct {
     }
 
     pub fn hasBackendPrivateFunctionTables(self: MetalRayTracingExecutionMapping) bool {
-        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
-        return self.native_tables.function_table_entries == self.functionTableEntryCount() and
-            self.native_tables.intersection_function_count == self.intersectionFunctionCount();
+        assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
+        return self.state().native_tables.function_table_entries == self.functionTableEntryCount() and
+            self.state().native_tables.intersection_function_count == self.intersectionFunctionCount();
     }
 
     pub fn backendPrivateAccelerationStructureSlots(self: MetalRayTracingExecutionMapping) u32 {
-        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
-        return self.native_tables.acceleration_structure_slots;
+        assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
+        return self.state().native_tables.acceleration_structure_slots;
     }
 
     pub fn backendPrivateMetalTablesBoundToDriver(self: MetalRayTracingExecutionMapping) bool {
-        assertAlive(self.alive, .metal_ray_tracing_execution_mapping);
-        return self.native_tables.driver_bound;
+        assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
+        return self.state().native_tables.driver_bound;
     }
 };
 
@@ -2551,144 +2760,174 @@ fn alignForwardU64(value: u64, alignment: u64) !u64 {
 }
 
 pub const QuerySet = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    descriptor_value: core.QuerySetDescriptor,
-    result_source_value: core.TimestampQuerySource = .unavailable,
-    values: []u64,
-    available: []bool,
-    active_occlusion_query: ?u32 = null,
-    timestamp_counter: u64 = 1,
-    alive: bool = true,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        descriptor_value: core.QuerySetDescriptor,
+        result_source_value: core.TimestampQuerySource = .unavailable,
+        values: []u64,
+        available: []bool,
+        active_occlusion_query: ?u32 = null,
+        timestamp_counter: u64 = 1,
+        alive: bool = true,
+    };
+
+    fn init(state_value: State) QuerySet {
+        var result: QuerySet = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const QuerySet) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn deinit(self: *QuerySet) void {
-        assertObjectAlive(self.alive, "query_set");
-        self.alive = false;
-        self.allocator.free(self.values);
-        self.allocator.free(self.available);
-        self.tracker.release(.query_set);
+        assertObjectAlive(self.state().alive, "query_set");
+        self.state().alive = false;
+        self.state().allocator.free(self.state().values);
+        self.state().allocator.free(self.state().available);
+        self.state().tracker.release(.query_set);
     }
 
     pub fn selectedBackend(self: QuerySet) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: QuerySet) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *QuerySet, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "query_set");
-        self.label_value = label_value;
+        assertObjectAlive(self.state().alive, "query_set");
+        self.state().label_value = label_value;
     }
 
     pub fn descriptor(self: QuerySet) core.QuerySetDescriptor {
-        assertObjectAlive(self.alive, "query_set");
-        return self.descriptor_value;
+        assertObjectAlive(self.state().alive, "query_set");
+        return self.state().descriptor_value;
     }
 
     pub fn resultSource(self: QuerySet) core.TimestampQuerySource {
-        assertObjectAlive(self.alive, "query_set");
-        return self.result_source_value;
+        assertObjectAlive(self.state().alive, "query_set");
+        return self.state().result_source_value;
     }
 
     pub fn reset(self: *QuerySet) void {
-        assertObjectAlive(self.alive, "query_set");
-        @memset(self.values, 0);
-        @memset(self.available, false);
-        self.active_occlusion_query = null;
-        self.timestamp_counter = 1;
+        assertObjectAlive(self.state().alive, "query_set");
+        @memset(self.state().values, 0);
+        @memset(self.state().available, false);
+        self.state().active_occlusion_query = null;
+        self.state().timestamp_counter = 1;
     }
 
     pub fn beginOcclusionQuery(self: *QuerySet, query_index: u32) core.QueryError!void {
-        assertObjectAlive(self.alive, "query_set");
+        assertObjectAlive(self.state().alive, "query_set");
         try self.validateQueryType(.occlusion);
         try self.validateQueryIndex(query_index);
-        if (self.active_occlusion_query != null) return core.QueryError.QueryNotReady;
-        self.available[query_index] = false;
-        self.active_occlusion_query = query_index;
+        if (self.state().active_occlusion_query != null) return core.QueryError.QueryNotReady;
+        self.state().available[query_index] = false;
+        self.state().active_occlusion_query = query_index;
     }
 
     pub fn endOcclusionQuery(self: *QuerySet) core.QueryError!void {
-        assertObjectAlive(self.alive, "query_set");
+        assertObjectAlive(self.state().alive, "query_set");
         try self.validateQueryType(.occlusion);
-        const query_index = self.active_occlusion_query orelse return core.QueryError.QueryNotReady;
-        self.values[query_index] = 1;
-        self.available[query_index] = true;
-        self.active_occlusion_query = null;
+        const query_index = self.state().active_occlusion_query orelse return core.QueryError.QueryNotReady;
+        self.state().values[query_index] = 1;
+        self.state().available[query_index] = true;
+        self.state().active_occlusion_query = null;
     }
 
     pub fn writeTimestamp(self: *QuerySet, query_index: u32) core.QueryError!void {
-        assertObjectAlive(self.alive, "query_set");
+        assertObjectAlive(self.state().alive, "query_set");
         try self.validateQueryType(.timestamp);
         try self.validateQueryIndex(query_index);
-        self.values[query_index] = self.timestamp_counter;
-        self.timestamp_counter += 1;
-        self.available[query_index] = true;
+        self.state().values[query_index] = self.state().timestamp_counter;
+        self.state().timestamp_counter += 1;
+        self.state().available[query_index] = true;
     }
 
     pub fn readback(self: *QuerySet, readback_descriptor: core.QueryReadbackDescriptor) core.QueryError!void {
-        assertObjectAlive(self.alive, "query_set");
-        try readback_descriptor.validate(self.descriptor_value);
+        assertObjectAlive(self.state().alive, "query_set");
+        try readback_descriptor.validate(self.state().descriptor_value);
         const first: usize = @intCast(readback_descriptor.first_query);
         const count: usize = @intCast(readback_descriptor.query_count);
         try self.requireAvailable(first, count);
-        @memcpy(readback_descriptor.destination[0..count], self.values[first..][0..count]);
+        @memcpy(readback_descriptor.destination[0..count], self.state().values[first..][0..count]);
     }
 
     fn validateQueryType(self: QuerySet, expected: core.QueryType) core.QueryError!void {
-        if (self.descriptor_value.query_type != expected) return core.QueryError.QueryTypeMismatch;
+        if (self.state().descriptor_value.query_type != expected) return core.QueryError.QueryTypeMismatch;
     }
 
     fn validateQueryIndex(self: QuerySet, query_index: u32) core.QueryError!void {
-        if (query_index >= self.descriptor_value.count) return core.QueryError.InvalidQueryRange;
+        if (query_index >= self.state().descriptor_value.count) return core.QueryError.InvalidQueryRange;
     }
 
     fn requireAvailable(self: QuerySet, first: usize, count: usize) core.QueryError!void {
-        for (self.available[first..][0..count]) |available| {
+        for (self.state().available[first..][0..count]) |available| {
             if (!available) return core.QueryError.QueryNotReady;
         }
     }
 };
 
 pub const ShaderModule = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanShaderModule,
         metal: MetalShaderModule,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) ShaderModule {
+        var result: ShaderModule = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ShaderModule) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *ShaderModule) void {
-        assertAlive(self.alive, .shader_module);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .shader_module);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        self.tracker.release(.shader_module);
+        state_value.tracker.release(.shader_module);
     }
 
     pub fn selectedBackend(self: ShaderModule) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: ShaderModule) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *ShaderModule, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .shader_module);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .shader_module);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
@@ -2696,49 +2935,65 @@ pub const ShaderModule = struct {
 };
 
 pub const RenderPipelineState = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: ?std.mem.Allocator = null,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    root_constant_ranges: []core.RootConstantRange = &.{},
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanRenderPipelineState,
         metal: MetalRenderPipelineState,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: ?std.mem.Allocator = null,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        root_constant_ranges: []core.RootConstantRange = &.{},
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) RenderPipelineState {
+        var result: RenderPipelineState = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const RenderPipelineState) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *RenderPipelineState) void {
-        assertAlive(self.alive, .render_pipeline_state);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .render_pipeline_state);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        if (self.allocator) |allocator| allocator.free(self.root_constant_ranges);
-        self.tracker.release(.render_pipeline_state);
+        if (state_value.allocator) |allocator| allocator.free(state_value.root_constant_ranges);
+        state_value.tracker.release(.render_pipeline_state);
     }
 
     pub fn selectedBackend(self: RenderPipelineState) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: RenderPipelineState) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn rootConstantLayout(self: RenderPipelineState) ?core.RootConstantLayoutDescriptor {
-        if (self.root_constant_ranges.len == 0) return null;
-        return .{ .ranges = self.root_constant_ranges };
+        if (self.state().root_constant_ranges.len == 0) return null;
+        return .{ .ranges = self.state().root_constant_ranges };
     }
 
     pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .render_pipeline_state);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .render_pipeline_state);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
@@ -2746,49 +3001,65 @@ pub const RenderPipelineState = struct {
 };
 
 pub const ComputePipelineState = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: ?std.mem.Allocator = null,
-    label_value: ?[]const u8 = null,
-    native_labels_enabled: bool = false,
-    root_constant_ranges: []core.RootConstantRange = &.{},
-    alive: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanComputePipelineState,
         metal: MetalComputePipelineState,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: ?std.mem.Allocator = null,
+        label_value: ?[]const u8 = null,
+        native_labels_enabled: bool = false,
+        root_constant_ranges: []core.RootConstantRange = &.{},
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) ComputePipelineState {
+        var result: ComputePipelineState = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ComputePipelineState) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *ComputePipelineState) void {
-        assertAlive(self.alive, .compute_pipeline_state);
-        self.alive = false;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .compute_pipeline_state);
+        state_value.alive = false;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        if (self.allocator) |allocator| allocator.free(self.root_constant_ranges);
-        self.tracker.release(.compute_pipeline_state);
+        if (state_value.allocator) |allocator| allocator.free(state_value.root_constant_ranges);
+        state_value.tracker.release(.compute_pipeline_state);
     }
 
     pub fn selectedBackend(self: ComputePipelineState) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: ComputePipelineState) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn rootConstantLayout(self: ComputePipelineState) ?core.RootConstantLayoutDescriptor {
-        if (self.root_constant_ranges.len == 0) return null;
-        return .{ .ranges = self.root_constant_ranges };
+        if (self.state().root_constant_ranges.len == 0) return null;
+        return .{ .ranges = self.state().root_constant_ranges };
     }
 
     pub fn setLabel(self: *ComputePipelineState, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .compute_pipeline_state);
-        self.label_value = label_value;
-        if (!self.native_labels_enabled) return;
-        switch (self.impl) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .compute_pipeline_state);
+        state_value.label_value = label_value;
+        if (!state_value.native_labels_enabled) return;
+        switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         }
@@ -2796,99 +3067,129 @@ pub const ComputePipelineState = struct {
 };
 
 pub const BindGroupLayout = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    entries: []core.BindGroupLayoutEntry,
-    impl: ?Impl = null,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanBindGroupBackend.VulkanBindGroupLayout,
         metal: MetalBindGroupBackend.MetalBindGroupLayout,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        entries: []core.BindGroupLayoutEntry,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: State) BindGroupLayout {
+        var result: BindGroupLayout = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const BindGroupLayout) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *BindGroupLayout) void {
-        assertAlive(self.alive, .bind_group_layout);
-        self.alive = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .bind_group_layout);
+        state_value.alive = false;
+        if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
-        self.allocator.free(self.entries);
-        self.tracker.release(.bind_group_layout);
+        state_value.allocator.free(state_value.entries);
+        state_value.tracker.release(.bind_group_layout);
     }
 
     pub fn selectedBackend(self: BindGroupLayout) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: BindGroupLayout) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *BindGroupLayout, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .bind_group_layout);
-        self.label_value = label_value;
+        assertAlive(self.state().alive, .bind_group_layout);
+        self.state().label_value = label_value;
     }
 
     pub fn descriptor(self: BindGroupLayout) core.BindGroupLayoutDescriptor {
-        assertAlive(self.alive, .bind_group_layout);
-        return .{ .label = self.label_value, .entries = self.entries };
+        assertAlive(self.state().alive, .bind_group_layout);
+        return .{ .label = self.state().label_value, .entries = self.state().entries };
     }
 };
 
 pub const AdvancedBindGroupLayout = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    model_value: core.AdvancedBindingModel,
-    ranges: []core.DescriptorIndexingRange,
-    alive: bool = true,
-    impl: ?Impl = null,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanAdvancedBindGroupBackend,
         metal: MetalAdvancedBindGroupBackend,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        model_value: core.AdvancedBindingModel,
+        ranges: []core.DescriptorIndexingRange,
+        alive: bool = true,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: State) AdvancedBindGroupLayout {
+        var result: AdvancedBindGroupLayout = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const AdvancedBindGroupLayout) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *AdvancedBindGroupLayout) void {
-        assertObjectAlive(self.alive, "advanced_bind_group_layout");
-        self.alive = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "advanced_bind_group_layout");
+        state_value.alive = false;
+        if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => {},
         };
-        self.allocator.free(self.ranges);
-        self.tracker.release(.advanced_bind_group_layout);
+        state_value.allocator.free(state_value.ranges);
+        state_value.tracker.release(.advanced_bind_group_layout);
     }
 
     pub fn selectedBackend(self: AdvancedBindGroupLayout) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: AdvancedBindGroupLayout) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn model(self: AdvancedBindGroupLayout) core.AdvancedBindingModel {
-        return self.model_value;
+        return self.state().model_value;
     }
 
     pub fn rangeCount(self: AdvancedBindGroupLayout) usize {
-        return self.ranges.len;
+        return self.state().ranges.len;
     }
 
     pub fn range(self: AdvancedBindGroupLayout, index: usize) ?core.DescriptorIndexingRange {
-        if (index >= self.ranges.len) return null;
-        return self.ranges[index];
+        if (index >= self.state().ranges.len) return null;
+        return self.state().ranges[index];
     }
 
     pub fn totalDescriptorCount(self: AdvancedBindGroupLayout) u32 {
         var count: u32 = 0;
-        for (self.ranges) |descriptor_range| count +|= descriptor_range.descriptor_count;
+        for (self.state().ranges) |descriptor_range| count +|= descriptor_range.descriptor_count;
         return count;
     }
 
@@ -2897,21 +3198,21 @@ pub const AdvancedBindGroupLayout = struct {
         resource: core.BindingResourceKind,
     ) u32 {
         var count: u32 = 0;
-        for (self.ranges) |descriptor_range| {
+        for (self.state().ranges) |descriptor_range| {
             if (descriptor_range.resource == resource) count +|= descriptor_range.descriptor_count;
         }
         return count;
     }
 
     pub fn usesPartiallyBoundRanges(self: AdvancedBindGroupLayout) bool {
-        for (self.ranges) |descriptor_range| {
+        for (self.state().ranges) |descriptor_range| {
             if (descriptor_range.partially_bound) return true;
         }
         return false;
     }
 
     pub fn usesUpdateAfterBindRanges(self: AdvancedBindGroupLayout) bool {
-        for (self.ranges) |descriptor_range| {
+        for (self.state().ranges) |descriptor_range| {
             if (descriptor_range.update_after_bind) return true;
         }
         return false;
@@ -2946,20 +3247,20 @@ pub const BindGroupResource = union(core.BindingResourceKind) {
     fn validateRuntimeResource(self: BindGroupResource, expected_backend: core.Backend) RuntimeError!void {
         switch (self) {
             .uniform_buffer, .storage_buffer => |binding| {
-                assertAlive(binding.buffer.alive, .buffer);
-                try expectSameBackend(expected_backend, binding.buffer.backend);
+                assertAlive(binding.buffer.state().alive, .buffer);
+                try expectSameBackend(expected_backend, binding.buffer.selectedBackend());
             },
             .storage_texture => |texture_view| {
-                assertAlive(texture_view.alive, .texture_view);
-                try expectSameBackend(expected_backend, texture_view.backend);
+                assertAlive(texture_view.state().alive, .texture_view);
+                try expectSameBackend(expected_backend, texture_view.selectedBackend());
             },
             .sampled_texture => |texture_view| {
-                assertAlive(texture_view.alive, .texture_view);
-                try expectSameBackend(expected_backend, texture_view.backend);
+                assertAlive(texture_view.state().alive, .texture_view);
+                try expectSameBackend(expected_backend, texture_view.selectedBackend());
             },
             .sampler, .compare_sampler => |sampler_state| {
-                assertAlive(sampler_state.alive, .sampler_state);
-                try expectSameBackend(expected_backend, sampler_state.backend);
+                assertAlive(sampler_state.state().alive, .sampler_state);
+                try expectSameBackend(expected_backend, sampler_state.selectedBackend());
             },
         }
     }
@@ -3022,54 +3323,69 @@ pub const ResourceTableUpdateDescriptor = struct {
 };
 
 pub const ResourceTable = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    model_value: core.AdvancedBindingModel,
-    ranges: []core.DescriptorIndexingRange,
-    slots: []?BindGroupResource,
-    allow_update_after_bind: bool = false,
-    bound_count: u64 = 0,
-    impl: ?Impl = null,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanAdvancedBindGroupBackend.ResourceTable,
         metal: MetalAdvancedBindGroupBackend.ResourceTable,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        model_value: core.AdvancedBindingModel,
+        ranges: []core.DescriptorIndexingRange,
+        slots: []?BindGroupResource,
+        allow_update_after_bind: bool = false,
+        bound_count: u64 = 0,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: State) ResourceTable {
+        var result: ResourceTable = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const ResourceTable) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *ResourceTable) void {
-        assertObjectAlive(self.alive, "resource_table");
-        self.alive = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "resource_table");
+        state_value.alive = false;
+        if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
-        self.allocator.free(self.slots);
-        self.allocator.free(self.ranges);
-        self.tracker.release(.resource_table);
+        state_value.allocator.free(state_value.slots);
+        state_value.allocator.free(state_value.ranges);
+        state_value.tracker.release(.resource_table);
     }
 
     pub fn selectedBackend(self: ResourceTable) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: ResourceTable) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn model(self: ResourceTable) core.AdvancedBindingModel {
-        return self.model_value;
+        return self.state().model_value;
     }
 
     pub fn slotCount(self: ResourceTable) usize {
-        return self.slots.len;
+        return self.state().slots.len;
     }
 
     pub fn visibility(self: ResourceTable) core.ShaderVisibility {
         var out = core.ShaderVisibility{};
-        for (self.ranges) |range| {
+        for (self.state().ranges) |range| {
             out.vertex = out.vertex or range.visibility.vertex;
             out.fragment = out.fragment or range.visibility.fragment;
             out.compute = out.compute or range.visibility.compute;
@@ -3087,39 +3403,39 @@ pub const ResourceTable = struct {
     }
 
     pub fn update(self: *ResourceTable, descriptor: ResourceTableUpdateDescriptor) !void {
-        assertObjectAlive(self.alive, "resource_table");
+        assertObjectAlive(self.state().alive, "resource_table");
         const resolved = try self.resolveSlot(descriptor.slot);
-        if (self.bound_count != 0 and (!self.allow_update_after_bind or !resolved.range.update_after_bind)) {
+        if (self.state().bound_count != 0 and (!self.state().allow_update_after_bind or !resolved.range.update_after_bind)) {
             return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
         }
         if (descriptor.resource.resourceKind() != resolved.range.resource) {
             return core.BindingError.BindingResourceKindMismatch;
         }
-        try validateResourceTableResource(descriptor.resource, self.backend);
-        self.slots[resolved.index] = descriptor.resource;
+        try validateResourceTableResource(descriptor.resource, self.state().backend);
+        self.state().slots[resolved.index] = descriptor.resource;
     }
 
     pub fn clear(self: *ResourceTable, slot: core.ResourceTableSlot) !void {
-        assertObjectAlive(self.alive, "resource_table");
+        assertObjectAlive(self.state().alive, "resource_table");
         const resolved = try self.resolveSlot(slot);
-        if (self.bound_count != 0 and (!self.allow_update_after_bind or !resolved.range.update_after_bind)) {
+        if (self.state().bound_count != 0 and (!self.state().allow_update_after_bind or !resolved.range.update_after_bind)) {
             return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
         }
-        self.slots[resolved.index] = null;
+        self.state().slots[resolved.index] = null;
     }
 
     pub fn isSlotBound(self: ResourceTable, slot: core.ResourceTableSlot) !bool {
-        assertObjectAlive(self.alive, "resource_table");
+        assertObjectAlive(self.state().alive, "resource_table");
         const resolved = try self.resolveSlot(slot);
-        return self.slots[resolved.index] != null;
+        return self.state().slots[resolved.index] != null;
     }
 
     pub fn validateReadyForBinding(self: ResourceTable) core.BindingError!void {
-        assertObjectAlive(self.alive, "resource_table");
+        assertObjectAlive(self.state().alive, "resource_table");
         var base: usize = 0;
-        for (self.ranges) |range| {
+        for (self.state().ranges) |range| {
             for (0..range.descriptor_count) |array_index| {
-                if (self.slots[base + array_index] == null and !range.partially_bound) {
+                if (self.state().slots[base + array_index] == null and !range.partially_bound) {
                     return core.BindingError.MissingResourceTableBinding;
                 }
             }
@@ -3129,7 +3445,7 @@ pub const ResourceTable = struct {
 
     pub fn markBoundForCommands(self: *ResourceTable) core.BindingError!void {
         try self.validateReadyForBinding();
-        self.bound_count += 1;
+        self.state().bound_count += 1;
     }
 
     const ResolvedSlot = struct {
@@ -3139,7 +3455,7 @@ pub const ResourceTable = struct {
 
     fn resolveSlot(self: ResourceTable, slot: core.ResourceTableSlot) core.BindingError!ResolvedSlot {
         var base: usize = 0;
-        for (self.ranges) |range| {
+        for (self.state().ranges) |range| {
             if (range.binding == slot.binding) {
                 if (slot.array_element >= range.descriptor_count) return core.BindingError.InvalidResourceTableSlot;
                 return .{
@@ -3154,56 +3470,71 @@ pub const ResourceTable = struct {
 };
 
 pub const BindGroup = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    allocator: std.mem.Allocator,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    layout_entries: []const core.BindGroupLayoutEntry = &.{},
-    entries: []core.BindGroupEntry,
-    impl: ?Impl = null,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanBindGroupBackend.VulkanBindGroup,
         metal: MetalBindGroupBackend.MetalBindGroup,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        layout_entries: []const core.BindGroupLayoutEntry = &.{},
+        entries: []core.BindGroupEntry,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: State) BindGroup {
+        var result: BindGroup = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const BindGroup) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn deinit(self: *BindGroup) void {
-        assertAlive(self.alive, .bind_group);
-        self.alive = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .bind_group);
+        state_value.alive = false;
+        if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
-        self.allocator.free(self.layout_entries);
-        self.allocator.free(self.entries);
-        self.tracker.release(.bind_group);
+        state_value.allocator.free(state_value.layout_entries);
+        state_value.allocator.free(state_value.entries);
+        state_value.tracker.release(.bind_group);
     }
 
     pub fn selectedBackend(self: BindGroup) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: BindGroup) ?[]const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn setLabel(self: *BindGroup, label_value: ?[]const u8) void {
-        assertAlive(self.alive, .bind_group);
-        self.label_value = label_value;
+        assertAlive(self.state().alive, .bind_group);
+        self.state().label_value = label_value;
     }
 
     pub fn entryForBinding(self: BindGroup, binding: u32) ?core.BindGroupEntry {
-        assertAlive(self.alive, .bind_group);
-        for (self.entries) |entry| {
+        assertAlive(self.state().alive, .bind_group);
+        for (self.state().entries) |entry| {
             if (entry.binding == binding) return entry;
         }
         return null;
     }
 
     pub fn layoutDescriptor(self: BindGroup) core.BindGroupLayoutDescriptor {
-        assertAlive(self.alive, .bind_group);
-        return .{ .entries = self.layout_entries };
+        assertAlive(self.state().alive, .bind_group);
+        return .{ .entries = self.state().layout_entries };
     }
 };
 
@@ -3226,14 +3557,14 @@ pub const RenderPassColorAttachmentDescriptor = struct {
                 if (self.resolve_target != null) return RuntimeError.InvalidRenderPassAttachment;
             },
             .texture_view => |texture_view| {
-                assertAlive(texture_view.alive, .texture_view);
-                try expectSameBackend(backend, texture_view.backend);
+                assertAlive(texture_view.state().alive, .texture_view);
+                try expectSameBackend(backend, texture_view.selectedBackend());
                 if (!texture_view.usage().render_attachment or !core.isColorFormat(texture_view.format())) {
                     return RuntimeError.InvalidRenderPassAttachment;
                 }
                 if (self.resolve_target) |resolve_target| {
-                    assertAlive(resolve_target.alive, .texture_view);
-                    try expectSameBackend(backend, resolve_target.backend);
+                    assertAlive(resolve_target.state().alive, .texture_view);
+                    try expectSameBackend(backend, resolve_target.selectedBackend());
                     if (!resolve_target.usage().render_attachment or !core.isColorFormat(resolve_target.format())) {
                         return RuntimeError.InvalidRenderPassAttachment;
                     }
@@ -3283,8 +3614,8 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
-                assertAlive(texture_view.alive, .texture_view);
-                try expectSameBackend(backend, texture_view.backend);
+                assertAlive(texture_view.state().alive, .texture_view);
+                try expectSameBackend(backend, texture_view.selectedBackend());
                 if (!texture_view.usage().render_attachment or !core.isDepthFormat(texture_view.format())) {
                     return RuntimeError.InvalidRenderPassAttachment;
                 }
@@ -3325,8 +3656,8 @@ pub const RenderPassStencilAttachmentDescriptor = struct {
         switch (self.target) {
             .current_drawable => {},
             .texture_view => |texture_view| {
-                assertAlive(texture_view.alive, .texture_view);
-                try expectSameBackend(backend, texture_view.backend);
+                assertAlive(texture_view.state().alive, .texture_view);
+                try expectSameBackend(backend, texture_view.selectedBackend());
                 if (!texture_view.usage().render_attachment or !core.isStencilFormat(texture_view.format())) {
                     return RuntimeError.InvalidRenderPassAttachment;
                 }
@@ -3482,18 +3813,18 @@ fn vulkanRenderPassDescriptor(descriptor: RenderPassDescriptor) VulkanCommand.Re
 fn vulkanColorAttachmentTarget(target: RenderPassColorAttachmentTarget) VulkanCommand.RenderPassColorAttachmentTarget {
     return switch (target) {
         .current_drawable => .current_drawable,
-        .texture_view => |texture_view| .{ .texture_view = &texture_view.impl.vulkan },
+        .texture_view => |texture_view| .{ .texture_view = &texture_view.state().impl.vulkan },
     };
 }
 
 fn vulkanResolveAttachmentTarget(target: ?*TextureView) ?*const @import("../backend/vulkan/texture_view.zig") {
-    return if (target) |texture_view| &texture_view.impl.vulkan else null;
+    return if (target) |texture_view| &texture_view.state().impl.vulkan else null;
 }
 
 fn vulkanDepthAttachmentTarget(target: RenderPassDepthAttachmentTarget) VulkanCommand.RenderPassDepthAttachmentTarget {
     return switch (target) {
         .current_drawable => .current_drawable,
-        .texture_view => |texture_view| .{ .texture_view = &texture_view.impl.vulkan },
+        .texture_view => |texture_view| .{ .texture_view = &texture_view.state().impl.vulkan },
     };
 }
 
@@ -3524,18 +3855,18 @@ fn metalRenderPassDescriptor(descriptor: RenderPassDescriptor) MetalCommand.Rend
 fn metalColorAttachmentTarget(target: RenderPassColorAttachmentTarget) MetalCommand.RenderPassColorAttachmentTarget {
     return switch (target) {
         .current_drawable => .current_drawable,
-        .texture_view => |texture_view| .{ .texture_view = &texture_view.impl.metal },
+        .texture_view => |texture_view| .{ .texture_view = &texture_view.state().impl.metal },
     };
 }
 
 fn metalResolveAttachmentTarget(target: ?*TextureView) ?*const @import("../backend/metal/texture_view.zig") {
-    return if (target) |texture_view| &texture_view.impl.metal else null;
+    return if (target) |texture_view| &texture_view.state().impl.metal else null;
 }
 
 fn metalDepthAttachmentTarget(target: RenderPassDepthAttachmentTarget) MetalCommand.RenderPassDepthAttachmentTarget {
     return switch (target) {
         .current_drawable => .current_drawable,
-        .texture_view => |texture_view| .{ .texture_view = &texture_view.impl.metal },
+        .texture_view => |texture_view| .{ .texture_view = &texture_view.state().impl.metal },
     };
 }
 
@@ -3568,39 +3899,53 @@ fn insertNativeCommandsForEncoder(
     expected_encoder: core.NativeCommandEncoderKind,
     descriptor: core.NativeCommandInsertionDescriptor,
 ) !void {
-    try descriptor.validateForEncoder(expected_encoder, command_buffer.features_value);
-    const view = command_buffer.native_handle_view orelse return core.AdvancedFeatureError.UnsupportedNativeCommandInsertion;
+    try descriptor.validateForEncoder(expected_encoder, command_buffer.privateState().features_value);
+    const view = command_buffer.privateState().native_handle_view orelse return core.AdvancedFeatureError.UnsupportedNativeCommandInsertion;
     descriptor.callback.?(descriptor.context, view);
 }
 
 pub const CommandBuffer = struct {
-    backend: core.Backend,
-    tracker: ?*ResourceTracker = null,
-    runtime_impl: ?*BackendRuntime = null,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    uses_current_drawable_pass: bool = false,
-    queue_kind_value: core.QueueKind = .graphics,
-    features_value: core.DeviceFeatures = .{},
-    limits_value: core.DeviceLimits = .{},
-    native_handle_view: ?core.NativeHandleView = null,
-    debug: core.CommandBufferDebugState = .{},
-    debug_groups: core.DebugGroupStack = .{},
-    impl: ?Impl = null,
+    _state: [@sizeOf(PrivateState)]u8 align(@alignOf(PrivateState)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanCommand.CommandBuffer,
         metal: MetalCommand.CommandBuffer,
     };
 
+    const PrivateState = struct {
+        backend: core.Backend,
+        tracker: ?*ResourceTracker = null,
+        runtime_impl: ?*BackendRuntime = null,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        uses_current_drawable_pass: bool = false,
+        queue_kind_value: core.QueueKind = .graphics,
+        features_value: core.DeviceFeatures = .{},
+        limits_value: core.DeviceLimits = .{},
+        native_handle_view: ?core.NativeHandleView = null,
+        debug: core.CommandBufferDebugState = .{},
+        debug_groups: core.DebugGroupStack = .{},
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: PrivateState) CommandBuffer {
+        var result: CommandBuffer = undefined;
+        result.privateState().* = state_value;
+        return result;
+    }
+
+    fn privateState(self: *const CommandBuffer) *PrivateState {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn makeRenderCommandEncoder(
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
     ) !RenderCommandEncoder {
-        assertObjectAlive(self.alive, "command_buffer");
-        if (self.queue_kind_value != .graphics) return core.CommandEncodingError.InvalidQueueCapability;
-        try descriptor.validateRuntime(self.backend);
-        validateRenderPassOwnership(self.queue_kind_value, descriptor) catch |err| return err;
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (self.privateState().queue_kind_value != .graphics) return core.CommandEncodingError.InvalidQueueCapability;
+        try descriptor.validateRuntime(self.privateState().backend);
+        validateRenderPassOwnership(self.privateState().queue_kind_value, descriptor) catch |err| return err;
         recordRenderPassUsage(descriptor);
 
         const core_color_attachments = [_]core.RenderPassColorAttachmentDescriptor{
@@ -3614,72 +3959,72 @@ pub const CommandBuffer = struct {
             .stencil_attachment = if (descriptor.stencil_attachment) |stencil_attachment| stencil_attachment.toCore() else null,
         };
 
-        const debug_encoder = try self.debug.makeRenderCommandEncoder(core_descriptor);
-        errdefer self.debug.state = .ready;
-        self.uses_current_drawable_pass = descriptor.colorTargetUsesCurrentDrawable();
+        const debug_encoder = try self.privateState().debug.makeRenderCommandEncoder(core_descriptor);
+        errdefer self.privateState().debug.state = .ready;
+        self.privateState().uses_current_drawable_pass = descriptor.colorTargetUsesCurrentDrawable();
 
-        const encoder_impl: ?RenderCommandEncoder.Impl = if (self.impl) |*impl| switch (impl.*) {
+        const encoder_impl: ?RenderCommandEncoder.Impl = if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| .{ .vulkan = try vulkan.makeRenderCommandEncoder(vulkanRenderPassDescriptor(descriptor)) },
             .metal => |*metal| .{ .metal = try metal.makeRenderCommandEncoder(metalRenderPassDescriptor(descriptor)) },
         } else null;
 
-        var encoder = RenderCommandEncoder{
-            .backend = self.backend,
+        var encoder = RenderCommandEncoder.init(.{
+            .backend = self.privateState().backend,
             .command_buffer = self,
             .label_value = descriptor.label,
             .debug = debug_encoder,
             .impl = encoder_impl,
-        };
+        });
         encoder.setLabel(descriptor.label);
         return encoder;
     }
 
     pub fn makeBlitCommandEncoder(self: *CommandBuffer) !BlitCommandEncoder {
-        assertObjectAlive(self.alive, "command_buffer");
+        assertObjectAlive(self.privateState().alive, "command_buffer");
 
-        const debug_encoder = try self.debug.makeBlitCommandEncoder();
-        errdefer self.debug.state = .ready;
-        self.uses_current_drawable_pass = false;
+        const debug_encoder = try self.privateState().debug.makeBlitCommandEncoder();
+        errdefer self.privateState().debug.state = .ready;
+        self.privateState().uses_current_drawable_pass = false;
 
-        const encoder_impl: ?BlitCommandEncoder.Impl = if (self.impl) |*impl| switch (impl.*) {
+        const encoder_impl: ?BlitCommandEncoder.Impl = if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| .{ .vulkan = try vulkan.makeBlitCommandEncoder() },
             .metal => |*metal| .{ .metal = try metal.makeBlitCommandEncoder() },
         } else null;
 
-        return .{
-            .backend = self.backend,
+        return BlitCommandEncoder.init(.{
+            .backend = self.privateState().backend,
             .command_buffer = self,
             .debug = debug_encoder,
             .impl = encoder_impl,
-        };
+        });
     }
 
     pub fn makeComputeCommandEncoder(self: *CommandBuffer) !ComputeCommandEncoder {
-        assertObjectAlive(self.alive, "command_buffer");
-        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
 
-        const debug_encoder = try self.debug.makeComputeCommandEncoder();
-        errdefer self.debug.state = .ready;
-        self.uses_current_drawable_pass = false;
+        const debug_encoder = try self.privateState().debug.makeComputeCommandEncoder();
+        errdefer self.privateState().debug.state = .ready;
+        self.privateState().uses_current_drawable_pass = false;
 
-        const encoder_impl: ?ComputeCommandEncoder.Impl = if (self.impl) |*impl| switch (impl.*) {
+        const encoder_impl: ?ComputeCommandEncoder.Impl = if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| .{ .vulkan = try vulkan.makeComputeCommandEncoder() },
             .metal => |*metal| .{ .metal = try metal.makeComputeCommandEncoder() },
         } else null;
 
-        return .{
-            .backend = self.backend,
+        return ComputeCommandEncoder.init(.{
+            .backend = self.privateState().backend,
             .command_buffer = self,
             .debug = debug_encoder,
             .impl = encoder_impl,
-        };
+        });
     }
 
     pub fn presentDrawable(self: *CommandBuffer) !void {
-        assertObjectAlive(self.alive, "command_buffer");
-        if (!self.uses_current_drawable_pass) return RuntimeError.PresentRequiresCurrentDrawable;
-        try self.debug.presentDrawable();
-        switch (self.impl orelse return) {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (!self.privateState().uses_current_drawable_pass) return RuntimeError.PresentRequiresCurrentDrawable;
+        try self.privateState().debug.presentDrawable();
+        switch (self.privateState().impl orelse return) {
             .vulkan => |*vulkan| try vulkan.presentDrawable(),
             .metal => |*metal| try metal.presentDrawable(),
         }
@@ -3690,22 +4035,22 @@ pub const CommandBuffer = struct {
         plan: core.AccelerationStructureBuildPlan,
         resources: AccelerationStructureBuildResources,
     ) !void {
-        assertObjectAlive(self.alive, "command_buffer");
-        if (self.debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
-        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
-        try resources.validate(self.backend, plan);
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try resources.validate(self.privateState().backend, plan);
         _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
         for (resources.geometries) |geometry| geometry.recordUsage();
         var driver_submitted = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
-                if (resources.result.impl) |*result_impl| switch (result_impl.*) {
+                if (resources.result.state().impl) |*result_impl| switch (result_impl.*) {
                     .vulkan => |*vulkan_as| {
-                        const scratch_impl = switch (resources.scratch.impl) {
+                        const scratch_impl = switch (resources.scratch.state().impl) {
                             .vulkan => |*vulkan_scratch| vulkan_scratch,
                             .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                         };
-                        const instance_source_impl = if (resources.instance_source) |source| switch (source.impl orelse {
+                        const instance_source_impl = if (resources.instance_source) |source| switch (source.state().impl orelse {
                             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                         }) {
                             .vulkan => |*vulkan_source| vulkan_source,
@@ -3716,7 +4061,7 @@ pub const CommandBuffer = struct {
                             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                         }
                         for (resources.instance_sources, 0..) |source, source_index| {
-                            vulkan_instance_source_buffer[source_index] = switch (source.impl orelse {
+                            vulkan_instance_source_buffer[source_index] = switch (source.state().impl orelse {
                                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                             }) {
                                 .vulkan => |*vulkan_source| vulkan_source,
@@ -3732,18 +4077,18 @@ pub const CommandBuffer = struct {
                             vulkan_geometry_buffer[geometry_index] = switch (geometry) {
                                 .triangles => |triangles| .{ .triangles = .{
                                     .descriptor = triangles.descriptor,
-                                    .vertex_buffer = switch (triangles.vertex_buffer.impl) {
+                                    .vertex_buffer = switch (triangles.vertex_buffer.state().impl) {
                                         .vulkan => |*vertex_buffer| vertex_buffer,
                                         .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                                     },
-                                    .index_buffer = if (triangles.index_buffer) |index_buffer| switch (index_buffer.impl) {
+                                    .index_buffer = if (triangles.index_buffer) |index_buffer| switch (index_buffer.state().impl) {
                                         .vulkan => |*vulkan_index_buffer| vulkan_index_buffer,
                                         .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                                     } else null,
                                 } },
                                 .aabbs => |aabbs| .{ .aabbs = .{
                                     .descriptor = aabbs.descriptor,
-                                    .buffer = switch (aabbs.buffer.impl) {
+                                    .buffer = switch (aabbs.buffer.state().impl) {
                                         .vulkan => |*buffer| buffer,
                                         .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                                     },
@@ -3767,14 +4112,14 @@ pub const CommandBuffer = struct {
                 };
             },
             .metal => |*metal| {
-                if (resources.result.impl) |*result_impl| switch (result_impl.*) {
+                if (resources.result.state().impl) |*result_impl| switch (result_impl.*) {
                     .vulkan => {},
                     .metal => |*metal_as| {
-                        const scratch_impl = switch (resources.scratch.impl) {
+                        const scratch_impl = switch (resources.scratch.state().impl) {
                             .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                             .metal => |*metal_scratch| metal_scratch,
                         };
-                        const instance_source_impl = if (resources.instance_source) |source| switch (source.impl orelse {
+                        const instance_source_impl = if (resources.instance_source) |source| switch (source.state().impl orelse {
                             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                         }) {
                             .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
@@ -3785,7 +4130,7 @@ pub const CommandBuffer = struct {
                             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                         }
                         for (resources.instance_sources, 0..) |source, source_index| {
-                            metal_instance_source_buffer[source_index] = switch (source.impl orelse {
+                            metal_instance_source_buffer[source_index] = switch (source.state().impl orelse {
                                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                             }) {
                                 .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
@@ -3801,18 +4146,18 @@ pub const CommandBuffer = struct {
                             metal_geometry_buffer[geometry_index] = switch (geometry) {
                                 .triangles => |triangles| .{ .triangles = .{
                                     .descriptor = triangles.descriptor,
-                                    .vertex_buffer = switch (triangles.vertex_buffer.impl) {
+                                    .vertex_buffer = switch (triangles.vertex_buffer.state().impl) {
                                         .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                                         .metal => |*vertex_buffer| vertex_buffer,
                                     },
-                                    .index_buffer = if (triangles.index_buffer) |index_buffer| switch (index_buffer.impl) {
+                                    .index_buffer = if (triangles.index_buffer) |index_buffer| switch (index_buffer.state().impl) {
                                         .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                                         .metal => |*metal_index_buffer| metal_index_buffer,
                                     } else null,
                                 } },
                                 .aabbs => |aabbs| .{ .aabbs = .{
                                     .descriptor = aabbs.descriptor,
-                                    .buffer = switch (aabbs.buffer.impl) {
+                                    .buffer = switch (aabbs.buffer.state().impl) {
                                         .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                                         .metal => |*buffer| buffer,
                                     },
@@ -3834,7 +4179,7 @@ pub const CommandBuffer = struct {
                 };
             },
         };
-        try resources.result.markBuilt(plan, resources, self.impl != null, driver_submitted);
+        try resources.result.markBuilt(plan, resources, self.privateState().impl != null, driver_submitted);
     }
 
     pub fn dispatchRays(
@@ -3843,16 +4188,16 @@ pub const CommandBuffer = struct {
         shader_binding_table: *ShaderBindingTable,
         descriptor: core.RayDispatchDescriptor,
     ) !core.RayDispatchPlan {
-        assertObjectAlive(self.alive, "command_buffer");
-        assertAlive(pipeline.alive, .ray_tracing_pipeline_state);
-        assertAlive(shader_binding_table.alive, .shader_binding_table);
-        if (self.debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
-        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
-        try expectSameBackend(self.backend, pipeline.backend);
-        try expectSameBackend(self.backend, shader_binding_table.backend);
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
+        assertAlive(shader_binding_table.state().alive, .shader_binding_table);
+        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
+        try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
         var driver_submitted = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
                 if (pipeline.vulkanImpl()) |vulkan_pipeline| {
                     try vulkan.traceRays(vulkan_pipeline, descriptor);
@@ -3861,7 +4206,7 @@ pub const CommandBuffer = struct {
             },
             .metal => {},
         };
-        shader_binding_table.recordDispatch(plan, self.impl != null, driver_submitted);
+        shader_binding_table.recordDispatch(plan, self.privateState().impl != null, driver_submitted);
         return plan;
     }
 
@@ -3872,116 +4217,116 @@ pub const CommandBuffer = struct {
         descriptor: core.RayDispatchDescriptor,
         resources: RayTracingDrawableResources,
     ) !core.RayDispatchPlan {
-        assertObjectAlive(self.alive, "command_buffer");
-        assertAlive(pipeline.alive, .ray_tracing_pipeline_state);
-        assertAlive(shader_binding_table.alive, .shader_binding_table);
-        if (self.debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
-        if (self.queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
-        try expectSameBackend(self.backend, pipeline.backend);
-        try expectSameBackend(self.backend, shader_binding_table.backend);
-        try resources.validate(self.backend);
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
+        assertAlive(shader_binding_table.state().alive, .shader_binding_table);
+        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
+        try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
+        try resources.validate(self.privateState().backend);
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
         var driver_submitted = false;
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
                 const vulkan_pipeline = pipeline.vulkanImpl() orelse {
                     return core.AdvancedFeatureError.InvalidRayTracingPipeline;
                 };
-                const vulkan_as = switch (resources.acceleration_structure.impl orelse {
+                const vulkan_as = switch (resources.acceleration_structure.state().impl orelse {
                     return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                 }) {
                     .vulkan => |*acceleration_structure| acceleration_structure,
                     .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                 };
-                const vulkan_output = switch (resources.output.impl) {
+                const vulkan_output = switch (resources.output.state().impl) {
                     .vulkan => |*output| output,
                     .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                 };
                 try vulkan.traceRaysToDrawable(vulkan_pipeline, vulkan_as, vulkan_output, descriptor);
-                self.uses_current_drawable_pass = true;
+                self.privateState().uses_current_drawable_pass = true;
                 driver_submitted = true;
             },
             .metal => |*metal| {
                 const metal_pipeline = pipeline.metalImpl() orelse {
                     return core.AdvancedFeatureError.InvalidRayTracingPipeline;
                 };
-                const metal_as = switch (resources.acceleration_structure.impl orelse {
+                const metal_as = switch (resources.acceleration_structure.state().impl orelse {
                     return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                 }) {
                     .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                     .metal => |*acceleration_structure| acceleration_structure,
                 };
-                switch (resources.output.impl) {
+                switch (resources.output.state().impl) {
                     .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                     .metal => {},
                 }
                 try metal.traceRaysToDrawable(metal_pipeline, metal_as, descriptor);
-                self.uses_current_drawable_pass = true;
+                self.privateState().uses_current_drawable_pass = true;
                 driver_submitted = true;
             },
         };
-        shader_binding_table.recordDispatch(plan, self.impl != null, driver_submitted);
+        shader_binding_table.recordDispatch(plan, self.privateState().impl != null, driver_submitted);
         return plan;
     }
 
     pub fn label(self: CommandBuffer) ?[]const u8 {
-        return self.label_value;
+        return self.privateState().label_value;
     }
 
     pub fn state(self: CommandBuffer) core.CommandBufferState {
-        return self.debug.status();
+        return self.privateState().debug.status();
     }
 
     pub fn queueKind(self: CommandBuffer) core.QueueKind {
-        return self.queue_kind_value;
+        return self.privateState().queue_kind_value;
     }
 
     pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "command_buffer");
-        self.label_value = label_value;
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        self.privateState().label_value = label_value;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         };
     }
 
     pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "command_buffer");
-        if (self.debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
-        try self.debug_groups.push(label_value);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (self.privateState().debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug_groups.push(label_value);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
             .metal => |*metal| metal.pushDebugGroup(label_value),
         };
     }
 
     pub fn popDebugGroup(self: *CommandBuffer) !void {
-        assertObjectAlive(self.alive, "command_buffer");
-        if (self.debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
-        try self.debug_groups.pop();
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (self.privateState().debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug_groups.pop();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.popDebugGroup(),
             .metal => |*metal| metal.popDebugGroup(),
         };
     }
 
     pub fn insertDebugSignpost(self: *CommandBuffer, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "command_buffer");
-        try self.debug.insertDebugSignpost(.{ .label = label_value });
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        try self.privateState().debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
             .metal => |*metal| metal.insertDebugSignpost(label_value),
         };
     }
 
     pub fn commit(self: *CommandBuffer) !void {
-        assertObjectAlive(self.alive, "command_buffer");
-        try self.debug_groups.requireEmpty();
-        try self.debug.commit();
-        const work_serial = if (self.tracker) |tracker| tracker.submitWork() else 0;
-        switch (self.impl orelse {
-            self.alive = false;
-            if (self.tracker) |tracker| tracker.completeWork(work_serial);
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        try self.privateState().debug_groups.requireEmpty();
+        try self.privateState().debug.commit();
+        const work_serial = if (self.privateState().tracker) |tracker| tracker.submitWork() else 0;
+        switch (self.privateState().impl orelse {
+            self.privateState().alive = false;
+            if (self.privateState().tracker) |tracker| tracker.completeWork(work_serial);
             return;
         }) {
             .vulkan => |*vulkan| {
@@ -3993,15 +4338,15 @@ pub const CommandBuffer = struct {
                 metal.deinit();
             },
         }
-        if (self.tracker) |tracker| tracker.completeWork(work_serial);
-        self.alive = false;
+        if (self.privateState().tracker) |tracker| tracker.completeWork(work_serial);
+        self.privateState().alive = false;
     }
 
     pub fn commitWithExternalSynchronization(
         self: *CommandBuffer,
         descriptor: ExternalSynchronizationDescriptor,
     ) !void {
-        _ = try descriptor.plan(self.backend);
+        _ = try descriptor.plan(self.privateState().backend);
         try self.commit();
     }
 
@@ -4009,30 +4354,44 @@ pub const CommandBuffer = struct {
         self: *CommandBuffer,
         descriptor: SynchronizationDescriptor,
     ) !void {
-        try descriptor.validate(self.backend);
+        try descriptor.validate(self.privateState().backend);
         try descriptor.waitBeforeSubmit();
         try self.commit();
         try descriptor.signalAfterSubmit();
     }
 
     pub fn selectedBackend(self: CommandBuffer) core.Backend {
-        return self.backend;
+        return self.privateState().backend;
     }
 };
 
 pub const BlitCommandEncoder = struct {
-    backend: core.Backend,
-    command_buffer: *CommandBuffer,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    debug: core.BlitCommandEncoderDebugState = .{},
-    debug_groups: core.DebugGroupStack = .{},
-    impl: ?Impl = null,
+    _state: [@sizeOf(PrivateState)]u8 align(@alignOf(PrivateState)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanCommand.BlitCommandEncoder,
         metal: MetalCommand.BlitCommandEncoder,
     };
+
+    const PrivateState = struct {
+        backend: core.Backend,
+        command_buffer: *CommandBuffer,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        debug: core.BlitCommandEncoderDebugState = .{},
+        debug_groups: core.DebugGroupStack = .{},
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: PrivateState) BlitCommandEncoder {
+        var result: BlitCommandEncoder = undefined;
+        result.privateState().* = state_value;
+        return result;
+    }
+
+    fn privateState(self: *const BlitCommandEncoder) *PrivateState {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
 
     pub fn copyBufferToBuffer(
         self: *BlitCommandEncoder,
@@ -4040,21 +4399,21 @@ pub const BlitCommandEncoder = struct {
         destination: *Buffer,
         descriptor: core.CopyBufferToBufferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(source.alive, .buffer);
-        assertAlive(destination.alive, .buffer);
-        try expectSameBackend(self.backend, source.backend);
-        try expectSameBackend(self.backend, destination.backend);
-        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
-        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, source);
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        try self.debug.copyBufferToBuffer(descriptor, source.length(), destination.length());
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(source.state().alive, .buffer);
+        assertAlive(destination.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, source.selectedBackend());
+        try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        if (!source.state().usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        if (!destination.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, source);
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
+        try self.privateState().debug.copyBufferToBuffer(descriptor, source.length(), destination.length());
         _ = source.recordUsage(.copy_source);
         _ = destination.recordUsage(.copy_destination);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.copyBufferToBuffer(&source.impl.vulkan, &destination.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.copyBufferToBuffer(&source.impl.metal, &destination.impl.metal, descriptor),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.copyBufferToBuffer(&source.state().impl.vulkan, &destination.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.copyBufferToBuffer(&source.state().impl.metal, &destination.state().impl.metal, descriptor),
         };
     }
 
@@ -4064,29 +4423,29 @@ pub const BlitCommandEncoder = struct {
         destination: *Texture,
         descriptor: core.CopyBufferToTextureDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(source.alive, .buffer);
-        assertAlive(destination.alive, .texture);
-        try expectSameBackend(self.backend, source.backend);
-        try expectSameBackend(self.backend, destination.backend);
-        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
-        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, source);
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        const resolved = try self.debug.copyBufferToTextureWithRequirements(
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(source.state().alive, .buffer);
+        assertAlive(destination.state().alive, .texture);
+        try expectSameBackend(self.privateState().backend, source.selectedBackend());
+        try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        if (!source.state().usage_value.copy_source) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        if (!destination.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, source);
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
+        const resolved = try self.privateState().debug.copyBufferToTextureWithRequirements(
             descriptor,
             source.length(),
             destination.textureDescriptor(),
-            core.TextureCopyLayoutRequirements.fromLimits(self.command_buffer.limits_value),
+            core.TextureCopyLayoutRequirements.fromLimits(self.privateState().command_buffer.privateState().limits_value),
         );
         _ = source.recordUsage(.copy_source);
         _ = try destination.recordSubresourceUsage(
             copySubresourceRange(destination.textureDescriptor(), resolved.mip_level, resolved.slice, 1),
             .copy_destination,
         );
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.copyBufferToTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
-            .metal => |*metal| try metal.copyBufferToTexture(&source.impl.metal, &destination.impl.metal, resolved),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.copyBufferToTexture(&source.state().impl.vulkan, &destination.state().impl.vulkan, resolved),
+            .metal => |*metal| try metal.copyBufferToTexture(&source.state().impl.metal, &destination.state().impl.metal, resolved),
         };
     }
 
@@ -4096,29 +4455,29 @@ pub const BlitCommandEncoder = struct {
         destination: *Buffer,
         descriptor: core.CopyTextureToBufferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(source.alive, .texture);
-        assertAlive(destination.alive, .buffer);
-        try expectSameBackend(self.backend, source.backend);
-        try expectSameBackend(self.backend, destination.backend);
-        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        const resolved = try self.debug.copyTextureToBufferWithRequirements(
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(source.state().alive, .texture);
+        assertAlive(destination.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, source.selectedBackend());
+        try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        if (!source.state().usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        if (!destination.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, source);
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
+        const resolved = try self.privateState().debug.copyTextureToBufferWithRequirements(
             descriptor,
             source.textureDescriptor(),
             destination.length(),
-            core.TextureCopyLayoutRequirements.fromLimits(self.command_buffer.limits_value),
+            core.TextureCopyLayoutRequirements.fromLimits(self.privateState().command_buffer.privateState().limits_value),
         );
         _ = try source.recordSubresourceUsage(
             copySubresourceRange(source.textureDescriptor(), resolved.mip_level, resolved.slice, 1),
             .copy_source,
         );
         _ = destination.recordUsage(.copy_destination);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.copyTextureToBuffer(&source.impl.vulkan, &destination.impl.vulkan, resolved),
-            .metal => |*metal| try metal.copyTextureToBuffer(&source.impl.metal, &destination.impl.metal, resolved),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.copyTextureToBuffer(&source.state().impl.vulkan, &destination.state().impl.vulkan, resolved),
+            .metal => |*metal| try metal.copyTextureToBuffer(&source.state().impl.metal, &destination.state().impl.metal, resolved),
         };
     }
 
@@ -4128,16 +4487,16 @@ pub const BlitCommandEncoder = struct {
         destination: *Texture,
         descriptor: core.CopyTextureToTextureDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(source.alive, .texture);
-        assertAlive(destination.alive, .texture);
-        try expectSameBackend(self.backend, source.backend);
-        try expectSameBackend(self.backend, destination.backend);
-        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        const resolved = try self.debug.copyTextureToTexture(
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(source.state().alive, .texture);
+        assertAlive(destination.state().alive, .texture);
+        try expectSameBackend(self.privateState().backend, source.selectedBackend());
+        try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        if (!source.state().usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        if (!destination.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, source);
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
+        const resolved = try self.privateState().debug.copyTextureToTexture(
             descriptor,
             source.textureDescriptor(),
             destination.textureDescriptor(),
@@ -4150,9 +4509,9 @@ pub const BlitCommandEncoder = struct {
             copySubresourceRange(destination.textureDescriptor(), resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count),
             .copy_destination,
         );
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.copyTextureToTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
-            .metal => |*metal| try metal.copyTextureToTexture(&source.impl.metal, &destination.impl.metal, resolved),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.copyTextureToTexture(&source.state().impl.vulkan, &destination.state().impl.vulkan, resolved),
+            .metal => |*metal| try metal.copyTextureToTexture(&source.state().impl.metal, &destination.state().impl.metal, resolved),
         };
     }
 
@@ -4162,18 +4521,18 @@ pub const BlitCommandEncoder = struct {
         destination: *Texture,
         descriptor: core.BlitTextureDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(source.alive, .texture);
-        assertAlive(destination.alive, .texture);
-        try expectSameBackend(self.backend, source.backend);
-        try expectSameBackend(self.backend, destination.backend);
-        if (!source.usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        if (!destination.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, source);
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        const source_caps = commandFormatCapabilities(self.command_buffer, source.format());
-        const destination_caps = commandFormatCapabilities(self.command_buffer, destination.format());
-        const resolved = try self.debug.blitTexture(
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(source.state().alive, .texture);
+        assertAlive(destination.state().alive, .texture);
+        try expectSameBackend(self.privateState().backend, source.selectedBackend());
+        try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        if (!source.state().usage_value.copy_source) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        if (!destination.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyTextureUsage;
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, source);
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
+        const source_caps = commandFormatCapabilities(self.privateState().command_buffer, source.format());
+        const destination_caps = commandFormatCapabilities(self.privateState().command_buffer, destination.format());
+        const resolved = try self.privateState().debug.blitTexture(
             descriptor,
             source.textureDescriptor(),
             destination.textureDescriptor(),
@@ -4188,9 +4547,9 @@ pub const BlitCommandEncoder = struct {
             copySubresourceRange(destination.textureDescriptor(), resolved.destination_mip_level, resolved.destination_slice, resolved.slice_count),
             .copy_destination,
         );
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.blitTexture(&source.impl.vulkan, &destination.impl.vulkan, resolved),
-            .metal => |*metal| try metal.blitTexture(&source.impl.metal, &destination.impl.metal, resolved),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.blitTexture(&source.state().impl.vulkan, &destination.state().impl.vulkan, resolved),
+            .metal => |*metal| try metal.blitTexture(&source.state().impl.metal, &destination.state().impl.metal, resolved),
         };
     }
 
@@ -4199,16 +4558,16 @@ pub const BlitCommandEncoder = struct {
         buffer: *Buffer,
         descriptor: core.FillBufferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(buffer.alive, .buffer);
-        try expectSameBackend(self.backend, buffer.backend);
-        if (!buffer.usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
-        try self.debug.fillBuffer(descriptor, buffer.length());
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(buffer.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, buffer.selectedBackend());
+        if (!buffer.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, buffer);
+        try self.privateState().debug.fillBuffer(descriptor, buffer.length());
         _ = buffer.recordUsage(.copy_destination);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.fillBuffer(&buffer.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.fillBuffer(&buffer.impl.metal, descriptor),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.fillBuffer(&buffer.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.fillBuffer(&buffer.state().impl.metal, descriptor),
         };
     }
 
@@ -4217,19 +4576,19 @@ pub const BlitCommandEncoder = struct {
         texture: *Texture,
         descriptor: core.GenerateMipmapsDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertAlive(texture.alive, .texture);
-        try expectSameBackend(self.backend, texture.backend);
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, texture);
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertAlive(texture.state().alive, .texture);
+        try expectSameBackend(self.privateState().backend, texture.selectedBackend());
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, texture);
         const resolved = try descriptor.resolveForTexture(texture.textureDescriptor());
         if (!isFullGenerateMipmapsRange(texture.textureDescriptor(), resolved)) {
             return core.TextureError.UnsupportedMipmapGeneration;
         }
         _ = texture.recordUsage(.copy_source);
         _ = texture.recordUsage(.copy_destination);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.generateMipmaps(&texture.impl.vulkan, resolved),
-            .metal => |*metal| try metal.generateMipmaps(&texture.impl.metal, resolved),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.generateMipmaps(&texture.state().impl.vulkan, resolved),
+            .metal => |*metal| try metal.generateMipmaps(&texture.state().impl.metal, resolved),
         };
         _ = texture.recordUsage(.sampled_texture);
     }
@@ -4239,12 +4598,12 @@ pub const BlitCommandEncoder = struct {
         buffer: *Buffer,
         descriptor: core.BufferBarrierDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
-        try recordBufferBarrier(self.backend, self.command_buffer.features_value, buffer, descriptor);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.bufferBarrier(&buffer.impl.metal, descriptor),
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, buffer);
+        try recordBufferBarrier(self.privateState().backend, self.privateState().command_buffer.privateState().features_value, buffer, descriptor);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.bufferBarrier(&buffer.state().impl.metal, descriptor),
         };
     }
 
@@ -4253,12 +4612,12 @@ pub const BlitCommandEncoder = struct {
         texture: *Texture,
         descriptor: core.TextureBarrierDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, texture);
-        try recordTextureBarrier(self.backend, self.command_buffer.features_value, texture, descriptor);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.textureBarrier(&texture.impl.metal, descriptor),
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, texture);
+        try recordTextureBarrier(self.privateState().backend, self.privateState().command_buffer.privateState().features_value, texture, descriptor);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.textureBarrier(&texture.state().impl.metal, descriptor),
         };
     }
 
@@ -4267,9 +4626,9 @@ pub const BlitCommandEncoder = struct {
         buffer: *Buffer,
         descriptor: core.QueueOwnershipTransferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-        try recordBufferOwnershipTransfer(self.command_buffer.features_value, buffer, descriptor);
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        if (self.privateState().command_buffer.privateState().queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordBufferOwnershipTransfer(self.privateState().command_buffer.privateState().features_value, buffer, descriptor);
     }
 
     pub fn textureOwnershipTransfer(
@@ -4277,21 +4636,21 @@ pub const BlitCommandEncoder = struct {
         texture: *Texture,
         descriptor: core.QueueOwnershipTransferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-        try recordTextureOwnershipTransfer(self.command_buffer.features_value, texture, descriptor);
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        if (self.privateState().command_buffer.privateState().queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordTextureOwnershipTransfer(self.privateState().command_buffer.privateState().features_value, texture, descriptor);
     }
 
     pub fn writeTimestamp(self: *BlitCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertObjectAlive(query_set.alive, "query_set");
-        try expectSameBackend(self.backend, query_set.backend);
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertObjectAlive(query_set.state().alive, "query_set");
+        try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
         try query_set.writeTimestamp(query_index);
     }
 
     pub fn insertNativeCommands(self: *BlitCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try insertNativeCommandsForEncoder(self.command_buffer, .blit, descriptor);
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try insertNativeCommandsForEncoder(self.privateState().command_buffer, .blit, descriptor);
     }
 
     pub fn resolveQuerySet(
@@ -4300,13 +4659,13 @@ pub const BlitCommandEncoder = struct {
         destination: *Buffer,
         descriptor: core.QueryResolveDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        assertObjectAlive(query_set.alive, "query_set");
-        assertAlive(destination.alive, .buffer);
-        try expectSameBackend(self.backend, query_set.backend);
-        try expectSameBackend(self.backend, destination.backend);
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, destination);
-        try descriptor.validate(query_set.descriptor_value, core.defaultDeviceLimits(self.backend));
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        assertObjectAlive(query_set.state().alive, "query_set");
+        assertAlive(destination.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
+        try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
+        try descriptor.validate(query_set.state().descriptor_value, core.defaultDeviceLimits(self.privateState().backend));
         const first: usize = @intCast(descriptor.first_query);
         const count: usize = @intCast(descriptor.query_count);
         try query_set.requireAvailable(first, count);
@@ -4315,67 +4674,67 @@ pub const BlitCommandEncoder = struct {
         if (end > destination.length()) return core.QueryError.InvalidQueryRange;
         try destination.replaceBytes(
             @intCast(descriptor.destination_offset),
-            std.mem.sliceAsBytes(query_set.values[first..][0..count]),
+            std.mem.sliceAsBytes(query_set.state().values[first..][0..count]),
         );
         _ = destination.recordUsage(.copy_destination);
     }
 
     pub fn endEncoding(self: *BlitCommandEncoder) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try self.debug_groups.requireEmpty();
-        try self.debug.endEncoding(&self.command_buffer.debug);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try self.privateState().debug_groups.requireEmpty();
+        try self.privateState().debug.endEncoding(&self.privateState().command_buffer.privateState().debug);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.endEncoding(),
             .metal => |*metal| {
                 try metal.endEncoding();
                 metal.deinit();
             },
         };
-        self.alive = false;
+        self.privateState().alive = false;
     }
 
     pub fn label(self: BlitCommandEncoder) ?[]const u8 {
-        return self.label_value;
+        return self.privateState().label_value;
     }
 
     pub fn setLabel(self: *BlitCommandEncoder, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        self.label_value = label_value;
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        self.privateState().label_value = label_value;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         };
     }
 
     pub fn pushDebugGroup(self: *BlitCommandEncoder, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try self.debug_groups.push(label_value);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try self.privateState().debug_groups.push(label_value);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
             .metal => |*metal| metal.pushDebugGroup(label_value),
         };
     }
 
     pub fn popDebugGroup(self: *BlitCommandEncoder) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try self.debug_groups.pop();
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try self.privateState().debug_groups.pop();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.popDebugGroup(),
             .metal => |*metal| metal.popDebugGroup(),
         };
     }
 
     pub fn insertDebugSignpost(self: *BlitCommandEncoder, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "blit_command_encoder");
-        try self.debug.insertDebugSignpost(.{ .label = label_value });
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "blit_command_encoder");
+        try self.privateState().debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
             .metal => |*metal| metal.insertDebugSignpost(label_value),
         };
     }
 
     pub fn selectedBackend(self: BlitCommandEncoder) core.Backend {
-        return self.backend;
+        return self.privateState().backend;
     }
 };
 
@@ -4394,14 +4753,14 @@ fn isFullGenerateMipmapsRange(
 }
 
 fn commandFormatCapabilities(command_buffer: *const CommandBuffer, format: core.TextureFormat) core.FormatCapabilities {
-    if (command_buffer.runtime_impl) |runtime_impl| {
+    if (command_buffer.privateState().runtime_impl) |runtime_impl| {
         return switch (runtime_impl.*) {
             .vulkan => |*vulkan| vulkan.formatCapabilities(format),
             .metal => |*metal| metal.formatCapabilities(format),
         };
     }
 
-    return defaultCommandFormatCapabilities(command_buffer.backend, format);
+    return defaultCommandFormatCapabilities(command_buffer.privateState().backend, format);
 }
 
 fn defaultCommandFormatCapabilities(backend: core.Backend, format: core.TextureFormat) core.FormatCapabilities {
@@ -4440,32 +4799,46 @@ fn textureSubresourceRangeIsFull(
 }
 
 pub const ComputeCommandEncoder = struct {
-    backend: core.Backend,
-    command_buffer: *CommandBuffer,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    debug: core.ComputeCommandEncoderDebugState = .{},
-    debug_groups: core.DebugGroupStack = .{},
-    active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
-    impl: ?Impl = null,
+    _state: [@sizeOf(PrivateState)]u8 align(@alignOf(PrivateState)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanCommand.ComputeCommandEncoder,
         metal: MetalCommand.ComputeCommandEncoder,
     };
 
+    const PrivateState = struct {
+        backend: core.Backend,
+        command_buffer: *CommandBuffer,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        debug: core.ComputeCommandEncoderDebugState = .{},
+        debug_groups: core.DebugGroupStack = .{},
+        active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: PrivateState) ComputeCommandEncoder {
+        var result: ComputeCommandEncoder = undefined;
+        result.privateState().* = state_value;
+        return result;
+    }
+
+    fn privateState(self: *const ComputeCommandEncoder) *PrivateState {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn setComputePipelineState(
         self: *ComputeCommandEncoder,
         pipeline: *ComputePipelineState,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        assertAlive(pipeline.alive, .compute_pipeline_state);
-        try expectSameBackend(self.backend, pipeline.backend);
-        try self.debug.setComputePipelineState();
-        self.active_root_constant_layout = pipeline.rootConstantLayout();
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setComputePipelineState(&pipeline.impl.vulkan),
-            .metal => |*metal| try metal.setComputePipelineState(&pipeline.impl.metal),
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        assertAlive(pipeline.state().alive, .compute_pipeline_state);
+        try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
+        try self.privateState().debug.setComputePipelineState();
+        self.privateState().active_root_constant_layout = pipeline.rootConstantLayout();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setComputePipelineState(&pipeline.state().impl.vulkan),
+            .metal => |*metal| try metal.setComputePipelineState(&pipeline.state().impl.metal),
         };
     }
 
@@ -4474,14 +4847,14 @@ pub const ComputeCommandEncoder = struct {
         bind_group: *BindGroup,
         binding: core.BindGroupBinding,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        assertAlive(bind_group.alive, .bind_group);
-        try expectSameBackend(self.backend, bind_group.backend);
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        assertAlive(bind_group.state().alive, .bind_group);
+        try expectSameBackend(self.privateState().backend, bind_group.selectedBackend());
         try validateDynamicOffsetsForBindGroup(bind_group.*, binding);
-        try self.debug.setBindGroup(binding);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.impl.?.vulkan, binding),
-            .metal => |*metal| try metal.setBindGroup(&bind_group.impl.?.metal, binding),
+        try self.privateState().debug.setBindGroup(binding);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.state().impl.?.vulkan, binding),
+            .metal => |*metal| try metal.setBindGroup(&bind_group.state().impl.?.metal, binding),
         };
     }
 
@@ -4490,16 +4863,16 @@ pub const ComputeCommandEncoder = struct {
         table: *ResourceTable,
         binding: core.ResourceTableBinding,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        assertObjectAlive(table.alive, "resource_table");
-        try expectSameBackend(self.backend, table.backend);
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        assertObjectAlive(table.state().alive, "resource_table");
+        try expectSameBackend(self.privateState().backend, table.selectedBackend());
         try binding.validate();
         if (!table.supportsComputeEncoding()) return core.BindingError.ResourceTableVisibilityMismatch;
         try table.validateReadyForBinding();
-        try self.debug.setResourceTable(binding);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setResourceTable(&table.impl.?.vulkan, binding),
-            .metal => |*metal| try metal.setResourceTable(&table.impl.?.metal, binding),
+        try self.privateState().debug.setResourceTable(binding);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setResourceTable(&table.state().impl.?.vulkan, binding),
+            .metal => |*metal| try metal.setResourceTable(&table.state().impl.?.metal, binding),
         };
         try table.markBoundForCommands();
     }
@@ -4508,14 +4881,14 @@ pub const ComputeCommandEncoder = struct {
         self: *ComputeCommandEncoder,
         descriptor: core.RootConstantWriteDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
         const range = try validateRootConstantWriteForStages(
-            self.active_root_constant_layout,
+            self.privateState().active_root_constant_layout,
             descriptor,
             .{ .compute = true },
         );
-        try self.debug.setRootConstants();
-        if (self.impl) |*impl| switch (impl.*) {
+        try self.privateState().debug.setRootConstants();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setRootConstants(descriptor, range.visibility),
             .metal => |*metal| try metal.setRootConstants(descriptor, range.visibility),
         };
@@ -4525,10 +4898,10 @@ pub const ComputeCommandEncoder = struct {
         self: *ComputeCommandEncoder,
         descriptor: core.DispatchThreadgroupsDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try self.debug.dispatchThreadgroups(descriptor);
-        try descriptor.validateForLimits(core.defaultDeviceLimits(self.backend));
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try self.privateState().debug.dispatchThreadgroups(descriptor);
+        try descriptor.validateForLimits(core.defaultDeviceLimits(self.privateState().backend));
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.dispatchThreadgroups(descriptor),
             .metal => |*metal| try metal.dispatchThreadgroups(descriptor),
         };
@@ -4538,12 +4911,12 @@ pub const ComputeCommandEncoder = struct {
         self: *ComputeCommandEncoder,
         descriptor: core.DispatchThreadsDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        const resolved = try self.debug.dispatchThreads(
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        const resolved = try self.privateState().debug.dispatchThreads(
             descriptor,
-            core.defaultDeviceLimits(self.backend),
+            core.defaultDeviceLimits(self.privateState().backend),
         );
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.dispatchThreadgroups(resolved),
             .metal => |*metal| try metal.dispatchThreadgroups(resolved),
         };
@@ -4554,21 +4927,21 @@ pub const ComputeCommandEncoder = struct {
         indirect_buffer: *Buffer,
         descriptor: core.DispatchThreadgroupsIndirectDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        assertAlive(indirect_buffer.alive, .buffer);
-        try expectSameBackend(self.backend, indirect_buffer.backend);
-        if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, indirect_buffer);
-        try self.debug.dispatchThreadgroupsIndirect(
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        assertAlive(indirect_buffer.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, indirect_buffer.selectedBackend());
+        if (!indirect_buffer.state().usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, indirect_buffer);
+        try self.privateState().debug.dispatchThreadgroupsIndirect(
             descriptor,
             indirect_buffer.length(),
             .{ .compute_dispatch_indirect = true },
-            core.defaultDeviceLimits(self.backend),
+            core.defaultDeviceLimits(self.privateState().backend),
         );
         _ = indirect_buffer.recordUsage(.indirect_buffer);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.dispatchThreadgroupsIndirect(&indirect_buffer.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.dispatchThreadgroupsIndirect(&indirect_buffer.impl.metal, descriptor),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.dispatchThreadgroupsIndirect(&indirect_buffer.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.dispatchThreadgroupsIndirect(&indirect_buffer.state().impl.metal, descriptor),
         };
     }
 
@@ -4577,12 +4950,12 @@ pub const ComputeCommandEncoder = struct {
         buffer: *Buffer,
         descriptor: core.BufferBarrierDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
-        try recordBufferBarrier(self.backend, self.command_buffer.features_value, buffer, descriptor);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.bufferBarrier(&buffer.impl.metal, descriptor),
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, buffer);
+        try recordBufferBarrier(self.privateState().backend, self.privateState().command_buffer.privateState().features_value, buffer, descriptor);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.bufferBarrier(&buffer.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.bufferBarrier(&buffer.state().impl.metal, descriptor),
         };
     }
 
@@ -4591,12 +4964,12 @@ pub const ComputeCommandEncoder = struct {
         texture: *Texture,
         descriptor: core.TextureBarrierDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try ensureTextureOwnedByQueue(self.command_buffer.queue_kind_value, texture);
-        try recordTextureBarrier(self.backend, self.command_buffer.features_value, texture, descriptor);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.impl.vulkan, descriptor),
-            .metal => |*metal| try metal.textureBarrier(&texture.impl.metal, descriptor),
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try ensureTextureOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, texture);
+        try recordTextureBarrier(self.privateState().backend, self.privateState().command_buffer.privateState().features_value, texture, descriptor);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.textureBarrier(&texture.state().impl.vulkan, descriptor),
+            .metal => |*metal| try metal.textureBarrier(&texture.state().impl.metal, descriptor),
         };
     }
 
@@ -4605,9 +4978,9 @@ pub const ComputeCommandEncoder = struct {
         buffer: *Buffer,
         descriptor: core.QueueOwnershipTransferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-        try recordBufferOwnershipTransfer(self.command_buffer.features_value, buffer, descriptor);
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        if (self.privateState().command_buffer.privateState().queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordBufferOwnershipTransfer(self.privateState().command_buffer.privateState().features_value, buffer, descriptor);
     }
 
     pub fn textureOwnershipTransfer(
@@ -4615,109 +4988,123 @@ pub const ComputeCommandEncoder = struct {
         texture: *Texture,
         descriptor: core.QueueOwnershipTransferDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        if (self.command_buffer.queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-        try recordTextureOwnershipTransfer(self.command_buffer.features_value, texture, descriptor);
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        if (self.privateState().command_buffer.privateState().queue_kind_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+        try recordTextureOwnershipTransfer(self.privateState().command_buffer.privateState().features_value, texture, descriptor);
     }
 
     pub fn writeTimestamp(self: *ComputeCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        assertObjectAlive(query_set.alive, "query_set");
-        try expectSameBackend(self.backend, query_set.backend);
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        assertObjectAlive(query_set.state().alive, "query_set");
+        try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
         try query_set.writeTimestamp(query_index);
     }
 
     pub fn insertNativeCommands(self: *ComputeCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try insertNativeCommandsForEncoder(self.command_buffer, .compute, descriptor);
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try insertNativeCommandsForEncoder(self.privateState().command_buffer, .compute, descriptor);
     }
 
     pub fn endEncoding(self: *ComputeCommandEncoder) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try self.debug_groups.requireEmpty();
-        try self.debug.endEncoding(&self.command_buffer.debug);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try self.privateState().debug_groups.requireEmpty();
+        try self.privateState().debug.endEncoding(&self.privateState().command_buffer.privateState().debug);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.endEncoding(),
             .metal => |*metal| {
                 try metal.endEncoding();
                 metal.deinit();
             },
         };
-        self.alive = false;
+        self.privateState().alive = false;
     }
 
     pub fn label(self: ComputeCommandEncoder) ?[]const u8 {
-        return self.label_value;
+        return self.privateState().label_value;
     }
 
     pub fn setLabel(self: *ComputeCommandEncoder, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        self.label_value = label_value;
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        self.privateState().label_value = label_value;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         };
     }
 
     pub fn pushDebugGroup(self: *ComputeCommandEncoder, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try self.debug_groups.push(label_value);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try self.privateState().debug_groups.push(label_value);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
             .metal => |*metal| metal.pushDebugGroup(label_value),
         };
     }
 
     pub fn popDebugGroup(self: *ComputeCommandEncoder) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try self.debug_groups.pop();
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try self.privateState().debug_groups.pop();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.popDebugGroup(),
             .metal => |*metal| metal.popDebugGroup(),
         };
     }
 
     pub fn insertDebugSignpost(self: *ComputeCommandEncoder, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "compute_command_encoder");
-        try self.debug.insertDebugSignpost(.{ .label = label_value });
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        try self.privateState().debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
             .metal => |*metal| metal.insertDebugSignpost(label_value),
         };
     }
 
     pub fn selectedBackend(self: ComputeCommandEncoder) core.Backend {
-        return self.backend;
+        return self.privateState().backend;
     }
 };
 
 pub const RenderCommandEncoder = struct {
-    backend: core.Backend,
-    command_buffer: *CommandBuffer,
-    label_value: ?[]const u8 = null,
-    alive: bool = true,
-    debug: core.RenderCommandEncoderDebugState = .{},
-    debug_groups: core.DebugGroupStack = .{},
-    active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
-    impl: ?Impl = null,
+    _state: [@sizeOf(PrivateState)]u8 align(@alignOf(PrivateState)),
 
     const Impl = union(core.Backend) {
         vulkan: VulkanCommand.RenderCommandEncoder,
         metal: MetalCommand.RenderCommandEncoder,
     };
 
+    const PrivateState = struct {
+        backend: core.Backend,
+        command_buffer: *CommandBuffer,
+        label_value: ?[]const u8 = null,
+        alive: bool = true,
+        debug: core.RenderCommandEncoderDebugState = .{},
+        debug_groups: core.DebugGroupStack = .{},
+        active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
+        impl: ?Impl = null,
+    };
+
+    fn init(state_value: PrivateState) RenderCommandEncoder {
+        var result: RenderCommandEncoder = undefined;
+        result.privateState().* = state_value;
+        return result;
+    }
+
+    fn privateState(self: *const RenderCommandEncoder) *PrivateState {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn setRenderPipelineState(
         self: *RenderCommandEncoder,
         pipeline: *RenderPipelineState,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertAlive(pipeline.alive, .render_pipeline_state);
-        try expectSameBackend(self.backend, pipeline.backend);
-        try self.debug.setRenderPipelineState();
-        self.active_root_constant_layout = pipeline.rootConstantLayout();
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setRenderPipelineState(&pipeline.impl.vulkan),
-            .metal => |*metal| try metal.setRenderPipelineState(&pipeline.impl.metal),
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertAlive(pipeline.state().alive, .render_pipeline_state);
+        try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
+        try self.privateState().debug.setRenderPipelineState();
+        self.privateState().active_root_constant_layout = pipeline.rootConstantLayout();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setRenderPipelineState(&pipeline.state().impl.vulkan),
+            .metal => |*metal| try metal.setRenderPipelineState(&pipeline.state().impl.metal),
         };
     }
 
@@ -4726,28 +5113,28 @@ pub const RenderCommandEncoder = struct {
         buffer: *Buffer,
         binding: core.VertexBufferBinding,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertAlive(buffer.alive, .buffer);
-        try expectSameBackend(self.backend, buffer.backend);
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
-        try self.debug.setVertexBuffer(binding);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertAlive(buffer.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, buffer.selectedBackend());
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, buffer);
+        try self.privateState().debug.setVertexBuffer(binding);
         _ = buffer.recordUsage(.vertex_buffer);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setVertexBuffer(&buffer.impl.vulkan, binding),
-            .metal => |*metal| try metal.setVertexBuffer(&buffer.impl.metal, binding),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setVertexBuffer(&buffer.state().impl.vulkan, binding),
+            .metal => |*metal| try metal.setVertexBuffer(&buffer.state().impl.metal, binding),
         };
     }
 
     pub fn setIndexBuffer(self: *RenderCommandEncoder, buffer: *Buffer) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertAlive(buffer.alive, .buffer);
-        try expectSameBackend(self.backend, buffer.backend);
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, buffer);
-        try self.debug.setIndexBuffer();
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertAlive(buffer.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, buffer.selectedBackend());
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, buffer);
+        try self.privateState().debug.setIndexBuffer();
         _ = buffer.recordUsage(.index_buffer);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setIndexBuffer(&buffer.impl.vulkan),
-            .metal => |*metal| try metal.setIndexBuffer(&buffer.impl.metal),
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setIndexBuffer(&buffer.state().impl.vulkan),
+            .metal => |*metal| try metal.setIndexBuffer(&buffer.state().impl.metal),
         };
     }
 
@@ -4756,14 +5143,14 @@ pub const RenderCommandEncoder = struct {
         bind_group: *BindGroup,
         binding: core.BindGroupBinding,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertAlive(bind_group.alive, .bind_group);
-        try expectSameBackend(self.backend, bind_group.backend);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertAlive(bind_group.state().alive, .bind_group);
+        try expectSameBackend(self.privateState().backend, bind_group.selectedBackend());
         try validateDynamicOffsetsForBindGroup(bind_group.*, binding);
-        try self.debug.setBindGroup(binding);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.impl.?.vulkan, binding),
-            .metal => |*metal| try metal.setBindGroup(&bind_group.impl.?.metal, binding),
+        try self.privateState().debug.setBindGroup(binding);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setBindGroup(&bind_group.state().impl.?.vulkan, binding),
+            .metal => |*metal| try metal.setBindGroup(&bind_group.state().impl.?.metal, binding),
         };
     }
 
@@ -4772,16 +5159,16 @@ pub const RenderCommandEncoder = struct {
         table: *ResourceTable,
         binding: core.ResourceTableBinding,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertObjectAlive(table.alive, "resource_table");
-        try expectSameBackend(self.backend, table.backend);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertObjectAlive(table.state().alive, "resource_table");
+        try expectSameBackend(self.privateState().backend, table.selectedBackend());
         try binding.validate();
         if (!table.supportsRenderEncoding()) return core.BindingError.ResourceTableVisibilityMismatch;
         try table.validateReadyForBinding();
-        try self.debug.setResourceTable(binding);
-        if (self.impl) |*impl| switch (impl.*) {
-            .vulkan => |*vulkan| try vulkan.setResourceTable(&table.impl.?.vulkan, binding),
-            .metal => |*metal| try metal.setResourceTable(&table.impl.?.metal, binding),
+        try self.privateState().debug.setResourceTable(binding);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.setResourceTable(&table.state().impl.?.vulkan, binding),
+            .metal => |*metal| try metal.setResourceTable(&table.state().impl.?.metal, binding),
         };
         try table.markBoundForCommands();
     }
@@ -4790,98 +5177,98 @@ pub const RenderCommandEncoder = struct {
         self: *RenderCommandEncoder,
         descriptor: core.RootConstantWriteDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
         const range = try validateRootConstantWriteForStages(
-            self.active_root_constant_layout,
+            self.privateState().active_root_constant_layout,
             descriptor,
             .{ .vertex = true, .fragment = true },
         );
-        try self.debug.setRootConstants();
-        if (self.impl) |*impl| switch (impl.*) {
+        try self.privateState().debug.setRootConstants();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setRootConstants(descriptor, range.visibility),
             .metal => |*metal| try metal.setRootConstants(descriptor, range.visibility),
         };
     }
 
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.setViewport(viewport);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.setViewport(viewport);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setViewport(viewport),
             .metal => |*metal| try metal.setViewport(viewport),
         };
     }
 
     pub fn setScissorRect(self: *RenderCommandEncoder, rect: core.ScissorRect) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.setScissorRect(rect);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.setScissorRect(rect);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setScissorRect(rect),
             .metal => |*metal| try metal.setScissorRect(rect),
         };
     }
 
     pub fn setBlendColor(self: *RenderCommandEncoder, color: core.BlendColor) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.setBlendColor(color);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.setBlendColor(color);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setBlendColor(color),
             .metal => |*metal| try metal.setBlendColor(color),
         };
     }
 
     pub fn setStencilReference(self: *RenderCommandEncoder, reference: core.StencilReference) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.setStencilReference(reference);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.setStencilReference(reference);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setStencilReference(reference),
             .metal => |*metal| try metal.setStencilReference(reference),
         };
     }
 
     pub fn setDepthBias(self: *RenderCommandEncoder, descriptor: core.DepthBiasDescriptor) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.setDepthBias(descriptor);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.setDepthBias(descriptor);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setDepthBias(descriptor),
             .metal => |*metal| try metal.setDepthBias(descriptor),
         };
     }
 
     pub fn beginOcclusionQuery(self: *RenderCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertObjectAlive(query_set.alive, "query_set");
-        try expectSameBackend(self.backend, query_set.backend);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertObjectAlive(query_set.state().alive, "query_set");
+        try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
         try query_set.beginOcclusionQuery(query_index);
     }
 
     pub fn endOcclusionQuery(self: *RenderCommandEncoder, query_set: *QuerySet) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertObjectAlive(query_set.alive, "query_set");
-        try expectSameBackend(self.backend, query_set.backend);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertObjectAlive(query_set.state().alive, "query_set");
+        try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
         try query_set.endOcclusionQuery();
     }
 
     pub fn writeTimestamp(self: *RenderCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertObjectAlive(query_set.alive, "query_set");
-        try expectSameBackend(self.backend, query_set.backend);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertObjectAlive(query_set.state().alive, "query_set");
+        try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
         try query_set.writeTimestamp(query_index);
     }
 
     pub fn insertNativeCommands(self: *RenderCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try insertNativeCommandsForEncoder(self.command_buffer, .render, descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try insertNativeCommandsForEncoder(self.privateState().command_buffer, .render, descriptor);
     }
 
     pub fn drawPrimitives(
         self: *RenderCommandEncoder,
         descriptor: core.DrawPrimitivesDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.drawPrimitives(descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.drawPrimitives(descriptor);
         try validateDrawPrimitivesLowering(descriptor, .{ .draw_base_instance = true });
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawPrimitives(descriptor),
             .metal => |*metal| try metal.drawPrimitives(descriptor),
         };
@@ -4891,13 +5278,13 @@ pub const RenderCommandEncoder = struct {
         self: *RenderCommandEncoder,
         descriptor: core.DrawIndexedPrimitivesDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.drawIndexedPrimitives(descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.drawIndexedPrimitives(descriptor);
         try validateDrawIndexedPrimitivesLowering(descriptor, .{
             .draw_base_vertex = true,
             .draw_base_instance = true,
         });
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawIndexedPrimitives(descriptor),
             .metal => |*metal| try metal.drawIndexedPrimitives(descriptor),
         };
@@ -4908,22 +5295,22 @@ pub const RenderCommandEncoder = struct {
         indirect_buffer: *Buffer,
         descriptor: core.DrawPrimitivesIndirectDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertAlive(indirect_buffer.alive, .buffer);
-        try expectSameBackend(self.backend, indirect_buffer.backend);
-        if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, indirect_buffer);
-        try self.debug.drawPrimitivesIndirect(descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertAlive(indirect_buffer.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, indirect_buffer.selectedBackend());
+        if (!indirect_buffer.state().usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, indirect_buffer);
+        try self.privateState().debug.drawPrimitivesIndirect(descriptor);
         try validateIndirectDrawRange(descriptor.buffer_offset, descriptor.draw_count, descriptor.stride, indirect_buffer.length(), 16);
         _ = indirect_buffer.recordUsage(.indirect_buffer);
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
                 var draw = descriptor;
                 draw.draw_count = 1;
                 draw.stride = 0;
                 for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
                     draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 16);
-                    try vulkan.drawPrimitivesIndirect(&indirect_buffer.impl.vulkan, draw);
+                    try vulkan.drawPrimitivesIndirect(&indirect_buffer.state().impl.vulkan, draw);
                 }
             },
             .metal => |*metal| {
@@ -4932,7 +5319,7 @@ pub const RenderCommandEncoder = struct {
                 draw.stride = 0;
                 for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
                     draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 16);
-                    try metal.drawPrimitivesIndirect(&indirect_buffer.impl.metal, draw);
+                    try metal.drawPrimitivesIndirect(&indirect_buffer.state().impl.metal, draw);
                 }
             },
         };
@@ -4943,22 +5330,22 @@ pub const RenderCommandEncoder = struct {
         indirect_buffer: *Buffer,
         descriptor: core.DrawIndexedPrimitivesIndirectDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        assertAlive(indirect_buffer.alive, .buffer);
-        try expectSameBackend(self.backend, indirect_buffer.backend);
-        if (!indirect_buffer.usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
-        try ensureBufferOwnedByQueue(self.command_buffer.queue_kind_value, indirect_buffer);
-        try self.debug.drawIndexedPrimitivesIndirect(descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertAlive(indirect_buffer.state().alive, .buffer);
+        try expectSameBackend(self.privateState().backend, indirect_buffer.selectedBackend());
+        if (!indirect_buffer.state().usage_value.indirect) return core.CommandEncodingError.InvalidIndirectBufferUsage;
+        try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, indirect_buffer);
+        try self.privateState().debug.drawIndexedPrimitivesIndirect(descriptor);
         try validateIndirectDrawRange(descriptor.buffer_offset, descriptor.draw_count, descriptor.stride, indirect_buffer.length(), 20);
         _ = indirect_buffer.recordUsage(.indirect_buffer);
-        if (self.impl) |*impl| switch (impl.*) {
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
                 var draw = descriptor;
                 draw.draw_count = 1;
                 draw.stride = 0;
                 for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
                     draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 20);
-                    try vulkan.drawIndexedPrimitivesIndirect(&indirect_buffer.impl.vulkan, draw);
+                    try vulkan.drawIndexedPrimitivesIndirect(&indirect_buffer.state().impl.vulkan, draw);
                 }
             },
             .metal => |*metal| {
@@ -4967,7 +5354,7 @@ pub const RenderCommandEncoder = struct {
                 draw.stride = 0;
                 for (0..@as(usize, @intCast(descriptor.draw_count))) |draw_index| {
                     draw.buffer_offset = descriptor.buffer_offset + @as(u64, @intCast(draw_index)) * indirectDrawStride(descriptor.stride, 20);
-                    try metal.drawIndexedPrimitivesIndirect(&indirect_buffer.impl.metal, draw);
+                    try metal.drawIndexedPrimitivesIndirect(&indirect_buffer.state().impl.metal, draw);
                 }
             },
         };
@@ -4977,8 +5364,8 @@ pub const RenderCommandEncoder = struct {
         self: *RenderCommandEncoder,
         descriptor: core.MultiDrawPrimitivesDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.drawPrimitivesMulti(descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.drawPrimitivesMulti(descriptor);
         for (descriptor.draws) |draw| {
             try self.drawPrimitives(draw);
         }
@@ -4988,69 +5375,69 @@ pub const RenderCommandEncoder = struct {
         self: *RenderCommandEncoder,
         descriptor: core.MultiDrawIndexedPrimitivesDescriptor,
     ) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.drawIndexedPrimitivesMulti(descriptor);
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.drawIndexedPrimitivesMulti(descriptor);
         for (descriptor.draws) |draw| {
             try self.drawIndexedPrimitives(draw);
         }
     }
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug_groups.requireEmpty();
-        try self.debug.endEncoding(&self.command_buffer.debug);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug_groups.requireEmpty();
+        try self.privateState().debug.endEncoding(&self.privateState().command_buffer.privateState().debug);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.endEncoding(),
             .metal => |*metal| {
                 try metal.endEncoding();
                 metal.deinit();
             },
         };
-        self.alive = false;
+        self.privateState().alive = false;
     }
 
     pub fn label(self: RenderCommandEncoder) ?[]const u8 {
-        return self.label_value;
+        return self.privateState().label_value;
     }
 
     pub fn setLabel(self: *RenderCommandEncoder, label_value: ?[]const u8) void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        self.label_value = label_value;
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        self.privateState().label_value = label_value;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.setLabel(label_value),
             .metal => |*metal| metal.setLabel(label_value),
         };
     }
 
     pub fn pushDebugGroup(self: *RenderCommandEncoder, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug_groups.push(label_value);
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug_groups.push(label_value);
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
             .metal => |*metal| metal.pushDebugGroup(label_value),
         };
     }
 
     pub fn popDebugGroup(self: *RenderCommandEncoder) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug_groups.pop();
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug_groups.pop();
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.popDebugGroup(),
             .metal => |*metal| metal.popDebugGroup(),
         };
     }
 
     pub fn insertDebugSignpost(self: *RenderCommandEncoder, label_value: []const u8) !void {
-        assertObjectAlive(self.alive, "render_command_encoder");
-        try self.debug.insertDebugSignpost(.{ .label = label_value });
-        if (self.impl) |*impl| switch (impl.*) {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        try self.privateState().debug.insertDebugSignpost(.{ .label = label_value });
+        if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.insertDebugSignpost(label_value),
             .metal => |*metal| metal.insertDebugSignpost(label_value),
         };
     }
 
     pub fn selectedBackend(self: RenderCommandEncoder) core.Backend {
-        return self.backend;
+        return self.privateState().backend;
     }
 };
 
@@ -5084,63 +5471,78 @@ const BackendRuntime = union(core.Backend) {
     metal: MetalClearScreen,
 };
 
-pub const Surface = struct {
+const RuntimeState = struct {
+    allocator: std.mem.Allocator,
+    tracker: *ResourceTracker,
     backend: core.Backend,
-    descriptor_value: core.SurfaceDescriptor,
-    presentation: *core.PresentationDescriptor,
-    impl: *BackendRuntime,
+    surface_descriptor: core.SurfaceDescriptor,
+    presentation_descriptor: core.PresentationDescriptor,
+    adapter_info: core.AdapterInfo,
+    capability_report: core.DeviceCapabilityReport,
+    owned_adapter_name: ?[]u8 = null,
+    impl: BackendRuntime,
+};
+
+fn runtimeState(pointer: *anyopaque) *RuntimeState {
+    return @ptrCast(@alignCast(pointer));
+}
+
+pub const Surface = struct {
+    _state: *anyopaque,
+
+    fn state(self: Surface) *RuntimeState {
+        return runtimeState(self._state);
+    }
 
     pub fn selectedBackend(self: Surface) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn descriptor(self: Surface) core.SurfaceDescriptor {
-        return self.descriptor_value;
+        return self.state().surface_descriptor;
     }
 
     pub fn provider(self: Surface) ?core.SurfaceProvider {
-        const source = self.descriptor_value.source orelse return null;
+        const source = self.state().surface_descriptor.source orelse return null;
         return source.provider;
     }
 
     pub fn swapchain(self: *Surface) Swapchain {
-        return .{
-            .backend = self.backend,
-            .presentation = self.presentation,
-            .impl = self.impl,
-        };
+        return .{ ._state = self._state };
     }
 };
 
 pub const Swapchain = struct {
-    backend: core.Backend,
-    presentation: *core.PresentationDescriptor,
-    impl: *BackendRuntime,
+    _state: *anyopaque,
+
+    fn state(self: Swapchain) *RuntimeState {
+        return runtimeState(self._state);
+    }
 
     pub fn selectedBackend(self: Swapchain) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn presentationDescriptor(self: Swapchain) core.PresentationDescriptor {
-        return self.presentation.*;
+        return self.state().presentation_descriptor;
     }
 
     pub fn extent(self: Swapchain) core.Extent2D {
-        return self.presentation.extent;
+        return self.state().presentation_descriptor.extent;
     }
 
     pub fn resize(self: *Swapchain, new_extent: core.Extent2D) !void {
-        switch (self.impl.*) {
+        switch (self.state().impl) {
             .vulkan => |*vulkan| try vulkan.resize(new_extent),
             .metal => |*metal| try metal.resize(new_extent),
         }
         if (!new_extent.isZero()) {
-            self.presentation.extent = new_extent;
+            self.state().presentation_descriptor.extent = new_extent;
         }
     }
 
     pub fn clear(self: *Swapchain, color: ClearColor) !void {
-        switch (self.impl.*) {
+        switch (self.state().impl) {
             .vulkan => |*vulkan| try vulkan.clear(color),
             .metal => |*metal| try metal.clear(color),
         }
@@ -5148,24 +5550,38 @@ pub const Swapchain = struct {
 };
 
 pub const Queue = struct {
-    backend: core.Backend,
-    tracker: *ResourceTracker,
-    impl: *BackendRuntime,
-    label_value: ?[]const u8 = null,
-    features_value: core.DeviceFeatures,
-    limits_value: core.DeviceLimits = .{},
-    kind_value: core.QueueKind = .graphics,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const State = struct {
+        runtime: *anyopaque,
+        label: ?[]const u8 = null,
+        kind: core.QueueKind = .graphics,
+    };
+
+    fn init(state_value: State) Queue {
+        var result: Queue = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const Queue) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
+    fn runtime(self: Queue) *RuntimeState {
+        return runtimeState(self.state().runtime);
+    }
 
     pub fn selectedBackend(self: Queue) core.Backend {
-        return self.backend;
+        return self.runtime().backend;
     }
 
     pub fn kind(self: Queue) core.QueueKind {
-        return self.kind_value;
+        return self.state().kind;
     }
 
     pub fn label(self: Queue) ?[]const u8 {
-        return self.label_value;
+        return self.state().label;
     }
 
     pub fn makeCommandBuffer(self: *Queue) !CommandBuffer {
@@ -5178,129 +5594,128 @@ pub const Queue = struct {
     ) !CommandBuffer {
         const debug = try core.CommandBufferDebugState.init(
             descriptor,
-            self.features_value,
+            self.runtime().capability_report.features,
         );
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.runtime().impl) {
             .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
             .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer() },
         };
-        var command_buffer = CommandBuffer{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .runtime_impl = self.impl,
+        var command_buffer = CommandBuffer.init(.{
+            .backend = self.runtime().backend,
+            .tracker = self.runtime().tracker,
+            .runtime_impl = &self.runtime().impl,
             .label_value = descriptor.label,
-            .queue_kind_value = self.kind_value,
-            .features_value = self.features_value,
-            .limits_value = self.limits_value,
+            .queue_kind_value = self.state().kind,
+            .features_value = self.runtime().capability_report.features,
+            .limits_value = self.runtime().capability_report.limits,
             .debug = debug,
             .impl = impl,
-        };
+        });
         command_buffer.setLabel(descriptor.label);
         return command_buffer;
     }
 };
 
 pub const Device = struct {
-    allocator: std.mem.Allocator,
-    tracker: *ResourceTracker,
-    backend: core.Backend,
-    impl: *BackendRuntime,
-    adapter_info: core.AdapterInfo,
-    capability_report: core.DeviceCapabilityReport,
+    _state: *anyopaque,
+
+    fn state(self: Device) *RuntimeState {
+        return runtimeState(self._state);
+    }
 
     pub fn selectedBackend(self: Device) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn adapterInfo(self: Device) core.AdapterInfo {
-        return self.adapter_info;
+        return self.state().adapter_info;
     }
 
     pub fn features(self: Device) core.DeviceFeatures {
-        return self.capability_report.features;
+        return self.state().capability_report.features;
     }
 
     pub fn nativeFeatures(self: Device) core.DeviceFeatures {
-        return self.capability_report.native_features;
+        return self.state().capability_report.native_features;
     }
 
     pub fn limits(self: Device) core.DeviceLimits {
-        return self.capability_report.limits;
+        return self.state().capability_report.limits;
     }
 
     pub fn capabilityReport(self: Device) core.DeviceCapabilityReport {
-        return self.capability_report;
+        return self.state().capability_report;
     }
 
-    pub fn validateDescriptorIndexingLayout(self: Device, descriptor: core.DescriptorIndexingLayoutDescriptor) core.AdvancedFeatureError!void {
+    fn validateDescriptorIndexingLayout(self: Device, descriptor: core.DescriptorIndexingLayoutDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planResourceTablePressure(self: Device, descriptor: core.ResourceTablePressureDescriptor) core.AdvancedFeatureError!core.ResourceTablePressurePlan {
+    fn planResourceTablePressure(self: Device, descriptor: core.ResourceTablePressureDescriptor) core.AdvancedFeatureError!core.ResourceTablePressurePlan {
         return try descriptor.plan(self.features(), self.limits());
     }
 
-    pub fn validateSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!void {
+    fn validateSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!core.SparseMappingCommitPlan {
+    fn planSparseMappingCommit(self: Device, descriptor: core.SparseMappingCommitDescriptor) core.AdvancedFeatureError!core.SparseMappingCommitPlan {
         return try descriptor.plan(self.nativeFeatures(), self.limits());
     }
 
-    pub fn planSparseResidencyChurn(self: Device, descriptor: core.SparseResidencyChurnDescriptor) core.AdvancedFeatureError!core.SparseResidencyChurnPlan {
+    fn planSparseResidencyChurn(self: Device, descriptor: core.SparseResidencyChurnDescriptor) core.AdvancedFeatureError!core.SparseResidencyChurnPlan {
         return try descriptor.plan(self.nativeFeatures(), self.limits());
     }
 
-    pub fn validateSparseBufferDescriptor(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!void {
+    fn validateSparseBufferDescriptor(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planSparseBufferLowering(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!core.SparseBufferLowering {
+    fn planSparseBufferLowering(self: Device, descriptor: core.SparseBufferDescriptor) core.AdvancedFeatureError!core.SparseBufferLowering {
         return try core.SparseBufferLowering.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn validateSparseTextureDescriptor(self: Device, descriptor: core.SparseTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
+    fn validateSparseTextureDescriptor(self: Device, descriptor: core.SparseTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planSparseTextureLowering(self: Device, descriptor: core.SparseTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.SparseTextureLowering {
+    fn planSparseTextureLowering(self: Device, descriptor: core.SparseTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.SparseTextureLowering {
         return try core.SparseTextureLowering.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn validateExternalTextureDescriptor(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
-        try descriptor.validate(self.backend, self.features());
+    fn validateExternalTextureDescriptor(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!void {
+        try descriptor.validate(self.state().backend, self.features());
     }
 
-    pub fn validateExternalMemoryDescriptor(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!void {
-        try descriptor.validate(self.backend, self.features());
+    fn validateExternalMemoryDescriptor(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.state().backend, self.features());
     }
 
-    pub fn validateExternalBufferDescriptor(self: Device, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!void {
-        try descriptor.validate(self.backend, self.features());
+    fn validateExternalBufferDescriptor(self: Device, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.state().backend, self.features());
     }
 
-    pub fn validateExternalSemaphoreDescriptor(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!void {
-        try descriptor.validate(self.backend, self.features());
+    fn validateExternalSemaphoreDescriptor(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.state().backend, self.features());
     }
 
-    pub fn validateExternalEventDescriptor(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!void {
-        try descriptor.validate(self.backend, self.features());
+    fn validateExternalEventDescriptor(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!void {
+        try descriptor.validate(self.state().backend, self.features());
     }
 
-    pub fn planExternalMemoryImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalMemoryImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try core.planExternalMemoryImport(
-            self.backend,
+            self.state().backend,
             platform,
             descriptor,
             self.features(),
@@ -5308,9 +5723,9 @@ pub const Device = struct {
         );
     }
 
-    pub fn planExternalBufferImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalBufferImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try core.planExternalBufferImport(
-            self.backend,
+            self.state().backend,
             platform,
             descriptor,
             self.features(),
@@ -5318,9 +5733,9 @@ pub const Device = struct {
         );
     }
 
-    pub fn planExternalTextureImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
+    fn planExternalTextureImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
         return try core.planExternalTextureImport(
-            self.backend,
+            self.state().backend,
             platform,
             descriptor,
             self.features(),
@@ -5328,18 +5743,18 @@ pub const Device = struct {
         );
     }
 
-    pub fn planExternalTextureUsageForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalTextureUsageDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalTextureUsagePlan {
+    fn planExternalTextureUsageForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalTextureUsageDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalTextureUsagePlan {
         return try descriptor.validate(
-            self.backend,
+            self.state().backend,
             platform,
             self.features(),
             self.nativeFeatures(),
         );
     }
 
-    pub fn planExternalSemaphoreImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalSemaphoreImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try core.planExternalSemaphoreImport(
-            self.backend,
+            self.state().backend,
             platform,
             descriptor,
             self.features(),
@@ -5347,9 +5762,9 @@ pub const Device = struct {
         );
     }
 
-    pub fn planExternalEventImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalEventImportForPlatform(self: Device, platform: core.ExternalInteropPlatform, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try core.planExternalEventImport(
-            self.backend,
+            self.state().backend,
             platform,
             descriptor,
             self.features(),
@@ -5357,14 +5772,14 @@ pub const Device = struct {
         );
     }
 
-    pub fn diagnoseExternalInteropImportForPlatform(
+    fn diagnoseExternalInteropImportForPlatform(
         self: Device,
         platform: core.ExternalInteropPlatform,
         resource: core.ExternalInteropResourceKind,
         handle: core.ExternalHandleDescriptor,
     ) core.ExternalInteropImportDiagnostic {
         return core.diagnoseExternalInteropImport(
-            self.backend,
+            self.state().backend,
             platform,
             self.features(),
             self.nativeFeatures(),
@@ -5373,31 +5788,31 @@ pub const Device = struct {
         );
     }
 
-    pub fn planExternalMemoryImport(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalMemoryImport(self: Device, descriptor: core.ExternalMemoryDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try self.planExternalMemoryImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
-    pub fn planExternalBufferImport(self: Device, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalBufferImport(self: Device, descriptor: core.ExternalBufferDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try self.planExternalBufferImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
-    pub fn planExternalTextureImport(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
+    fn planExternalTextureImport(self: Device, descriptor: core.ExternalTextureDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalInteropImportPlan {
         return try self.planExternalTextureImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
-    pub fn planExternalTextureUsage(self: Device, descriptor: core.ExternalTextureUsageDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalTextureUsagePlan {
+    fn planExternalTextureUsage(self: Device, descriptor: core.ExternalTextureUsageDescriptor) (core.AdvancedFeatureError || core.TextureError)!core.ExternalTextureUsagePlan {
         return try self.planExternalTextureUsageForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
-    pub fn planExternalSemaphoreImport(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalSemaphoreImport(self: Device, descriptor: core.ExternalSemaphoreDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try self.planExternalSemaphoreImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
-    pub fn planExternalEventImport(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
+    fn planExternalEventImport(self: Device, descriptor: core.ExternalEventDescriptor) core.AdvancedFeatureError!core.ExternalInteropImportPlan {
         return try self.planExternalEventImportForPlatform(core.ExternalInteropPlatform.native(), descriptor);
     }
 
-    pub fn diagnoseExternalInteropImport(
+    fn diagnoseExternalInteropImport(
         self: Device,
         resource: core.ExternalInteropResourceKind,
         handle: core.ExternalHandleDescriptor,
@@ -5409,116 +5824,116 @@ pub const Device = struct {
         );
     }
 
-    pub fn externalInteropCapabilityMatrix(self: Device) core.ExternalInteropCapabilityMatrix {
+    fn externalInteropCapabilityMatrix(self: Device) core.ExternalInteropCapabilityMatrix {
         return self.externalInteropCapabilityMatrixForPlatform(core.ExternalInteropPlatform.native());
     }
 
-    pub fn externalInteropCapabilityMatrixForPlatform(self: Device, platform: core.ExternalInteropPlatform) core.ExternalInteropCapabilityMatrix {
+    fn externalInteropCapabilityMatrixForPlatform(self: Device, platform: core.ExternalInteropPlatform) core.ExternalInteropCapabilityMatrix {
         return core.externalInteropCapabilityMatrix(
-            self.backend,
+            self.state().backend,
             platform,
             self.features(),
             self.nativeFeatures(),
         );
     }
 
-    pub fn validateNativeCommandInsertionDescriptor(self: Device, descriptor: core.NativeCommandInsertionDescriptor) core.AdvancedFeatureError!void {
+    fn validateNativeCommandInsertionDescriptor(self: Device, descriptor: core.NativeCommandInsertionDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features());
     }
 
-    pub fn planNativeAdvancedClosure(self: Device, descriptor: core.NativeAdvancedClosureDescriptor) core.NativeAdvancedClosurePlan {
+    fn planNativeAdvancedClosure(self: Device, descriptor: core.NativeAdvancedClosureDescriptor) core.NativeAdvancedClosurePlan {
         _ = self;
         return core.NativeAdvancedClosurePlan.fromDescriptor(descriptor);
     }
 
-    pub fn validateTessellationDescriptor(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!void {
+    fn validateTessellationDescriptor(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planTessellationLowering(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!core.TessellationLowering {
+    fn planTessellationLowering(self: Device, descriptor: core.TessellationDescriptor) core.AdvancedFeatureError!core.TessellationLowering {
         return try core.TessellationLowering.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn validateTessellationPatchDrawDescriptor(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!void {
+    fn validateTessellationPatchDrawDescriptor(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.TessellationDrawPlan {
+    fn planTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.TessellationDrawPlan {
         return try core.TessellationDrawPlan.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn planVulkanTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.VulkanTessellationDrawLowering {
-        if (self.backend != .vulkan) return core.AdvancedFeatureError.UnsupportedTessellation;
+    fn planVulkanTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.VulkanTessellationDrawLowering {
+        if (self.state().backend != .vulkan) return core.AdvancedFeatureError.UnsupportedTessellation;
         const plan = try self.planTessellationPatchDraw(descriptor);
-        return try plan.vulkanLowering();
+        return try core.vulkanTessellationDrawLowering(plan);
     }
 
-    pub fn planMetalTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.MetalTessellationDrawLowering {
-        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedTessellation;
+    fn planMetalTessellationPatchDraw(self: Device, descriptor: core.TessellationPatchDrawDescriptor) core.AdvancedFeatureError!core.MetalTessellationDrawLowering {
+        if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedTessellation;
         const plan = try self.planTessellationPatchDraw(descriptor);
-        return try plan.metalLowering();
+        return try core.metalTessellationDrawLowering(plan);
     }
 
-    pub fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
+    fn validateMeshPipelineDescriptor(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planMeshPipelineLowering(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!core.MeshPipelineLowering {
+    fn planMeshPipelineLowering(self: Device, descriptor: core.MeshPipelineDescriptor) core.AdvancedFeatureError!core.MeshPipelineLowering {
         return try core.MeshPipelineLowering.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn validateMeshDispatchDescriptor(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!void {
+    fn validateMeshDispatchDescriptor(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.MeshDispatchPlan {
+    fn planMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.MeshDispatchPlan {
         return try core.MeshDispatchPlan.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn planVulkanMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.VulkanMeshDispatchLowering {
-        if (self.backend != .vulkan) return core.AdvancedFeatureError.UnsupportedMeshShaders;
+    fn planVulkanMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.VulkanMeshDispatchLowering {
+        if (self.state().backend != .vulkan) return core.AdvancedFeatureError.UnsupportedMeshShaders;
         const plan = try self.planMeshDispatch(descriptor);
-        return try plan.vulkanLowering();
+        return try core.vulkanMeshDispatchLowering(plan);
     }
 
-    pub fn planMetalMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.MetalMeshDispatchLowering {
-        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedMeshShaders;
+    fn planMetalMeshDispatch(self: Device, descriptor: core.MeshDispatchDescriptor) core.AdvancedFeatureError!core.MetalMeshDispatchLowering {
+        if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedMeshShaders;
         const plan = try self.planMeshDispatch(descriptor);
-        return try plan.metalLowering();
+        return try core.metalMeshDispatchLowering(plan);
     }
 
-    pub fn validateAccelerationStructureDescriptor(self: Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!void {
+    fn validateAccelerationStructureDescriptor(self: Device, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features());
     }
 
-    pub fn planAccelerationStructureBuild(self: Device, descriptor: core.AccelerationStructureBuildDescriptor) core.AdvancedFeatureError!core.AccelerationStructureBuildPlan {
+    fn planAccelerationStructureBuild(self: Device, descriptor: core.AccelerationStructureBuildDescriptor) core.AdvancedFeatureError!core.AccelerationStructureBuildPlan {
         var plan = try core.AccelerationStructureBuildPlan.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
         );
-        if (self.capability_report.source == .vulkan_query or self.capability_report.source == .metal_query) {
-            switch (self.impl.*) {
+        if (self.state().capability_report.source == .vulkan_query or self.state().capability_report.source == .metal_query) {
+            switch (self.state().impl) {
                 .vulkan => |*vulkan| {
                     const sizes = try vulkan.accelerationStructureBuildSizes(descriptor.acceleration_structure);
                     plan.result_size = sizes.result_size;
@@ -5546,23 +5961,23 @@ pub const Device = struct {
         return plan;
     }
 
-    pub fn planAccelerationStructureMaintenance(
+    fn planAccelerationStructureMaintenance(
         self: Device,
         descriptor: core.AccelerationStructureMaintenanceDescriptor,
     ) core.AdvancedFeatureError!core.AccelerationStructureMaintenancePlan {
         return try core.AccelerationStructureMaintenancePlan.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
         );
     }
 
-    pub fn planTopLevelAccelerationStructureLayout(
+    fn planTopLevelAccelerationStructureLayout(
         self: Device,
         descriptor: core.TopLevelAccelerationStructureLayoutDescriptor,
     ) core.AdvancedFeatureError!core.TopLevelAccelerationStructureLayoutPlan {
         return try descriptor.plan(
-            self.backend,
+            self.state().backend,
             self.nativeFeatures(),
             self.limits(),
         );
@@ -5572,8 +5987,8 @@ pub const Device = struct {
         try descriptor.validate(self.nativeFeatures());
         var sizes = core.estimateAccelerationStructureBuildSizes(descriptor);
         var impl: ?AccelerationStructure.Impl = null;
-        if (self.capability_report.source == .vulkan_query or self.capability_report.source == .metal_query) {
-            switch (self.impl.*) {
+        if (self.state().capability_report.source == .vulkan_query or self.state().capability_report.source == .metal_query) {
+            switch (self.state().impl) {
                 .vulkan => |*vulkan| {
                     var acceleration_structure = try vulkan.makeAccelerationStructure(descriptor);
                     sizes = acceleration_structure.buildSizes();
@@ -5586,30 +6001,30 @@ pub const Device = struct {
                 },
             }
         }
-        self.tracker.retain(.acceleration_structure);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.acceleration_structure);
+        return AccelerationStructure.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
             .sizes_value = sizes,
             .native_handle = BackendPrivateAccelerationStructureHandle.fromDescriptor(
-                self.backend,
+                self.state().backend,
                 descriptor,
                 sizes,
             ),
             .impl = impl,
-        };
+        });
     }
 
-    pub fn validateRayTracingPipelineDescriptor(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!void {
+    fn validateRayTracingPipelineDescriptor(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn planRayTracingPipelineLowering(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!core.RayTracingPipelineLowering {
+    fn planRayTracingPipelineLowering(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!core.RayTracingPipelineLowering {
         const metal_intersections: []const core.MetalIntersectionFunctionDescriptor = &.{};
         return try core.RayTracingPipelineLowering.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             metal_intersections,
             self.nativeFeatures(),
@@ -5620,56 +6035,56 @@ pub const Device = struct {
     pub fn makeRayTracingPipelineState(self: *Device, descriptor: core.RayTracingPipelineDescriptor) !RayTracingPipelineState {
         const metal_intersections: []const core.MetalIntersectionFunctionDescriptor = &.{};
         const lowering = try core.RayTracingPipelineLowering.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             metal_intersections,
             self.nativeFeatures(),
             self.limits(),
         );
-        const shader_groups = try self.allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.shader_groups);
-        errdefer self.allocator.free(shader_groups);
+        const shader_groups = try self.state().allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.shader_groups);
+        errdefer self.state().allocator.free(shader_groups);
         var impl: ?RayTracingPipelineState.Impl = null;
         errdefer if (impl) |*pipeline_impl| switch (pipeline_impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         };
-        switch (self.impl.*) {
+        switch (self.state().impl) {
             .vulkan => |*vulkan| {
-                if (self.backend == .vulkan and descriptor.hasNativeShaderStages()) {
+                if (self.state().backend == .vulkan and descriptor.hasNativeShaderStages()) {
                     impl = .{ .vulkan = try vulkan.makeRayTracingPipelineState(descriptor) };
                 }
             },
             .metal => |*metal| {
-                if (self.backend == .metal) {
-                    impl = .{ .metal = try metal.makeRayTracingPipelineState(self.allocator, descriptor) };
+                if (self.state().backend == .metal) {
+                    impl = .{ .metal = try metal.makeRayTracingPipelineState(self.state().allocator, descriptor) };
                 }
             },
         }
         var native_handle = BackendPrivateRayTracingPipelineHandle.fromLowering(
-            self.backend,
+            self.state().backend,
             descriptor,
             lowering,
         );
         native_handle.driver_bound = impl != null;
-        self.tracker.retain(.ray_tracing_pipeline_state);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.ray_tracing_pipeline_state);
+        return RayTracingPipelineState.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .descriptor_value = .{
                 .label = descriptor.label,
                 .shader_groups = shader_groups,
                 .max_recursion_depth = descriptor.max_recursion_depth,
             },
-            .lowering_value = lowering,
+            .lowering = lowering,
             .native_handle = native_handle,
             .impl = impl,
-        };
+        });
     }
 
-    pub fn planMetalRayTracingMapping(self: Device, descriptor: core.MetalRayTracingMappingDescriptor) core.AdvancedFeatureError!core.MetalRayTracingMappingPlan {
-        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
+    fn planMetalRayTracingMapping(self: Device, descriptor: core.MetalRayTracingMappingDescriptor) core.AdvancedFeatureError!core.MetalRayTracingMappingPlan {
+        if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
         return try core.MetalRayTracingMappingPlan.fromDescriptor(
             descriptor,
             self.nativeFeatures(),
@@ -5677,22 +6092,22 @@ pub const Device = struct {
         );
     }
 
-    pub fn makeMetalRayTracingExecutionMapping(self: *Device, descriptor: core.MetalRayTracingMappingDescriptor) !MetalRayTracingExecutionMapping {
-        if (self.backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
+    fn makeMetalRayTracingExecutionMapping(self: *Device, descriptor: core.MetalRayTracingMappingDescriptor) !MetalRayTracingExecutionMapping {
+        if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
         const plan = try core.MetalRayTracingMappingPlan.fromDescriptor(
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
-        const shader_groups = try self.allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.pipeline.shader_groups);
-        errdefer self.allocator.free(shader_groups);
-        const intersections = try self.allocator.dupe(core.MetalIntersectionFunctionDescriptor, descriptor.intersections);
-        errdefer self.allocator.free(intersections);
+        const shader_groups = try self.state().allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.pipeline.shader_groups);
+        errdefer self.state().allocator.free(shader_groups);
+        const intersections = try self.state().allocator.dupe(core.MetalIntersectionFunctionDescriptor, descriptor.intersections);
+        errdefer self.state().allocator.free(intersections);
 
-        self.tracker.retain(.metal_ray_tracing_execution_mapping);
-        return .{
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.metal_ray_tracing_execution_mapping);
+        return MetalRayTracingExecutionMapping.init(.{
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.function_table_label,
             .descriptor_value = .{
                 .pipeline = .{
@@ -5705,10 +6120,10 @@ pub const Device = struct {
             },
             .plan_value = plan,
             .native_tables = BackendPrivateMetalRayTracingTables.fromPlan(plan),
-        };
+        });
     }
 
-    pub fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
+    fn validateShaderBindingTableDescriptor(self: Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
@@ -5718,22 +6133,22 @@ pub const Device = struct {
             self.nativeFeatures(),
             self.limits(),
         );
-        self.tracker.retain(.shader_binding_table);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.shader_binding_table);
+        return ShaderBindingTable.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .layout_value = layout,
             .limits_value = self.limits(),
             .native_records = BackendPrivateShaderBindingTableRecords.fromLayout(
-                self.backend,
+                self.state().backend,
                 descriptor,
                 layout,
             ),
-        };
+        });
     }
 
-    pub fn planComplexShaderBindingTable(
+    fn planComplexShaderBindingTable(
         self: Device,
         descriptor: core.ComplexShaderBindingTableDescriptor,
     ) core.AdvancedFeatureError!core.ComplexShaderBindingTablePlan {
@@ -5744,7 +6159,7 @@ pub const Device = struct {
         );
     }
 
-    pub fn planRayDispatch(
+    fn planRayDispatch(
         self: Device,
         sbt: core.ShaderBindingTableDescriptor,
         dispatch: core.RayDispatchDescriptor,
@@ -5757,33 +6172,33 @@ pub const Device = struct {
         );
     }
 
-    pub fn planRayQuery(self: Device, descriptor: core.RayQueryDescriptor) core.AdvancedFeatureError!core.RayQueryPlan {
+    fn planRayQuery(self: Device, descriptor: core.RayQueryDescriptor) core.AdvancedFeatureError!core.RayQueryPlan {
         return try core.RayQueryPlan.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn planRayTracingStress(self: Device, descriptor: core.RayTracingStressDescriptor) core.AdvancedFeatureError!core.RayTracingStressPlan {
+    fn planRayTracingStress(self: Device, descriptor: core.RayTracingStressDescriptor) core.AdvancedFeatureError!core.RayTracingStressPlan {
         return try core.RayTracingStressPlan.fromDescriptor(
-            self.backend,
+            self.state().backend,
             descriptor,
             self.nativeFeatures(),
             self.limits(),
         );
     }
 
-    pub fn validateDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
+    fn validateDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    pub fn validateNativeDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
+    fn validateNativeDriverPipelineCacheDescriptor(self: Device, descriptor: core.DriverPipelineCacheDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.nativeFeatures(), self.limits());
     }
 
-    pub fn planDriverPipelineCache(self: Device, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
+    fn planDriverPipelineCache(self: Device, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
         try self.validateNativeDriverPipelineCacheDescriptor(descriptor);
         return try core.DriverPipelineCachePlan.fromDescriptor(
             descriptor,
@@ -5793,118 +6208,118 @@ pub const Device = struct {
         );
     }
 
-    pub fn planRuntimeCache(self: Device, descriptor: core.RuntimeCachePlanDescriptor) !core.RuntimeCachePlan {
-        if (descriptor.manifest.backend != self.backend) return core.ObjectCacheError.InvalidObjectCacheKey;
-        return try core.RuntimeCachePlan.fromDescriptor(self.allocator, descriptor);
+    fn planRuntimeCache(self: Device, descriptor: core.RuntimeCachePlanDescriptor) !core.RuntimeCachePlan {
+        if (descriptor.manifest.backend != self.state().backend) return core.ObjectCacheError.InvalidObjectCacheKey;
+        return try core.RuntimeCachePlan.fromDescriptor(self.state().allocator, descriptor);
     }
 
-    pub fn planPipelineArtifactCache(self: Device, descriptor: core.PipelineArtifactCachePlanDescriptor) core.ObjectCacheError!core.PipelineArtifactCachePlan {
-        if (descriptor.manifest.backend != self.backend) return core.ObjectCacheError.InvalidObjectCacheKey;
+    fn planPipelineArtifactCache(self: Device, descriptor: core.PipelineArtifactCachePlanDescriptor) core.ObjectCacheError!core.PipelineArtifactCachePlan {
+        if (descriptor.manifest.backend != self.state().backend) return core.ObjectCacheError.InvalidObjectCacheKey;
         return try core.PipelineArtifactCachePlan.fromDescriptor(descriptor);
     }
 
-    pub fn planBackendParitySemantics(
+    fn planBackendParitySemantics(
         self: Device,
         descriptor: core.BackendParitySemanticsDescriptor,
     ) core.StabilityRunError!core.BackendParitySemanticsPlan {
         var resolved = descriptor;
-        resolved.backend = self.backend;
+        resolved.backend = self.state().backend;
         return try core.BackendParitySemanticsPlan.fromDescriptor(resolved);
     }
 
     pub fn getFormatCaps(self: Device, format: core.TextureFormat) core.FormatCapabilities {
-        return switch (self.impl.*) {
+        return switch (self.state().impl) {
             .vulkan => |*vulkan| vulkan.formatCapabilities(format),
             .metal => |*metal| metal.formatCapabilities(format),
         };
     }
 
-    pub fn objectCacheDiagnostics(self: Device) core.ObjectCacheDiagnostics {
-        return self.tracker.objectCacheDiagnostics();
+    fn objectCacheDiagnostics(self: Device) core.ObjectCacheDiagnostics {
+        return self.state().tracker.objectCacheDiagnostics();
     }
 
-    pub fn runtimeDiagnostics(self: Device) core.RuntimeDiagnosticsSnapshot {
-        return self.tracker.diagnosticsSnapshot();
+    fn runtimeDiagnostics(self: Device) core.RuntimeDiagnosticsSnapshot {
+        return self.state().tracker.diagnosticsSnapshot();
     }
 
-    pub fn syncCapabilities(self: Device) core.SyncCapabilities {
+    fn syncCapabilities(self: Device) core.SyncCapabilities {
         return core.SyncCapabilities.fromFeatures(self.features());
     }
 
-    pub fn writeCaptureName(
+    fn writeCaptureName(
         self: Device,
         descriptor: core.CaptureNameDescriptor,
         buffer: []u8,
     ) core.CommandEncodingError![]const u8 {
         var resolved = descriptor;
-        if (resolved.backend == null) resolved.backend = self.backend;
+        if (resolved.backend == null) resolved.backend = self.state().backend;
         return try resolved.write(buffer);
     }
 
     pub fn makeFence(self: *Device, descriptor: core.FenceDescriptor) !Fence {
         try descriptor.validate(self.features());
-        self.tracker.retain(.fence);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.fence);
+        return Fence.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
             .current_value = descriptor.initial_value,
-        };
+        });
     }
 
     pub fn makeEvent(self: *Device, descriptor: core.EventDescriptor) !Event {
         try descriptor.validate(self.features());
-        self.tracker.retain(.event);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.event);
+        return Event.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
-        };
+        });
     }
 
     pub fn makeQuerySet(self: *Device, descriptor: core.QuerySetDescriptor) !QuerySet {
         try descriptor.validate(self.features());
         const count: usize = @intCast(descriptor.count);
-        const values = try self.allocator.alloc(u64, count);
-        errdefer self.allocator.free(values);
-        const available = try self.allocator.alloc(bool, count);
-        errdefer self.allocator.free(available);
+        const values = try self.state().allocator.alloc(u64, count);
+        errdefer self.state().allocator.free(values);
+        const available = try self.state().allocator.alloc(bool, count);
+        errdefer self.state().allocator.free(available);
         @memset(values, 0);
         @memset(available, false);
 
-        self.tracker.retain(.query_set);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.query_set);
+        return QuerySet.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
             .result_source_value = if (descriptor.query_type == .timestamp) .logical_sequence else .unavailable,
             .values = values,
             .available = available,
-        };
+        });
     }
 
     pub fn makeHeap(self: *Device, descriptor: core.HeapDescriptor) !Heap {
         try descriptor.validate(self.features());
-        self.tracker.retain(.heap);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.heap);
+        return Heap.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
-        };
+        });
     }
 
-    pub fn memoryBudgetReport(self: Device, descriptor: core.MemoryBudgetDescriptor) core.MemoryBudgetError!core.MemoryBudgetReport {
+    fn memoryBudgetReport(self: Device, descriptor: core.MemoryBudgetDescriptor) core.MemoryBudgetError!core.MemoryBudgetReport {
         var resolved = descriptor;
         resolved.native_budget_available = resolved.native_budget_available or self.nativeFeatures().memory_budget;
         return try resolved.report();
     }
 
-    pub fn transientAllocationDiagnostics(
+    fn transientAllocationDiagnostics(
         self: Device,
         resources: []const core.TransientResourceDescriptor,
     ) error{InvalidResourceBarrierRange}!core.TransientAllocationDiagnostics {
@@ -5913,36 +6328,35 @@ pub const Device = struct {
     }
 
     pub fn queue(self: *Device) Queue {
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .impl = self.impl,
-            .features_value = self.features(),
-            .limits_value = self.limits(),
-        };
+        return self.queueView(null, .graphics);
     }
 
-    pub fn queueCapabilities(self: Device) core.QueueCapabilities {
+    fn queueView(self: *Device, label: ?[]const u8, kind: core.QueueKind) Queue {
+        return Queue.init(.{
+            .runtime = self._state,
+            .label = label,
+            .kind = kind,
+        });
+    }
+
+    fn queueCapabilities(self: Device) core.QueueCapabilities {
         return core.QueueCapabilities.fromFeatures(self.features());
     }
 
-    pub fn presentModeSupport(self: Device) core.PresentModeSupport {
-        return core.defaultPresentModeSupport(self.backend);
+    fn presentModeSupport(self: Device) core.PresentModeSupport {
+        return core.defaultPresentModeSupport(self.state().backend);
     }
 
-    pub fn resolvePresentMode(self: Device, requested: core.PresentMode) core.PresentModeResolution {
+    fn resolvePresentMode(self: Device, requested: core.PresentMode) core.PresentModeResolution {
         return self.presentModeSupport().resolveWithDiagnostics(requested);
     }
 
     pub fn queueWithDescriptor(self: *Device, descriptor: core.QueueDescriptor) !Queue {
         const plan = try self.planQueue(descriptor);
-        var queue_view = self.queue();
-        queue_view.label_value = descriptor.label;
-        queue_view.kind_value = plan.resolved;
-        return queue_view;
+        return self.queueView(descriptor.label, plan.resolved);
     }
 
-    pub fn planQueue(self: Device, descriptor: core.QueueDescriptor) core.CommandEncodingError!core.QueueSelectionPlan {
+    fn planQueue(self: Device, descriptor: core.QueueDescriptor) core.CommandEncodingError!core.QueueSelectionPlan {
         return try core.QueueSelectionPlan.fromDescriptor(
             descriptor,
             self.features(),
@@ -5950,8 +6364,8 @@ pub const Device = struct {
         );
     }
 
-    pub fn makeSurfaceCollection(self: Device) core.SurfaceCollection {
-        return core.SurfaceCollection.init(self.allocator, self.backend);
+    fn makeSurfaceCollection(self: Device) core.SurfaceCollection {
+        return core.SurfaceCollection.init(self.state().allocator, self.state().backend);
     }
 
     pub fn compileRenderShader(
@@ -5961,7 +6375,7 @@ pub const Device = struct {
         options: ShaderCompiler.RenderShaderOptions,
     ) !ShaderCompiler.CompiledRenderShader {
         return try ShaderCompiler.compileRenderShader(
-            self.allocator,
+            self.state().allocator,
             name,
             source,
             options,
@@ -5975,7 +6389,7 @@ pub const Device = struct {
         options: ShaderCompiler.ComputeShaderOptions,
     ) !ShaderCompiler.CompiledComputeShader {
         return try ShaderCompiler.compileComputeShader(
-            self.allocator,
+            self.state().allocator,
             name,
             source,
             options,
@@ -5989,7 +6403,7 @@ pub const Device = struct {
         options: ShaderCompiler.RayTracingShaderOptions,
     ) !ShaderCompiler.CompiledRayTracingShader {
         return try ShaderCompiler.compileRayTracingShader(
-            self.allocator,
+            self.state().allocator,
             name,
             source,
             options,
@@ -5998,44 +6412,44 @@ pub const Device = struct {
 
     pub fn makeBuffer(self: *Device, descriptor: core.BufferDescriptor) !Buffer {
         const length = try descriptor.resolvedLength();
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| Buffer.Impl{ .vulkan = try vulkan.makeBuffer(descriptor) },
             .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(descriptor) },
         };
-        self.tracker.retain(.buffer);
-        var buffer = Buffer{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.buffer);
+        var buffer = Buffer.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .length_value = length,
             .usage_value = descriptor.usage,
             .storage_mode_value = descriptor.storage_mode,
             .impl = impl,
-        };
+        });
         buffer.setLabel(descriptor.label);
         return buffer;
     }
 
     pub fn makeShaderModule(self: *Device, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
-        var fingerprint = objectFingerprintStart(.shader_module, self.backend);
+        var fingerprint = objectFingerprintStart(.shader_module, self.state().backend);
         hashShaderModuleDescriptor(&fingerprint, descriptor);
-        const lookup = self.tracker.beginObjectCacheLookup(.shader_module, fingerprint, descriptor.cache_policy);
+        const lookup = self.state().tracker.beginObjectCacheLookup(.shader_module, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| ShaderModule.Impl{ .vulkan = try vulkan.makeShaderModule(descriptor) },
-            .metal => |*metal| ShaderModule.Impl{ .metal = try metal.makeShaderModule(self.allocator, descriptor) },
+            .metal => |*metal| ShaderModule.Impl{ .metal = try metal.makeShaderModule(self.state().allocator, descriptor) },
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
-        self.tracker.retain(.shader_module);
-        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
-        var shader_module = ShaderModule{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.shader_module);
+        self.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+        var shader_module = ShaderModule.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .impl = impl,
-        };
+        });
         shader_module.setLabel(descriptor.label);
         return shader_module;
     }
@@ -6046,29 +6460,29 @@ pub const Device = struct {
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.vertex, self.features());
         if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment, self.features());
-        try ShaderReflection.validateRenderPipelineDescriptor(self.allocator, descriptor);
-        const root_constant_ranges = try copyRootConstantRanges(self.allocator, descriptor.root_constant_layout);
-        errdefer self.allocator.free(root_constant_ranges);
-        var fingerprint = objectFingerprintStart(.render_pipeline, self.backend);
+        try ShaderReflection.validateRenderPipelineDescriptor(self.state().allocator, descriptor);
+        const root_constant_ranges = try copyRootConstantRanges(self.state().allocator, descriptor.root_constant_layout);
+        errdefer self.state().allocator.free(root_constant_ranges);
+        var fingerprint = objectFingerprintStart(.render_pipeline, self.state().backend);
         hashRenderPipelineDescriptor(&fingerprint, descriptor);
-        const lookup = self.tracker.beginObjectCacheLookup(.render_pipeline, fingerprint, descriptor.cache_policy);
+        const lookup = self.state().tracker.beginObjectCacheLookup(.render_pipeline, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| RenderPipelineState.Impl{ .vulkan = try vulkan.makeRenderPipelineState(descriptor) },
-            .metal => |*metal| RenderPipelineState.Impl{ .metal = try metal.makeRenderPipelineState(self.allocator, descriptor) },
+            .metal => |*metal| RenderPipelineState.Impl{ .metal = try metal.makeRenderPipelineState(self.state().allocator, descriptor) },
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
-        self.tracker.retain(.render_pipeline_state);
-        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
-        var pipeline = RenderPipelineState{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.render_pipeline_state);
+        self.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+        var pipeline = RenderPipelineState.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .root_constant_ranges = root_constant_ranges,
             .impl = impl,
-        };
+        });
         pipeline.setLabel(descriptor.label);
         return pipeline;
     }
@@ -6077,29 +6491,29 @@ pub const Device = struct {
         try descriptor.validate();
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.compute, self.features());
-        try ShaderReflection.validateComputePipelineDescriptor(self.allocator, descriptor);
-        const root_constant_ranges = try copyRootConstantRanges(self.allocator, descriptor.root_constant_layout);
-        errdefer self.allocator.free(root_constant_ranges);
-        var fingerprint = objectFingerprintStart(.compute_pipeline, self.backend);
+        try ShaderReflection.validateComputePipelineDescriptor(self.state().allocator, descriptor);
+        const root_constant_ranges = try copyRootConstantRanges(self.state().allocator, descriptor.root_constant_layout);
+        errdefer self.state().allocator.free(root_constant_ranges);
+        var fingerprint = objectFingerprintStart(.compute_pipeline, self.state().backend);
         hashComputePipelineDescriptor(&fingerprint, descriptor);
-        const lookup = self.tracker.beginObjectCacheLookup(.compute_pipeline, fingerprint, descriptor.cache_policy);
+        const lookup = self.state().tracker.beginObjectCacheLookup(.compute_pipeline, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| ComputePipelineState.Impl{ .vulkan = try vulkan.makeComputePipelineState(descriptor) },
-            .metal => |*metal| ComputePipelineState.Impl{ .metal = try metal.makeComputePipelineState(self.allocator, descriptor) },
+            .metal => |*metal| ComputePipelineState.Impl{ .metal = try metal.makeComputePipelineState(self.state().allocator, descriptor) },
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
-        self.tracker.retain(.compute_pipeline_state);
-        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
-        var pipeline = ComputePipelineState{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.compute_pipeline_state);
+        self.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+        var pipeline = ComputePipelineState.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .root_constant_ranges = root_constant_ranges,
             .impl = impl,
-        };
+        });
         pipeline.setLabel(descriptor.label);
         return pipeline;
     }
@@ -6107,67 +6521,67 @@ pub const Device = struct {
     pub fn makeBindGroupLayout(self: *Device, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
         try descriptor.validate();
         try validateFirstSliceBindGroupLayout(descriptor);
-        var fingerprint = objectFingerprintStart(.bind_group_layout, self.backend);
+        var fingerprint = objectFingerprintStart(.bind_group_layout, self.state().backend);
         hashBindGroupLayoutDescriptor(&fingerprint, descriptor);
-        const lookup = self.tracker.beginObjectCacheLookup(.bind_group_layout, fingerprint, descriptor.cache_policy);
+        const lookup = self.state().tracker.beginObjectCacheLookup(.bind_group_layout, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
 
-        const entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.entries);
-        errdefer self.allocator.free(entries);
+        const entries = try self.state().allocator.dupe(core.BindGroupLayoutEntry, descriptor.entries);
+        errdefer self.state().allocator.free(entries);
 
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| BindGroupLayout.Impl{
                 .vulkan = try VulkanBindGroupBackend.VulkanBindGroupLayout.init(
                     vulkan.gc,
-                    self.allocator,
+                    self.state().allocator,
                     descriptor,
                 ),
             },
             .metal => BindGroupLayout.Impl{
                 .metal = try MetalBindGroupBackend.MetalBindGroupLayout.init(
-                    self.allocator,
+                    self.state().allocator,
                     descriptor,
                 ),
             },
         };
 
         const elapsed_ns = objectCreationElapsedNs(timer_start);
-        self.tracker.retain(.bind_group_layout);
-        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.bind_group_layout);
+        self.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+        return BindGroupLayout.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .entries = entries,
             .impl = impl,
-        };
+        });
     }
 
     pub fn makeAdvancedBindGroupLayout(self: *Device, descriptor: core.DescriptorIndexingLayoutDescriptor) !AdvancedBindGroupLayout {
         try descriptor.validate(self.features(), self.limits());
-        const ranges = try self.allocator.dupe(core.DescriptorIndexingRange, descriptor.ranges);
-        errdefer self.allocator.free(ranges);
-        const impl: ?AdvancedBindGroupLayout.Impl = switch (self.impl.*) {
+        const ranges = try self.state().allocator.dupe(core.DescriptorIndexingRange, descriptor.ranges);
+        errdefer self.state().allocator.free(ranges);
+        const impl: ?AdvancedBindGroupLayout.Impl = switch (self.state().impl) {
             .vulkan => |*vulkan| .{ .vulkan = try VulkanAdvancedBindGroupBackend.init(vulkan.gc, descriptor) },
             .metal => .{ .metal = try MetalAdvancedBindGroupBackend.init(descriptor) },
         };
 
-        self.tracker.retain(.advanced_bind_group_layout);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.advanced_bind_group_layout);
+        return AdvancedBindGroupLayout.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .model_value = descriptor.model,
             .ranges = ranges,
             .impl = impl,
-        };
+        });
     }
 
     pub fn makeResourceTable(self: *Device, descriptor: ResourceTableDescriptor) !ResourceTable {
-        assertObjectAlive(descriptor.layout.alive, "advanced_bind_group_layout");
-        try expectSameBackend(self.backend, descriptor.layout.backend);
+        assertObjectAlive(descriptor.layout.state().alive, "advanced_bind_group_layout");
+        try expectSameBackend(self.state().backend, descriptor.layout.selectedBackend());
         if (descriptor.layout.usesPartiallyBoundRanges() and !descriptor.allow_partially_bound) {
             return core.BindingError.ResourceTablePartiallyBoundUnsupported;
         }
@@ -6175,77 +6589,77 @@ pub const Device = struct {
             return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
         }
 
-        const ranges = try self.allocator.dupe(core.DescriptorIndexingRange, descriptor.layout.ranges);
-        errdefer self.allocator.free(ranges);
+        const ranges = try self.state().allocator.dupe(core.DescriptorIndexingRange, descriptor.layout.state().ranges);
+        errdefer self.state().allocator.free(ranges);
 
-        const slots = try self.allocator.alloc(?BindGroupResource, descriptor.layout.totalDescriptorCount());
-        errdefer self.allocator.free(slots);
+        const slots = try self.state().allocator.alloc(?BindGroupResource, descriptor.layout.totalDescriptorCount());
+        errdefer self.state().allocator.free(slots);
         @memset(slots, null);
 
-        const impl: ?ResourceTable.Impl = switch (descriptor.layout.impl.?) {
+        const impl: ?ResourceTable.Impl = switch (descriptor.layout.state().impl.?) {
             .vulkan => |vulkan| .{ .vulkan = VulkanAdvancedBindGroupBackend.ResourceTable.init(vulkan) },
             .metal => |metal| .{ .metal = MetalAdvancedBindGroupBackend.ResourceTable.init(metal) },
         };
 
-        self.tracker.retain(.resource_table);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.resource_table);
+        return ResourceTable.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
-            .model_value = descriptor.layout.model_value,
+            .model_value = descriptor.layout.state().model_value,
             .ranges = ranges,
             .slots = slots,
             .allow_update_after_bind = descriptor.allow_update_after_bind,
             .impl = impl,
-        };
+        });
     }
 
     pub fn makeBindGroup(self: *Device, descriptor: BindGroupDescriptor) !BindGroup {
-        const entries = try materializeBindGroupEntries(self.allocator, self.backend, descriptor);
-        errdefer self.allocator.free(entries);
+        const entries = try materializeBindGroupEntries(self.state().allocator, self.state().backend, descriptor);
+        errdefer self.state().allocator.free(entries);
 
-        const layout_entries = try self.allocator.dupe(core.BindGroupLayoutEntry, descriptor.layout.entries);
-        errdefer self.allocator.free(layout_entries);
+        const layout_entries = try self.state().allocator.dupe(core.BindGroupLayoutEntry, descriptor.layout.state().entries);
+        errdefer self.state().allocator.free(layout_entries);
 
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| bind_group_impl: {
-                const vulkan_entries = try materializeVulkanBindGroupEntries(self.allocator, descriptor.entries);
-                defer vulkan_entries.deinit(self.allocator);
+                const vulkan_entries = try materializeVulkanBindGroupEntries(self.state().allocator, descriptor.entries);
+                defer vulkan_entries.deinit(self.state().allocator);
 
                 break :bind_group_impl BindGroup.Impl{
                     .vulkan = try VulkanBindGroupBackend.VulkanBindGroup.init(
                         vulkan.gc,
-                        self.allocator,
-                        &descriptor.layout.impl.?.vulkan,
+                        self.state().allocator,
+                        &descriptor.layout.state().impl.?.vulkan,
                         vulkan_entries.entries,
                     ),
                 };
             },
             .metal => bind_group_impl: {
-                const metal_entries = try materializeMetalBindGroupEntries(self.allocator, descriptor.entries);
-                defer metal_entries.deinit(self.allocator);
+                const metal_entries = try materializeMetalBindGroupEntries(self.state().allocator, descriptor.entries);
+                defer metal_entries.deinit(self.state().allocator);
 
                 break :bind_group_impl BindGroup.Impl{
                     .metal = try MetalBindGroupBackend.MetalBindGroup.init(
-                        self.allocator,
-                        &descriptor.layout.impl.?.metal,
+                        self.state().allocator,
+                        &descriptor.layout.state().impl.?.metal,
                         metal_entries.entries,
                     ),
                 };
             },
         };
 
-        self.tracker.retain(.bind_group);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .allocator = self.allocator,
+        self.state().tracker.retain(.bind_group);
+        return BindGroup.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
+            .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .layout_entries = layout_entries,
             .entries = entries,
             .impl = impl,
-        };
+        });
     }
 
     pub fn makeTexture(self: *Device, descriptor: core.TextureDescriptor) !Texture {
@@ -6253,16 +6667,16 @@ pub const Device = struct {
         if (!self.getFormatCaps(descriptor.format).supportsTextureDescriptor(descriptor)) {
             return core.TextureError.UnsupportedTextureUsage;
         }
-        const subresource_usage_tracker = try SharedTextureUsageTracker.init(self.allocator, descriptor);
+        const subresource_usage_tracker = try SharedTextureUsageTracker.init(self.state().allocator, descriptor);
         errdefer subresource_usage_tracker.release();
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| Texture.Impl{ .vulkan = try vulkan.makeTexture(descriptor) },
             .metal => |*metal| Texture.Impl{ .metal = try metal.makeTexture(descriptor) },
         };
-        self.tracker.retain(.texture);
-        var texture = Texture{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.texture);
+        var texture = Texture.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .dimension_value = descriptor.dimension,
@@ -6271,7 +6685,7 @@ pub const Device = struct {
             .sample_count_value = descriptor.sample_count,
             .subresource_usage_tracker = subresource_usage_tracker,
             .impl = impl,
-        };
+        });
         texture.setLabel(descriptor.label);
         return texture;
     }
@@ -6279,132 +6693,223 @@ pub const Device = struct {
     pub fn makeExternalMemory(self: *Device, descriptor: core.ExternalMemoryDescriptor) !ExternalMemory {
         try self.validateExternalMemoryDescriptor(descriptor);
         const import_plan = try self.planExternalMemoryImport(descriptor);
-        self.tracker.retain(.external_memory);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.external_memory);
+        return ExternalMemory.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
-        };
+        });
     }
 
     pub fn makeExternalBuffer(self: *Device, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
         try self.validateExternalBufferDescriptor(descriptor);
         const import_plan = try self.planExternalBufferImport(descriptor);
-        self.tracker.retain(.external_buffer);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.external_buffer);
+        return ExternalBuffer.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
-        };
+        });
     }
 
     pub fn makeExternalSemaphore(self: *Device, descriptor: core.ExternalSemaphoreDescriptor) !ExternalSemaphore {
         try self.validateExternalSemaphoreDescriptor(descriptor);
         const import_plan = try self.planExternalSemaphoreImport(descriptor);
-        self.tracker.retain(.external_semaphore);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.external_semaphore);
+        return ExternalSemaphore.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
-        };
+        });
     }
 
     pub fn makeExternalEvent(self: *Device, descriptor: core.ExternalEventDescriptor) !ExternalEvent {
         try self.validateExternalEventDescriptor(descriptor);
         const import_plan = try self.planExternalEventImport(descriptor);
-        self.tracker.retain(.external_event);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.external_event);
+        return ExternalEvent.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
-        };
+        });
     }
 
     pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
         try self.validateExternalTextureDescriptor(descriptor);
         const import_plan = try self.planExternalTextureImport(descriptor);
-        self.tracker.retain(.texture);
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.texture);
+        return ExternalTexture.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
-        };
+        });
     }
 
     pub fn makeSamplerState(self: *Device, descriptor: core.SamplerDescriptor) !SamplerState {
         try descriptor.validateForDevice(self.features(), self.limits());
-        var fingerprint = objectFingerprintStart(.sampler, self.backend);
+        var fingerprint = objectFingerprintStart(.sampler, self.state().backend);
         hashSamplerDescriptor(&fingerprint, descriptor);
-        const lookup = self.tracker.beginObjectCacheLookup(.sampler, fingerprint, descriptor.cache_policy);
+        const lookup = self.state().tracker.beginObjectCacheLookup(.sampler, fingerprint, descriptor.cache_policy);
         const timer_start = objectCreationTimerStart();
-        const impl = switch (self.impl.*) {
+        const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| SamplerState.Impl{ .vulkan = try vulkan.makeSamplerState(descriptor) },
             .metal => |*metal| SamplerState.Impl{ .metal = try metal.makeSamplerState(descriptor) },
         };
         const elapsed_ns = objectCreationElapsedNs(timer_start);
-        self.tracker.retain(.sampler_state);
-        self.tracker.finishObjectCacheLookup(lookup, elapsed_ns);
-        var sampler = SamplerState{
-            .backend = self.backend,
-            .tracker = self.tracker,
+        self.state().tracker.retain(.sampler_state);
+        self.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+        var sampler = SamplerState.init(.{
+            .backend = self.state().backend,
+            .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .impl = impl,
-        };
+        });
         sampler.setLabel(descriptor.label);
         return sampler;
     }
 };
 
+pub const validateDescriptorIndexingLayout = Device.validateDescriptorIndexingLayout;
+pub const planResourceTablePressure = Device.planResourceTablePressure;
+
+pub const validateSparseMappingCommit = Device.validateSparseMappingCommit;
+pub const planSparseMappingCommit = Device.planSparseMappingCommit;
+pub const planSparseResidencyChurn = Device.planSparseResidencyChurn;
+pub const validateSparseBufferDescriptor = Device.validateSparseBufferDescriptor;
+pub const planSparseBufferLowering = Device.planSparseBufferLowering;
+pub const validateSparseTextureDescriptor = Device.validateSparseTextureDescriptor;
+pub const planSparseTextureLowering = Device.planSparseTextureLowering;
+pub const transientAllocationDiagnostics = Device.transientAllocationDiagnostics;
+
+pub const validateExternalTextureDescriptor = Device.validateExternalTextureDescriptor;
+pub const validateExternalMemoryDescriptor = Device.validateExternalMemoryDescriptor;
+pub const validateExternalBufferDescriptor = Device.validateExternalBufferDescriptor;
+pub const validateExternalSemaphoreDescriptor = Device.validateExternalSemaphoreDescriptor;
+pub const validateExternalEventDescriptor = Device.validateExternalEventDescriptor;
+pub const planExternalMemoryImportForPlatform = Device.planExternalMemoryImportForPlatform;
+pub const planExternalBufferImportForPlatform = Device.planExternalBufferImportForPlatform;
+pub const planExternalTextureImportForPlatform = Device.planExternalTextureImportForPlatform;
+pub const planExternalTextureUsageForPlatform = Device.planExternalTextureUsageForPlatform;
+pub const planExternalSemaphoreImportForPlatform = Device.planExternalSemaphoreImportForPlatform;
+pub const planExternalEventImportForPlatform = Device.planExternalEventImportForPlatform;
+pub const diagnoseExternalInteropImportForPlatform = Device.diagnoseExternalInteropImportForPlatform;
+pub const planExternalMemoryImport = Device.planExternalMemoryImport;
+pub const planExternalBufferImport = Device.planExternalBufferImport;
+pub const planExternalTextureImport = Device.planExternalTextureImport;
+pub const planExternalTextureUsage = Device.planExternalTextureUsage;
+pub const planExternalSemaphoreImport = Device.planExternalSemaphoreImport;
+pub const planExternalEventImport = Device.planExternalEventImport;
+pub const diagnoseExternalInteropImport = Device.diagnoseExternalInteropImport;
+pub const externalInteropCapabilityMatrix = Device.externalInteropCapabilityMatrix;
+pub const externalInteropCapabilityMatrixForPlatform = Device.externalInteropCapabilityMatrixForPlatform;
+
+pub const validateTessellationDescriptor = Device.validateTessellationDescriptor;
+pub const validateTessellationPatchDrawDescriptor = Device.validateTessellationPatchDrawDescriptor;
+pub const planTessellationPatchDraw = Device.planTessellationPatchDraw;
+pub const validateMeshPipelineDescriptor = Device.validateMeshPipelineDescriptor;
+pub const validateMeshDispatchDescriptor = Device.validateMeshDispatchDescriptor;
+pub const planMeshDispatch = Device.planMeshDispatch;
+
+pub const validateAccelerationStructureDescriptor = Device.validateAccelerationStructureDescriptor;
+pub const planAccelerationStructureBuild = Device.planAccelerationStructureBuild;
+pub const planAccelerationStructureMaintenance = Device.planAccelerationStructureMaintenance;
+pub const planTopLevelAccelerationStructureLayout = Device.planTopLevelAccelerationStructureLayout;
+pub const validateRayTracingPipelineDescriptor = Device.validateRayTracingPipelineDescriptor;
+pub const validateShaderBindingTableDescriptor = Device.validateShaderBindingTableDescriptor;
+pub const planComplexShaderBindingTable = Device.planComplexShaderBindingTable;
+pub const planRayDispatch = Device.planRayDispatch;
+pub const planRayQuery = Device.planRayQuery;
+pub const planRayTracingStress = Device.planRayTracingStress;
+
+pub const validateDriverPipelineCacheDescriptor = Device.validateDriverPipelineCacheDescriptor;
+pub const planDriverPipelineCache = Device.planDriverPipelineCache;
+pub const planRuntimeCache = Device.planRuntimeCache;
+pub const planPipelineArtifactCache = Device.planPipelineArtifactCache;
+pub const planBackendParitySemantics = Device.planBackendParitySemantics;
+pub const objectCacheDiagnostics = Device.objectCacheDiagnostics;
+pub const runtimeDiagnostics = Device.runtimeDiagnostics;
+pub const writeCaptureName = Device.writeCaptureName;
+pub const memoryBudgetReport = Device.memoryBudgetReport;
+
+pub const validateNativeCommandInsertionDescriptor = Device.validateNativeCommandInsertionDescriptor;
+pub const planVulkanTessellationPatchDraw = Device.planVulkanTessellationPatchDraw;
+pub const planVulkanMeshDispatch = Device.planVulkanMeshDispatch;
+pub const planMetalTessellationPatchDraw = Device.planMetalTessellationPatchDraw;
+pub const planMetalMeshDispatch = Device.planMetalMeshDispatch;
+pub const planMetalRayTracingMapping = Device.planMetalRayTracingMapping;
+pub const makeMetalRayTracingExecutionMapping = Device.makeMetalRayTracingExecutionMapping;
+
+pub const queueCapabilities = Device.queueCapabilities;
+pub const planQueue = Device.planQueue;
+pub const syncCapabilities = Device.syncCapabilities;
+pub const presentModeSupport = Device.presentModeSupport;
+pub const resolvePresentMode = Device.resolvePresentMode;
+pub const makeSurfaceCollection = Device.makeSurfaceCollection;
+
 pub const CaptureScope = struct {
-    backend: core.Backend,
-    label_value: []const u8,
-    active: bool = true,
-    impl: Impl,
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
     const Impl = union(core.Backend) {
         vulkan: void,
         metal: *MetalClearScreen,
     };
 
+    const State = struct {
+        backend: core.Backend,
+        label_value: []const u8,
+        active: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) CaptureScope {
+        var result: CaptureScope = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const CaptureScope) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
     pub fn selectedBackend(self: CaptureScope) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn label(self: CaptureScope) []const u8 {
-        return self.label_value;
+        return self.state().label_value;
     }
 
     pub fn isActive(self: CaptureScope) bool {
-        return self.active;
+        return self.state().active;
     }
 
     pub fn end(self: *CaptureScope) core.CaptureError!void {
-        if (!self.active) return core.CaptureError.CaptureNotActive;
-        switch (self.impl) {
+        if (!self.state().active) return core.CaptureError.CaptureNotActive;
+        switch (self.state().impl) {
             .vulkan => return core.CaptureError.UnsupportedCapture,
             .metal => |metal| try metal.endCapture(),
         }
-        self.active = false;
+        self.state().active = false;
     }
 
     pub fn deinit(self: *CaptureScope) void {
-        if (!self.active) return;
+        if (!self.state().active) return;
         self.end() catch {};
     }
 };
 
 pub fn debugMarkerCapabilities(device: Device) core.DebugMarkerCapabilities {
-    return core.DebugMarkerCapabilities.fromFeatures(device.backend, device.features());
+    return core.DebugMarkerCapabilities.fromFeatures(device.selectedBackend(), device.features());
 }
 
 pub fn captureCapabilities(device: Device) core.CaptureCapabilities {
-    return core.CaptureCapabilities.forBackend(device.backend);
+    return core.CaptureCapabilities.forBackend(device.selectedBackend());
 }
 
 pub fn beginCaptureScope(
@@ -6412,21 +6917,21 @@ pub fn beginCaptureScope(
     descriptor: core.CaptureScopeDescriptor,
 ) (core.CaptureError || core.CommandEncodingError)!CaptureScope {
     try descriptor.validate(captureCapabilities(device.*));
-    return switch (device.impl.*) {
+    return switch (device.state().impl) {
         .vulkan => core.CaptureError.UnsupportedCapture,
         .metal => |*metal| blk: {
             try metal.beginCapture();
-            break :blk .{
+            break :blk CaptureScope.init(.{
                 .backend = .metal,
                 .label_value = descriptor.label,
                 .impl = .{ .metal = metal },
-            };
+            });
         },
     };
 }
 
 pub fn profilingCapabilities(device: Device) core.ProfilingCapabilities {
-    return core.ProfilingCapabilities.fromFeatures(device.backend, device.features());
+    return core.ProfilingCapabilities.fromFeatures(device.selectedBackend(), device.features());
 }
 
 pub fn planProfiling(
@@ -6444,9 +6949,9 @@ pub fn issueReport(
     const failure_name = if (descriptor.failure) |failure| @errorName(failure) else null;
     const failure_category = if (descriptor.failure) |failure| core.classifyError(failure) else null;
     return .{
-        .backend = device.backend,
-        .adapter_name = device.adapter_info.name,
-        .capability_source = device.capability_report.source,
+        .backend = device.selectedBackend(),
+        .adapter_name = device.adapterInfo().name,
+        .capability_source = device.capabilityReport().source,
         .operation = descriptor.operation,
         .object_kind = descriptor.object_kind,
         .object_label = descriptor.object_label,
@@ -6529,15 +7034,11 @@ fn deinitBackendRuntime(impl: *BackendRuntime) void {
 }
 
 pub const WindowContext = struct {
-    allocator: std.mem.Allocator,
-    tracker: *ResourceTracker,
-    backend: core.Backend,
-    surface_descriptor: core.SurfaceDescriptor,
-    presentation_descriptor: core.PresentationDescriptor,
-    adapter_info: core.AdapterInfo,
-    capability_report: core.DeviceCapabilityReport,
-    owned_adapter_name: ?[]u8 = null,
-    impl: BackendRuntime,
+    _state: *anyopaque,
+
+    fn state(self: WindowContext) *RuntimeState {
+        return runtimeState(self._state);
+    }
 
     pub fn init(allocator: std.mem.Allocator, options: WindowContextOptions) !WindowContext {
         const tracker = try allocator.create(ResourceTracker);
@@ -6578,7 +7079,9 @@ pub const WindowContext = struct {
         try validateAdapterSelection(adapter_selection, adapter_info.info);
         const capability_report = resolveCapabilityReport(&impl);
 
-        return .{
+        const state_value = try allocator.create(RuntimeState);
+        errdefer allocator.destroy(state_value);
+        state_value.* = .{
             .allocator = allocator,
             .tracker = tracker,
             .backend = backend,
@@ -6589,28 +7092,34 @@ pub const WindowContext = struct {
             .owned_adapter_name = adapter_info.owned_name,
             .impl = impl,
         };
+
+        return .{ ._state = state_value };
     }
 
     pub fn deinit(self: *WindowContext) void {
-        self.tracker.completeAllWork();
-        self.tracker.assertNoLeaks();
-        deinitBackendRuntime(&self.impl);
-        if (self.owned_adapter_name) |name| {
-            self.allocator.free(name);
+        const state_value = self.state();
+        const allocator = state_value.allocator;
+        state_value.tracker.completeAllWork();
+        state_value.tracker.assertNoLeaks();
+        deinitBackendRuntime(&state_value.impl);
+        if (state_value.owned_adapter_name) |name| {
+            allocator.free(name);
         }
-        self.allocator.destroy(self.tracker);
+        allocator.destroy(state_value.tracker);
+        allocator.destroy(state_value);
+        self._state = undefined;
     }
 
     pub fn selectedBackend(self: WindowContext) core.Backend {
-        return self.backend;
+        return self.state().backend;
     }
 
     pub fn adapterInfo(self: WindowContext) core.AdapterInfo {
-        return self.adapter_info;
+        return self.state().adapter_info;
     }
 
     pub fn nativeHandles(self: *WindowContext) !core.NativeHandles {
-        return switch (self.impl) {
+        return switch (self.state().impl) {
             .vulkan => |*vulkan| vulkan.nativeHandles(),
             .metal => |*metal| try metal.nativeHandles(),
         };
@@ -6620,305 +7129,21 @@ pub const WindowContext = struct {
         return core.nativeHandleView(try self.nativeHandles());
     }
 
-    pub fn objectCacheDiagnostics(self: WindowContext) core.ObjectCacheDiagnostics {
-        return self.tracker.objectCacheDiagnostics();
-    }
-
-    pub fn runtimeDiagnostics(self: WindowContext) core.RuntimeDiagnosticsSnapshot {
-        return self.tracker.diagnosticsSnapshot();
-    }
-
-    pub fn writeCaptureName(
-        self: WindowContext,
-        descriptor: core.CaptureNameDescriptor,
-        buffer: []u8,
-    ) core.CommandEncodingError![]const u8 {
-        var resolved = descriptor;
-        if (resolved.backend == null) resolved.backend = self.backend;
-        return try resolved.write(buffer);
-    }
-
-    pub fn planDriverPipelineCache(self: *WindowContext, descriptor: core.DriverPipelineCacheDescriptor) !core.DriverPipelineCachePlan {
-        const device_view = self.device();
-        return try device_view.planDriverPipelineCache(descriptor);
-    }
-
-    pub fn planRuntimeCache(self: *WindowContext, descriptor: core.RuntimeCachePlanDescriptor) !core.RuntimeCachePlan {
-        const device_view = self.device();
-        return try device_view.planRuntimeCache(descriptor);
-    }
-
-    pub fn planPipelineArtifactCache(self: *WindowContext, descriptor: core.PipelineArtifactCachePlanDescriptor) core.ObjectCacheError!core.PipelineArtifactCachePlan {
-        const device_view = self.device();
-        return try device_view.planPipelineArtifactCache(descriptor);
-    }
-
-    pub fn planAccelerationStructureMaintenance(
-        self: *WindowContext,
-        descriptor: core.AccelerationStructureMaintenanceDescriptor,
-    ) core.AdvancedFeatureError!core.AccelerationStructureMaintenancePlan {
-        const device_view = self.device();
-        return try device_view.planAccelerationStructureMaintenance(descriptor);
-    }
-
-    pub fn planTopLevelAccelerationStructureLayout(
-        self: *WindowContext,
-        descriptor: core.TopLevelAccelerationStructureLayoutDescriptor,
-    ) core.AdvancedFeatureError!core.TopLevelAccelerationStructureLayoutPlan {
-        const device_view = self.device();
-        return try device_view.planTopLevelAccelerationStructureLayout(descriptor);
-    }
-
-    pub fn planRayQuery(self: *WindowContext, descriptor: core.RayQueryDescriptor) core.AdvancedFeatureError!core.RayQueryPlan {
-        const device_view = self.device();
-        return try device_view.planRayQuery(descriptor);
-    }
-
-    pub fn planComplexShaderBindingTable(
-        self: *WindowContext,
-        descriptor: core.ComplexShaderBindingTableDescriptor,
-    ) core.AdvancedFeatureError!core.ComplexShaderBindingTablePlan {
-        const device_view = self.device();
-        return try device_view.planComplexShaderBindingTable(descriptor);
-    }
-
-    pub fn planRayTracingStress(self: *WindowContext, descriptor: core.RayTracingStressDescriptor) core.AdvancedFeatureError!core.RayTracingStressPlan {
-        const device_view = self.device();
-        return try device_view.planRayTracingStress(descriptor);
-    }
-
     pub fn device(self: *WindowContext) Device {
-        return .{
-            .allocator = self.allocator,
-            .tracker = self.tracker,
-            .backend = self.backend,
-            .impl = &self.impl,
-            .adapter_info = self.adapter_info,
-            .capability_report = self.capability_report,
-        };
+        return .{ ._state = self._state };
     }
 
     pub fn queue(self: *WindowContext) Queue {
-        return .{
-            .backend = self.backend,
-            .tracker = self.tracker,
-            .impl = &self.impl,
-            .features_value = self.capability_report.features,
-            .limits_value = self.capability_report.limits,
-        };
-    }
-
-    pub fn queueWithDescriptor(self: *WindowContext, descriptor: core.QueueDescriptor) !Queue {
         var device_view = self.device();
-        return try device_view.queueWithDescriptor(descriptor);
-    }
-
-    pub fn queueCapabilities(self: *WindowContext) core.QueueCapabilities {
-        var device_view = self.device();
-        return device_view.queueCapabilities();
-    }
-
-    pub fn syncCapabilities(self: *WindowContext) core.SyncCapabilities {
-        const device_view = self.device();
-        return device_view.syncCapabilities();
-    }
-
-    pub fn presentModeSupport(self: *WindowContext) core.PresentModeSupport {
-        const device_view = self.device();
-        return device_view.presentModeSupport();
-    }
-
-    pub fn resolvePresentMode(self: *WindowContext, requested: core.PresentMode) core.PresentModeResolution {
-        const device_view = self.device();
-        return device_view.resolvePresentMode(requested);
+        return device_view.queue();
     }
 
     pub fn surface(self: *WindowContext) Surface {
-        return .{
-            .backend = self.backend,
-            .descriptor_value = self.surface_descriptor,
-            .presentation = &self.presentation_descriptor,
-            .impl = &self.impl,
-        };
+        return .{ ._state = self._state };
     }
 
     pub fn swapchain(self: *WindowContext) Swapchain {
-        return .{
-            .backend = self.backend,
-            .presentation = &self.presentation_descriptor,
-            .impl = &self.impl,
-        };
-    }
-
-    pub fn makeSurfaceCollection(self: *WindowContext) core.SurfaceCollection {
-        const device_view = self.device();
-        return device_view.makeSurfaceCollection();
-    }
-
-    pub fn compileRenderShader(
-        self: *WindowContext,
-        name: []const u8,
-        source: []const u8,
-        options: ShaderCompiler.RenderShaderOptions,
-    ) !ShaderCompiler.CompiledRenderShader {
-        var device_view = self.device();
-        return try device_view.compileRenderShader(name, source, options);
-    }
-
-    pub fn compileComputeShader(
-        self: *WindowContext,
-        name: []const u8,
-        source: []const u8,
-        options: ShaderCompiler.ComputeShaderOptions,
-    ) !ShaderCompiler.CompiledComputeShader {
-        var device_view = self.device();
-        return try device_view.compileComputeShader(name, source, options);
-    }
-
-    pub fn compileRayTracingShader(
-        self: *WindowContext,
-        name: []const u8,
-        source: []const u8,
-        options: ShaderCompiler.RayTracingShaderOptions,
-    ) !ShaderCompiler.CompiledRayTracingShader {
-        var device_view = self.device();
-        return try device_view.compileRayTracingShader(name, source, options);
-    }
-
-    pub fn resize(self: *WindowContext, extent: core.Extent2D) !void {
-        var swapchain_view = self.swapchain();
-        return try swapchain_view.resize(extent);
-    }
-
-    pub fn clear(self: *WindowContext, color: ClearColor) !void {
-        var swapchain_view = self.swapchain();
-        return try swapchain_view.clear(color);
-    }
-
-    pub fn makeCommandBuffer(self: *WindowContext) !CommandBuffer {
-        var queue_view = self.queue();
-        return try queue_view.makeCommandBuffer();
-    }
-
-    pub fn makeCommandBufferWithDescriptor(
-        self: *WindowContext,
-        descriptor: core.CommandBufferDescriptor,
-    ) !CommandBuffer {
-        var queue_view = self.queue();
-        return try queue_view.makeCommandBufferWithDescriptor(descriptor);
-    }
-
-    pub fn makeFence(self: *WindowContext, descriptor: core.FenceDescriptor) !Fence {
-        var device_view = self.device();
-        return try device_view.makeFence(descriptor);
-    }
-
-    pub fn makeEvent(self: *WindowContext, descriptor: core.EventDescriptor) !Event {
-        var device_view = self.device();
-        return try device_view.makeEvent(descriptor);
-    }
-
-    pub fn makeQuerySet(self: *WindowContext, descriptor: core.QuerySetDescriptor) !QuerySet {
-        var device_view = self.device();
-        return try device_view.makeQuerySet(descriptor);
-    }
-
-    pub fn makeHeap(self: *WindowContext, descriptor: core.HeapDescriptor) !Heap {
-        var device_view = self.device();
-        return try device_view.makeHeap(descriptor);
-    }
-
-    pub fn memoryBudgetReport(self: *WindowContext, descriptor: core.MemoryBudgetDescriptor) core.MemoryBudgetError!core.MemoryBudgetReport {
-        const device_view = self.device();
-        return try device_view.memoryBudgetReport(descriptor);
-    }
-
-    pub fn transientAllocationDiagnostics(
-        self: *WindowContext,
-        resources: []const core.TransientResourceDescriptor,
-    ) error{InvalidResourceBarrierRange}!core.TransientAllocationDiagnostics {
-        const device_view = self.device();
-        return try device_view.transientAllocationDiagnostics(resources);
-    }
-
-    pub fn makeBuffer(self: *WindowContext, descriptor: core.BufferDescriptor) !Buffer {
-        var device_view = self.device();
-        return try device_view.makeBuffer(descriptor);
-    }
-
-    pub fn makeShaderModule(self: *WindowContext, descriptor: core.ShaderModuleDescriptor) !ShaderModule {
-        var device_view = self.device();
-        return try device_view.makeShaderModule(descriptor);
-    }
-
-    pub fn makeRenderPipelineState(self: *WindowContext, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
-        var device_view = self.device();
-        return try device_view.makeRenderPipelineState(descriptor);
-    }
-
-    pub fn makeComputePipelineState(self: *WindowContext, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
-        var device_view = self.device();
-        return try device_view.makeComputePipelineState(descriptor);
-    }
-
-    pub fn makeBindGroupLayout(self: *WindowContext, descriptor: core.BindGroupLayoutDescriptor) !BindGroupLayout {
-        var device_view = self.device();
-        return try device_view.makeBindGroupLayout(descriptor);
-    }
-
-    pub fn makeAdvancedBindGroupLayout(self: *WindowContext, descriptor: core.DescriptorIndexingLayoutDescriptor) !AdvancedBindGroupLayout {
-        var device_view = self.device();
-        return try device_view.makeAdvancedBindGroupLayout(descriptor);
-    }
-
-    pub fn planResourceTablePressure(self: *WindowContext, descriptor: core.ResourceTablePressureDescriptor) core.AdvancedFeatureError!core.ResourceTablePressurePlan {
-        const device_view = self.device();
-        return try device_view.planResourceTablePressure(descriptor);
-    }
-
-    pub fn makeResourceTable(self: *WindowContext, descriptor: ResourceTableDescriptor) !ResourceTable {
-        var device_view = self.device();
-        return try device_view.makeResourceTable(descriptor);
-    }
-
-    pub fn makeBindGroup(self: *WindowContext, descriptor: BindGroupDescriptor) !BindGroup {
-        var device_view = self.device();
-        return try device_view.makeBindGroup(descriptor);
-    }
-
-    pub fn makeTexture(self: *WindowContext, descriptor: core.TextureDescriptor) !Texture {
-        var device_view = self.device();
-        return try device_view.makeTexture(descriptor);
-    }
-
-    pub fn makeExternalMemory(self: *WindowContext, descriptor: core.ExternalMemoryDescriptor) !ExternalMemory {
-        var device_view = self.device();
-        return try device_view.makeExternalMemory(descriptor);
-    }
-
-    pub fn makeExternalBuffer(self: *WindowContext, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
-        var device_view = self.device();
-        return try device_view.makeExternalBuffer(descriptor);
-    }
-
-    pub fn makeExternalSemaphore(self: *WindowContext, descriptor: core.ExternalSemaphoreDescriptor) !ExternalSemaphore {
-        var device_view = self.device();
-        return try device_view.makeExternalSemaphore(descriptor);
-    }
-
-    pub fn makeExternalEvent(self: *WindowContext, descriptor: core.ExternalEventDescriptor) !ExternalEvent {
-        var device_view = self.device();
-        return try device_view.makeExternalEvent(descriptor);
-    }
-
-    pub fn makeExternalTexture(self: *WindowContext, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
-        var device_view = self.device();
-        return try device_view.makeExternalTexture(descriptor);
-    }
-
-    pub fn makeSamplerState(self: *WindowContext, descriptor: core.SamplerDescriptor) !SamplerState {
-        var device_view = self.device();
-        return try device_view.makeSamplerState(descriptor);
+        return .{ ._state = self._state };
     }
 };
 
@@ -6927,8 +7152,8 @@ fn materializeBindGroupEntries(
     backend: core.Backend,
     descriptor: BindGroupDescriptor,
 ) ![]core.BindGroupEntry {
-    assertAlive(descriptor.layout.alive, .bind_group_layout);
-    try expectSameBackend(backend, descriptor.layout.backend);
+    assertAlive(descriptor.layout.state().alive, .bind_group_layout);
+    try expectSameBackend(backend, descriptor.layout.selectedBackend());
     const layout_descriptor = descriptor.layout.descriptor();
     try validateFirstSliceBindGroupLayout(layout_descriptor);
 
@@ -6968,10 +7193,10 @@ fn recordBufferBarrier(
     buffer: *Buffer,
     descriptor: core.BufferBarrierDescriptor,
 ) !void {
-    assertAlive(buffer.alive, .buffer);
-    try expectSameBackend(backend, buffer.backend);
+    assertAlive(buffer.state().alive, .buffer);
+    try expectSameBackend(backend, buffer.selectedBackend());
     try descriptor.validate(buffer.length(), features);
-    _ = try buffer.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    _ = try buffer.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
 }
 
 fn recordTextureBarrier(
@@ -6980,23 +7205,23 @@ fn recordTextureBarrier(
     texture: *Texture,
     descriptor: core.TextureBarrierDescriptor,
 ) !void {
-    assertAlive(texture.alive, .texture);
-    try expectSameBackend(backend, texture.backend);
+    assertAlive(texture.state().alive, .texture);
+    try expectSameBackend(backend, texture.selectedBackend());
     const texture_descriptor = texture.textureDescriptor();
     try descriptor.validate(texture_descriptor, features);
-    if (texture.subresource_usage_tracker) |subresource_tracker| {
+    if (texture.state().subresource_usage_tracker) |subresource_tracker| {
         const summary = try subresource_tracker.value.applyExplicitBarrier(
             descriptor.subresourceRange(),
             descriptor.before,
             descriptor.after,
         );
-        texture.usage_state.current = if (textureSubresourceRangeIsFull(descriptor.subresourceRange(), texture_descriptor))
+        texture.state().usage_state.current = if (textureSubresourceRangeIsFull(descriptor.subresourceRange(), texture_descriptor))
             descriptor.after
         else
             null;
-        if (summary.required_barrier_count != 0) texture.usage_state.barrier_count += 1;
+        if (summary.required_barrier_count != 0) texture.state().usage_state.barrier_count += 1;
     } else {
-        _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+        _ = try texture.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
     }
 }
 
@@ -7005,11 +7230,11 @@ fn recordBufferOwnershipTransfer(
     buffer: *Buffer,
     descriptor: core.QueueOwnershipTransferDescriptor,
 ) !void {
-    assertAlive(buffer.alive, .buffer);
+    assertAlive(buffer.state().alive, .buffer);
     try descriptor.validate(features);
-    if (buffer.owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-    _ = try buffer.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
-    buffer.owner_queue_value = descriptor.destination;
+    if (buffer.state().owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    _ = try buffer.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    buffer.state().owner_queue_value = descriptor.destination;
 }
 
 fn recordTextureOwnershipTransfer(
@@ -7017,25 +7242,25 @@ fn recordTextureOwnershipTransfer(
     texture: *Texture,
     descriptor: core.QueueOwnershipTransferDescriptor,
 ) !void {
-    assertAlive(texture.alive, .texture);
+    assertAlive(texture.state().alive, .texture);
     try descriptor.validate(features);
-    if (texture.owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-    if (texture.subresource_usage_tracker) |subresource_tracker| {
+    if (texture.state().owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    if (texture.state().subresource_usage_tracker) |subresource_tracker| {
         const summary = try subresource_tracker.value.applyExplicitBarrier(.{}, descriptor.before, descriptor.after);
-        texture.usage_state.current = descriptor.after;
-        if (summary.required_barrier_count != 0) texture.usage_state.barrier_count += 1;
+        texture.state().usage_state.current = descriptor.after;
+        if (summary.required_barrier_count != 0) texture.state().usage_state.barrier_count += 1;
     } else {
-        _ = try texture.usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+        _ = try texture.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
     }
-    texture.owner_queue_value = descriptor.destination;
+    texture.state().owner_queue_value = descriptor.destination;
 }
 
 fn ensureBufferOwnedByQueue(queue: core.QueueKind, buffer: *const Buffer) core.CommandEncodingError!void {
-    if (buffer.owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    if (buffer.state().owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
 }
 
 fn ensureTextureOwnedByQueue(queue: core.QueueKind, texture: *const Texture) core.CommandEncodingError!void {
-    if (texture.owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    if (texture.state().owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
 }
 
 fn ensureTextureViewOwnedByQueue(queue: core.QueueKind, texture_view: *const TextureView) core.CommandEncodingError!void {
@@ -7072,7 +7297,7 @@ fn validateDynamicOffsetsForBindGroup(
 ) core.BindingError!void {
     try (core.DynamicOffsetList{ .offsets = binding.dynamic_offsets }).validate(
         bind_group.layoutDescriptor(),
-        core.defaultDeviceLimits(bind_group.backend),
+        core.defaultDeviceLimits(bind_group.selectedBackend()),
     );
 }
 
@@ -7083,7 +7308,7 @@ fn validateAndRecordStorageAccess(
     const access = layout_entry.resolvedStorageAccess() orelse return;
     switch (resource) {
         .storage_buffer => |binding| {
-            if (!binding.buffer.usage_value.storage) return RuntimeError.InvalidStorageBufferUsage;
+            if (!binding.buffer.state().usage_value.storage) return RuntimeError.InvalidStorageBufferUsage;
             if (access.requiresWrite()) {
                 _ = binding.buffer.recordUsage(.storage_buffer_write);
             } else {
@@ -7091,10 +7316,10 @@ fn validateAndRecordStorageAccess(
             }
         },
         .storage_texture => |texture_view| {
-            if (access.requiresRead() and !texture_view.usage_value.shader_read) {
+            if (access.requiresRead() and !texture_view.state().usage_value.shader_read) {
                 return RuntimeError.InvalidStorageTextureUsage;
             }
-            if (access.requiresWrite() and !texture_view.usage_value.shader_write) {
+            if (access.requiresWrite() and !texture_view.state().usage_value.shader_write) {
                 return RuntimeError.InvalidStorageTextureUsage;
             }
             if (access.requiresWrite()) {
@@ -7113,23 +7338,23 @@ fn validateResourceTableResource(
 ) !void {
     if (!resourceTableResourceAlive(resource)) return core.BindingError.InvalidResourceTableResource;
     try expectSameBackend(expected_backend, switch (resource) {
-        .uniform_buffer => |binding| binding.buffer.backend,
-        .storage_buffer => |binding| binding.buffer.backend,
-        .storage_texture => |texture_view| texture_view.backend,
-        .sampled_texture => |texture_view| texture_view.backend,
-        .sampler => |sampler_state| sampler_state.backend,
-        .compare_sampler => |sampler_state| sampler_state.backend,
+        .uniform_buffer => |binding| binding.buffer.selectedBackend(),
+        .storage_buffer => |binding| binding.buffer.selectedBackend(),
+        .storage_texture => |texture_view| texture_view.selectedBackend(),
+        .sampled_texture => |texture_view| texture_view.selectedBackend(),
+        .sampler => |sampler_state| sampler_state.selectedBackend(),
+        .compare_sampler => |sampler_state| sampler_state.selectedBackend(),
     });
 }
 
 fn resourceTableResourceAlive(resource: BindGroupResource) bool {
     return switch (resource) {
-        .uniform_buffer => |binding| binding.buffer.alive,
-        .storage_buffer => |binding| binding.buffer.alive,
-        .storage_texture => |texture_view| texture_view.alive,
-        .sampled_texture => |texture_view| texture_view.alive,
-        .sampler => |sampler_state| sampler_state.alive,
-        .compare_sampler => |sampler_state| sampler_state.alive,
+        .uniform_buffer => |binding| binding.buffer.state().alive,
+        .storage_buffer => |binding| binding.buffer.state().alive,
+        .storage_texture => |texture_view| texture_view.state().alive,
+        .sampled_texture => |texture_view| texture_view.state().alive,
+        .sampler => |sampler_state| sampler_state.state().alive,
+        .compare_sampler => |sampler_state| sampler_state.state().alive,
     };
 }
 
@@ -7310,29 +7535,29 @@ fn vulkanResourceForBindGroupResource(resource: BindGroupResource) VulkanBindGro
     return switch (resource) {
         .uniform_buffer => |binding| .{
             .uniform_buffer = .{
-                .buffer = &binding.buffer.impl.vulkan,
+                .buffer = &binding.buffer.state().impl.vulkan,
                 .offset = binding.offset,
                 .size = binding.size,
             },
         },
         .storage_buffer => |binding| .{
             .storage_buffer = .{
-                .buffer = &binding.buffer.impl.vulkan,
+                .buffer = &binding.buffer.state().impl.vulkan,
                 .offset = binding.offset,
                 .size = binding.size,
             },
         },
         .storage_texture => |texture_view| .{
-            .storage_texture = &texture_view.impl.vulkan,
+            .storage_texture = &texture_view.state().impl.vulkan,
         },
         .sampled_texture => |texture_view| .{
-            .sampled_texture = &texture_view.impl.vulkan,
+            .sampled_texture = &texture_view.state().impl.vulkan,
         },
         .sampler => |sampler_state| .{
-            .sampler = &sampler_state.impl.vulkan,
+            .sampler = &sampler_state.state().impl.vulkan,
         },
         .compare_sampler => |sampler_state| .{
-            .compare_sampler = &sampler_state.impl.vulkan,
+            .compare_sampler = &sampler_state.state().impl.vulkan,
         },
     };
 }
@@ -7380,29 +7605,29 @@ fn metalResourceForBindGroupResource(resource: BindGroupResource) MetalBindGroup
     return switch (resource) {
         .uniform_buffer => |binding| .{
             .uniform_buffer = .{
-                .buffer = &binding.buffer.impl.metal,
+                .buffer = &binding.buffer.state().impl.metal,
                 .offset = binding.offset,
                 .size = binding.size,
             },
         },
         .storage_buffer => |binding| .{
             .storage_buffer = .{
-                .buffer = &binding.buffer.impl.metal,
+                .buffer = &binding.buffer.state().impl.metal,
                 .offset = binding.offset,
                 .size = binding.size,
             },
         },
         .storage_texture => |texture_view| .{
-            .storage_texture = &texture_view.impl.metal,
+            .storage_texture = &texture_view.state().impl.metal,
         },
         .sampled_texture => |texture_view| .{
-            .sampled_texture = &texture_view.impl.metal,
+            .sampled_texture = &texture_view.state().impl.metal,
         },
         .sampler => |sampler_state| .{
-            .sampler = &sampler_state.impl.metal,
+            .sampler = &sampler_state.state().impl.metal,
         },
         .compare_sampler => |sampler_state| .{
-            .compare_sampler = &sampler_state.impl.metal,
+            .compare_sampler = &sampler_state.state().impl.metal,
         },
     };
 }
@@ -7479,6 +7704,29 @@ fn mipDimension(base: u32, level: u32) u32 {
         value /= 2;
     }
     return value;
+}
+
+fn testRuntimeState(
+    allocator: std.mem.Allocator,
+    tracker: *ResourceTracker,
+    backend: core.Backend,
+    impl: *BackendRuntime,
+    adapter_name: []const u8,
+    capability_report: core.DeviceCapabilityReport,
+) RuntimeState {
+    return .{
+        .allocator = allocator,
+        .tracker = tracker,
+        .backend = backend,
+        .surface_descriptor = undefined,
+        .presentation_descriptor = undefined,
+        .adapter_info = .{
+            .backend = backend,
+            .name = adapter_name,
+        },
+        .capability_report = capability_report,
+        .impl = impl.*,
+    };
 }
 
 test "resource tracker defers retirements until submitted work completes" {
@@ -7569,25 +7817,29 @@ test "resource tracker exposes runtime diagnostics snapshot" {
 
 test "runtime blit encoder records buffer usage transitions" {
     var tracker = ResourceTracker{};
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
-    var encoder = BlitCommandEncoder{
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
+    var encoder = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
-    };
-    var source = Buffer{
+    });
+    const source_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 4,
         .usage_value = .{ .copy_source = true },
-        .impl = undefined,
     };
-    var destination = Buffer{
+    var source = Buffer.init(source_state);
+    const destination_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 4,
         .usage_value = .{ .copy_destination = true },
-        .impl = undefined,
     };
+    var destination = Buffer.init(destination_state);
 
     try encoder.copyBufferToBuffer(&source, &destination, .{ .size = 4 });
 
@@ -7610,7 +7862,7 @@ test "runtime texture views share subresource usage across passes" {
     };
     defer subresource_tracker.value.deinit();
     var tracker = ResourceTracker{};
-    var mip_zero = TextureView{
+    var mip_zero = TextureView.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -7624,8 +7876,8 @@ test "runtime texture views share subresource usage across passes" {
         .array_layer_count_value = 1,
         .subresource_usage_tracker = &subresource_tracker,
         .impl = undefined,
-    };
-    var mip_one = TextureView{
+    });
+    var mip_one = TextureView.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -7639,7 +7891,7 @@ test "runtime texture views share subresource usage across passes" {
         .array_layer_count_value = 1,
         .subresource_usage_tracker = &subresource_tracker,
         .impl = undefined,
-    };
+    });
 
     _ = mip_zero.recordUsage(.render_attachment_write);
     _ = mip_one.recordUsage(.sampled_texture);
@@ -7665,26 +7917,30 @@ test "Period 42 shared texture usage state outlives its source owner" {
 
 test "runtime compute encoder lowers valid dispatch indirect and validates usage" {
     var tracker = ResourceTracker{};
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
-    var encoder = ComputeCommandEncoder{
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
+    var encoder = ComputeCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
         .debug = .{ .pipeline_set = true },
-    };
-    var indirect_buffer = Buffer{
+    });
+    const indirect_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 16,
         .usage_value = .{ .indirect = true },
-        .impl = undefined,
     };
-    var storage_buffer = Buffer{
+    var indirect_buffer = Buffer.init(indirect_buffer_state);
+    const storage_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 16,
         .usage_value = .{ .storage = true },
-        .impl = undefined,
     };
+    var storage_buffer = Buffer.init(storage_buffer_state);
 
     try encoder.dispatchThreadgroupsIndirect(&indirect_buffer, .{});
     try std.testing.expectEqual(core.ResourceUsageKind.indirect_buffer, indirect_buffer.currentUsage().?);
@@ -7702,18 +7958,16 @@ test "runtime device exposes adapter features limits and format caps" {
             .extent = .{ .width = 1, .height = 1 },
         },
     };
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-            .vendor = "Test Vendor",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(
+        std.testing.allocator,
+        &tracker,
+        .metal,
+        &backend_runtime,
+        "test metal adapter",
+        core.defaultDeviceCapabilityReport(.metal),
+    );
+    device_state.adapter_info.vendor = "Test Vendor";
+    const device = Device{ ._state = &device_state };
 
     try std.testing.expectEqual(core.Backend.metal, device.selectedBackend());
     try std.testing.expectEqual(core.Backend.metal, device.adapterInfo().backend);
@@ -7733,17 +7987,8 @@ test "runtime device validates advanced descriptors against selected capabilitie
             .extent = .{ .width = 1, .height = 1 },
         },
     };
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", core.defaultDeviceCapabilityReport(.metal));
+    const device = Device{ ._state = &device_state };
 
     const bindless_ranges = [_]core.DescriptorIndexingRange{.{
         .binding = 0,
@@ -7800,17 +8045,8 @@ test "runtime device plans sparse buffer lowering from native capabilities" {
     report.native_features.sparse_buffers = true;
     report.limits.sparse_buffer_page_size = 4096;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test sparse adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test sparse adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.SparseBufferDescriptor{
         .size = 8192,
@@ -7837,17 +8073,8 @@ test "runtime device plans sparse texture lowering from native capabilities" {
     report.limits.sparse_texture_page_height = 64;
     report.limits.sparse_texture_page_depth = 1;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test tiled adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test tiled adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.SparseTextureDescriptor{
         .kind = .tiled_texture,
@@ -7876,17 +8103,8 @@ test "runtime device plans sparse mapping commits from native capabilities" {
     report.limits.sparse_buffer_page_size = 4096;
     report.limits.max_sparse_regions_per_commit = 2;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test sparse commit adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test sparse commit adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.SparseMappingCommitDescriptor{
         .buffers = &.{.{
@@ -7927,17 +8145,8 @@ test "runtime device plans tessellation lowering from native capabilities" {
     report.native_features.tessellation = true;
     report.limits.max_tessellation_control_points = 16;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test tessellation adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test tessellation adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.TessellationDescriptor{
         .control_point_count = 4,
@@ -7962,17 +8171,8 @@ test "runtime device plans tessellation patch draws from native capabilities" {
     report.native_features.tessellation = true;
     report.limits.max_tessellation_control_points = 32;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test tessellation patch draw adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test tessellation patch draw adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.TessellationPatchDrawDescriptor{
         .tessellation = .{
@@ -7998,17 +8198,8 @@ test "runtime device plans Vulkan tessellation patch draw lowering" {
     report.native_features.tessellation = true;
     report.limits.max_tessellation_control_points = 32;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan tessellation draw adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan tessellation draw adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const lowering = try device.planVulkanTessellationPatchDraw(.{
         .tessellation = .{
@@ -8030,17 +8221,8 @@ test "runtime device plans Metal tessellation factor buffer ownership" {
     report.native_features.tessellation = true;
     report.limits.max_tessellation_control_points = 16;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal tessellation draw adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal tessellation draw adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const lowering = try device.planMetalTessellationPatchDraw(.{
         .tessellation = .{
@@ -8067,17 +8249,8 @@ test "runtime device plans mesh lowering from native capabilities" {
     report.limits.max_mesh_threads_per_threadgroup = 128;
     report.limits.max_task_threads_per_threadgroup = 64;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test mesh adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test mesh adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.MeshPipelineDescriptor{
         .mesh_entry_point = "ms_main",
@@ -8103,17 +8276,8 @@ test "runtime device plans Vulkan mesh dispatch from native capabilities" {
     report.native_features.mesh_shaders = true;
     report.limits.max_mesh_threads_per_threadgroup = 128;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan mesh dispatch adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan mesh dispatch adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.MeshDispatchDescriptor{
         .pipeline = .{
@@ -8142,17 +8306,8 @@ test "runtime device plans Metal mesh dispatch from native capabilities" {
     report.limits.max_mesh_threads_per_threadgroup = 64;
     report.limits.max_task_threads_per_threadgroup = 16;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal mesh dispatch adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal mesh dispatch adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.MeshDispatchDescriptor{
         .pipeline = .{
@@ -8178,17 +8333,8 @@ test "runtime device plans acceleration structure builds from native capabilitie
     report.features.acceleration_structures = false;
     report.native_features.acceleration_structures = true;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test acceleration adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test acceleration adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.AccelerationStructureBuildDescriptor{
         .acceleration_structure = .{
@@ -8223,17 +8369,8 @@ test "runtime device plans acceleration structure maintenance from native capabi
     report.native_features.acceleration_structure_refit = true;
     report.native_features.acceleration_structure_compaction = true;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test acceleration maintenance adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test acceleration maintenance adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.AccelerationStructureMaintenanceDescriptor{
         .acceleration_structure = .{
@@ -8275,17 +8412,8 @@ test "runtime device plans top level acceleration structure instance layouts fro
     report.limits.max_acceleration_structure_instances = 64;
     report.limits.max_shader_binding_table_records = 16;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test many instance adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test many instance adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const instances = [_]core.TopLevelAccelerationStructureInstanceDescriptor{
         .{
@@ -8321,17 +8449,8 @@ test "runtime encodes acceleration structure build resources from native capabil
     report.features.acceleration_structures = false;
     report.native_features.acceleration_structures = true;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test acceleration build adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test acceleration build adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const descriptor = core.AccelerationStructureDescriptor{
         .label = "blas",
@@ -8353,15 +8472,17 @@ test "runtime encodes acceleration structure build resources from native capabil
             .vertex_stride = 24,
         }},
     });
-    var scratch = Buffer{
+    const scratch_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = @intCast(plan.scratch_size),
         .usage_value = .{ .acceleration_structure_scratch = true },
-        .impl = undefined,
     };
+    var scratch = Buffer.init(scratch_state);
     var bad_scratch = scratch;
-    bad_scratch.usage_value = .{ .storage = true };
+    bad_scratch.state().usage_value = .{ .storage = true };
 
     try std.testing.expectError(
         core.AdvancedFeatureError.InvalidAccelerationStructureResources,
@@ -8379,10 +8500,10 @@ test "runtime encodes acceleration structure build resources from native capabil
         }).validate(.vulkan, plan),
     );
 
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .compute,
-    };
+    });
     try command_buffer.encodeAccelerationStructureBuild(plan, .{
         .result = &acceleration_structure,
         .scratch = &scratch,
@@ -8401,17 +8522,8 @@ test "runtime validates acceleration structure mesh build input buffers" {
     report.features.acceleration_structures = false;
     report.native_features.acceleration_structures = true;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test acceleration mesh adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test acceleration mesh adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const geometry = core.AccelerationStructureGeometryDescriptor{
         .kind = .triangles,
@@ -8431,22 +8543,26 @@ test "runtime validates acceleration structure mesh build input buffers" {
         .geometries = &.{geometry},
     });
 
-    var scratch = Buffer{
+    const scratch_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = @intCast(plan.scratch_size),
         .usage_value = .{ .acceleration_structure_scratch = true },
-        .impl = undefined,
     };
-    var vertex_buffer = Buffer{
+    var scratch = Buffer.init(scratch_state);
+    const vertex_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 36,
         .usage_value = .{ .acceleration_structure_build_input = true },
-        .impl = undefined,
     };
+    var vertex_buffer = Buffer.init(vertex_buffer_state);
     var bad_vertex_buffer = vertex_buffer;
-    bad_vertex_buffer.usage_value = .{ .vertex = true };
+    bad_vertex_buffer.state().usage_value = .{ .vertex = true };
 
     const geometry_resources = [_]AccelerationStructureGeometryResources{.{
         .triangles = .{
@@ -8481,17 +8597,8 @@ test "runtime device plans ray tracing pipeline lowering from native capabilitie
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test ray tracing adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test ray tracing adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const groups = [_]core.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -8519,17 +8626,8 @@ test "runtime creates ray tracing pipeline states from native capabilities" {
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test ray tracing pipeline adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test ray tracing pipeline adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const groups = [_]core.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -8563,17 +8661,8 @@ test "runtime device plans ray dispatch from native capabilities" {
     report.native_features.ray_tracing = true;
     report.limits.shader_binding_table_alignment = 64;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test ray dispatch adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test ray dispatch adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const sbt = core.ShaderBindingTableDescriptor{
         .stride = 64,
@@ -8603,17 +8692,8 @@ test "runtime plans complex shader binding tables through device" {
     report.limits.shader_binding_table_alignment = 64;
     report.limits.max_shader_binding_table_records = 12;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test complex sbt adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test complex sbt adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const ranges = [_]core.ShaderBindingTableHitGroupRangeDescriptor{
         .{ .first_record = 0, .record_count = 1 },
@@ -8645,17 +8725,8 @@ test "runtime creates shader binding tables and dispatches rays" {
     report.limits.max_ray_tracing_recursion_depth = 2;
     report.limits.shader_binding_table_alignment = 64;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test ray dispatch adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test ray dispatch adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const groups = [_]core.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -8676,10 +8747,10 @@ test "runtime creates shader binding tables and dispatches rays" {
     });
     defer too_small_table.deinit();
 
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .compute,
-    };
+    });
     try std.testing.expectError(
         core.AdvancedFeatureError.InvalidShaderBindingTable,
         command_buffer.dispatchRays(&pipeline, &too_small_table, .{
@@ -8719,17 +8790,8 @@ test "runtime device plans Metal ray tracing mapping from native capabilities" {
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal ray tracing adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal ray tracing adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const groups = [_]core.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -8757,17 +8819,8 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal execution mapping adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal execution mapping adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const groups = [_]core.RayTracingShaderGroupDescriptor{
         .{ .kind = .ray_generation, .entry_point = "raygen" },
@@ -8796,17 +8849,8 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
 
     var vulkan_report = core.defaultDeviceCapabilityReport(.vulkan);
     vulkan_report.native_features.ray_tracing = true;
-    var vulkan_device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan mapping adapter",
-        },
-        .capability_report = vulkan_report,
-    };
+    var vulkan_device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan mapping adapter", vulkan_report);
+    var vulkan_device = Device{ ._state = &vulkan_device_state };
     try std.testing.expectError(
         core.AdvancedFeatureError.UnsupportedRayTracing,
         vulkan_device.makeMetalRayTracingExecutionMapping(.{
@@ -8825,38 +8869,19 @@ test "runtime device plans ray query support from native capabilities" {
     report.native_features.ray_query = true;
     report.limits.max_ray_tracing_recursion_depth = 4;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test ray query adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test ray query adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const plan = try device.planRayQuery(.{
         .shader_stage = .fragment,
         .max_traversal_depth = 2,
     });
     try std.testing.expectEqual(core.Backend.vulkan, plan.backend);
-    try std.testing.expectEqual(core.RayQueryLoweringMode.vulkan_ray_query, plan.lowering);
     try std.testing.expectEqual(core.ShaderStage.fragment, plan.shader_stage);
     try std.testing.expectEqual(@as(u32, 2), plan.max_traversal_depth);
 
-    const metal_device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal ray query adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var metal_device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal ray query adapter", core.defaultDeviceCapabilityReport(.metal));
+    const metal_device = Device{ ._state = &metal_device_state };
     try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, metal_device.planRayQuery(.{}));
 }
 
@@ -8875,17 +8900,8 @@ test "runtime device plans ray tracing stress from native capabilities" {
     report.limits.max_acceleration_structure_instances = 8;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test rt stress adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test rt stress adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const instances = [_]core.TopLevelAccelerationStructureInstanceDescriptor{
         .{ .geometry_kind = .triangles },
@@ -8931,17 +8947,8 @@ test "runtime plans driver pipeline caches from native feature reports" {
     report.native_features.driver_pipeline_cache = true;
     report.limits.max_driver_cache_identity_bytes = 128;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const descriptor = core.DriverPipelineCacheDescriptor{
         .path = "build.zig",
@@ -8975,17 +8982,8 @@ test "runtime device exposes diagnostics and capture names" {
     tracker.retain(.sampler_state);
     tracker.recordObjectCreation(.sampler, 19, .{}, 5);
     var backend_runtime: BackendRuntime = undefined;
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", core.defaultDeviceCapabilityReport(.metal));
+    const device = Device{ ._state = &device_state };
 
     const snapshot = device.runtimeDiagnostics();
     try std.testing.expectEqual(@as(usize, 1), snapshot.live_resources);
@@ -9003,17 +9001,8 @@ test "runtime device exposes diagnostics and capture names" {
 test "runtime device plans native advanced closure inventory" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test native closure adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test native closure adapter", core.defaultDeviceCapabilityReport(.metal));
+    const device = Device{ ._state = &device_state };
 
     const plan = device.planNativeAdvancedClosure(.{
         .features = &.{
@@ -9036,17 +9025,8 @@ test "runtime device plans native advanced closure inventory" {
 test "runtime device plans backend parity semantics for selected backend" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test parity adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test parity adapter", core.defaultDeviceCapabilityReport(.metal));
+    const device = Device{ ._state = &device_state };
 
     const plan = try device.planBackendParitySemantics(.{
         .backend = .vulkan,
@@ -9063,17 +9043,8 @@ test "runtime device plans backend parity semantics for selected backend" {
 test "runtime plans persistent cache manifests through device" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", core.defaultDeviceCapabilityReport(.metal));
+    const device = Device{ ._state = &device_state };
 
     const manifest = core.RuntimeCacheManifestDescriptor{
         .backend = .metal,
@@ -9103,17 +9074,8 @@ test "runtime plans persistent cache manifests through device" {
 test "runtime plans pipeline artifact cache compatibility through device" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.vulkan),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", core.defaultDeviceCapabilityReport(.vulkan));
+    const device = Device{ ._state = &device_state };
 
     const manifest = core.PipelineArtifactManifestDescriptor{
         .backend = .vulkan,
@@ -9175,17 +9137,8 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
     report.limits.max_bindless_descriptors_per_range = 16;
     report.limits.max_bindless_ranges_per_layout = 4;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", report);
+    var device = Device{ ._state = &device_state };
 
     var ranges = [_]core.DescriptorIndexingRange{.{
         .binding = 3,
@@ -9221,17 +9174,8 @@ test "runtime plans resource table pressure through device limits" {
     report.limits.max_bindless_descriptors_per_range = 64;
     report.limits.max_bindless_ranges_per_layout = 2;
 
-    const device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", report);
+    const device = Device{ ._state = &device_state };
 
     const ranges = [_]core.DescriptorIndexingRange{
         .{
@@ -9289,17 +9233,8 @@ test "runtime resource table updates clear and validate slots" {
     report.limits.max_bindless_descriptors_per_range = 16;
     report.limits.max_bindless_ranges_per_layout = 4;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const ranges = [_]core.DescriptorIndexingRange{
         .{
@@ -9341,7 +9276,7 @@ test "runtime resource table updates clear and validate slots" {
     });
     defer table.deinit();
 
-    var texture_view = TextureView{
+    var texture_view = TextureView.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -9350,18 +9285,18 @@ test "runtime resource table updates clear and validate slots" {
         .width_value = 1,
         .height_value = 1,
         .impl = undefined,
-    };
-    var sampler = SamplerState{
+    });
+    var sampler = SamplerState.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .impl = undefined,
-    };
-    var dead_sampler = SamplerState{
+    });
+    var dead_sampler = SamplerState.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .alive = false,
         .impl = undefined,
-    };
+    });
 
     try std.testing.expectEqual(@as(usize, 3), table.slotCount());
     try std.testing.expectError(core.BindingError.MissingResourceTableBinding, table.validateReadyForBinding());
@@ -9400,17 +9335,8 @@ test "runtime resource table rejects update after bind without range support" {
     var report = core.defaultDeviceCapabilityReport(.metal);
     report.features.argument_buffers = true;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", report);
+    var device = Device{ ._state = &device_state };
 
     var ranges = [_]core.DescriptorIndexingRange{.{
         .binding = 0,
@@ -9430,11 +9356,11 @@ test "runtime resource table rejects update after bind without range support" {
     });
     defer table.deinit();
 
-    var sampler = SamplerState{
+    var sampler = SamplerState.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .impl = undefined,
-    };
+    });
     try table.update(.{
         .slot = .{ .binding = 0 },
         .resource = .{ .sampler = &sampler },
@@ -9496,17 +9422,8 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     report.native_features.external_textures = true;
     report.native_features.external_semaphores = true;
 
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = backend,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = backend,
-            .name = "test external interop adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, backend, &backend_runtime, "test external interop adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const interop_matrix = device.externalInteropCapabilityMatrixForPlatform(platform);
     try std.testing.expect(interop_matrix.supportsPortableWrapper(.texture));
@@ -9648,12 +9565,12 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(@as(usize, 1), external_sync_plan.native_wait_count);
     try std.testing.expectEqual(@as(usize, 1), external_sync_plan.native_signal_count);
     try std.testing.expectError(RuntimeError.BackendMismatch, external_sync.plan(other_backend));
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = backend,
         .tracker = &tracker,
-    };
+    });
     try command_buffer.commitWithExternalSynchronization(external_sync);
-    try std.testing.expect(!command_buffer.alive);
+    try std.testing.expect(!command_buffer.privateState().alive);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_memories);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_buffers);
     try std.testing.expectEqual(@as(usize, 1), tracker.external_semaphores);
@@ -9675,7 +9592,7 @@ test "runtime native command insertion validates encoder and invokes callback" {
     }.call;
 
     var state = State{};
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .features_value = .{ .native_command_insertion = true },
         .native_handle_view = core.nativeHandleView(.{
@@ -9688,11 +9605,11 @@ test "runtime native command insertion validates encoder and invokes callback" {
                 .present_queue = 6,
             },
         }),
-    };
-    var blit_encoder = BlitCommandEncoder{
+    });
+    var blit_encoder = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
-    };
+    });
 
     try blit_encoder.insertNativeCommands(.{
         .encoder = .blit,
@@ -9708,13 +9625,13 @@ test "runtime native command insertion validates encoder and invokes callback" {
         .context = &state,
     }));
 
-    var gated_command_buffer = CommandBuffer{
+    var gated_command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
-    };
-    var gated_encoder = BlitCommandEncoder{
+    });
+    var gated_encoder = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &gated_command_buffer,
-    };
+    });
     try std.testing.expectError(core.AdvancedFeatureError.UnsupportedNativeCommandInsertion, gated_encoder.insertNativeCommands(.{
         .encoder = .blit,
         .callback = callback,
@@ -9738,7 +9655,7 @@ test "runtime adapter selection validates resolved adapter info" {
 
 test "window context exposes device and queue views" {
     var tracker = ResourceTracker{};
-    var context = WindowContext{
+    var context_state = RuntimeState{
         .allocator = std.testing.allocator,
         .tracker = &tracker,
         .backend = .vulkan,
@@ -9759,6 +9676,7 @@ test "window context exposes device and queue views" {
         .capability_report = core.defaultDeviceCapabilityReport(.vulkan),
         .impl = undefined,
     };
+    var context = WindowContext{ ._state = &context_state };
 
     var device = context.device();
     const queue_view = context.queue();
@@ -9776,10 +9694,10 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.QueueKind.graphics, queue_view.kind());
     try std.testing.expectEqual(core.QueueKind.graphics, descriptor_queue.kind());
     try std.testing.expectEqual(core.QueueKind.graphics, fallback_compute_queue.kind());
-    try std.testing.expect(context.queueCapabilities().compute);
-    try std.testing.expect(context.syncCapabilities().fences);
-    try std.testing.expect(context.syncCapabilities().events);
-    const fallback_plan = try device.planQueue(.{
+    try std.testing.expect(queueCapabilities(device).compute);
+    try std.testing.expect(syncCapabilities(device).fences);
+    try std.testing.expect(syncCapabilities(device).events);
+    const fallback_plan = try planQueue(device, .{
         .kind = .compute,
         .allow_fallback = true,
     });
@@ -9798,24 +9716,15 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
     try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
     try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
-    try std.testing.expect(context.presentModeSupport().fifo);
-    try std.testing.expectEqual(core.PresentMode.fifo, context.resolvePresentMode(.immediate).selected);
+    try std.testing.expect(presentModeSupport(device).fifo);
+    try std.testing.expectEqual(core.PresentMode.fifo, resolvePresentMode(device, .immediate).selected);
 }
 
 test "runtime device creates multi surface collections" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .metal,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .metal,
-            .name = "test metal adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.metal),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .metal, &backend_runtime, "test metal adapter", core.defaultDeviceCapabilityReport(.metal));
+    var device = Device{ ._state = &device_state };
 
     var collection = device.makeSurfaceCollection();
     defer collection.deinit();
@@ -9853,17 +9762,8 @@ test "runtime queue descriptor selects logical queue view when multi queue is su
     report.features.multi_queue = true;
     report.features.dedicated_compute_queue = true;
     report.features.dedicated_transfer_queue = true;
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const compute_queue = try device.queueWithDescriptor(.{
         .label = "compute queue",
@@ -9882,7 +9782,7 @@ test "runtime queue descriptor selects logical queue view when multi queue is su
 
 test "runtime queue ownership transfers gate cross queue resource use" {
     var tracker = ResourceTracker{};
-    var graphics_command_buffer = CommandBuffer{
+    var graphics_command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .graphics,
         .features_value = .{
@@ -9890,13 +9790,13 @@ test "runtime queue ownership transfers gate cross queue resource use" {
             .queue_ownership_transfer = true,
         },
         .impl = null,
-    };
-    var graphics_blit = BlitCommandEncoder{
+    });
+    var graphics_blit = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &graphics_command_buffer,
         .impl = null,
-    };
-    var compute_command_buffer = CommandBuffer{
+    });
+    var compute_command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .compute,
         .features_value = .{
@@ -9904,22 +9804,24 @@ test "runtime queue ownership transfers gate cross queue resource use" {
             .queue_ownership_transfer = true,
         },
         .impl = null,
-    };
-    var compute_encoder = ComputeCommandEncoder{
+    });
+    var compute_encoder = ComputeCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &compute_command_buffer,
         .impl = null,
-    };
+    });
 
-    var buffer = Buffer{
+    const buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 64,
         .usage_value = .{ .copy_destination = true, .copy_source = true, .storage = true },
         .storage_mode_value = .shared,
         .usage_state = .{ .current = .copy_destination },
-        .impl = undefined,
     };
+    var buffer = Buffer.init(buffer_state);
 
     try graphics_blit.bufferOwnershipTransfer(&buffer, .{
         .source = .graphics,
@@ -9939,17 +9841,17 @@ test "runtime queue ownership transfers gate cross queue resource use" {
     });
     try std.testing.expectEqual(core.ResourceUsageKind.copy_source, buffer.currentUsage().?);
 
-    var gated_command_buffer = CommandBuffer{
+    var gated_command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .graphics,
         .features_value = .{},
         .impl = null,
-    };
-    var gated_blit = BlitCommandEncoder{
+    });
+    var gated_blit = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &gated_command_buffer,
         .impl = null,
-    };
+    });
     try std.testing.expectError(core.CommandEncodingError.UnsupportedQueueOwnershipTransfer, gated_blit.bufferOwnershipTransfer(&buffer, .{
         .source = .graphics,
         .destination = .transfer,
@@ -9966,26 +9868,28 @@ test "runtime queue ownership transfers gate cross queue resource use" {
 
 test "runtime explicit barriers update resource usage state" {
     var tracker = ResourceTracker{};
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .features_value = core.defaultDeviceFeatures(.vulkan),
         .impl = null,
-    };
-    var blit = BlitCommandEncoder{
+    });
+    var blit = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
         .impl = null,
-    };
+    });
 
-    var buffer = Buffer{
+    const buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 64,
         .usage_value = .{ .copy_destination = true, .vertex = true },
         .storage_mode_value = .shared,
         .usage_state = .{ .current = .copy_destination },
-        .impl = undefined,
     };
+    var buffer = Buffer.init(buffer_state);
 
     try blit.bufferBarrier(&buffer, .{
         .before = .copy_destination,
@@ -10006,7 +9910,7 @@ test "runtime explicit barriers update resource usage state" {
         .height = 8,
         .usage = .{ .copy_destination = true, .shader_read = true },
     };
-    var texture = Texture{
+    var texture = Texture.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = texture_descriptor.format,
@@ -10024,7 +9928,7 @@ test "runtime explicit barriers update resource usage state" {
             .depth_or_array_layers_value = texture_descriptor.depth_or_array_layers,
             .mip_level_count_value = texture_descriptor.mip_level_count,
         } },
-    };
+    });
 
     try blit.textureBarrier(&texture, .{
         .before = .copy_destination,
@@ -10033,16 +9937,16 @@ test "runtime explicit barriers update resource usage state" {
     try std.testing.expectEqual(core.ResourceUsageKind.sampled_texture, texture.currentUsage().?);
     try std.testing.expectEqual(@as(usize, 1), texture.usageBarrierCount());
 
-    var gated_command_buffer = CommandBuffer{
+    var gated_command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .features_value = .{},
         .impl = null,
-    };
-    var gated_compute = ComputeCommandEncoder{
+    });
+    var gated_compute = ComputeCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &gated_command_buffer,
         .impl = null,
-    };
+    });
     try std.testing.expectError(core.CommandEncodingError.UnsupportedExplicitResourceBarrier, gated_compute.bufferBarrier(&buffer, .{
         .before = .vertex_buffer,
         .after = .copy_destination,
@@ -10051,16 +9955,16 @@ test "runtime explicit barriers update resource usage state" {
 
 test "runtime generate mipmaps validates full texture range" {
     var tracker = ResourceTracker{};
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .features_value = core.defaultDeviceFeatures(.vulkan),
         .impl = null,
-    };
-    var blit = BlitCommandEncoder{
+    });
+    var blit = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
         .impl = null,
-    };
+    });
     const descriptor = core.TextureDescriptor{
         .format = .rgba8_unorm,
         .width = 8,
@@ -10073,7 +9977,7 @@ test "runtime generate mipmaps validates full texture range" {
             .shader_read = true,
         },
     };
-    var texture = Texture{
+    var texture = Texture.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = descriptor.format,
@@ -10090,7 +9994,7 @@ test "runtime generate mipmaps validates full texture range" {
             .depth_or_array_layers_value = descriptor.depth_or_array_layers,
             .mip_level_count_value = descriptor.mip_level_count,
         } },
-    };
+    });
 
     try std.testing.expectError(core.TextureError.UnsupportedMipmapGeneration, blit.generateMipmaps(&texture, .{
         .base_mip_level = 1,
@@ -10103,17 +10007,8 @@ test "runtime fences and events track lifecycle state" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
     var report = core.defaultDeviceCapabilityReport(.vulkan);
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", report);
+    var device = Device{ ._state = &device_state };
 
     var fence = try device.makeFence(.{ .label = "binary fence" });
     defer fence.deinit();
@@ -10132,7 +10027,7 @@ test "runtime fences and events track lifecycle state" {
         .initial_value = 2,
     }));
     report.features.timeline_fences = true;
-    device.capability_report = report;
+    device.state().capability_report = report;
     var timeline = try device.makeFence(.{
         .kind = .timeline,
         .initial_value = 2,
@@ -10166,17 +10061,8 @@ test "runtime command buffer synchronization waits before submit and signals aft
     var backend_runtime: BackendRuntime = undefined;
     var report = core.defaultDeviceCapabilityReport(.vulkan);
     report.features.timeline_fences = true;
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", report);
+    var device = Device{ ._state = &device_state };
 
     var wait_fence = try device.makeFence(.{ .label = "wait fence" });
     defer wait_fence.deinit();
@@ -10191,23 +10077,23 @@ test "runtime command buffer synchronization waits before submit and signals aft
     var event = try device.makeEvent(.{ .label = "signal event" });
     defer event.deinit();
 
-    var blocked = CommandBuffer{
+    var blocked = CommandBuffer.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
-    };
+    });
     const blocked_waits = [_]FenceWaitOperation{.{
         .fence = &wait_fence,
     }};
     try std.testing.expectError(core.CommandEncodingError.FenceWaitTimeout, blocked.commitWithSynchronization(.{
         .wait_fences = blocked_waits[0..],
     }));
-    try std.testing.expect(blocked.alive);
+    try std.testing.expectEqual(core.CommandBufferState.ready, blocked.state());
 
     try wait_fence.signal(.{});
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
-    };
+    });
     const waits = [_]FenceWaitOperation{.{
         .fence = &wait_fence,
     }};
@@ -10224,7 +10110,7 @@ test "runtime command buffer synchronization waits before submit and signals aft
         .signal_events = event_signals[0..],
     });
 
-    try std.testing.expect(!command_buffer.alive);
+    try std.testing.expect(!command_buffer.privateState().alive);
     try std.testing.expect(signal_fence.isSignaled(1));
     try std.testing.expect(timeline.isSignaled(5));
     try std.testing.expect(event.isSignaled());
@@ -10233,39 +10119,30 @@ test "runtime command buffer synchronization waits before submit and signals aft
 test "runtime query sets support encoder writes and readback" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = core.defaultDeviceCapabilityReport(.vulkan),
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", core.defaultDeviceCapabilityReport(.vulkan));
+    var device = Device{ ._state = &device_state };
 
-    var command_buffer = CommandBuffer{
+    var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .graphics,
         .features_value = device.features(),
         .impl = null,
-    };
-    var render_encoder = RenderCommandEncoder{
+    });
+    var render_encoder = RenderCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
         .impl = null,
-    };
-    var compute_encoder = ComputeCommandEncoder{
+    });
+    var compute_encoder = ComputeCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
         .impl = null,
-    };
-    var blit_encoder = BlitCommandEncoder{
+    });
+    var blit_encoder = BlitCommandEncoder.init(.{
         .backend = .vulkan,
         .command_buffer = &command_buffer,
         .impl = null,
-    };
+    });
 
     var timestamps = try device.makeQuerySet(.{
         .query_type = .timestamp,
@@ -10292,14 +10169,16 @@ test "runtime query sets support encoder writes and readback" {
     });
     defer occlusion.deinit();
     try std.testing.expectEqual(core.TimestampQuerySource.unavailable, occlusion.resultSource());
-    var resolve_destination = Buffer{
+    const resolve_destination_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 8,
         .usage_value = .{ .copy_destination = true },
         .storage_mode_value = .shared,
-        .impl = undefined,
     };
+    var resolve_destination = Buffer.init(resolve_destination_state);
     try std.testing.expectError(core.QueryError.QueryNotReady, blit_encoder.resolveQuerySet(&occlusion, &resolve_destination, .{
         .first_query = 0,
         .query_count = 1,
@@ -10321,7 +10200,7 @@ test "runtime query sets support encoder writes and readback" {
 
     var report = core.defaultDeviceCapabilityReport(.vulkan);
     report.features.pipeline_statistics_queries = false;
-    device.capability_report = report;
+    device.state().capability_report = report;
     try std.testing.expectError(core.QueryError.UnsupportedPipelineStatisticsQueries, device.makeQuerySet(.{
         .query_type = .pipeline_statistics,
         .count = 1,
@@ -10337,17 +10216,8 @@ test "Period 43 runtime diagnostics expose markers profiling capture and issue r
     report.features.debug_labels = true;
     report.features.debug_markers = true;
     report.features.timestamp_queries = true;
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "diagnostic adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "diagnostic adapter", report);
+    var device = Device{ ._state = &device_state };
 
     const markers = debugMarkerCapabilities(device);
     try std.testing.expectEqual(core.NativeDiagnosticSupport.native, markers.object_labels);
@@ -10380,23 +10250,14 @@ test "runtime heaps track aligned reservations and diagnostics" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
     var report = core.defaultDeviceCapabilityReport(.vulkan);
-    var device = Device{
-        .allocator = std.testing.allocator,
-        .tracker = &tracker,
-        .backend = .vulkan,
-        .impl = &backend_runtime,
-        .adapter_info = .{
-            .backend = .vulkan,
-            .name = "test vulkan adapter",
-        },
-        .capability_report = report,
-    };
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test vulkan adapter", report);
+    var device = Device{ ._state = &device_state };
 
     try std.testing.expectError(core.HeapError.UnsupportedHeaps, device.makeHeap(.{
         .size = 4096,
     }));
     report.features.heaps = true;
-    device.capability_report = report;
+    device.state().capability_report = report;
     var heap = try device.makeHeap(.{
         .label = "upload heap",
         .size = 4096,
@@ -10490,22 +10351,24 @@ test "runtime bind group materialization validates resources against layout" {
         },
     };
     const copied_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, layout_entries[0..]);
-    var layout = BindGroupLayout{
+    var layout = BindGroupLayout.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = allocator,
         .entries = copied_layout_entries,
-    };
+    });
     tracker.retain(.bind_group_layout);
     defer layout.deinit();
 
-    var buffer = Buffer{
+    const buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
-        .length_value = 128,
         .impl = undefined,
+
+        .length_value = 128,
     };
-    var texture_view = TextureView{
+    var buffer = Buffer.init(buffer_state);
+    var texture_view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -10514,12 +10377,12 @@ test "runtime bind group materialization validates resources against layout" {
         .width_value = 1,
         .height_value = 1,
         .impl = undefined,
-    };
-    var sampler = SamplerState{
+    });
+    var sampler = SamplerState.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .impl = undefined,
-    };
+    });
 
     const entries = [_]BindGroupEntry{
         .{
@@ -10555,12 +10418,12 @@ test "runtime bind group materialization validates resources against layout" {
         },
     };
     const copied_compare_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, compare_layout_entries[0..]);
-    var compare_layout = BindGroupLayout{
+    var compare_layout = BindGroupLayout.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = allocator,
         .entries = copied_compare_layout_entries,
-    };
+    });
     tracker.retain(.bind_group_layout);
     defer compare_layout.deinit();
 
@@ -10589,22 +10452,24 @@ test "runtime bind group materialization validates resources against layout" {
         },
     };
     const copied_storage_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, storage_layout_entries[0..]);
-    var storage_layout = BindGroupLayout{
+    var storage_layout = BindGroupLayout.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = allocator,
         .entries = copied_storage_layout_entries,
-    };
+    });
     tracker.retain(.bind_group_layout);
     defer storage_layout.deinit();
 
-    var storage_buffer = Buffer{
+    const storage_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 128,
         .usage_value = .{ .storage = true },
-        .impl = undefined,
     };
+    var storage_buffer = Buffer.init(storage_buffer_state);
     const storage_entries = [_]BindGroupEntry{
         .{
             .binding = 0,
@@ -10623,12 +10488,14 @@ test "runtime bind group materialization validates resources against layout" {
     try std.testing.expectEqual(core.ResourceUsageKind.storage_buffer_write, storage_buffer.currentUsage().?);
     try std.testing.expectEqual(core.ResourceUsageKind.storage_texture_read, texture_view.currentUsage().?);
 
-    var non_storage_buffer = Buffer{
+    const non_storage_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
-        .length_value = 128,
         .impl = undefined,
+
+        .length_value = 128,
     };
+    var non_storage_buffer = Buffer.init(non_storage_buffer_state);
     const invalid_storage_entries = [_]BindGroupEntry{
         .{
             .binding = 0,
@@ -10668,12 +10535,14 @@ test "runtime bind group materialization validates resources against layout" {
         .entries = invalid_range_entries[0..],
     }));
 
-    var metal_buffer = Buffer{
+    const metal_buffer_state = Buffer.State{
         .backend = .metal,
         .tracker = &tracker,
-        .length_value = 128,
         .impl = undefined,
+
+        .length_value = 128,
     };
+    var metal_buffer = Buffer.init(metal_buffer_state);
     const backend_mismatch_entries = [_]BindGroupEntry{
         .{
             .binding = 0,
@@ -10702,12 +10571,12 @@ test "runtime bind group materialization validates resources against layout" {
         },
     };
     const copied_array_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, array_layout_entries[0..]);
-    var array_layout = BindGroupLayout{
+    var array_layout = BindGroupLayout.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = allocator,
         .entries = copied_array_layout_entries,
-    };
+    });
     tracker.retain(.bind_group_layout);
     defer array_layout.deinit();
     try std.testing.expectError(core.BindingError.InvalidBindGroupResourceCount, materializeBindGroupEntries(allocator, .vulkan, .{
@@ -10741,12 +10610,12 @@ test "runtime bind group materialization validates resources against layout" {
         },
     };
     const copied_dynamic_layout_entries = try allocator.dupe(core.BindGroupLayoutEntry, dynamic_layout_entries[0..]);
-    var dynamic_layout = BindGroupLayout{
+    var dynamic_layout = BindGroupLayout.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = allocator,
         .entries = copied_dynamic_layout_entries,
-    };
+    });
     tracker.retain(.bind_group_layout);
     defer dynamic_layout.deinit();
     const materialized_dynamic = try materializeBindGroupEntries(allocator, .vulkan, .{
@@ -10767,13 +10636,13 @@ test "runtime bind group dynamic offsets validate against layout" {
         },
     };
     var tracker = ResourceTracker{};
-    const bind_group = BindGroup{
+    const bind_group = BindGroup.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
         .layout_entries = layout_entries[0..],
         .entries = &.{},
-    };
+    });
 
     try validateDynamicOffsetsForBindGroup(bind_group, .{
         .index = 0,
@@ -10801,13 +10670,13 @@ test "runtime bind group dynamic offsets validate array elements" {
         .dynamic_offset = true,
     }};
     var tracker = ResourceTracker{};
-    const bind_group = BindGroup{
+    const bind_group = BindGroup.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
         .layout_entries = layout_entries[0..],
         .entries = &.{},
-    };
+    });
 
     try validateDynamicOffsetsForBindGroup(bind_group, .{
         .index = 0,
@@ -10831,12 +10700,12 @@ test "runtime bind group dynamic offsets validate array elements" {
 
 test "runtime command encoders bind resource tables with validation" {
     var tracker = ResourceTracker{};
-    var command_buffer = CommandBuffer{ .backend = .metal };
-    var sampler = SamplerState{
+    var command_buffer = CommandBuffer.init(.{ .backend = .metal });
+    var sampler = SamplerState.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .impl = undefined,
-    };
+    });
     var ranges = [_]core.DescriptorIndexingRange{.{
         .binding = 0,
         .resource = .sampler,
@@ -10844,47 +10713,47 @@ test "runtime command encoders bind resource tables with validation" {
         .descriptor_count = 1,
     }};
     var slots = [_]?BindGroupResource{.{ .sampler = &sampler }};
-    var table = ResourceTable{
+    var table = ResourceTable.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
         .model_value = .argument_buffer,
         .ranges = ranges[0..],
         .slots = slots[0..],
-    };
-    var render_encoder = RenderCommandEncoder{
+    });
+    var render_encoder = RenderCommandEncoder.init(.{
         .backend = .metal,
         .command_buffer = &command_buffer,
-    };
+    });
     try render_encoder.setResourceTable(&table, .{ .index = 1 });
-    try std.testing.expectEqual(@as(u64, 2), render_encoder.debug.resource_table_mask);
-    try std.testing.expectEqual(@as(u64, 1), table.bound_count);
+    try std.testing.expectEqual(@as(u64, 2), render_encoder.privateState().debug.resource_table_mask);
+    try std.testing.expectEqual(@as(u64, 1), table.state().bound_count);
     try std.testing.expectError(core.BindingError.ResourceTableUpdateAfterBindUnsupported, table.clear(.{ .binding = 0 }));
 
-    var compute_encoder = ComputeCommandEncoder{
+    var compute_encoder = ComputeCommandEncoder.init(.{
         .backend = .metal,
         .command_buffer = &command_buffer,
-    };
+    });
     try std.testing.expectError(core.BindingError.ResourceTableVisibilityMismatch, compute_encoder.setResourceTable(&table, .{ .index = 0 }));
 
     var vulkan_table = table;
-    vulkan_table.backend = .vulkan;
+    vulkan_table.state().backend = .vulkan;
     try std.testing.expectError(RuntimeError.BackendMismatch, render_encoder.setResourceTable(&vulkan_table, .{ .index = 0 }));
 
     var empty_slots = [_]?BindGroupResource{null};
     var incomplete_table = table;
-    incomplete_table.slots = empty_slots[0..];
+    incomplete_table.state().slots = empty_slots[0..];
     try std.testing.expectError(core.BindingError.MissingResourceTableBinding, render_encoder.setResourceTable(&incomplete_table, .{ .index = 0 }));
 }
 
 test "runtime command encoders write root constants with pipeline layout validation" {
     var tracker = ResourceTracker{};
-    var command_buffer = CommandBuffer{ .backend = .metal };
+    var command_buffer = CommandBuffer.init(.{ .backend = .metal });
     var bytes = [_]u8{ 1, 2, 3, 4 };
-    var render_encoder = RenderCommandEncoder{
+    var render_encoder = RenderCommandEncoder.init(.{
         .backend = .metal,
         .command_buffer = &command_buffer,
-    };
+    });
 
     try std.testing.expectError(core.RootConstantError.MissingRootConstantRange, render_encoder.setRootConstants(.{
         .offset = 0,
@@ -10896,12 +10765,12 @@ test "runtime command encoders write root constants with pipeline layout validat
         .offset = 0,
         .size = 8,
     }};
-    var render_pipeline = RenderPipelineState{
+    var render_pipeline = RenderPipelineState.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .root_constant_ranges = render_ranges[0..],
         .impl = undefined,
-    };
+    });
     try render_encoder.setRenderPipelineState(&render_pipeline);
     try render_encoder.setRootConstants(.{
         .offset = 0,
@@ -10916,16 +10785,16 @@ test "runtime command encoders write root constants with pipeline layout validat
         .bytes = bytes[0..],
     }));
 
-    var compute_encoder = ComputeCommandEncoder{
+    var compute_encoder = ComputeCommandEncoder.init(.{
         .backend = .metal,
         .command_buffer = &command_buffer,
-    };
-    var compute_pipeline = ComputePipelineState{
+    });
+    var compute_pipeline = ComputePipelineState.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .root_constant_ranges = render_ranges[0..],
         .impl = undefined,
-    };
+    });
     try compute_encoder.setComputePipelineState(&compute_pipeline);
     try std.testing.expectError(core.RootConstantError.RootConstantVisibilityMismatch, compute_encoder.setRootConstants(.{
         .offset = 0,
@@ -11074,7 +10943,7 @@ test "runtime render pipeline gate rejects unsupported raster state" {
 }
 
 test "runtime render encoder validates bind group binding" {
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
         .color_attachments = color_attachments[0..],
@@ -11087,23 +10956,23 @@ test "runtime render encoder validates bind group binding" {
         .resource = .sampler,
         .visibility = .{ .fragment = true },
     }};
-    var bind_group = BindGroup{
+    var bind_group = BindGroup.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
         .layout_entries = layout_entries[0..],
         .entries = entries[0..],
-    };
+    });
     try encoder.setBindGroup(&bind_group, .{ .index = 0 });
-    try std.testing.expectEqual(@as(u64, 1), encoder.debug.bind_group_mask);
+    try std.testing.expectEqual(@as(u64, 1), encoder.privateState().debug.bind_group_mask);
 
-    var metal_bind_group = BindGroup{
+    var metal_bind_group = BindGroup.init(.{
         .backend = .metal,
         .tracker = &tracker,
         .allocator = std.testing.allocator,
         .layout_entries = layout_entries[0..],
         .entries = entries[0..],
-    };
+    });
     try std.testing.expectError(RuntimeError.BackendMismatch, encoder.setBindGroup(&metal_bind_group, .{ .index = 0 }));
     try std.testing.expectError(error.InvalidBindGroupIndex, encoder.setBindGroup(&bind_group, .{ .index = 16 }));
 
@@ -11111,7 +10980,7 @@ test "runtime render encoder validates bind group binding" {
 }
 
 test "runtime render encoder dynamic state methods validate before backend lowering" {
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
         .color_attachments = color_attachments[0..],
@@ -11145,30 +11014,32 @@ test "runtime render encoder dynamic state methods validate before backend lower
 }
 
 test "runtime render encoder base draw fields lower while indirect variants are gated" {
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
         .color_attachments = color_attachments[0..],
     });
 
     var tracker = ResourceTracker{};
-    var pipeline = RenderPipelineState{
+    var pipeline = RenderPipelineState.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .impl = undefined,
-    };
+    });
     try encoder.setRenderPipelineState(&pipeline);
 
     try encoder.drawPrimitives(.{
         .vertex_count = 3,
         .base_instance = 1,
     });
-    var index_buffer = Buffer{
+    const index_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
-        .length_value = 64,
         .impl = undefined,
+
+        .length_value = 64,
     };
+    var index_buffer = Buffer.init(index_buffer_state);
     try encoder.setIndexBuffer(&index_buffer);
     try encoder.drawIndexedPrimitives(.{
         .index_count = 3,
@@ -11176,13 +11047,15 @@ test "runtime render encoder base draw fields lower while indirect variants are 
         .base_instance = 1,
     });
 
-    var indirect_buffer = Buffer{
+    const indirect_buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 64,
         .usage_value = .{ .indirect = true },
-        .impl = undefined,
     };
+    var indirect_buffer = Buffer.init(indirect_buffer_state);
     try encoder.drawPrimitivesIndirect(&indirect_buffer, .{});
     try encoder.drawIndexedPrimitivesIndirect(&indirect_buffer, .{});
     try encoder.drawPrimitivesIndirect(&indirect_buffer, .{
@@ -11205,13 +11078,15 @@ test "runtime render encoder base draw fields lower while indirect variants are 
 
 test "runtime resources keep borrowed debug labels" {
     var tracker = ResourceTracker{};
-    var buffer = Buffer{
+    const buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .label_value = "vertices",
         .length_value = 16,
-        .impl = undefined,
     };
+    var buffer = Buffer.init(buffer_state);
 
     try std.testing.expectEqualStrings("vertices", buffer.label().?);
     buffer.setLabel("renamed vertices");
@@ -11222,13 +11097,15 @@ test "runtime resources keep borrowed debug labels" {
 
 test "runtime buffers expose storage and cpu visibility" {
     var tracker = ResourceTracker{};
-    var buffer = Buffer{
+    const buffer_state = Buffer.State{
         .backend = .vulkan,
         .tracker = &tracker,
+        .impl = undefined,
+
         .length_value = 16,
         .storage_mode_value = .private,
-        .impl = undefined,
     };
+    var buffer = Buffer.init(buffer_state);
 
     try std.testing.expectEqual(core.ResourceStorageMode.private, buffer.storageMode());
     try std.testing.expect(!buffer.cpuVisible());
@@ -11236,7 +11113,7 @@ test "runtime buffers expose storage and cpu visibility" {
 
 test "runtime texture views expose resolved ranges" {
     var tracker = ResourceTracker{};
-    var view = TextureView{
+    var view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -11250,7 +11127,7 @@ test "runtime texture views expose resolved ranges" {
         .base_array_layer_value = 1,
         .array_layer_count_value = 2,
         .impl = undefined,
-    };
+    });
 
     try std.testing.expectEqual(core.TextureViewDimension.two_d_array, view.dimension());
     try std.testing.expectEqual(@as(u32, 2), view.baseMipLevel());
@@ -11261,7 +11138,7 @@ test "runtime texture views expose resolved ranges" {
 }
 
 test "runtime command objects validate debug group balance" {
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
     const invalid_utf8 = [_]u8{0xff};
     command_buffer.setLabel("frame commands");
     try std.testing.expectEqualStrings("frame commands", command_buffer.label().?);
@@ -11297,7 +11174,7 @@ test "runtime command objects validate debug group balance" {
 
 test "runtime render pass descriptor accepts texture-backed color targets" {
     var tracker = ResourceTracker{};
-    var color_view = TextureView{
+    var color_view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -11306,7 +11183,7 @@ test "runtime render pass descriptor accepts texture-backed color targets" {
         .width_value = 64,
         .height_value = 64,
         .impl = undefined,
-    };
+    });
     var second_color_view = color_view;
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
         .target = .{ .texture_view = &color_view },
@@ -11327,7 +11204,7 @@ test "runtime render pass descriptor accepts texture-backed color targets" {
 
 test "runtime render pass descriptor rejects invalid texture targets" {
     var tracker = ResourceTracker{};
-    var sampled_only_view = TextureView{
+    var sampled_only_view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -11336,7 +11213,7 @@ test "runtime render pass descriptor rejects invalid texture targets" {
         .width_value = 64,
         .height_value = 64,
         .impl = undefined,
-    };
+    });
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
         .target = .{ .texture_view = &sampled_only_view },
     }};
@@ -11366,7 +11243,7 @@ test "runtime render pass descriptor rejects invalid texture targets" {
 
 test "runtime render pass descriptor validates msaa resolve targets" {
     var tracker = ResourceTracker{};
-    var msaa_view = TextureView{
+    var msaa_view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -11375,8 +11252,8 @@ test "runtime render pass descriptor validates msaa resolve targets" {
         .width_value = 64,
         .height_value = 64,
         .impl = undefined,
-    };
-    var resolve_view = TextureView{
+    });
+    var resolve_view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -11385,7 +11262,7 @@ test "runtime render pass descriptor validates msaa resolve targets" {
         .width_value = 64,
         .height_value = 64,
         .impl = undefined,
-    };
+    });
 
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
         .target = .{ .texture_view = &msaa_view },
@@ -11402,7 +11279,7 @@ test "runtime render pass descriptor validates msaa resolve targets" {
         .color_attachments = missing_resolve[0..],
     }).validateRuntime(.vulkan));
 
-    resolve_view.sample_count_value = 4;
+    resolve_view.state().sample_count_value = 4;
     try std.testing.expectError(RuntimeError.InvalidRenderPassAttachment, (RenderPassDescriptor{
         .color_attachments = color_attachments[0..],
     }).validateRuntime(.vulkan));
@@ -11410,7 +11287,7 @@ test "runtime render pass descriptor validates msaa resolve targets" {
 
 test "Period 42 runtime depth and stencil resolve targets fail with typed unsupported errors" {
     var tracker = ResourceTracker{};
-    var depth_source = TextureView{
+    var depth_source = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .depth32_float,
@@ -11419,8 +11296,8 @@ test "Period 42 runtime depth and stencil resolve targets fail with typed unsupp
         .width_value = 32,
         .height_value = 32,
         .impl = undefined,
-    };
-    var depth_destination = TextureView{
+    });
+    var depth_destination = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .depth32_float,
@@ -11429,13 +11306,13 @@ test "Period 42 runtime depth and stencil resolve targets fail with typed unsupp
         .width_value = 32,
         .height_value = 32,
         .impl = undefined,
-    };
+    });
     try std.testing.expectError(core.CommandEncodingError.UnsupportedTextureResolve, (RenderPassDepthAttachmentDescriptor{
         .target = .{ .texture_view = &depth_source },
         .resolve_target = &depth_destination,
     }).validateRuntime(.vulkan));
 
-    var stencil_source = TextureView{
+    var stencil_source = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .depth32_float_stencil8,
@@ -11444,8 +11321,8 @@ test "Period 42 runtime depth and stencil resolve targets fail with typed unsupp
         .width_value = 32,
         .height_value = 32,
         .impl = undefined,
-    };
-    var stencil_destination = TextureView{
+    });
+    var stencil_destination = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .depth32_float_stencil8,
@@ -11454,7 +11331,7 @@ test "Period 42 runtime depth and stencil resolve targets fail with typed unsupp
         .width_value = 32,
         .height_value = 32,
         .impl = undefined,
-    };
+    });
     try std.testing.expectError(core.CommandEncodingError.UnsupportedTextureResolve, (RenderPassStencilAttachmentDescriptor{
         .target = .{ .texture_view = &stencil_source },
         .resolve_target = &stencil_destination,
@@ -11463,7 +11340,7 @@ test "Period 42 runtime depth and stencil resolve targets fail with typed unsupp
 
 test "runtime command buffer refuses to present offscreen render passes" {
     var tracker = ResourceTracker{};
-    var color_view = TextureView{
+    var color_view = TextureView.init(.{
         .backend = .vulkan,
         .tracker = &tracker,
         .format_value = .rgba8_unorm,
@@ -11472,12 +11349,12 @@ test "runtime command buffer refuses to present offscreen render passes" {
         .width_value = 32,
         .height_value = 32,
         .impl = undefined,
-    };
+    });
     const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{
         .target = .{ .texture_view = &color_view },
     }};
 
-    var command_buffer = CommandBuffer{ .backend = .vulkan };
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
     var encoder = try command_buffer.makeRenderCommandEncoder(.{
         .color_attachments = color_attachments[0..],
     });
