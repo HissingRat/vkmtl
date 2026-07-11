@@ -1,4 +1,5 @@
 const std = @import("std");
+const shader_depfile = @import("depfile.zig");
 const shader_manifest = @import("manifest.zig");
 
 const max_source_bytes = 4 * 1024 * 1024;
@@ -75,7 +76,7 @@ pub fn main(init: std.process.Init) !void {
     try makeDirPath(output_dir);
     var merged_depfile: std.ArrayList(u8) = .empty;
     defer merged_depfile.deinit(allocator);
-    try merged_depfile.appendSlice(allocator, "vkmtl-precompiled-shaders:\n");
+    try merged_depfile.appendSlice(allocator, "vkmtl-precompiled-shaders:");
 
     var generated_render: std.ArrayList(GeneratedRender) = .empty;
     defer generated_render.deinit(allocator);
@@ -130,6 +131,7 @@ pub fn main(init: std.process.Init) !void {
         generated_compute.items,
         generated_ray_tracing.items,
     );
+    try merged_depfile.append(allocator, '\n');
     try writeFile(output_depfile, merged_depfile.items);
 }
 
@@ -379,8 +381,18 @@ fn mergeSlangDepfile(
     const bytes = try readFile(allocator, depfile_path);
     defer allocator.free(bytes);
     if (bytes.len == 0) return error.EmptySlangDepfile;
-    try merged_depfile.appendSlice(allocator, bytes);
-    if (bytes[bytes.len - 1] != '\n') try merged_depfile.append(allocator, '\n');
+
+    var cwd_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    const cwd_len = try std.process.currentPath(std.Options.debug_io, &cwd_buffer);
+    shader_depfile.appendPrerequisites(
+        allocator,
+        bytes,
+        cwd_buffer[0..cwd_len],
+        merged_depfile,
+    ) catch |err| {
+        std.debug.print("unable to normalize Slang depfile {s}: {t}\n", .{ depfile_path, err });
+        return error.InvalidSlangDepfile;
+    };
 }
 
 fn runProcess(

@@ -741,6 +741,14 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_shader_build_contract_tests = b.addRunArtifact(shader_build_contract_tests);
+    const shader_depfile_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/precompile_shaders/depfile.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+        }),
+    });
+    const run_shader_depfile_tests = b.addRunArtifact(shader_depfile_tests);
 
     const test_step = b.step("test", "Run vkmtl tests");
     test_step.dependOn(&run_unit_tests.step);
@@ -750,6 +758,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_backend_pipeline_tests.step);
     test_step.dependOn(&run_shader_manifest_tests.step);
     test_step.dependOn(&run_shader_build_contract_tests.step);
+    test_step.dependOn(&run_shader_depfile_tests.step);
 }
 
 const SlangTool = struct {
@@ -802,6 +811,8 @@ fn addPrecompiledShaderModule(
 
     const run_generator = b.addRunArtifact(generator);
     run_generator.setName("precompile vkmtl shaders");
+    // Keep the inherited build cwd: the generator normalizes Slang depfile
+    // prerequisites against it, and Run parses the merged depfile from it.
     const generated_dir = run_generator.addOutputDirectoryArg("vkmtl-precompiled-shaders");
     _ = run_generator.addDepFileOutputArg("vkmtl-precompiled-shaders.d");
     run_generator.addArg(shader_tools.slangc);
