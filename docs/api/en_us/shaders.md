@@ -14,6 +14,40 @@ examples/rainbow_cube/shaders/rainbow_cube.slang
 examples/compute_readback/shaders/compute_readback.slang
 ```
 
+## Consumer Shader Manifest
+
+Applications register their own shaders through the vkmtl dependency's
+source-backed `shader_manifest` lazy-path option:
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+});
+```
+
+Schema version 1 has these arrays and fields:
+
+| Array | Required entry fields |
+| --- | --- |
+| `render_shaders` | `name`, `source`, `vertex_entry`, `fragment_entry` |
+| `compute_shaders` | `name`, `source`, `entry` |
+| `ray_tracing_shaders` | `name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`, `miss_entry`, `closest_hit_entry`, `any_hit_entry`, `intersection_entry` |
+
+Each array may be empty. Names are unique across all three arrays and use the
+portable lowercase form `[a-z0-9_.-]+` (`.` and `..` are not names). `source`
+and `metal_ray_generation_source` are relative to the manifest file and must
+stay inside the LazyPath owner's logical root. Schema version 1 does not accept
+a generated manifest because the dependency graph enumerates shader inputs
+during configuration. The build tracks the manifest and every declared source
+as inputs, then consumes Slang depfiles so include/import changes also
+invalidate cached artifacts.
+
+The repository defaults to `shaders/manifest.json` for its own examples. A
+consumer should pass its own manifest so the generated shader module contains
+the application's declarations rather than the repository example set.
+
 Examples embed those `.slang` files and declare the required shaders through
 `Device`. `zig build` precompiles matching SPIR-V, MSL, and reflection JSON
 into the executable. Runtime resolves those embedded blobs directly from
@@ -44,8 +78,19 @@ listed by the current manifest.
 The pinned Slang version and release package hashes live in `build.zig`; the
 download, verification, and extraction commands live under `scripts/`. Auto
 download currently covers macOS, Linux, and Windows packages for supported host
-architectures. If the build host has no pinned package, the build fails; pass an
-explicit build-time compiler path when needed:
+architectures. If a consumer build host has no pinned package, forward the
+compiler path as a dependency option:
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+    .slangc = "/path/to/build-time/slangc",
+});
+```
+
+When building the vkmtl repository directly, the equivalent override is:
 
 ```sh
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc

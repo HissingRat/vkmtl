@@ -31,9 +31,28 @@ closed one by one as vkmtl moves from prototype to library.
 - Period 1 Phase 9 and the staged pre-tag API migration are complete. The
   frozen baseline is 68 root declarations, 34 public `Device` methods, and 10
   public `WindowContext` methods, enforced by `zig build run-api-guard`.
-- The next mainline decision is release review for the first tagged
-  compatibility surface; later feature work must use the canonical facades and
-  public API admission rules.
+- The active mainline work is the `v0.1.0` release review for the first tagged
+  compatibility surface. Later feature work must use the canonical facades and
+  public API admission and release rules.
+
+## v0.1.0 Release Checklist
+
+- [x] Freeze the guarded baseline at 68 root declarations, 34 public `Device`
+  methods, 10 public `WindowContext` methods, and 35 opaque runtime handles.
+- [x] Define the `v0.1.x` portable source compatibility promise and explicit
+  ABI, `_state`, native-handle, capability, and Zig-version non-guarantees.
+- [x] Set package version `0.1.0`, include the changelog in the package, and
+  publish the release policy and changelog.
+- [x] Define the single-module package export and consumer-owned
+  `shader_manifest` contract.
+- [x] Pass the external local-path package smoke with a consumer-owned shader.
+- [x] Pass formatting, API guard, all tests, default and Vulkan builds, and
+  package metadata fetch from a clean release worktree.
+- [ ] Pass hosted macOS, Linux, and Windows CI on the exact release commit.
+- [ ] Record physical Metal and Vulkan evidence against the release commit.
+- [ ] Create the annotated `v0.1.0` tag after all preceding gates pass.
+- [ ] Fetch the tag archive into a fresh external project and repeat the
+  package smoke before publishing the GitHub release.
 
 ## Open Design Decisions
 

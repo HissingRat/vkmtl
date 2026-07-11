@@ -100,12 +100,46 @@ Default `zig build` prepares the pinned Slang distribution under
 listed by the current manifest. Runtime never launches `slangc`, and release
 artifacts do not need to carry a Slang compiler or setup scripts.
 
-Pass an explicit build-time compiler path if the build host has no pinned
-package:
+External applications select a schema-version-1 manifest through the dependency
+option:
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+});
+```
+
+The manifest arrays are `render_shaders`, `compute_shaders`, and
+`ray_tracing_shaders`; their entries declare `name`, relative source paths, and
+the stage-specific entry points. Shader names must be unique lowercase portable
+`[a-z0-9_.-]+` filesystem components. The manifest must be source-backed;
+generated manifests are not supported by schema version 1. Sources stay inside
+the LazyPath owner's logical root. The manifest, every declared source, and
+Slang include/import dependencies from compiler depfiles are tracked build
+inputs.
+
+If the consumer host has no pinned package, forward an explicit build-time
+compiler path in the same dependency options:
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+    .slangc = "/path/to/build-time/slangc",
+});
+```
+
+For a direct checkout build, use the command-line equivalent:
 
 ```sh
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
 ```
+
+The complete schema fields are listed in
+[Shader Authoring](../../api/en_us/shaders.md).
 
 ## Shader Artifacts
 

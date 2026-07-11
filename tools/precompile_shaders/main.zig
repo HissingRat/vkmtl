@@ -1,29 +1,33 @@
 const std = @import("std");
+const shader_manifest = @import("manifest.zig");
 
 const max_source_bytes = 4 * 1024 * 1024;
 
 const RenderSpec = struct {
     name: []const u8,
     source_path: []const u8,
-    vertex_entry: []const u8 = "vs_main",
-    fragment_entry: []const u8 = "fs_main",
+    source_label: []const u8,
+    vertex_entry: []const u8,
+    fragment_entry: []const u8,
 };
 
 const ComputeSpec = struct {
     name: []const u8,
     source_path: []const u8,
-    entry: []const u8 = "cs_main",
+    source_label: []const u8,
+    entry: []const u8,
 };
 
 const RayTracingSpec = struct {
     name: []const u8,
     source_path: []const u8,
-    metal_ray_generation_source_path: ?[]const u8 = null,
-    ray_generation_entry: []const u8 = "raygen",
-    miss_entry: []const u8 = "miss",
-    closest_hit_entry: []const u8 = "closest_hit",
-    any_hit_entry: []const u8 = "any_hit",
-    intersection_entry: []const u8 = "intersection_main",
+    source_label: []const u8,
+    metal_ray_generation_source_path: []const u8,
+    ray_generation_entry: []const u8,
+    miss_entry: []const u8,
+    closest_hit_entry: []const u8,
+    any_hit_entry: []const u8,
+    intersection_entry: []const u8,
 };
 
 const GeneratedRender = struct {
@@ -41,49 +45,6 @@ const GeneratedRayTracing = struct {
     hash: [64]u8,
 };
 
-const render_specs = [_]RenderSpec{
-    .{ .name = "triangle", .source_path = "examples/triangle/shaders/triangle.slang" },
-    .{ .name = "rainbow_cube", .source_path = "examples/rainbow_cube/shaders/rainbow_cube.slang" },
-    .{
-        .name = "msaa_triangle_msaa",
-        .source_path = "examples/msaa_triangle/shaders/msaa_triangle.slang",
-        .vertex_entry = "msaa_vs",
-        .fragment_entry = "msaa_fs",
-    },
-    .{
-        .name = "msaa_triangle_screen",
-        .source_path = "examples/msaa_triangle/shaders/msaa_triangle.slang",
-        .vertex_entry = "screen_vs",
-        .fragment_entry = "screen_fs",
-    },
-    .{
-        .name = "offscreen_texture_offscreen",
-        .source_path = "examples/offscreen_texture/shaders/offscreen_texture.slang",
-        .vertex_entry = "offscreen_vs",
-        .fragment_entry = "offscreen_fs",
-    },
-    .{
-        .name = "offscreen_texture_screen",
-        .source_path = "examples/offscreen_texture/shaders/offscreen_texture.slang",
-        .vertex_entry = "screen_vs",
-        .fragment_entry = "screen_fs",
-    },
-};
-
-const compute_specs = [_]ComputeSpec{
-    .{ .name = "compute_readback", .source_path = "examples/compute_readback/shaders/compute_readback.slang" },
-    .{ .name = "gpu_soak", .source_path = "tools/gpu_soak/shaders/soak.slang" },
-};
-
-const ray_tracing_specs = [_]RayTracingSpec{
-    .{
-        .name = "ray_traced_scene_rt",
-        .source_path = "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
-        .metal_ray_generation_source_path = "examples/ray_traced_scene/shaders/ray_traced_scene_metal.msl",
-        .intersection_entry = "intersect_sphere",
-    },
-};
-
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
@@ -92,31 +53,74 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const output_dir = args.next() orelse {
-        std.debug.print("usage: vkmtl-precompile-shaders <output-dir> <slangc>\n", .{});
+        printUsage();
+        return error.InvalidArguments;
+    };
+    const output_depfile = args.next() orelse {
+        printUsage();
         return error.InvalidArguments;
     };
     const slangc = args.next() orelse {
-        std.debug.print("usage: vkmtl-precompile-shaders <output-dir> <slangc>\n", .{});
+        printUsage();
         return error.InvalidArguments;
     };
+    const manifest_path = args.next() orelse {
+        printUsage();
+        return error.InvalidArguments;
+    };
+    const manifest_bytes = try readFile(allocator, manifest_path);
+    defer allocator.free(manifest_bytes);
+    var parsed_manifest = try shader_manifest.parse(allocator, manifest_bytes);
+    defer parsed_manifest.deinit();
     try makeDirPath(output_dir);
+    var merged_depfile: std.ArrayList(u8) = .empty;
+    defer merged_depfile.deinit(allocator);
+    try merged_depfile.appendSlice(allocator, "vkmtl-precompiled-shaders:\n");
 
     var generated_render: std.ArrayList(GeneratedRender) = .empty;
     defer generated_render.deinit(allocator);
-    for (render_specs) |spec| {
-        try generated_render.append(allocator, try precompileRender(allocator, io, output_dir, slangc, spec));
+    for (parsed_manifest.value.render_shaders) |decl| {
+        const spec = RenderSpec{
+            .name = decl.name,
+            .source_path = args.next() orelse return missingSourceArgument(decl.source),
+            .source_label = decl.source,
+            .vertex_entry = decl.vertex_entry,
+            .fragment_entry = decl.fragment_entry,
+        };
+        try generated_render.append(allocator, try precompileRender(allocator, io, output_dir, slangc, spec, &merged_depfile));
     }
 
     var generated_compute: std.ArrayList(GeneratedCompute) = .empty;
     defer generated_compute.deinit(allocator);
-    for (compute_specs) |spec| {
-        try generated_compute.append(allocator, try precompileCompute(allocator, io, output_dir, slangc, spec));
+    for (parsed_manifest.value.compute_shaders) |decl| {
+        const spec = ComputeSpec{
+            .name = decl.name,
+            .source_path = args.next() orelse return missingSourceArgument(decl.source),
+            .source_label = decl.source,
+            .entry = decl.entry,
+        };
+        try generated_compute.append(allocator, try precompileCompute(allocator, io, output_dir, slangc, spec, &merged_depfile));
     }
 
     var generated_ray_tracing: std.ArrayList(GeneratedRayTracing) = .empty;
     defer generated_ray_tracing.deinit(allocator);
-    for (ray_tracing_specs) |spec| {
-        try generated_ray_tracing.append(allocator, try precompileRayTracing(allocator, io, output_dir, slangc, spec));
+    for (parsed_manifest.value.ray_tracing_shaders) |decl| {
+        const spec = RayTracingSpec{
+            .name = decl.name,
+            .source_path = args.next() orelse return missingSourceArgument(decl.source),
+            .source_label = decl.source,
+            .metal_ray_generation_source_path = args.next() orelse return missingSourceArgument(decl.metal_ray_generation_source),
+            .ray_generation_entry = decl.ray_generation_entry,
+            .miss_entry = decl.miss_entry,
+            .closest_hit_entry = decl.closest_hit_entry,
+            .any_hit_entry = decl.any_hit_entry,
+            .intersection_entry = decl.intersection_entry,
+        };
+        try generated_ray_tracing.append(allocator, try precompileRayTracing(allocator, io, output_dir, slangc, spec, &merged_depfile));
+    }
+    if (args.next() != null) {
+        std.debug.print("shader manifest received more source arguments than it declares\n", .{});
+        return error.InvalidArguments;
     }
 
     try writeGeneratedModule(
@@ -126,6 +130,19 @@ pub fn main(init: std.process.Init) !void {
         generated_compute.items,
         generated_ray_tracing.items,
     );
+    try writeFile(output_depfile, merged_depfile.items);
+}
+
+fn printUsage() void {
+    std.debug.print(
+        "usage: vkmtl-precompile-shaders <output-dir> <depfile> <slangc> <manifest> [manifest-source ...]\n",
+        .{},
+    );
+}
+
+fn missingSourceArgument(source: []const u8) error{InvalidArguments} {
+    std.debug.print("shader manifest source has no build input argument: {s}\n", .{source});
+    return error.InvalidArguments;
 }
 
 fn precompileRender(
@@ -134,8 +151,8 @@ fn precompileRender(
     output_dir: []const u8,
     slangc: []const u8,
     spec: RenderSpec,
+    merged_depfile: *std.ArrayList(u8),
 ) !GeneratedRender {
-    std.debug.print("precompiling slang shader: {s}\n", .{spec.name});
     const source = try readFile(allocator, spec.source_path);
     defer allocator.free(source);
     const hash = sourceHash(source);
@@ -157,15 +174,15 @@ fn precompileRender(
     const frag_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "frag.reflect.json" });
     defer allocator.free(frag_reflect);
 
-    try runSlang(allocator, io, slangc, spec.source_path, .vertex, spec.vertex_entry, .spirv, vert_spv);
-    try runSlang(allocator, io, slangc, spec.source_path, .fragment, spec.fragment_entry, .spirv, frag_spv);
-    try runSlang(allocator, io, slangc, spec.source_path, .vertex, spec.vertex_entry, .msl, vert_msl);
-    try runSlang(allocator, io, slangc, spec.source_path, .fragment, spec.fragment_entry, .msl, frag_msl);
+    try runSlang(allocator, io, slangc, spec.source_path, .vertex, spec.vertex_entry, .spirv, vert_spv, merged_depfile);
+    try runSlang(allocator, io, slangc, spec.source_path, .fragment, spec.fragment_entry, .spirv, frag_spv, merged_depfile);
+    try runSlang(allocator, io, slangc, spec.source_path, .vertex, spec.vertex_entry, .msl, vert_msl, merged_depfile);
+    try runSlang(allocator, io, slangc, spec.source_path, .fragment, spec.fragment_entry, .msl, frag_msl, merged_depfile);
 
-    const vertex_json = try renderStageReflectionJson(allocator, spec.name, spec.source_path, source, .vertex, spec.vertex_entry);
+    const vertex_json = try renderStageReflectionJson(allocator, spec.name, spec.source_label, source, .vertex, spec.vertex_entry);
     defer allocator.free(vertex_json);
     try writeFile(vert_reflect, vertex_json);
-    const fragment_json = try renderStageReflectionJson(allocator, spec.name, spec.source_path, source, .fragment, spec.fragment_entry);
+    const fragment_json = try renderStageReflectionJson(allocator, spec.name, spec.source_label, source, .fragment, spec.fragment_entry);
     defer allocator.free(fragment_json);
     try writeFile(frag_reflect, fragment_json);
 
@@ -178,8 +195,8 @@ fn precompileCompute(
     output_dir: []const u8,
     slangc: []const u8,
     spec: ComputeSpec,
+    merged_depfile: *std.ArrayList(u8),
 ) !GeneratedCompute {
-    std.debug.print("precompiling slang shader: {s}\n", .{spec.name});
     const source = try readFile(allocator, spec.source_path);
     defer allocator.free(source);
     const hash = sourceHash(source);
@@ -195,10 +212,10 @@ fn precompileCompute(
     const reflect = try std.fs.path.join(allocator, &.{ shader_dir, "compute.reflect.json" });
     defer allocator.free(reflect);
 
-    try runSlang(allocator, io, slangc, spec.source_path, .compute, spec.entry, .spirv, spirv);
-    try runSlang(allocator, io, slangc, spec.source_path, .compute, spec.entry, .msl, msl);
+    try runSlang(allocator, io, slangc, spec.source_path, .compute, spec.entry, .spirv, spirv, merged_depfile);
+    try runSlang(allocator, io, slangc, spec.source_path, .compute, spec.entry, .msl, msl, merged_depfile);
 
-    const reflection_json = try renderStageReflectionJson(allocator, spec.name, spec.source_path, source, .compute, spec.entry);
+    const reflection_json = try renderStageReflectionJson(allocator, spec.name, spec.source_label, source, .compute, spec.entry);
     defer allocator.free(reflection_json);
     try writeFile(reflect, reflection_json);
 
@@ -211,8 +228,8 @@ fn precompileRayTracing(
     output_dir: []const u8,
     slangc: []const u8,
     spec: RayTracingSpec,
+    merged_depfile: *std.ArrayList(u8),
 ) !GeneratedRayTracing {
-    std.debug.print("precompiling slang shader: {s}\n", .{spec.name});
     const source = try readFile(allocator, spec.source_path);
     defer allocator.free(source);
     const hash = sourceHash(source);
@@ -244,32 +261,28 @@ fn precompileRayTracing(
     const intersection_reflect = try std.fs.path.join(allocator, &.{ shader_dir, "intersection.reflect.json" });
     defer allocator.free(intersection_reflect);
 
-    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.ray_generation_entry, raygen_spv);
-    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.miss_entry, miss_spv);
-    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.closest_hit_entry, closest_hit_spv);
-    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.any_hit_entry, any_hit_spv);
-    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.intersection_entry, intersection_spv);
-    if (spec.metal_ray_generation_source_path) |metal_source_path| {
-        const metal_source = try readFile(allocator, metal_source_path);
-        defer allocator.free(metal_source);
-        try writeFile(raygen_msl, metal_source);
-    } else {
-        return error.MissingMetalRayGenerationArtifact;
-    }
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.ray_generation_entry, raygen_spv, merged_depfile);
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.miss_entry, miss_spv, merged_depfile);
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.closest_hit_entry, closest_hit_spv, merged_depfile);
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.any_hit_entry, any_hit_spv, merged_depfile);
+    try runRayTracingSlang(allocator, io, slangc, spec.source_path, spec.intersection_entry, intersection_spv, merged_depfile);
+    const metal_source = try readFile(allocator, spec.metal_ray_generation_source_path);
+    defer allocator.free(metal_source);
+    try writeFile(raygen_msl, metal_source);
 
-    const raygen_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "ray_generation", spec.ray_generation_entry);
+    const raygen_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_label, source, "ray_generation", spec.ray_generation_entry);
     defer allocator.free(raygen_json);
     try writeFile(raygen_reflect, raygen_json);
-    const miss_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "miss", spec.miss_entry);
+    const miss_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_label, source, "miss", spec.miss_entry);
     defer allocator.free(miss_json);
     try writeFile(miss_reflect, miss_json);
-    const closest_hit_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "closest_hit", spec.closest_hit_entry);
+    const closest_hit_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_label, source, "closest_hit", spec.closest_hit_entry);
     defer allocator.free(closest_hit_json);
     try writeFile(closest_hit_reflect, closest_hit_json);
-    const any_hit_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "any_hit", spec.any_hit_entry);
+    const any_hit_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_label, source, "any_hit", spec.any_hit_entry);
     defer allocator.free(any_hit_json);
     try writeFile(any_hit_reflect, any_hit_json);
-    const intersection_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_path, source, "intersection", spec.intersection_entry);
+    const intersection_json = try renderRayTracingReflectionJson(allocator, spec.name, spec.source_label, source, "intersection", spec.intersection_entry);
     defer allocator.free(intersection_json);
     try writeFile(intersection_reflect, intersection_json);
 
@@ -296,6 +309,7 @@ fn runSlang(
     entry: []const u8,
     target: Target,
     output_path: []const u8,
+    merged_depfile: *std.ArrayList(u8),
 ) !void {
     const profile = switch (stage) {
         .vertex => "vs_6_0",
@@ -306,6 +320,9 @@ fn runSlang(
         .spirv => "spirv",
         .msl => "metal",
     };
+    const depfile_path = try std.fmt.allocPrint(allocator, "{s}.d", .{output_path});
+    defer allocator.free(depfile_path);
+    defer std.Io.Dir.cwd().deleteFile(std.Options.debug_io, depfile_path) catch {};
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
     try argv.appendSlice(allocator, &.{
@@ -319,8 +336,9 @@ fn runSlang(
         entry,
     });
     if (target == .spirv) try argv.append(allocator, "-fvk-use-entrypoint-name");
-    try argv.appendSlice(allocator, &.{ "-o", output_path });
+    try argv.appendSlice(allocator, &.{ "-depfile", depfile_path, "-o", output_path });
     try runProcess(allocator, io, argv.items, source_path);
+    try mergeSlangDepfile(allocator, depfile_path, merged_depfile);
 }
 
 fn runRayTracingSlang(
@@ -330,7 +348,11 @@ fn runRayTracingSlang(
     source_path: []const u8,
     entry: []const u8,
     output_path: []const u8,
+    merged_depfile: *std.ArrayList(u8),
 ) !void {
+    const depfile_path = try std.fmt.allocPrint(allocator, "{s}.d", .{output_path});
+    defer allocator.free(depfile_path);
+    defer std.Io.Dir.cwd().deleteFile(std.Options.debug_io, depfile_path) catch {};
     try runProcess(allocator, io, &.{
         slangc,
         source_path,
@@ -341,9 +363,24 @@ fn runRayTracingSlang(
         "-entry",
         entry,
         "-fvk-use-entrypoint-name",
+        "-depfile",
+        depfile_path,
         "-o",
         output_path,
     }, source_path);
+    try mergeSlangDepfile(allocator, depfile_path, merged_depfile);
+}
+
+fn mergeSlangDepfile(
+    allocator: std.mem.Allocator,
+    depfile_path: []const u8,
+    merged_depfile: *std.ArrayList(u8),
+) !void {
+    const bytes = try readFile(allocator, depfile_path);
+    defer allocator.free(bytes);
+    if (bytes.len == 0) return error.EmptySlangDepfile;
+    try merged_depfile.appendSlice(allocator, bytes);
+    if (bytes[bytes.len - 1] != '\n') try merged_depfile.append(allocator, '\n');
 }
 
 fn runProcess(

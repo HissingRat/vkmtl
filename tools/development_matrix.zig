@@ -415,8 +415,8 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .macos,
         .backend = .metal,
         .required = true,
-        .command = "zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build && zig build run-validation-plan",
-        .expectation = "hosted Apple path compiles Metal-capable code without claiming physical GPU execution",
+        .command = "zig fmt --check build.zig src examples tools tests/package_consumer && zig build run-api-guard && zig build test --summary all && zig build && zig build run-validation-plan && scripts/ci/run_package_smoke.sh",
+        .expectation = "hosted Apple path compiles Metal-capable code and the external package consumer without claiming physical GPU execution",
     },
     .{
         .name = "macos_moltenvk_forced",
@@ -432,16 +432,16 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .linux,
         .backend = .vulkan,
         .required = true,
-        .command = "zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan",
-        .expectation = "hosted Linux path compiles Vulkan code without claiming a physical GPU smoke run",
+        .command = "zig fmt --check build.zig src examples tools tests/package_consumer && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan && scripts/ci/run_package_smoke.sh",
+        .expectation = "hosted Linux path compiles Vulkan code and the external package consumer without claiming a physical GPU smoke run",
     },
     .{
         .name = "windows_vulkan",
         .host = .windows,
         .backend = .vulkan,
         .required = true,
-        .command = "zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan",
-        .expectation = "hosted Windows path compiles Vulkan code without claiming a physical GPU smoke run",
+        .command = "zig fmt --check build.zig src examples tools tests/package_consumer && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan && scripts/ci/run_package_smoke.sh",
+        .expectation = "hosted Windows path compiles Vulkan code and the external package consumer without claiming a physical GPU smoke run",
     },
     .{
         .name = "ios_metal_optional",
@@ -618,7 +618,7 @@ pub const period44_jobs = [_]Period44Job{
         .expected_outcome = .build_only,
         .evidence = .configured_automated,
         .required_for_release = true,
-        .command = "zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools tests/package_consumer && zig build run-api-guard && zig build test --summary all && zig build && zig build run-validation-plan && scripts/ci/run_package_smoke.sh",
     },
     .{
         .name = "hosted_linux_build",
@@ -631,7 +631,7 @@ pub const period44_jobs = [_]Period44Job{
         .expected_outcome = .build_only,
         .evidence = .configured_automated,
         .required_for_release = true,
-        .command = "zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools tests/package_consumer && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan && scripts/ci/run_package_smoke.sh",
     },
     .{
         .name = "hosted_windows_build",
@@ -644,7 +644,7 @@ pub const period44_jobs = [_]Period44Job{
         .expected_outcome = .build_only,
         .evidence = .configured_automated,
         .required_for_release = true,
-        .command = "zig fmt --check build.zig src examples tools && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan",
+        .command = "zig fmt --check build.zig src examples tools tests/package_consumer && zig build run-api-guard && zig build test --summary all && zig build -Dvulkan && zig build run-validation-plan && scripts/ci/run_package_smoke.sh",
     },
     .{
         .name = "self_hosted_metal_smoke",
@@ -1916,6 +1916,7 @@ test "native interop gallery keeps explicit feature gates" {
 test "backend test matrix metadata is valid" {
     try validateBackendTestMatrix(backend_test_matrix[0..]);
     var configured_optional: usize = 0;
+    var hosted_package_smokes: usize = 0;
     var has_sync_query_regression = false;
     var has_resource_utility_regression = false;
     var has_platform_interop_regression = false;
@@ -1925,6 +1926,12 @@ test "backend test matrix metadata is valid" {
     var has_ray_tracing_native_parity_regression = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
+        if ((entry.host == .macos or entry.host == .linux or entry.host == .windows) and
+            entry.required and
+            std.mem.indexOf(u8, entry.command, "scripts/ci/run_package_smoke.sh") != null)
+        {
+            hosted_package_smokes += 1;
+        }
         if (std.mem.eql(u8, entry.name, "sync_query_regression")) has_sync_query_regression = true;
         if (std.mem.eql(u8, entry.name, "resource_utility_regression")) has_resource_utility_regression = true;
         if (std.mem.eql(u8, entry.name, "platform_interop_regression")) has_platform_interop_regression = true;
@@ -1934,6 +1941,7 @@ test "backend test matrix metadata is valid" {
         if (std.mem.eql(u8, entry.name, "ray_tracing_native_parity_regression")) has_ray_tracing_native_parity_regression = true;
     }
     try std.testing.expect(configured_optional >= 1);
+    try std.testing.expectEqual(@as(usize, 3), hosted_package_smokes);
     try std.testing.expect(has_sync_query_regression);
     try std.testing.expect(has_resource_utility_regression);
     try std.testing.expect(has_platform_interop_regression);
@@ -1947,6 +1955,7 @@ test "Period 44 validation jobs separate hosted builds from physical GPU evidenc
     try validatePeriod44Jobs(period44_jobs[0..]);
 
     var hosted_jobs: usize = 0;
+    var hosted_package_smokes: usize = 0;
     var physical_metal = false;
     var physical_vulkan = false;
     var release_gpu_jobs: usize = 0;
@@ -1955,6 +1964,9 @@ test "Period 44 validation jobs separate hosted builds from physical GPU evidenc
             hosted_jobs += 1;
             try std.testing.expectEqual(ValidationDeviceClass.none, entry.device_class);
             try std.testing.expectEqual(ValidationExpectedOutcome.build_only, entry.expected_outcome);
+            if (std.mem.indexOf(u8, entry.command, "scripts/ci/run_package_smoke.sh") != null) {
+                hosted_package_smokes += 1;
+            }
         }
         if (entry.execution == .self_hosted_gpu) {
             try std.testing.expect(entry.attach_capability_dump);
@@ -1965,6 +1977,7 @@ test "Period 44 validation jobs separate hosted builds from physical GPU evidenc
     }
 
     try std.testing.expectEqual(@as(usize, 3), hosted_jobs);
+    try std.testing.expectEqual(hosted_jobs, hosted_package_smokes);
     try std.testing.expect(physical_metal);
     try std.testing.expect(physical_vulkan);
     try std.testing.expect(release_gpu_jobs >= 4);

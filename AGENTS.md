@@ -41,6 +41,14 @@ public surface changes. `docs/develop/api-migration-guide.md` records the
 intentional Phase 9 break and is the compatibility reference for callers
 updating from the prototype surface.
 
+`docs/develop/release-policy.md` defines the versioned compatibility promise.
+For `v0.1.x`, preserve the documented portable Zig source API; intentional
+portable source breaks require `v0.2.0` or later, changelog coverage, and
+migration guidance. Do not treat opaque `_state` layout, binary ABI, raw native
+handles, or backend-native escape hatches as stable API. Capability-gated work
+is supported only when the selected device reports it and the path is
+documented as executable.
+
 In particular:
 
 - Do not add advanced declarations to the flat root merely because existing
@@ -57,6 +65,11 @@ In particular:
   `WindowContext` allowlists. Any intentional change to those sets must update
   the allocation decision, inventory, compatibility guidance when applicable,
   and guard allowlist in the same change.
+- The package exports only the `vkmtl` module. Keep example support modules and
+  repository tooling private to the repository build.
+- Consumer shaders are registered through the versioned `shader_manifest`
+  dependency option. Preserve its relative-source-path and build-input
+  contract when changing shader tooling.
 
 ## Intended Module Boundaries
 
@@ -136,9 +149,23 @@ with known release packages and precompiles known embedded shader declarations
 into a generated `vkmtl_precompiled_shaders` module. Runtime shader APIs do not
 spawn `slangc`, do not require `slangc` beside the executable, and must report a
 typed missing-precompiled-shader error when no matching name/entry/source hash
-blob exists. Unknown build hosts must use an explicit build-time
-`-Dslangc=/path/to/build-time/slangc` override. Runtime shader APIs must consume
-embedded precompiled blobs directly from memory and must not create
+blob exists. Consumers register shaders with the source-backed
+`shader_manifest` `std.Build.LazyPath` dependency option. Generated manifests
+are not supported by schema version 1 because shader inputs are enumerated
+while constructing the dependency build graph. Schema version 1 has
+`render_shaders`, `compute_shaders`, and `ray_tracing_shaders` arrays. Render
+entries declare `name`, `source`, `vertex_entry`, and `fragment_entry`; compute
+entries declare `name`, `source`, and `entry`; ray-tracing entries declare
+`name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`,
+`miss_entry`, `closest_hit_entry`, `any_hit_entry`, and `intersection_entry`.
+Source paths are relative to the manifest and must stay inside the LazyPath
+owner's logical root. Names are unique lowercase portable `[a-z0-9_.-]+`
+filesystem components. The manifest, every declared source, and Slang
+include/import dependencies reported through depfiles must remain tracked build
+inputs. Unknown consumer build hosts must forward
+`.slangc = "/path/to/build-time/slangc"` as a dependency option;
+`-Dslangc=...` is the direct-repository equivalent. Runtime shader APIs must
+consume embedded precompiled blobs directly from memory and must not create
 `vkmtl-cache`, parse `--cache-dir`, or write SPIR-V/MSL/reflection JSON beside
 the executable. Build-time artifact copies for inspection belong under
 `zig-out/shaders/<shader-name>/`.
@@ -163,7 +190,7 @@ item is a design decision, make the decision explicit in docs before
 implementing code that depends on it.
 
 Before changing public API during a phase, also read and apply
-`docs/develop/public-api-rules.md`.
+`docs/develop/public-api-rules.md` and `docs/develop/release-policy.md`.
 
 Current priority follows the active phase in `docs/develop/checklist.md`. Keep
 work in small vertical slices and do not jump to broad engine features before

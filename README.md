@@ -1,8 +1,9 @@
 # vkmtl
 
-`vkmtl` is an experimental Zig graphics library that will choose the best native
-graphics backend for the current platform and expose one small abstraction layer
-to applications.
+`vkmtl` is an experimental Zig graphics library that chooses the best native
+graphics backend for the current platform and exposes one small abstraction
+layer to applications. Version `0.1.0` establishes the first portable source
+compatibility baseline.
 
 The intended default backend selection is:
 
@@ -24,6 +25,9 @@ hatches.
 ## Documentation
 
 - [Docs index](docs/README.md): map of the documentation set.
+- [Release policy](docs/develop/release-policy.md): `v0.1.x` compatibility,
+  package, toolchain, capability, and release-gate contract.
+- [Changelog](CHANGELOG.md): user-visible release history.
 - [Roadmap](docs/develop/roadmap.md): route and stage boundaries.
 - [Checklist](docs/develop/checklist.md): checkable implementation and polish
   tasks.
@@ -51,6 +55,41 @@ hatches.
   API validation setup in English.
 - [Current parity report](docs/develop/period44/parity-report.md): observed,
   configured, and missing backend/device evidence.
+
+## Package And Compatibility
+
+`v0.1.x` preserves the documented portable Zig source API. Intentional
+portable source breaks require `v0.2.0` or later and migration guidance. This
+promise does not include a stable binary ABI, the layout of opaque `_state`
+storage, raw native-handle values, or backend-native escape hatches. The
+supported toolchain for this line is Zig `0.16.0`.
+
+The package exports one supported module named `vkmtl`. Applications that use
+runtime shader declarations provide a consumer-owned build-time shader
+manifest:
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+});
+
+exe.root_module.addImport("vkmtl", vkmtl_dep.module("vkmtl"));
+```
+
+The schema-version-1 manifest has `render_shaders`, `compute_shaders`, and
+`ray_tracing_shaders` arrays. It must be a source-backed LazyPath; shader source
+paths are relative to it and stay inside its logical package root. The
+dependency tracks those sources plus Slang include/import depfiles and embeds
+their SPIR-V, MSL, and reflection blobs; runtime code does not launch `slangc`
+or write a shader cache. See the
+[compatibility notes](docs/usage/en_us/compatibility.md) for the manifest
+contract.
+
+Feature availability remains capability-driven: query the selected device
+rather than inferring support from its platform. Planning-only or
+typed-unsupported paths are not executable feature claims.
 
 ## Examples
 

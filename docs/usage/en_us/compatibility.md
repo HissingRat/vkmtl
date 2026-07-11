@@ -3,6 +3,82 @@
 vkmtl targets portable Vulkan and Metal workflows first, with advanced features
 behind explicit capability gates.
 
+## v0.1.x Source Compatibility
+
+`v0.1.0` establishes the first compatibility baseline. Patch releases in the
+`v0.1.x` line preserve the documented portable Zig source API, including
+canonical declarations, documented owner methods and descriptor defaults,
+typed error categories, ownership/lifetime rules, and supported capability
+meanings. An intentional portable source break requires `v0.2.0` or later and
+migration guidance.
+
+This is not a stable binary ABI. Applications must not depend on the size,
+alignment, or contents of opaque `_state` storage, raw native-handle values, or
+the stability of backend-native escape hatches. The supported toolchain for
+`v0.1.x` is Zig `0.16.0`.
+
+See the authoritative [release policy](../../develop/release-policy.md) and the
+[prototype migration guide](../../develop/api-migration-guide.md).
+
+## Package And Shader Manifest
+
+The package exports one supported module named `vkmtl`. Repository example
+support code and tools are private to the repository build.
+
+Applications that declare shaders pass a consumer-owned, source-backed
+`shader_manifest` dependency option as a `std.Build.LazyPath`:
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+});
+
+exe.root_module.addImport("vkmtl", vkmtl_dep.module("vkmtl"));
+```
+
+The JSON manifest uses schema version 1 and contains three arrays:
+
+```json
+{
+  "schema_version": 1,
+  "render_shaders": [
+    {
+      "name": "triangle",
+      "source": "triangle.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
+    }
+  ],
+  "compute_shaders": [
+    {
+      "name": "particles",
+      "source": "particles.slang",
+      "entry": "cs_main"
+    }
+  ],
+  "ray_tracing_shaders": []
+}
+```
+
+Render entries contain `name`, `source`, `vertex_entry`, and
+`fragment_entry`. Compute entries contain `name`, `source`, and `entry`.
+Ray-tracing entries contain `name`, `source`,
+`metal_ray_generation_source`, `ray_generation_entry`, `miss_entry`,
+`closest_hit_entry`, `any_hit_entry`, and `intersection_entry`. Source paths,
+including `metal_ray_generation_source`, are relative to the manifest file and
+must remain inside the LazyPath owner's logical root. Generated manifests are
+not supported by schema version 1 because shader inputs are enumerated while
+constructing the dependency graph.
+
+The build tracks the manifest and all declared shader sources, consumes Slang
+depfiles for include/import dependencies, generates SPIR-V, MSL, and reflection
+blobs, and embeds them in the consumer's `vkmtl` module. Runtime shader APIs
+never launch `slangc` and never write a runtime shader cache. The repository
+default `shaders/manifest.json` serves its own examples; external applications
+should provide their own manifest.
+
 ## Current Backend Expectations
 
 | Platform | Preferred Backend | Notes |
@@ -17,7 +93,8 @@ behind explicit capability gates.
 
 Use `device.features()`, `device.limits()`, and `device.getFormatCaps(...)`
 instead of platform assumptions. Unsupported optional behavior should fail with
-typed errors rather than silently changing semantics.
+typed errors rather than silently changing semantics. A planning-only record
+or typed-unsupported path is not an executable feature claim.
 
 ## Sync And Query Defaults
 

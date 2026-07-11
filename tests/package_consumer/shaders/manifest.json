@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "render_shaders": [
+    {
+      "name": "package_consumer_render",
+      "source": "simple_render.slang",
+      "vertex_entry": "consumer_vs",
+      "fragment_entry": "consumer_fs"
+    }
+  ],
+  "compute_shaders": [],
+  "ray_tracing_shaders": []
+}

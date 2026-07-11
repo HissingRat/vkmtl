@@ -11,11 +11,30 @@
 const vkmtl_dep = b.dependency("vkmtl", .{
     .target = target,
     .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
 });
 const vkmtl = vkmtl_dep.module("vkmtl");
 
 exe.root_module.addImport("vkmtl", vkmtl);
 ```
+
+`shader_manifest` 是 consumer 自己拥有的 source-backed `std.Build.LazyPath`。
+Schema version 1 不支持 generated manifest。Schema version 1 包含
+`render_shaders`、`compute_shaders`、`ray_tracing_shaders` 三个 array。Render entry 使用
+`name`、`source`、`vertex_entry`、`fragment_entry`；compute entry 使用 `name`、`source`、
+`entry`；ray-tracing entry 使用 `name`、`source`、`metal_ray_generation_source`、
+`ray_generation_entry`、`miss_entry`、`closest_hit_entry`、`any_hit_entry`、
+`intersection_entry`。Source path 相对于 manifest，不能越出 LazyPath owner root；
+Slang include/import dependency 通过 depfile 追踪。Shader name 必须全局唯一，并使用
+lowercase portable `[a-z0-9_.-]+`。
+
+未知 build host 还需要把构建期 compiler 作为 dependency option 转发：
+
+```zig
+.slangc = "/path/to/build-time/slangc",
+```
+
+完整字段见 [Shader 编写](../../api/zh_cn/shaders.md)。
 
 vkmtl 不负责创建窗口。应用应该使用自己的 windowing package，然后把
 `SurfaceDescriptor` 和 `PresentationDescriptor` 传给 vkmtl。仓库示例使用 `zig_glfw`，

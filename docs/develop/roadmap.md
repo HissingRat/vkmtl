@@ -12,6 +12,9 @@ Use these companion documents for the other views:
   owner-method pressure, canonical namespaces, and compatibility candidates.
 - `docs/develop/api-migration-roadmap.md` records the completed staged pre-tag
   API migration and its exit gates.
+- `docs/develop/release-policy.md` defines versioned compatibility and release
+  gates.
+- `docs/develop/release-review-v0.1.0.md` tracks the active first-tag review.
 - `docs/develop/backend-completion-roadmap.md` tracks native Vulkan / Metal
   backend catch-up work after API shapes exist.
 - `docs/api/zh_cn/core.md` and `docs/api/en_us/core.md` describe the public API.
@@ -840,6 +843,28 @@ documented backend/device matrix.
 
 See `docs/develop/period44/`.
 
+## v0.1.0 Compatibility Release
+
+Status: in progress. Package metadata, compatibility policy, external package
+smoke, and local validation are complete; exact-commit CI/device evidence, tag,
+and archive gates remain open until their results are recorded.
+
+Goal: publish the completed Phase 9 API migration as the first tagged portable
+source compatibility baseline.
+
+- Preserve the documented portable Zig source API throughout `v0.1.x`.
+- Reserve intentional portable source breaks for `v0.2.0` or later.
+- Keep binary ABI, opaque `_state` layout, raw native handles, and
+  backend-native escape hatches outside the stability promise.
+- Test the release line with Zig `0.16.0`.
+- Export only the `vkmtl` package module and validate a consumer-owned
+  `shader_manifest` from an external project.
+- Treat capabilities as supported only when the selected device reports them
+  and the documentation identifies the path as executable.
+
+See `docs/develop/release-review-v0.1.0.md` and
+`docs/develop/release-policy.md`.
+
 ## Period 32+: Full Parity And Production Coverage
 
 Status: long-tail target. Period 33 through Period 44 split the broad target
@@ -855,8 +880,8 @@ See `docs/develop/period32+/target.md`.
 
 - Period 1 Phase 9 staged API migration is complete. The frozen baseline is 68
   root declarations, 34 public `Device` methods, and 10 public
-  `WindowContext` methods; the next decision is review of the first tagged
-  compatibility release.
+  `WindowContext` methods. The `v0.1.0` exact-commit release review is now the
+  active gate before later feature work resumes.
 - Periods 42 through 44 and all nine Period 44 release-evidence gates are
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.

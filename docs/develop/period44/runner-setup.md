@@ -98,7 +98,9 @@ scripts/ci/run_gpu_smoke.sh vulkan artifacts/moltenvk-smoke
 ## Artifact Review
 
 Do not mark a readiness flag from a queued job or workflow configuration. Check
-that the artifact contains host identity, capability dump, workload log, and a
-passed status file. Preserve the commit SHA and, for workflow-produced
-evidence, the workflow URL. For reviewed local evidence, preserve the OS, GPU,
-driver, and graphics API/runtime versions when updating `parity-report.md`.
+that the artifact contains `host.txt`, capability dump, workload log, and a
+passed status file. For release evidence, `host.txt` must report the full
+release commit in `git_commit` and `git_worktree=clean`; do not accept an older
+commit or dirty worktree. Preserve the workflow URL for workflow-produced
+evidence. For reviewed local evidence, preserve the OS, GPU, driver, and
+graphics API/runtime versions when updating `parity-report.md`.

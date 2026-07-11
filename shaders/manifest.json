@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "render_shaders": [
+    {
+      "name": "triangle",
+      "source": "../examples/triangle/shaders/triangle.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
+    },
+    {
+      "name": "rainbow_cube",
+      "source": "../examples/rainbow_cube/shaders/rainbow_cube.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
+    },
+    {
+      "name": "msaa_triangle_msaa",
+      "source": "../examples/msaa_triangle/shaders/msaa_triangle.slang",
+      "vertex_entry": "msaa_vs",
+      "fragment_entry": "msaa_fs"
+    },
+    {
+      "name": "msaa_triangle_screen",
+      "source": "../examples/msaa_triangle/shaders/msaa_triangle.slang",
+      "vertex_entry": "screen_vs",
+      "fragment_entry": "screen_fs"
+    },
+    {
+      "name": "offscreen_texture_offscreen",
+      "source": "../examples/offscreen_texture/shaders/offscreen_texture.slang",
+      "vertex_entry": "offscreen_vs",
+      "fragment_entry": "offscreen_fs"
+    },
+    {
+      "name": "offscreen_texture_screen",
+      "source": "../examples/offscreen_texture/shaders/offscreen_texture.slang",
+      "vertex_entry": "screen_vs",
+      "fragment_entry": "screen_fs"
+    }
+  ],
+  "compute_shaders": [
+    {
+      "name": "compute_readback",
+      "source": "../examples/compute_readback/shaders/compute_readback.slang",
+      "entry": "cs_main"
+    },
+    {
+      "name": "gpu_soak",
+      "source": "../tools/gpu_soak/shaders/soak.slang",
+      "entry": "cs_main"
+    }
+  ],
+  "ray_tracing_shaders": [
+    {
+      "name": "ray_traced_scene_rt",
+      "source": "../examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
+      "metal_ray_generation_source": "../examples/ray_traced_scene/shaders/ray_traced_scene_metal.msl",
+      "ray_generation_entry": "raygen",
+      "miss_entry": "miss",
+      "closest_hit_entry": "closest_hit",
+      "any_hit_entry": "any_hit",
+      "intersection_entry": "intersect_sphere"
+    }
+  ]
+}

@@ -34,6 +34,10 @@ vkmtl documentation is organized by audience and purpose.
 
 ## Development
 
+- `develop/release-policy.md`: release versioning, compatibility, package,
+  toolchain, capability, and release-gate contract
+- `develop/release-review-v0.1.0.md`: live checklist for the first tagged
+  compatibility release
 - `develop/public-api-rules.md`: authoritative public API evolution,
   namespacing, compatibility, and removal rules
 - `develop/public-api-inventory.md`: current root export, owner method,
@@ -70,6 +74,13 @@ vkmtl documentation is organized by audience and purpose.
   current parity report
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
+
+## Releases
+
+- `../CHANGELOG.md`: user-facing release history and migration-impact summary
+- `develop/api-migration-guide.md`: prototype-to-`v0.1.0` source migration
+- `usage/en_us/compatibility.md`: English package and compatibility contract
+- `usage/zh_cn/compatibility.md`: 中文 package 与兼容性契约
 
 The usage and API documents are the current user-facing source of truth. The
 period notes preserve development context and may describe temporary states from

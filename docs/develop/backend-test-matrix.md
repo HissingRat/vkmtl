@@ -4,12 +4,13 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 
 ## Required Rows
 
-- `hosted_macos_build`: formatting, tests, build, and validation plan on
-  `macos-15`; build-only evidence, not GPU proof.
-- `hosted_linux_build`: formatting, tests, forced-Vulkan build, and validation
-  plan on `ubuntu-24.04`; build-only evidence.
-- `hosted_windows_build`: formatting, tests, forced-Vulkan build, and validation
-  plan on `windows-2025`; build-only evidence.
+- `hosted_macos_build`: formatting, tests, build, validation plan, and external
+  package consumer smoke on `macos-15`; build-only evidence, not GPU proof.
+- `hosted_linux_build`: formatting, tests, forced-Vulkan build, validation plan,
+  and external package consumer smoke on `ubuntu-24.04`; build-only evidence.
+- `hosted_windows_build`: formatting, tests, forced-Vulkan build, validation
+  plan, and external package consumer smoke on `windows-2025`; build-only
+  evidence.
 - `self_hosted_metal_smoke`: `scripts/ci/run_gpu_smoke.sh metal ...` on a
   physical Apple Silicon host labeled `vkmtl-metal`.
 - `self_hosted_vulkan_smoke`: `scripts/ci/run_gpu_smoke.sh vulkan ...` on a
@@ -29,6 +30,12 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
 - `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, and Period 29 routing.
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-scene`
+
+The hosted package smoke runs `scripts/ci/run_package_smoke.sh`. Its independent
+Zig 0.16 package uses a local `../..` dependency, passes a consumer-owned Slang
+manifest through the `shader_manifest` dependency option, compiles that shader,
+and checks canonical API declarations without creating a device or requiring a
+GPU.
 
 ## Optional Rows
 
@@ -56,10 +63,13 @@ default release target.
 `.github/workflows/gpu-validation.yml` is manual and uses labeled self-hosted
 physical GPU runners. Hosted runner compilation never upgrades a GPU gate.
 
-Every physical smoke and soak bundle contains `capability-dump.txt` before the
-workload log. Failures trigger a second failure capability dump when possible.
-`zig build run-release-readiness` only marks a gate observed when the caller
-provides the corresponding evidence flag; its default result is not ready.
+Every physical smoke and soak bundle contains `host.txt` with the full Git
+commit, worktree state, toolchain, and host identity plus `capability-dump.txt`
+before the workload log. Release evidence must report the exact release commit
+and a clean worktree. Failures trigger a second failure capability dump when
+possible. `zig build run-release-readiness` only marks a gate observed when the
+caller provides the corresponding evidence flag; its default result is not
+ready.
 
 The current report is `docs/develop/period44/parity-report.md`.
 

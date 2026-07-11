@@ -1,5 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const shader_build_contract = @import("tools/precompile_shaders/build_contract.zig");
+const shader_manifest = @import("tools/precompile_shaders/manifest.zig");
 
 const slang_version = "2026.12.2";
 const slang_tag = "v2026.12.2";
@@ -15,17 +17,6 @@ const SlangPackage = struct {
 const VulkanRuntimeOptions = struct {
     loader_dir: ?[]const u8,
     icd: ?[]const u8,
-};
-
-const shader_source_paths = [_][]const u8{
-    "examples/triangle/shaders/triangle.slang",
-    "examples/rainbow_cube/shaders/rainbow_cube.slang",
-    "examples/msaa_triangle/shaders/msaa_triangle.slang",
-    "examples/offscreen_texture/shaders/offscreen_texture.slang",
-    "examples/compute_readback/shaders/compute_readback.slang",
-    "tools/gpu_soak/shaders/soak.slang",
-    "examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",
-    "examples/ray_traced_scene/shaders/ray_traced_scene_metal.msl",
 };
 
 const slang_packages = [_]SlangPackage{
@@ -70,13 +61,16 @@ const slang_packages = [_]SlangPackage{
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const manifest_path = b.option(
+        std.Build.LazyPath,
+        "shader_manifest",
+        "Path to a shader manifest whose source paths are relative to the manifest",
+    ) orelse b.path("shaders/manifest.json");
+    requireValidShaderManifestPath(b, manifest_path);
+    const manifest = loadShaderManifest(b, manifest_path);
     const shader_tools = resolveSlangTool(b, b.option([]const u8, "slangc", "Path to a build-time Slang compiler executable"), b.graph.host.result);
-    const precompiled_shaders = addPrecompiledShaderModule(b, shader_tools, target, optimize);
+    const precompiled_shaders = addPrecompiledShaderModule(b, shader_tools, manifest_path, manifest, target, optimize);
     const force_vulkan = b.option(bool, "vulkan", "Force WindowContext to use the Vulkan backend") orelse false;
-    const vulkan_runtime = VulkanRuntimeOptions{
-        .loader_dir = b.option([]const u8, "vulkan-loader-dir", "Directory containing the macOS Vulkan loader dylib for forced Vulkan example runs"),
-        .icd = b.option([]const u8, "vulkan-icd", "Path to the macOS MoltenVK ICD JSON for forced Vulkan example runs"),
-    };
     const vkmtl_build_options = b.addOptions();
     vkmtl_build_options.addOption(bool, "force_vulkan", force_vulkan);
 
@@ -85,18 +79,6 @@ pub fn build(b: *std.Build) void {
     const vulkan = b.dependency("vulkan", .{
         .registry = registry,
     }).module("vulkan-zig");
-
-    const zig_glfw_dep = b.dependency("zig_glfw", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const zig_glfw = zig_glfw_dep.module("zig_glfw");
-    const glfw = zig_glfw_dep.artifact("glfw");
-    if (target.result.os.tag == .linux) {
-        // GLFW's CMake build defines this because -std=c99 otherwise hides
-        // the POSIX interfaces used by its Linux platform sources.
-        glfw.root_module.addCMacro("_DEFAULT_SOURCE", "1");
-    }
 
     const metal_bridge = b.addTranslateC(.{
         .root_source_file = b.path("src/backend/metal/bridge.h"),
@@ -117,7 +99,27 @@ pub fn build(b: *std.Build) void {
     });
     addMetalBridge(b, vkmtl, target.result.os.tag);
 
-    const vkmtl_examples_common = b.addModule("vkmtl_examples_common", .{
+    // Dependency builds export only the vkmtl module. Repository examples,
+    // probes, and development tools stay out of consumer build graphs.
+    if (b.pkg_hash.len != 0) return;
+
+    const vulkan_runtime = VulkanRuntimeOptions{
+        .loader_dir = b.option([]const u8, "vulkan-loader-dir", "Directory containing the macOS Vulkan loader dylib for forced Vulkan example runs"),
+        .icd = b.option([]const u8, "vulkan-icd", "Path to the macOS MoltenVK ICD JSON for forced Vulkan example runs"),
+    };
+    const zig_glfw_dep = b.lazyDependency("zig_glfw", .{
+        .target = target,
+        .optimize = optimize,
+    }) orelse return;
+    const zig_glfw = zig_glfw_dep.module("zig_glfw");
+    const glfw = zig_glfw_dep.artifact("glfw");
+    if (target.result.os.tag == .linux) {
+        // GLFW's CMake build defines this because -std=c99 otherwise hides
+        // the POSIX interfaces used by its Linux platform sources.
+        glfw.root_module.addCMacro("_DEFAULT_SOURCE", "1");
+    }
+
+    const vkmtl_examples_common = b.createModule(.{
         .root_source_file = b.path("examples/common.zig"),
         .target = target,
         .optimize = optimize,
@@ -723,12 +725,31 @@ pub fn build(b: *std.Build) void {
     addMetalBridge(b, backend_pipeline_tests.root_module, target.result.os.tag);
     const run_backend_pipeline_tests = b.addRunArtifact(backend_pipeline_tests);
 
+    const shader_manifest_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/precompile_shaders/manifest.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+        }),
+    });
+    const run_shader_manifest_tests = b.addRunArtifact(shader_manifest_tests);
+    const shader_build_contract_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/precompile_shaders/build_contract.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+        }),
+    });
+    const run_shader_build_contract_tests = b.addRunArtifact(shader_build_contract_tests);
+
     const test_step = b.step("test", "Run vkmtl tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_root_tests.step);
     test_step.dependOn(&run_development_matrix_tests.step);
     test_step.dependOn(&run_api_guard_tests.step);
     test_step.dependOn(&run_backend_pipeline_tests.step);
+    test_step.dependOn(&run_shader_manifest_tests.step);
+    test_step.dependOn(&run_shader_build_contract_tests.step);
 }
 
 const SlangTool = struct {
@@ -765,6 +786,8 @@ fn resolveSlangTool(b: *std.Build, explicit_slangc: ?[]const u8, target: std.Tar
 fn addPrecompiledShaderModule(
     b: *std.Build,
     shader_tools: SlangTool,
+    manifest_path: std.Build.LazyPath,
+    manifest: shader_manifest.Manifest,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) *std.Build.Module {
@@ -780,26 +803,77 @@ fn addPrecompiledShaderModule(
     const run_generator = b.addRunArtifact(generator);
     run_generator.setName("precompile vkmtl shaders");
     const generated_dir = run_generator.addOutputDirectoryArg("vkmtl-precompiled-shaders");
+    _ = run_generator.addDepFileOutputArg("vkmtl-precompiled-shaders.d");
     run_generator.addArg(shader_tools.slangc);
-    run_generator.setCwd(b.path("."));
+    run_generator.addFileArg(manifest_path);
     if (shader_tools.setup_step) |setup_step| {
         run_generator.step.dependOn(setup_step);
     }
-    for (shader_source_paths) |path| {
-        run_generator.addFileArg(b.path(path));
+    const manifest_dir = manifest_path.dirname();
+    for (manifest.render_shaders) |shader| {
+        requireValidShaderSourcePath(b, manifest_path, shader.source);
+        run_generator.addFileArg(manifest_dir.path(b, shader.source));
     }
-    b.installDirectory(.{
-        .source_dir = generated_dir,
-        .install_dir = .prefix,
-        .install_subdir = "shaders",
-        .include_extensions = &.{ ".spv", ".msl", ".json" },
-    });
+    for (manifest.compute_shaders) |shader| {
+        requireValidShaderSourcePath(b, manifest_path, shader.source);
+        run_generator.addFileArg(manifest_dir.path(b, shader.source));
+    }
+    for (manifest.ray_tracing_shaders) |shader| {
+        requireValidShaderSourcePath(b, manifest_path, shader.source);
+        requireValidShaderSourcePath(b, manifest_path, shader.metal_ray_generation_source);
+        run_generator.addFileArg(manifest_dir.path(b, shader.source));
+        run_generator.addFileArg(manifest_dir.path(b, shader.metal_ray_generation_source));
+    }
+    if (b.pkg_hash.len == 0) {
+        b.installDirectory(.{
+            .source_dir = generated_dir,
+            .install_dir = .prefix,
+            .install_subdir = "shaders",
+            .include_extensions = &.{ ".spv", ".msl", ".json" },
+        });
+    }
 
     return b.createModule(.{
         .root_source_file = generated_dir.path(b, "precompiled_shaders.zig"),
         .target = target,
         .optimize = optimize,
     });
+}
+
+fn requireValidShaderManifestPath(b: *std.Build, manifest_path: std.Build.LazyPath) void {
+    shader_build_contract.validateManifestPath(b.allocator, manifest_path) catch |err| {
+        std.log.err("invalid shader manifest path {s}: {t}", .{ manifest_path.getDisplayName(), err });
+        @panic("invalid shader manifest path");
+    };
+}
+
+fn requireValidShaderSourcePath(
+    b: *std.Build,
+    manifest_path: std.Build.LazyPath,
+    source: []const u8,
+) void {
+    shader_build_contract.validateSourcePath(b.allocator, manifest_path, source) catch |err| {
+        std.log.err("shader source path {s} is outside the manifest logical root: {t}", .{ source, err });
+        @panic("invalid shader source path");
+    };
+}
+
+fn loadShaderManifest(b: *std.Build, manifest_path: std.Build.LazyPath) shader_manifest.Manifest {
+    const path = manifest_path.getPath3(b, null);
+    const bytes = path.root_dir.handle.readFileAlloc(
+        b.graph.io,
+        path.sub_path,
+        b.allocator,
+        .limited(1024 * 1024),
+    ) catch |err| {
+        std.log.err("unable to read shader manifest {s}: {t}", .{ manifest_path.getDisplayName(), err });
+        @panic("invalid shader manifest");
+    };
+    const parsed = shader_manifest.parse(b.allocator, bytes) catch |err| {
+        std.log.err("unable to parse shader manifest {s}: {t}", .{ manifest_path.getDisplayName(), err });
+        @panic("invalid shader manifest");
+    };
+    return parsed.value;
 }
 
 fn addSlangSetupStep(

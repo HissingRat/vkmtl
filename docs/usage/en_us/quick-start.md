@@ -12,11 +12,33 @@ An application build can depend on vkmtl and import the public module:
 const vkmtl_dep = b.dependency("vkmtl", .{
     .target = target,
     .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
 });
 const vkmtl = vkmtl_dep.module("vkmtl");
 
 exe.root_module.addImport("vkmtl", vkmtl);
 ```
+
+`shader_manifest` is a consumer-owned, source-backed `std.Build.LazyPath`.
+Generated manifests are not supported by schema version 1. Schema version 1
+contains `render_shaders`, `compute_shaders`, and `ray_tracing_shaders` arrays.
+Render entries use `name`, `source`, `vertex_entry`, and `fragment_entry`;
+compute entries use `name`, `source`, and `entry`; ray-tracing entries use
+`name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`,
+`miss_entry`, `closest_hit_entry`, `any_hit_entry`, and `intersection_entry`.
+Source paths are relative to the manifest, stay inside its LazyPath owner root,
+and include/import dependencies are tracked through Slang depfiles. Shader
+names are unique, lowercase
+portable `[a-z0-9_.-]+` values.
+
+On an unknown build host, also forward the build-time compiler as a dependency
+option:
+
+```zig
+.slangc = "/path/to/build-time/slangc",
+```
+
+See [Shader Authoring](../../api/en_us/shaders.md) for the complete field list.
 
 vkmtl does not create windows itself. Use a windowing package in the
 application, then pass vkmtl a `SurfaceDescriptor` and `PresentationDescriptor`.

@@ -7,7 +7,9 @@ ownership, or lifetime behavior.
 
 The Period 1 Phase 9 migration applied this policy to the prototype surface.
 The resulting 68-name root, 34-method `Device`, and 10-method `WindowContext`
-are explicit allowlists rather than precedent for uncontrolled growth.
+are the `v0.1.0` compatibility baseline and explicit allowlists rather than
+precedent for uncontrolled growth. `release-policy.md` defines the versioned
+promise applied to that surface.
 
 ## Goals
 
@@ -129,6 +131,13 @@ Compatibility aliases and forwarding methods are temporary migration tools,
 not preferred API. They must have a canonical replacement and must not be used
 by new examples or documentation.
 
+For `v0.1.x`, canonical portable declarations, documented public owner methods,
+descriptor defaults, typed errors, ownership/lifetime rules, and supported
+capability meanings are source-compatible. Intentional breaking changes to
+that surface require `v0.2.0` or later and migration guidance. This does not
+make the binary ABI, opaque `_state` layout, native-handle values, or
+backend-native escape hatches stable.
+
 The prototype `WindowContext.make*` and related forwarding methods were removed
 in the Phase 9 pre-release cleanup. Resource and pipeline APIs must be owned by
 `Device`, `Queue`, `Surface`, `Swapchain`, or a canonical facade. Do not restore
@@ -141,8 +150,8 @@ A new root export is allowed only when all of these are true:
 1. It is part of the common quick-start path, not an advanced planning helper.
 2. It has backend-neutral semantics on both Vulkan and Metal.
 3. Its ownership and lifetime belong to a stable public owner.
-4. Its name and default behavior are expected to survive the first tagged
-   compatibility release.
+4. Its name and default behavior can remain source-compatible throughout the
+   active minor release line.
 5. Keeping it only in a domain namespace would make ordinary use materially
    harder.
 
@@ -204,16 +213,28 @@ Before completion:
 
 ## Compatibility And Removal Process
 
-Until the first tagged compatibility release, breaking cleanup is allowed only
-as a deliberate API migration, not as incidental phase work.
+The pre-tag breaking cleanup ended at the `v0.1.0` baseline. Throughout
+`v0.1.x`, breaking cleanup of the documented portable surface is not allowed as
+incidental phase or backend work. Schedule an intentional portable source break
+for `v0.2.0` or later.
 
 Removing or renaming an existing public declaration requires this sequence:
 
 1. Define the canonical replacement and document the reason for the change.
 2. Migrate all in-tree examples, tests, and user-facing docs.
-3. Keep a compatibility alias or forwarding method when practical.
-4. Record the removal in the pre-release API cleanup checklist.
-5. Remove compatibility declarations together at the planned release boundary.
+3. Keep a compatibility alias or forwarding method through the current minor
+   line when practical.
+4. Record the compatibility impact in the changelog, active release review,
+   API inventory, and migration guide.
+5. Remove compatibility declarations together only at the planned next-minor
+   release boundary.
+
+Changes to defaults, enum tags, errors, ownership, lifetime, capability
+meaning, or limit meaning follow the same process even if no declaration is
+renamed. Fixes may reject invalid input earlier or return a more specific error
+without preserving the old invalid behavior. Capability-gated operations are
+compatible only within the support truth reported by the selected device; a
+planning-only record is not an executable feature promise.
 
 Do not mix broad public renaming with backend implementation changes. Public
 facade migration and internal file decomposition should be separate reviewable
@@ -235,8 +256,10 @@ changes.
 
 All seven implementation phases plus release polish are complete. The final
 surface and counts are in `public-api-inventory.md`; caller changes are in
-`api-migration-guide.md`. Future compatibility removals must still establish a
-canonical destination and migrate in-tree callers before deleting an old path.
+`api-migration-guide.md`. This surface is the `v0.1.0` compatibility baseline.
+Future compatibility removals must still establish a canonical destination,
+migrate in-tree callers, and wait for the documented release boundary before
+deleting an old path.
 
 ## Review Checklist
 
@@ -255,5 +278,6 @@ For every public API change, verify:
 - [ ] Examples and documentation use the canonical API rather than a
   compatibility alias.
 - [ ] Compatibility impact and removal timing are documented.
+- [ ] The change satisfies `release-policy.md` for the active version line.
 - [ ] The exact API guard allowlists are unchanged or intentionally updated.
 - [ ] Focused tests and the validation commands appropriate to the change pass.

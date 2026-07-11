@@ -1,6 +1,6 @@
 # Public API Inventory
 
-Status: final pre-tag API migration inventory, refreshed on 2026-07-11.
+Status: `v0.1.0` compatibility baseline, refreshed on 2026-07-11.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
@@ -45,6 +45,37 @@ The two owner surfaces targeted by the migration now measure:
 Device         34 public methods
 WindowContext  10 public methods
 ```
+
+## Package And Shader Build Contract
+
+The package exports one supported module named `vkmtl`. Repository example
+support modules, tools, and tests are not consumer module exports. Package
+specific build options are not part of the 68-name Zig root count, but they are
+part of the release compatibility surface:
+
+| Dependency option | Type | Contract |
+| --- | --- | --- |
+| `shader_manifest` | source-backed `std.Build.LazyPath` | consumer manifest; defaults to the repository `shaders/manifest.json` |
+| `slangc` | string path | explicit build-time compiler for a host without a pinned Slang package |
+
+The shader manifest uses schema version 1:
+
+| Array | Entry fields |
+| --- | --- |
+| `render_shaders` | `name`, `source`, `vertex_entry`, `fragment_entry` |
+| `compute_shaders` | `name`, `source`, `entry` |
+| `ray_tracing_shaders` | `name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`, `miss_entry`, `closest_hit_entry`, `any_hit_entry`, `intersection_entry` |
+
+Names are unique across every array and use lowercase portable
+`[a-z0-9_.-]+`; `.` and `..` are rejected. Shader source paths are relative to
+the manifest and must remain inside the LazyPath owner's logical root. Generated
+manifests are not supported by schema version 1. The build tracks the manifest,
+every declared Slang and Metal source, and Slang include/import dependencies
+reported through depfiles. `b.path(...)` retains its build root as owner; a
+scalar command-line path uses the `zig build` invocation directory as its root.
+Absolute, drive-relative, UNC, and backslash paths are rejected. The build
+generates the embedded SPIR-V/MSL/reflection module and never moves shader
+compilation or cache writes into runtime.
 
 ## Complete Root Name Set
 
@@ -521,9 +552,12 @@ for file in src/api/*.zig src/api/native/*.zig; do
   rg -c '^pub const ' "$file"
 done
 
-zig fmt --check build.zig src examples tools
+zig fmt --check build.zig src examples tools tests/package_consumer
+zig build run-api-guard
 zig build test --summary all
 zig build
+zig build -Dvulkan
+scripts/ci/run_package_smoke.sh
 git diff --check
 ```
 
@@ -541,4 +575,6 @@ When the public surface changes:
 - [ ] Update `api-migration-guide.md` for compatibility changes.
 - [ ] Update the exact-name API guard after an approved allowlist change.
 - [ ] Confirm public facades do not import backend-private bindings.
+- [ ] Update the package/module and shader-manifest inventory when consumer
+  build options or schema fields change.
 - [ ] Run the validation required by `public-api-rules.md`.

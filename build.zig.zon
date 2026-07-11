@@ -1,6 +1,6 @@
 .{
     .name = .vkmtl,
-    .version = "0.0.0",
+    .version = "0.1.0",
     .fingerprint = 0x13cf5b82c8e7a698, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
@@ -13,6 +13,7 @@
             .hash = "vulkan-0.0.0-r7Ytx7N9AwD7IZt5_XNHtkJ4G9qY0pCH-cpcOsbL8wzD",
         },
         .zig_glfw = .{
+            .lazy = true,
             .url = "git+https://github.com/HissingRat/zig-glfw.git#3a99de9aaf03bdbb0b1d47cc7e98d635d2a68480",
             .hash = "zig_glfw-0.1.0-r9fvbPg7AACx-wlafQu3FzaUtsqtS3Vt8DgW6fVn1tbR",
         },
@@ -28,6 +29,7 @@
         "docs",
         "AGENTS.md",
         "README.md",
+        "CHANGELOG.md",
         "LICENSE",
     },
 }

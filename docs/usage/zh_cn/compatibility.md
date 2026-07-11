@@ -2,6 +2,76 @@
 
 vkmtl 优先覆盖 portable Vulkan 和 Metal workflow；高级能力放在显式 capability gate 后面。
 
+## v0.1.x 源码兼容性
+
+`v0.1.0` 建立第一个 compatibility baseline。`v0.1.x` 内的 patch release 会保持文档中
+portable Zig source API 的兼容性，包括 canonical declaration、公开 owner method、descriptor
+default、typed error category、ownership/lifetime rule，以及已声明支持的 capability meaning。
+有意破坏 portable source compatibility 的改动必须进入 `v0.2.0` 或更高版本，并提供迁移说明。
+
+这不是 stable binary ABI。应用不能依赖 opaque `_state` storage 的 size、alignment、内容，
+不能依赖 raw native-handle value，也不能假设 backend-native escape hatch 在 `0.x` minor
+release 间稳定。`v0.1.x` 支持的工具链是 Zig `0.16.0`。
+
+权威规则见 [release policy](../../develop/release-policy.md)，从 prototype 更新的调用方见
+[API migration guide](../../develop/api-migration-guide.md)。
+
+## Package 与 Shader Manifest
+
+package 只导出一个受支持模块：`vkmtl`。仓库中的 example support code 和 tool 只供仓库自身
+build 使用，不是 package module export。
+
+声明 shader 的应用通过 source-backed `std.Build.LazyPath` 类型的
+`shader_manifest` dependency option 传入自己拥有的 manifest：
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+});
+
+exe.root_module.addImport("vkmtl", vkmtl_dep.module("vkmtl"));
+```
+
+JSON manifest 使用 schema version 1，并包含三个 array：
+
+```json
+{
+  "schema_version": 1,
+  "render_shaders": [
+    {
+      "name": "triangle",
+      "source": "triangle.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
+    }
+  ],
+  "compute_shaders": [
+    {
+      "name": "particles",
+      "source": "particles.slang",
+      "entry": "cs_main"
+    }
+  ],
+  "ray_tracing_shaders": []
+}
+```
+
+Render entry 包含 `name`、`source`、`vertex_entry`、`fragment_entry`；compute entry
+包含 `name`、`source`、`entry`；ray-tracing entry 包含 `name`、`source`、
+`metal_ray_generation_source`、`ray_generation_entry`、`miss_entry`、
+`closest_hit_entry`、`any_hit_entry`、`intersection_entry`。所有 source path（包括
+`metal_ray_generation_source`）都相对于 manifest 文件解析，且不能越出
+LazyPath owner 的 logical root。Schema version 1 不支持 generated manifest，因为
+dependency graph 会在 configuration 时枚举 shader input。
+
+构建会追踪 manifest 和其中声明的所有 shader source，并通过 Slang
+depfile 追踪 include/import dependency，然后生成 SPIR-V、MSL、reflection blob
+并嵌入 consumer 的 `vkmtl` module。Runtime shader API 不会启动 `slangc`，也不会写
+runtime shader cache。默认 `shaders/manifest.json` 服务于仓库自身示例；外部应用应该提供
+自己的 manifest。
+
 ## 当前后端预期
 
 | Platform | Preferred Backend | Notes |
@@ -15,7 +85,8 @@ vkmtl 优先覆盖 portable Vulkan 和 Metal workflow；高级能力放在显式
 ## Capability Gates
 
 使用 `device.features()`、`device.limits()` 和 `device.getFormatCaps(...)`，不要靠平台假设。
-不支持的 optional behavior 应该返回 typed error，而不是静默改变语义。
+不支持的 optional behavior 应该返回 typed error，而不是静默改变语义。Planning-only record
+或 typed-unsupported path 不构成 executable feature claim。
 
 ## Sync And Query Defaults
 

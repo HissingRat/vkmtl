@@ -14,6 +14,37 @@ examples/rainbow_cube/shaders/rainbow_cube.slang
 examples/compute_readback/shaders/compute_readback.slang
 ```
 
+## Consumer Shader Manifest
+
+应用通过 vkmtl dependency 的 source-backed `shader_manifest` lazy-path option
+注册自己的 shader：
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+});
+```
+
+Schema version 1 包含以下 array 与字段：
+
+| Array | 必填 entry field |
+| --- | --- |
+| `render_shaders` | `name`、`source`、`vertex_entry`、`fragment_entry` |
+| `compute_shaders` | `name`、`source`、`entry` |
+| `ray_tracing_shaders` | `name`、`source`、`metal_ray_generation_source`、`ray_generation_entry`、`miss_entry`、`closest_hit_entry`、`any_hit_entry`、`intersection_entry` |
+
+每个 array 都可以为空。Name 在三个 array 中必须全局唯一，并使用 portable lowercase 形式
+`[a-z0-9_.-]+`（`.` 和 `..` 不是合法 name）。`source` 与
+`metal_ray_generation_source` 都相对于 manifest 文件解析，且不能越出
+LazyPath owner 的 logical root。Schema version 1 不支持 generated manifest，因为
+dependency graph 会在 configuration 时枚举 shader input。构建会追踪 manifest、
+每个已声明 source，并通过 Slang depfile 追踪 include/import dependency。
+
+仓库自身示例默认使用 `shaders/manifest.json`。Consumer 应该传入自己的 manifest，确保
+生成的 shader module 包含应用声明，而不是仓库 example set。
+
 示例通过 `@embedFile(...)` 嵌入这些 `.slang` 文件，并在运行时通过 `Device`
 声明需要的 shader。`zig build` 会把匹配的 SPIR-V、MSL 和 reflection JSON 预编译进
 可执行文件；运行时直接从内嵌 blob 解析，不会写入磁盘。构建时会同时安装一份可检查的
@@ -39,8 +70,19 @@ source hash 保存在内嵌 blob metadata 里。找不到匹配 name、entry 和
 `.zig-cache/vkmtl-tools`，并预编译当前 manifest 中的 embedded shader。
 
 pinned Slang 版本和 release package hash 在 `build.zig` 中；下载、校验和解压命令放在
-`scripts/`。当前 auto download 覆盖 macOS、Linux 和 Windows 的受支持 host 架构。如果 build
-host 没有对应 pinned package，构建会失败；需要显式指定构建期 compiler 时：
+`scripts/`。当前 auto download 覆盖 macOS、Linux 和 Windows 的受支持 host 架构。如果
+consumer build host 没有对应 pinned package，通过 dependency option 转发 compiler path：
+
+```zig
+const vkmtl_dep = b.dependency("vkmtl", .{
+    .target = target,
+    .optimize = optimize,
+    .shader_manifest = b.path("shaders/manifest.json"),
+    .slangc = "/path/to/build-time/slangc",
+});
+```
+
+直接构建 vkmtl 仓库时，等价 override 是：
 
 ```sh
 zig build run-rainbow-cube -Dslangc=/path/to/build-time/slangc
