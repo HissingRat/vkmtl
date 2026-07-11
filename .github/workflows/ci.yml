@@ -46,6 +46,17 @@ jobs:
             echo "zig=$(zig version)"
             ${{ matrix.command }}
           } 2>&1 | tee artifacts/hosted-build/build.log
+      - name: Preserve failed shader depfiles
+        if: failure() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts/hosted-build/shader-depfiles
+          find .zig-cache/tmp -type f -name 'vkmtl-precompiled-shaders.d' -print | while read -r depfile; do
+            name="$(basename "$(dirname "$depfile")")-$(basename "$depfile")"
+            cp "$depfile" "artifacts/hosted-build/shader-depfiles/$name"
+            echo "depfile=$depfile"
+            sed -n '1,5p' "$depfile"
+          done
       - name: Upload hosted evidence
         if: always()
         uses: actions/upload-artifact@v4
