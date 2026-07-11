@@ -13,17 +13,49 @@ pub fn appendPrerequisites(
 
     var tokenizer: DepTokenizer = .{ .bytes = raw_depfile };
     while (tokenizer.next()) |token| {
-        const prerequisite = switch (token) {
+        const encoded_prerequisite = switch (token) {
             .target, .target_must_resolve => continue,
-            .prereq => |path| path,
-            .prereq_must_resolve => path: {
-                resolved.clearRetainingCapacity();
-                try token.resolve(allocator, &resolved);
-                break :path resolved.items;
-            },
+            .prereq, .prereq_must_resolve => |path| path,
             else => return error.InvalidSlangDepfile,
         };
-        try appendPrerequisite(allocator, cwd, prerequisite, output);
+        resolved.clearRetainingCapacity();
+        try resolveSlangPrerequisite(allocator, encoded_prerequisite, &resolved);
+        try appendPrerequisite(allocator, cwd, resolved.items, output);
+    }
+}
+
+fn resolveSlangPrerequisite(
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    output: *std.ArrayList(u8),
+) !void {
+    // Slang's Make depfiles escape drive colons and every Windows separator.
+    var index: usize = 0;
+    while (index < encoded.len) {
+        const byte = encoded[index];
+        if (byte == '$' and index + 1 < encoded.len and encoded[index + 1] == '$') {
+            try output.append(allocator, '$');
+            index += 2;
+            continue;
+        }
+        if (byte != '\\' or index + 1 == encoded.len) {
+            try output.append(allocator, byte);
+            index += 1;
+            continue;
+        }
+
+        const escaped = encoded[index + 1];
+        switch (escaped) {
+            ':', '\\', ' ', '#', '[', ']' => {
+                try output.append(allocator, escaped);
+                index += 2;
+            },
+            else => {
+                // A single backslash is also a normal Windows path separator.
+                try output.append(allocator, '\\');
+                index += 1;
+            },
+        }
     }
 }
 
@@ -37,19 +69,16 @@ fn appendPrerequisite(
     const relative = try relativeToCwd(allocator, cwd, path);
     defer allocator.free(relative);
 
-    try output.append(allocator, ' ');
+    // Zig's depfile parser returns quoted prerequisites without another escape pass.
+    try output.appendSlice(allocator, " \"");
     for (relative) |byte| {
         switch (byte) {
             '\\' => try output.append(allocator, '/'),
-            ' ', '#' => {
-                try output.append(allocator, '\\');
-                try output.append(allocator, byte);
-            },
-            '$' => try output.appendSlice(allocator, "$$"),
             '\t', '\r', '\n', '"' => return error.InvalidSlangDependencyPath,
             else => try output.append(allocator, byte),
         }
     }
+    try output.append(allocator, '"');
 }
 
 fn relativeToCwd(allocator: std.mem.Allocator, cwd: []const u8, path: []const u8) ![]u8 {
@@ -64,28 +93,28 @@ fn relativeToCwd(allocator: std.mem.Allocator, cwd: []const u8, path: []const u8
 
 test "Slang depfile prerequisites become relative portable paths" {
     const raw =
-        \\D:\project\out.spv: D:\project\shaders\main.slang D:\project\shaders\include.slang
+        \\.\\.zig-cache\\tmp\\shader\\vert.spv: D\:\\a\\vkmtl\\vkmtl\\examples\\triangle\\shaders\\triangle.slang D\:\\a\\vkmtl\\vkmtl\\examples\\triangle\\shaders\\common.slang
     ;
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(std.testing.allocator);
 
-    try appendPrerequisites(std.testing.allocator, raw, "D:\\project", &output);
+    try appendPrerequisites(std.testing.allocator, raw, "D:\\a\\vkmtl\\vkmtl", &output);
     try std.testing.expectEqualStrings(
-        " shaders/main.slang shaders/include.slang",
+        " \"examples/triangle/shaders/triangle.slang\" \"examples/triangle/shaders/common.slang\"",
         output.items,
     );
 }
 
 test "Slang depfile prerequisite escaping survives Zig depfile parsing" {
     const raw =
-        \\C:\out.spv: "C:\My Project\shader #1$$.slang"
+        \\out.spv: C\:\\My\ Project\\shader\ \#1\[debug\]$$.slang
     ;
     var output: std.ArrayList(u8) = .empty;
     defer output.deinit(std.testing.allocator);
 
     try appendPrerequisites(std.testing.allocator, raw, "C:\\", &output);
     try std.testing.expectEqualStrings(
-        " My\\ Project/shader\\ \\#1$$$$.slang",
+        " \"My Project/shader #1[debug]$.slang\"",
         output.items,
     );
 
@@ -97,13 +126,46 @@ test "Slang depfile prerequisite escaping survives Zig depfile parsing" {
     defer std.testing.allocator.free(merged);
 
     var tokenizer: DepTokenizer = .{ .bytes = merged };
-    var prerequisites: usize = 0;
+    var prerequisite: ?[]const u8 = null;
     while (tokenizer.next()) |token| switch (token) {
         .target, .target_must_resolve => {},
-        .prereq, .prereq_must_resolve => prerequisites += 1,
+        .prereq => |path| {
+            try std.testing.expect(prerequisite == null);
+            prerequisite = path;
+        },
+        .prereq_must_resolve => return error.UnexpectedEscapedMergedPrerequisite,
         else => return error.InvalidMergedDepfile,
     };
-    try std.testing.expectEqual(@as(usize, 1), prerequisites);
+    try std.testing.expectEqualStrings(
+        "My Project/shader #1[debug]$.slang",
+        prerequisite orelse return error.MissingMergedPrerequisite,
+    );
+}
+
+test "Slang Make escaping decodes Windows prerequisite paths" {
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+
+    try resolveSlangPrerequisite(
+        std.testing.allocator,
+        "D\\:\\\\a\\\\vkmtl\\\\shader\\ source\\#1\\[debug\\]$$.slang",
+        &output,
+    );
+    try std.testing.expectEqualStrings(
+        "D:\\a\\vkmtl\\shader source#1[debug]$.slang",
+        output.items,
+    );
+
+    output.clearRetainingCapacity();
+    try resolveSlangPrerequisite(
+        std.testing.allocator,
+        "D:\\a\\vkmtl\\$cache\\ordinary.slang",
+        &output,
+    );
+    try std.testing.expectEqualStrings(
+        "D:\\a\\vkmtl\\$cache\\ordinary.slang",
+        output.items,
+    );
 }
 
 test "POSIX Slang depfile prerequisites are relative to the build cwd" {
@@ -115,7 +177,7 @@ test "POSIX Slang depfile prerequisites are relative to the build cwd" {
 
     try appendPrerequisites(std.testing.allocator, raw, "/work/project", &output);
     try std.testing.expectEqualStrings(
-        " shaders/main.slang shaders/include.slang",
+        " \"shaders/main.slang\" \"shaders/include.slang\"",
         output.items,
     );
 }
