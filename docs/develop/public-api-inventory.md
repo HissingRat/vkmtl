@@ -569,6 +569,14 @@ The `resource` facade also adds `TextureComponent`,
 `TextureComponentMapping`, and `textureViewFormatsCompatible`; `TextureError`
 adds `UnsupportedTextureViewComponentMapping`.
 
+`resource.TextureFormat` gains `r8_unorm`, `rg8_unorm`, `rgba8_uint`,
+`rgba8_sint`, `r16_float`, `rg16_float`, `rgba16_float`, `r32_float`,
+`rg32_float`, `rgba32_float`, `r32_uint`, `r32_sint`, `depth16_unorm`, and
+`stencil8`. `render.VertexFormat` gains `float16x2`, `float16x4`, normalized
+8-bit x2/x4, and signed/unsigned 32-bit scalar/x2/x3/x4 tags. These are enum
+expansions inside existing canonical domains; no root alias or owner method is
+added.
+
 The additions belong to the existing `diagnostics` and `resource` domains and
 receive no new root aliases or owner methods. Field and error-set growth targets
 `v0.2.0`; callers with exhaustive error switches must add arms.

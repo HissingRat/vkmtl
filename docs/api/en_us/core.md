@@ -118,6 +118,10 @@ storage, attachment, filtering, mip, blend, exact-copy, scaled-blit,
 presentation, depth/stencil copy, and color/depth/stencil resolve support.
 `Device.getFormatCaps(format)` is queried from the selected backend; a native
 feature is not reported as usable before vkmtl has a validated execution path.
+The finite common set includes R/RG/RGBA normalized, integer, 16/32-bit float,
+depth16/depth32, and stencil8 formats. Vertex formats include half x2/x4,
+normalized 8-bit x2/x4, float32, and signed/unsigned 32-bit scalar/vector
+inputs. Native formats outside the enum are intentionally unsupported.
 
 Mipmap helpers include `mipDimension(...)`,
 `maxMipLevelCountForExtent(...)`, `TextureDescriptor.maxMipLevelCount()`, and

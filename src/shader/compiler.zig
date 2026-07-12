@@ -820,28 +820,60 @@ fn lastToken(text: []const u8) ?[]const u8 {
 }
 
 fn parseFieldFormat(name: []const u8) ?core.VertexFormat {
+    if (std.mem.eql(u8, name, "half2")) return .float16x2;
+    if (std.mem.eql(u8, name, "half4")) return .float16x4;
     if (std.mem.eql(u8, name, "float")) return .float32;
     if (std.mem.eql(u8, name, "float2")) return .float32x2;
     if (std.mem.eql(u8, name, "float3")) return .float32x3;
     if (std.mem.eql(u8, name, "float4")) return .float32x4;
+    if (std.mem.eql(u8, name, "uint")) return .uint32;
+    if (std.mem.eql(u8, name, "uint2")) return .uint32x2;
+    if (std.mem.eql(u8, name, "uint3")) return .uint32x3;
+    if (std.mem.eql(u8, name, "uint4")) return .uint32x4;
+    if (std.mem.eql(u8, name, "int")) return .sint32;
+    if (std.mem.eql(u8, name, "int2")) return .sint32x2;
+    if (std.mem.eql(u8, name, "int3")) return .sint32x3;
+    if (std.mem.eql(u8, name, "int4")) return .sint32x4;
     return null;
 }
 
 fn vertexFormatSize(format: core.VertexFormat) u32 {
     return switch (format) {
+        .float16x2 => 4,
+        .float16x4 => 8,
         .float32 => 4,
         .float32x2 => 8,
         .float32x3 => 12,
         .float32x4 => 16,
+        .unorm8x2, .snorm8x2 => 2,
+        .unorm8x4, .snorm8x4 => 4,
+        .uint32, .sint32 => 4,
+        .uint32x2, .sint32x2 => 8,
+        .uint32x3, .sint32x3 => 12,
+        .uint32x4, .sint32x4 => 16,
     };
 }
 
 fn vertexFormatName(format: core.VertexFormat) []const u8 {
     return switch (format) {
+        .float16x2 => "float16x2",
+        .float16x4 => "float16x4",
         .float32 => "float32",
         .float32x2 => "float32x2",
         .float32x3 => "float32x3",
         .float32x4 => "float32x4",
+        .unorm8x2 => "unorm8x2",
+        .unorm8x4 => "unorm8x4",
+        .snorm8x2 => "snorm8x2",
+        .snorm8x4 => "snorm8x4",
+        .uint32 => "uint32",
+        .uint32x2 => "uint32x2",
+        .uint32x3 => "uint32x3",
+        .uint32x4 => "uint32x4",
+        .sint32 => "sint32",
+        .sint32x2 => "sint32x2",
+        .sint32x3 => "sint32x3",
+        .sint32x4 => "sint32x4",
     };
 }
 
@@ -1096,4 +1128,12 @@ fn expectReflectionJson(
 
 fn expectContains(haystack: []const u8, needle: []const u8) !void {
     try std.testing.expect(std.mem.indexOf(u8, haystack, needle) != null);
+}
+
+test "vertex reflection names cover half and integer inputs" {
+    try std.testing.expectEqual(core.VertexFormat.float16x2, parseFieldFormat("half2").?);
+    try std.testing.expectEqual(core.VertexFormat.uint32x3, parseFieldFormat("uint3").?);
+    try std.testing.expectEqual(core.VertexFormat.sint32x4, parseFieldFormat("int4").?);
+    try std.testing.expectEqual(@as(u32, 8), vertexFormatSize(.float16x4));
+    try std.testing.expectEqualStrings("unorm8x4", vertexFormatName(.unorm8x4));
 }

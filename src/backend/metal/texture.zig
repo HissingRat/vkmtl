@@ -123,11 +123,25 @@ fn textureDimension(dimension: core.TextureDimension) metal.vkmtl_metal_texture_
 pub fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_format {
     return switch (format) {
         .automatic => metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
+        .r8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_R8_UNORM,
+        .rg8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_RG8_UNORM,
         .bgra8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM,
         .bgra8_unorm_srgb => metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB,
         .rgba8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM,
         .rgba8_unorm_srgb => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB,
+        .rgba8_uint => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UINT,
+        .rgba8_sint => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_SINT,
+        .r16_float => metal.VKMTL_METAL_TEXTURE_FORMAT_R16_FLOAT,
+        .rg16_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RG16_FLOAT,
+        .rgba16_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA16_FLOAT,
+        .r32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_R32_FLOAT,
+        .rg32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RG32_FLOAT,
+        .rgba32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA32_FLOAT,
+        .r32_uint => metal.VKMTL_METAL_TEXTURE_FORMAT_R32_UINT,
+        .r32_sint => metal.VKMTL_METAL_TEXTURE_FORMAT_R32_SINT,
+        .depth16_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH16_UNORM,
         .depth32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT,
+        .stencil8 => metal.VKMTL_METAL_TEXTURE_FORMAT_STENCIL8,
         .depth32_float_stencil8 => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8,
     };
 }

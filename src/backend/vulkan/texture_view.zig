@@ -114,7 +114,12 @@ fn viewType(dimension: core.TextureViewDimension) vk.ImageViewType {
 }
 
 fn aspectMask(format: core.TextureFormat) vk.ImageAspectFlags {
-    if (core.isDepthFormat(format)) return .{ .depth_bit = true };
+    if (core.isDepthFormat(format) or core.isStencilFormat(format)) {
+        return .{
+            .depth_bit = core.isDepthFormat(format),
+            .stencil_bit = core.isStencilFormat(format),
+        };
+    }
     return .{ .color_bit = true };
 }
 

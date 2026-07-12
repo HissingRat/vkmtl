@@ -18,6 +18,9 @@ reserved for the next minor release and are documented with migration guidance.
   constraint set.
 - Added `TextureComponent`, `TextureComponentMapping`, and compatible
   linear/sRGB texture-view reinterpretation with native component swizzles.
+- Added a finite common-format expansion covering 8-bit normalized/integer,
+  16/32-bit floating-point, 32-bit integer, depth16, stencil8 textures, plus
+  half, normalized 8-bit, and signed/unsigned 32-bit vertex inputs.
 - Added capability-gated native Vulkan query pools and Metal visibility/counter
   query sets for occlusion, timestamp readback, and GPU resolve.
 - Added default-null `RenderPassDescriptor.occlusion_query_set` so a pass can
@@ -48,6 +51,8 @@ reserved for the next minor release and are documented with migration guidance.
 - `TextureViewDescriptor.component_mapping` defaults to identity. The new
   `UnsupportedTextureViewComponentMapping` error and resource-facade
   declarations target `v0.2.0`.
+- New `TextureFormat` and `VertexFormat` tags target `v0.2.0`; downstream
+  exhaustive enum switches must handle the expanded finite set.
 - This Unreleased change targets `v0.2.0`, not a `v0.1.x` patch, because the
   public `QueryError` expansion is source-breaking for exhaustive switches.
 - The pass field defaults to null; the root, common owner methods, and opaque

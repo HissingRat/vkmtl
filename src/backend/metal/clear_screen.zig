@@ -422,4 +422,15 @@ test "Metal format capabilities keep presentation and scaled blit truthful" {
     const depth_stencil = screen.formatCapabilities(.depth32_float_stencil8);
     try std.testing.expect(!depth_stencil.copy_source);
     try std.testing.expect(!depth_stencil.stencil_copy);
+
+    const half_float = screen.formatCapabilities(.rgba16_float);
+    try std.testing.expect(half_float.sampled);
+    try std.testing.expect(half_float.filterable);
+    try std.testing.expect(half_float.color_attachment);
+    const integer = screen.formatCapabilities(.r32_uint);
+    try std.testing.expect(integer.storage);
+    try std.testing.expect(!integer.filterable);
+    const stencil = screen.formatCapabilities(.stencil8);
+    try std.testing.expect(stencil.depth_stencil_attachment);
+    try std.testing.expect(!stencil.stencil_copy);
 }

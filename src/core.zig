@@ -2494,11 +2494,25 @@ pub const SurfaceDescriptor = struct {
 
 pub const TextureFormat = enum {
     automatic,
+    r8_unorm,
+    rg8_unorm,
     bgra8_unorm,
     bgra8_unorm_srgb,
     rgba8_unorm,
     rgba8_unorm_srgb,
+    rgba8_uint,
+    rgba8_sint,
+    r16_float,
+    rg16_float,
+    rgba16_float,
+    r32_float,
+    rg32_float,
+    rgba32_float,
+    r32_uint,
+    r32_sint,
+    depth16_unorm,
     depth32_float,
+    stencil8,
     depth32_float_stencil8,
 };
 
@@ -2633,9 +2647,14 @@ pub fn defaultDeviceCapabilityReport(backend: Backend) DeviceCapabilityReport {
 pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
     return switch (format) {
         .automatic => .{},
+        .r8_unorm,
+        .rg8_unorm,
         .bgra8_unorm,
         .bgra8_unorm_srgb,
         .rgba8_unorm_srgb,
+        .r16_float,
+        .rg16_float,
+        .rgba16_float,
         => .{
             .sampled = true,
             .color_attachment = true,
@@ -2665,12 +2684,43 @@ pub fn defaultFormatCapabilities(format: TextureFormat) FormatCapabilities {
             .blit_destination = true,
             .color_resolve = true,
         },
-        .depth32_float => .{
+        .r32_float,
+        .rg32_float,
+        .rgba32_float,
+        => .{
+            .sampled = true,
+            .storage = true,
+            .color_attachment = true,
+            .mipmapped = true,
+            .copy_source = true,
+            .copy_destination = true,
+            .blit_source = true,
+            .blit_destination = true,
+            .color_resolve = true,
+        },
+        .rgba8_uint,
+        .rgba8_sint,
+        .r32_uint,
+        .r32_sint,
+        => .{
+            .sampled = true,
+            .storage = true,
+            .color_attachment = true,
+            .mipmapped = true,
+            .copy_source = true,
+            .copy_destination = true,
+            .blit_source = true,
+            .blit_destination = true,
+        },
+        .depth16_unorm, .depth32_float => .{
             .depth_stencil_attachment = true,
             .mipmapped = true,
             .copy_source = true,
             .copy_destination = true,
             .depth_copy = true,
+        },
+        .stencil8 => .{
+            .depth_stencil_attachment = true,
         },
         .depth32_float_stencil8 => .{
             .depth_stencil_attachment = true,
@@ -2940,10 +2990,24 @@ pub const ProgrammableStageDescriptor = struct {
 };
 
 pub const VertexFormat = enum {
+    float16x2,
+    float16x4,
     float32,
     float32x2,
     float32x3,
     float32x4,
+    unorm8x2,
+    unorm8x4,
+    snorm8x2,
+    snorm8x4,
+    uint32,
+    uint32x2,
+    uint32x3,
+    uint32x4,
+    sint32,
+    sint32x2,
+    sint32x3,
+    sint32x4,
 };
 
 pub const VertexStepFunction = enum {
@@ -9078,10 +9142,18 @@ fn validateViewDimension(
 
 fn vertexFormatSize(format: VertexFormat) u32 {
     return switch (format) {
+        .float16x2 => 4,
+        .float16x4 => 8,
         .float32 => 4,
         .float32x2 => 8,
         .float32x3 => 12,
         .float32x4 => 16,
+        .unorm8x2, .snorm8x2 => 2,
+        .unorm8x4, .snorm8x4 => 4,
+        .uint32, .sint32 => 4,
+        .uint32x2, .sint32x2 => 8,
+        .uint32x3, .sint32x3 => 12,
+        .uint32x4, .sint32x4 => 16,
     };
 }
 
@@ -9132,12 +9204,24 @@ pub fn maxMipLevelCountForExtent(width: u32, height: u32, depth: u32) u32 {
 pub fn textureFormatBytesPerPixel(format: TextureFormat) usize {
     return switch (format) {
         .automatic => unreachable,
+        .r8_unorm => 1,
+        .rg8_unorm, .r16_float => 2,
         .bgra8_unorm,
         .bgra8_unorm_srgb,
         .rgba8_unorm,
         .rgba8_unorm_srgb,
+        .rgba8_uint,
+        .rgba8_sint,
+        .rg16_float,
+        .r32_float,
+        .r32_uint,
+        .r32_sint,
         => 4,
+        .rgba16_float, .rg32_float => 8,
+        .rgba32_float => 16,
+        .depth16_unorm,
         .depth32_float,
+        .stencil8,
         .depth32_float_stencil8,
         => unreachable,
     };
@@ -9163,11 +9247,12 @@ pub fn textureFormatAspectBytes(format: TextureFormat, aspect: TextureAspect) Co
     return switch (resolved) {
         .color => textureFormatBytesPerPixel(format),
         .depth => switch (format) {
+            .depth16_unorm => 2,
             .depth32_float, .depth32_float_stencil8 => 4,
             else => return CommandEncodingError.InvalidCopyTextureAspect,
         },
         .stencil => switch (format) {
-            .depth32_float_stencil8 => 1,
+            .stencil8, .depth32_float_stencil8 => 1,
             else => return CommandEncodingError.InvalidCopyTextureAspect,
         },
         .all => return CommandEncodingError.UnsupportedTextureCopyFormat,
@@ -9177,12 +9262,25 @@ pub fn textureFormatAspectBytes(format: TextureFormat, aspect: TextureAspect) Co
 pub fn textureFormatKind(format: TextureFormat) TextureFormatKind {
     return switch (format) {
         .automatic => .invalid,
+        .r8_unorm,
+        .rg8_unorm,
         .bgra8_unorm,
         .bgra8_unorm_srgb,
         .rgba8_unorm,
         .rgba8_unorm_srgb,
+        .rgba8_uint,
+        .rgba8_sint,
+        .r16_float,
+        .rg16_float,
+        .rgba16_float,
+        .r32_float,
+        .rg32_float,
+        .rgba32_float,
+        .r32_uint,
+        .r32_sint,
         => .color,
-        .depth32_float => .depth,
+        .depth16_unorm, .depth32_float => .depth,
+        .stencil8 => .stencil,
         .depth32_float_stencil8 => .depth_stencil,
     };
 }
@@ -9215,9 +9313,23 @@ pub fn isSrgbFormat(format: TextureFormat) bool {
         .rgba8_unorm_srgb,
         => true,
         .automatic,
+        .r8_unorm,
+        .rg8_unorm,
         .bgra8_unorm,
         .rgba8_unorm,
+        .rgba8_uint,
+        .rgba8_sint,
+        .r16_float,
+        .rg16_float,
+        .rgba16_float,
+        .r32_float,
+        .rg32_float,
+        .rgba32_float,
+        .r32_uint,
+        .r32_sint,
+        .depth16_unorm,
         .depth32_float,
+        .stencil8,
         .depth32_float_stencil8,
         => false,
     };
@@ -9244,7 +9356,21 @@ fn textureFormatCopyClass(format: TextureFormat) TextureCopyClass {
         .bgra8_unorm_srgb,
         => .bgra8,
         .automatic,
+        .r8_unorm,
+        .rg8_unorm,
+        .rgba8_uint,
+        .rgba8_sint,
+        .r16_float,
+        .rg16_float,
+        .rgba16_float,
+        .r32_float,
+        .rg32_float,
+        .rgba32_float,
+        .r32_uint,
+        .r32_sint,
+        .depth16_unorm,
         .depth32_float,
+        .stencil8,
         .depth32_float_stencil8,
         => .none,
     };
@@ -15791,6 +15917,39 @@ test "default format capabilities describe current portable formats" {
         .height = 16,
         .usage = .{ .shader_read = true },
     }));
+
+    const normalized = defaultFormatCapabilities(.rg8_unorm);
+    try std.testing.expect(normalized.filterable);
+    try std.testing.expect(normalized.blendable);
+    try std.testing.expectEqual(@as(usize, 2), textureFormatBytesPerPixel(.rg8_unorm));
+
+    const integer = defaultFormatCapabilities(.r32_uint);
+    try std.testing.expect(integer.sampled);
+    try std.testing.expect(integer.storage);
+    try std.testing.expect(!integer.filterable);
+    try std.testing.expect(!integer.blendable);
+    try std.testing.expectEqual(@as(usize, 4), textureFormatBytesPerPixel(.r32_uint));
+
+    try std.testing.expectEqual(TextureFormatKind.depth, textureFormatKind(.depth16_unorm));
+    try std.testing.expectEqual(TextureFormatKind.stencil, textureFormatKind(.stencil8));
+    try std.testing.expectEqual(@as(usize, 2), try textureFormatAspectBytes(.depth16_unorm, .depth));
+    try std.testing.expectEqual(@as(usize, 1), try textureFormatAspectBytes(.stencil8, .stencil));
+}
+
+test "expanded vertex formats validate their exact byte widths" {
+    try (VertexBufferLayoutDescriptor{
+        .stride = 12,
+        .attributes = &.{
+            .{ .location = 0, .format = .float16x4, .offset = 0 },
+            .{ .location = 1, .format = .unorm8x4, .offset = 8 },
+        },
+    }).validate();
+    try std.testing.expectError(PipelineError.InvalidVertexAttributeOffset, (VertexBufferLayoutDescriptor{
+        .stride = 11,
+        .attributes = &.{
+            .{ .location = 0, .format = .uint32x3, .offset = 0 },
+        },
+    }).validate());
 }
 
 test "texture copy compatibility keeps channel order explicit" {

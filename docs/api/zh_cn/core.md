@@ -98,6 +98,9 @@ Format helper 包括 `textureFormatKind(...)`、`isColorFormat(...)`、`isDepthF
 scaled blit、presentation、depth/stencil copy 以及 color/depth/stencil resolve 支持。
 `Device.getFormatCaps(format)` 会查询当前选中的 backend；vkmtl 还没有验证执行路径时，不会把
 native feature 报告成可用能力。
+有限 common set 包含 R/RG/RGBA normalized、integer、16/32-bit float、depth16/depth32 和
+stencil8 texture format。Vertex format 包含 half x2/x4、normalized 8-bit x2/x4、float32，
+以及 signed/unsigned 32-bit scalar/vector input。Enum 之外的 native format 明确不支持。
 
 Mipmap helper 包括 `mipDimension(...)`、`maxMipLevelCountForExtent(...)`、
 `TextureDescriptor.maxMipLevelCount()` 和 `TextureDescriptor.mipExtent(level)`。Texture descriptor

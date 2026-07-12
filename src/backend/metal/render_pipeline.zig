@@ -177,10 +177,24 @@ fn makeVertexAttributes(
 
 fn vertexFormat(format: core.VertexFormat) metal.vkmtl_metal_vertex_format {
     return switch (format) {
+        .float16x2 => metal.VKMTL_METAL_VERTEX_FORMAT_HALF2,
+        .float16x4 => metal.VKMTL_METAL_VERTEX_FORMAT_HALF4,
         .float32 => metal.VKMTL_METAL_VERTEX_FORMAT_FLOAT,
         .float32x2 => metal.VKMTL_METAL_VERTEX_FORMAT_FLOAT2,
         .float32x3 => metal.VKMTL_METAL_VERTEX_FORMAT_FLOAT3,
         .float32x4 => metal.VKMTL_METAL_VERTEX_FORMAT_FLOAT4,
+        .unorm8x2 => metal.VKMTL_METAL_VERTEX_FORMAT_UCHAR2_NORMALIZED,
+        .unorm8x4 => metal.VKMTL_METAL_VERTEX_FORMAT_UCHAR4_NORMALIZED,
+        .snorm8x2 => metal.VKMTL_METAL_VERTEX_FORMAT_CHAR2_NORMALIZED,
+        .snorm8x4 => metal.VKMTL_METAL_VERTEX_FORMAT_CHAR4_NORMALIZED,
+        .uint32 => metal.VKMTL_METAL_VERTEX_FORMAT_UINT,
+        .uint32x2 => metal.VKMTL_METAL_VERTEX_FORMAT_UINT2,
+        .uint32x3 => metal.VKMTL_METAL_VERTEX_FORMAT_UINT3,
+        .uint32x4 => metal.VKMTL_METAL_VERTEX_FORMAT_UINT4,
+        .sint32 => metal.VKMTL_METAL_VERTEX_FORMAT_INT,
+        .sint32x2 => metal.VKMTL_METAL_VERTEX_FORMAT_INT2,
+        .sint32x3 => metal.VKMTL_METAL_VERTEX_FORMAT_INT3,
+        .sint32x4 => metal.VKMTL_METAL_VERTEX_FORMAT_INT4,
     };
 }
 
@@ -250,11 +264,25 @@ fn stencilOperation(operation: core.StencilOperation) metal.vkmtl_metal_stencil_
 fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_format {
     return switch (format) {
         .automatic => metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
+        .r8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_R8_UNORM,
+        .rg8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_RG8_UNORM,
         .bgra8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM,
         .bgra8_unorm_srgb => metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB,
         .rgba8_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM,
         .rgba8_unorm_srgb => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB,
+        .rgba8_uint => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UINT,
+        .rgba8_sint => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_SINT,
+        .r16_float => metal.VKMTL_METAL_TEXTURE_FORMAT_R16_FLOAT,
+        .rg16_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RG16_FLOAT,
+        .rgba16_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA16_FLOAT,
+        .r32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_R32_FLOAT,
+        .rg32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RG32_FLOAT,
+        .rgba32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA32_FLOAT,
+        .r32_uint => metal.VKMTL_METAL_TEXTURE_FORMAT_R32_UINT,
+        .r32_sint => metal.VKMTL_METAL_TEXTURE_FORMAT_R32_SINT,
+        .depth16_unorm => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH16_UNORM,
         .depth32_float => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT,
+        .stencil8 => metal.VKMTL_METAL_TEXTURE_FORMAT_STENCIL8,
         .depth32_float_stencil8 => metal.VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8,
     };
 }

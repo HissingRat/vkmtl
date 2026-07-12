@@ -658,11 +658,31 @@ fn parseResourceKind(value: std.json.Value) !core.BindingResourceKind {
 
 fn parseVertexFormat(value: std.json.Value) !core.VertexFormat {
     const format = try expectString(value);
+    if (std.mem.eql(u8, format, "float16x2")) return .float16x2;
+    if (std.mem.eql(u8, format, "float16x4")) return .float16x4;
     if (std.mem.eql(u8, format, "float32")) return .float32;
     if (std.mem.eql(u8, format, "float32x2")) return .float32x2;
     if (std.mem.eql(u8, format, "float32x3")) return .float32x3;
     if (std.mem.eql(u8, format, "float32x4")) return .float32x4;
+    if (std.mem.eql(u8, format, "unorm8x2")) return .unorm8x2;
+    if (std.mem.eql(u8, format, "unorm8x4")) return .unorm8x4;
+    if (std.mem.eql(u8, format, "snorm8x2")) return .snorm8x2;
+    if (std.mem.eql(u8, format, "snorm8x4")) return .snorm8x4;
+    if (std.mem.eql(u8, format, "uint32")) return .uint32;
+    if (std.mem.eql(u8, format, "uint32x2")) return .uint32x2;
+    if (std.mem.eql(u8, format, "uint32x3")) return .uint32x3;
+    if (std.mem.eql(u8, format, "uint32x4")) return .uint32x4;
+    if (std.mem.eql(u8, format, "sint32")) return .sint32;
+    if (std.mem.eql(u8, format, "sint32x2")) return .sint32x2;
+    if (std.mem.eql(u8, format, "sint32x3")) return .sint32x3;
+    if (std.mem.eql(u8, format, "sint32x4")) return .sint32x4;
     return core.ShaderError.InvalidShaderReflection;
+}
+
+test "reflection parser accepts expanded explicit vertex formats" {
+    try std.testing.expectEqual(core.VertexFormat.float16x4, try parseVertexFormat(.{ .string = "float16x4" }));
+    try std.testing.expectEqual(core.VertexFormat.unorm8x2, try parseVertexFormat(.{ .string = "unorm8x2" }));
+    try std.testing.expectEqual(core.VertexFormat.sint32x3, try parseVertexFormat(.{ .string = "sint32x3" }));
 }
 
 fn parseVisibility(value: std.json.Value) !core.ShaderVisibility {

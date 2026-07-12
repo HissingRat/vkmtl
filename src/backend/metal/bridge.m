@@ -827,6 +827,10 @@ static MTLTextureType vkmtl_texture_type(
 
 static MTLPixelFormat vkmtl_texture_pixel_format(vkmtl_metal_texture_format format) {
     switch (format) {
+        case VKMTL_METAL_TEXTURE_FORMAT_R8_UNORM:
+            return MTLPixelFormatR8Unorm;
+        case VKMTL_METAL_TEXTURE_FORMAT_RG8_UNORM:
+            return MTLPixelFormatRG8Unorm;
         case VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM:
             return MTLPixelFormatBGRA8Unorm;
         case VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB:
@@ -835,10 +839,34 @@ static MTLPixelFormat vkmtl_texture_pixel_format(vkmtl_metal_texture_format form
             return MTLPixelFormatRGBA8Unorm;
         case VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM_SRGB:
             return MTLPixelFormatRGBA8Unorm_sRGB;
+        case VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UINT:
+            return MTLPixelFormatRGBA8Uint;
+        case VKMTL_METAL_TEXTURE_FORMAT_RGBA8_SINT:
+            return MTLPixelFormatRGBA8Sint;
+        case VKMTL_METAL_TEXTURE_FORMAT_R16_FLOAT:
+            return MTLPixelFormatR16Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_RG16_FLOAT:
+            return MTLPixelFormatRG16Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_RGBA16_FLOAT:
+            return MTLPixelFormatRGBA16Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_R32_FLOAT:
+            return MTLPixelFormatR32Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_RG32_FLOAT:
+            return MTLPixelFormatRG32Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_RGBA32_FLOAT:
+            return MTLPixelFormatRGBA32Float;
+        case VKMTL_METAL_TEXTURE_FORMAT_R32_UINT:
+            return MTLPixelFormatR32Uint;
+        case VKMTL_METAL_TEXTURE_FORMAT_R32_SINT:
+            return MTLPixelFormatR32Sint;
+        case VKMTL_METAL_TEXTURE_FORMAT_DEPTH16_UNORM:
+            return MTLPixelFormatDepth16Unorm;
         case VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT:
             return MTLPixelFormatDepth32Float;
         case VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8:
             return MTLPixelFormatDepth32Float_Stencil8;
+        case VKMTL_METAL_TEXTURE_FORMAT_STENCIL8:
+            return MTLPixelFormatStencil8;
         case VKMTL_METAL_TEXTURE_FORMAT_INVALID:
         default:
             return MTLPixelFormatInvalid;
@@ -846,11 +874,13 @@ static MTLPixelFormat vkmtl_texture_pixel_format(vkmtl_metal_texture_format form
 }
 
 static BOOL vkmtl_texture_format_has_stencil(vkmtl_metal_texture_format format) {
-    return format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8;
+    return format == VKMTL_METAL_TEXTURE_FORMAT_STENCIL8 ||
+        format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
 static BOOL vkmtl_texture_format_has_depth(vkmtl_metal_texture_format format) {
-    return format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT ||
+    return format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH16_UNORM ||
+        format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT ||
         format == VKMTL_METAL_TEXTURE_FORMAT_DEPTH32_FLOAT_STENCIL8;
 }
 
@@ -983,6 +1013,10 @@ static MTLSamplerBorderColor vkmtl_sampler_border_color(vkmtl_metal_sampler_bord
 
 static MTLVertexFormat vkmtl_vertex_format(vkmtl_metal_vertex_format format) {
     switch (format) {
+        case VKMTL_METAL_VERTEX_FORMAT_HALF2:
+            return MTLVertexFormatHalf2;
+        case VKMTL_METAL_VERTEX_FORMAT_HALF4:
+            return MTLVertexFormatHalf4;
         case VKMTL_METAL_VERTEX_FORMAT_FLOAT:
             return MTLVertexFormatFloat;
         case VKMTL_METAL_VERTEX_FORMAT_FLOAT2:
@@ -991,6 +1025,30 @@ static MTLVertexFormat vkmtl_vertex_format(vkmtl_metal_vertex_format format) {
             return MTLVertexFormatFloat3;
         case VKMTL_METAL_VERTEX_FORMAT_FLOAT4:
             return MTLVertexFormatFloat4;
+        case VKMTL_METAL_VERTEX_FORMAT_UCHAR2_NORMALIZED:
+            return MTLVertexFormatUChar2Normalized;
+        case VKMTL_METAL_VERTEX_FORMAT_UCHAR4_NORMALIZED:
+            return MTLVertexFormatUChar4Normalized;
+        case VKMTL_METAL_VERTEX_FORMAT_CHAR2_NORMALIZED:
+            return MTLVertexFormatChar2Normalized;
+        case VKMTL_METAL_VERTEX_FORMAT_CHAR4_NORMALIZED:
+            return MTLVertexFormatChar4Normalized;
+        case VKMTL_METAL_VERTEX_FORMAT_UINT:
+            return MTLVertexFormatUInt;
+        case VKMTL_METAL_VERTEX_FORMAT_UINT2:
+            return MTLVertexFormatUInt2;
+        case VKMTL_METAL_VERTEX_FORMAT_UINT3:
+            return MTLVertexFormatUInt3;
+        case VKMTL_METAL_VERTEX_FORMAT_UINT4:
+            return MTLVertexFormatUInt4;
+        case VKMTL_METAL_VERTEX_FORMAT_INT:
+            return MTLVertexFormatInt;
+        case VKMTL_METAL_VERTEX_FORMAT_INT2:
+            return MTLVertexFormatInt2;
+        case VKMTL_METAL_VERTEX_FORMAT_INT3:
+            return MTLVertexFormatInt3;
+        case VKMTL_METAL_VERTEX_FORMAT_INT4:
+            return MTLVertexFormatInt4;
         default:
             return MTLVertexFormatInvalid;
     }

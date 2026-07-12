@@ -47,6 +47,14 @@ use `vkmtl.resource.TextureComponentMapping` for explicit zero/one/R/G/B/A
 swizzles. Exhaustive `TextureError` switches also need an
 `UnsupportedTextureViewComponentMapping` arm.
 
+`TextureFormat` and `VertexFormat` now contain the finite common set listed in
+`period47/phase2.md`. Existing enum values retain their meaning, but exhaustive
+switches must add arms for normalized/integer/floating-point texture formats,
+depth16/stencil8, half vertex inputs, normalized 8-bit vertex inputs, and
+signed/unsigned 32-bit vertex inputs. Use `Device.getFormatCaps(...)` for every
+new texture format; enum presence does not override the selected device's
+native capability result.
+
 ## Migration Rules
 
 Apply these rules in order:

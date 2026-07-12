@@ -19,7 +19,10 @@ Status: in progress.
   compatibility classes. Metal enables pixel-format views and lowers native
   swizzle channels; Vulkan creates mutable images and lowers component mapping
   through `VkImageView`.
-- Broader texture/vertex formats and buffer-address work remain in this phase.
+- The documented finite texture/vertex format set now has core byte/aspect
+  rules, shader reflection names, direct Metal/Vulkan mappings, and explicit
+  capability reporting. Formats outside that set remain closed.
+- Buffer-address and final storage-mode audit work remain in this phase.
 
 ## Scope
 
@@ -35,6 +38,16 @@ Status: in progress.
 - Define exact shared, managed, private, and automatic storage behavior per
   backend. Do not expose raw Metal resource-option bits.
 - Add buffer GPU address behind a raw native fact and a complete usable path.
+
+## Common Format Set
+
+The portable expansion is intentionally finite. Texture formats add `r8_unorm`,
+`rg8_unorm`, `rgba8_uint`, `rgba8_sint`, `r16_float`, `rg16_float`,
+`rgba16_float`, `r32_float`, `rg32_float`, `rgba32_float`, `r32_uint`,
+`r32_sint`, `depth16_unorm`, and `stencil8`. Vertex formats add float16 x2/x4,
+normalized 8-bit x2/x4, and signed/unsigned 32-bit scalar/x2/x3/x4 inputs.
+Formats outside this set remain unallocated rather than being accepted through
+an untyped native value.
 
 ## Backend Boundary
 

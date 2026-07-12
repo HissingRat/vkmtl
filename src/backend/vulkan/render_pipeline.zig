@@ -555,16 +555,44 @@ fn blendOp(operation: core.BlendOperation) vk.BlendOp {
 
 fn vertexFormat(format: core.VertexFormat) vk.Format {
     return switch (format) {
+        .float16x2 => .r16g16_sfloat,
+        .float16x4 => .r16g16b16a16_sfloat,
         .float32 => .r32_sfloat,
         .float32x2 => .r32g32_sfloat,
         .float32x3 => .r32g32b32_sfloat,
         .float32x4 => .r32g32b32a32_sfloat,
+        .unorm8x2 => .r8g8_unorm,
+        .unorm8x4 => .r8g8b8a8_unorm,
+        .snorm8x2 => .r8g8_snorm,
+        .snorm8x4 => .r8g8b8a8_snorm,
+        .uint32 => .r32_uint,
+        .uint32x2 => .r32g32_uint,
+        .uint32x3 => .r32g32b32_uint,
+        .uint32x4 => .r32g32b32a32_uint,
+        .sint32 => .r32_sint,
+        .sint32x2 => .r32g32_sint,
+        .sint32x3 => .r32g32b32_sint,
+        .sint32x4 => .r32g32b32a32_sint,
     };
 }
 
 fn textureFormat(format: core.TextureFormat) vk.Format {
     return switch (format) {
         .automatic => unreachable,
+        .r8_unorm => .r8_unorm,
+        .rg8_unorm => .r8g8_unorm,
+        .rgba8_uint => .r8g8b8a8_uint,
+        .rgba8_sint => .r8g8b8a8_sint,
+        .r16_float => .r16_sfloat,
+        .rg16_float => .r16g16_sfloat,
+        .rgba16_float => .r16g16b16a16_sfloat,
+        .r32_float => .r32_sfloat,
+        .rg32_float => .r32g32_sfloat,
+        .rgba32_float => .r32g32b32a32_sfloat,
+        .r32_uint => .r32_uint,
+        .r32_sint => .r32_sint,
+        .depth16_unorm => .d16_unorm,
+        .stencil8 => .s8_uint,
         .bgra8_unorm => .b8g8r8a8_unorm,
         .bgra8_unorm_srgb => .b8g8r8a8_srgb,
         .rgba8_unorm => .r8g8b8a8_unorm,
