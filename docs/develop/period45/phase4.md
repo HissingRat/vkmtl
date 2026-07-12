@@ -1,6 +1,7 @@
 # Phase 4: Ownership, Evidence, And Drift Checks
 
-Status: planned.
+Status: complete. The drift check is part of `zig build test` and also has a
+dedicated `run-semantic-inventory-check` step.
 
 ## Ownership And Evidence
 
@@ -32,3 +33,7 @@ inspection and GPU evidence remain required for status changes.
 - Intentional capability additions fail until the inventory changes with them.
 - The public API guard baseline remains unchanged unless a later implementation
   period separately admits new API.
+
+The check validates 86 feature fields, 54 feature-family inventory IDs, 99
+Metal semantic IDs, 78 Metal protocol mappings, approved status/evidence
+tokens, and exactly-once routing for all 77 incomplete rows.

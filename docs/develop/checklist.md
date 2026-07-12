@@ -50,11 +50,11 @@ closed one by one as vkmtl moves from prototype to library.
   transfer, synchronization, memory, RT, interop, and diagnostics families.
 - [x] Add a Metal source-coverage queue so missing public concepts cannot be
   hidden by the existing `DeviceFeatures` list.
-- [ ] Audit and correct the occlusion-query usable feature versus placeholder
+- [x] Audit and correct the occlusion-query usable feature versus placeholder
   runtime result.
-- [ ] Expand the Metal source-coverage queue into a versioned
+- [x] Expand the Metal source-coverage queue into a versioned
   method/feature-level ledger.
-- [ ] Define separate transient-lifetime and hardware-memoryless attachment
+- [x] Define separate transient-lifetime and hardware-memoryless attachment
   contracts and backend gates.
 - [x] Require inventory updates in every future backend lowering or capability
   change.
@@ -2547,35 +2547,35 @@ obvious render and binding blockers.
 
 ## Period 45 Phase 1 Checklist
 
-- [ ] Audit every usable `DeviceFeatures` assignment against executable work.
-- [ ] Disable the occlusion-query usable feature while results are placeholders.
-- [ ] Preserve native availability separately from usable capability.
-- [ ] Add focused capability and query rejection tests.
+- [x] Audit every usable `DeviceFeatures` assignment against executable work.
+- [x] Disable the occlusion-query usable feature while results are placeholders.
+- [x] Preserve native availability separately from usable capability.
+- [x] Add focused capability and query rejection tests.
 
 ## Period 45 Phase 2 Checklist
 
-- [ ] Pin the Metal source baseline and adjacent-framework exclusions.
-- [ ] Enumerate every in-scope Metal semantic family with stable IDs.
-- [ ] Record current vkmtl ownership or `missing-contract`.
+- [x] Pin the Metal source baseline and adjacent-framework exclusions.
+- [x] Enumerate every in-scope Metal semantic family with stable IDs.
+- [x] Record current vkmtl ownership or `missing-contract`.
 
 ## Period 45 Phase 3 Checklist
 
-- [ ] Classify Metal and Vulkan lowering for every semantic.
-- [ ] Record Vulkan core/extension/feature/limit requirements.
-- [ ] Separate transient lifetime from hardware memoryless guarantees.
+- [x] Classify Metal and Vulkan lowering for every semantic.
+- [x] Record Vulkan core/extension/feature/limit requirements.
+- [x] Separate transient lifetime from hardware memoryless guarantees.
 
 ## Period 45 Phase 4 Checklist
 
-- [ ] Link implementation locations and strongest truthful evidence.
-- [ ] Add deterministic semantic-ID, status, evidence, and feature-field drift
+- [x] Link implementation locations and strongest truthful evidence.
+- [x] Add deterministic semantic-ID, status, evidence, and feature-field drift
   checks.
-- [ ] Keep the public API guard baseline unchanged.
+- [x] Keep the public API guard baseline unchanged.
 
 ## Period 45 Phase 5 Checklist
 
-- [ ] Route every incomplete row to one dependency-ordered follow-up slice.
-- [ ] Update the inventory and backend-completion roadmap with accepted order.
-- [ ] Run API/backend validation and publish the Period 45 closeout.
+- [x] Route every incomplete row to one dependency-ordered follow-up slice.
+- [x] Update the inventory and backend-completion roadmap with accepted order.
+- [x] Run API/backend validation and publish the Period 45 closeout.
 
 ## First Backend-Independent Triangle Checklist
 

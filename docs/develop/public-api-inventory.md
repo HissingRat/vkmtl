@@ -209,6 +209,12 @@ Semantic corrections applied during the migration include:
 - runtime render-pass descriptors use the runtime object-bearing shapes, not
   the earlier core-only planning shapes.
 
+Post-baseline capability truth corrections preserve the declaration surface:
+
+- `occlusion_queries` remains a public `DeviceFeatures` field, but usable
+  reports keep it false until Metal and Vulkan resolve real native visibility
+  results. Native availability may still appear in `native_features`.
+
 Compile-time facade assertions in `src/vkmtl.zig` lock the sparse lowering
 ownership and reject a reintroduced `ray_tracing.RayQueryLoweringMode` route.
 

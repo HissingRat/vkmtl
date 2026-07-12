@@ -933,11 +933,11 @@ pub const sync_query_matrix = [_]SyncQueryMatrixEntry{
     .{
         .feature = .occlusion_queries,
         .public_api = "vkmtl.diagnostics.QuerySet occlusion begin/end and readback/resolve",
-        .portable_default = true,
+        .portable_default = false,
         .escape_hatch = false,
-        .vulkan_status = .portable_runtime,
-        .metal_status = .portable_runtime,
-        .validation = "occlusion query begin/end marks results available and rejects premature readback",
+        .vulkan_status = .deferred_native_lowering,
+        .metal_status = .deferred_native_lowering,
+        .validation = "occlusion query creation returns typed unsupported until native GPU visibility results replace the runtime placeholder",
     },
     .{
         .feature = .pipeline_statistics_queries,

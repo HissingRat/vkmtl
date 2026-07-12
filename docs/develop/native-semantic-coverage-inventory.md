@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: initial conservative baseline, 2026-07-12.
+Status: Period 45 audited baseline, 2026-07-12.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -15,10 +15,11 @@ resources, or a vkmtl state machine. It is supported only when the complete
 documented behavior is preserved. If a backend cannot preserve that behavior,
 vkmtl must report a capability-gated or typed unsupported result.
 
-This first baseline is feature-family-level. It is not yet an exhaustive
-symbol-by-symbol inventory of the Metal SDK or Vulkan registry. Source-API
-coverage must be expanded before vkmtl can claim complete Metal semantic
-coverage.
+This document remains the compact feature-family view. Period 45 adds the
+source-driven detail in `period45/metal-semantic-ledger.md`: 99 stable Metal
+semantic units, a complete 78-protocol map for the pinned SDK baseline, and
+exactly-once routing for all 77 incomplete units. It is a coverage inventory,
+not a claim that incomplete source semantics are executable.
 
 ## Source Baseline And Scope
 
@@ -136,7 +137,7 @@ develops a different lowering or support state.
 | SYN-05 | Physical dedicated queues and Vulkan queue-family ownership | `command`, `sync` | `incomplete` | `incomplete` | Planning and hazard validation exist; physical execution/evidence does not. |
 | QRY-01 | Logical timestamp sequence and CPU/marker profiling fallback | `diagnostics` | `emulated-exact` | `emulated-exact` | `unit`; explicitly not GPU time. |
 | QRY-02 | Native GPU timestamps and pipeline statistics | `diagnostics` | `incomplete` | `incomplete` | Typed unsupported or usable feature closed. |
-| QRY-03 | Occlusion result queries | `diagnostics`, render encoder | `incomplete` | `incomplete` | Critical audit: the runtime currently resolves a logical placeholder rather than a native visibility result, while the default usable feature is enabled. |
+| QRY-03 | Occlusion result queries | `diagnostics`, render encoder | `incomplete` | `incomplete` | Period 45 closed the usable feature on both backends and preserves native availability separately. Period 46 owns real GPU visibility-result lowering. |
 | MEM-01 | Heap reservation, aliasing, and transient allocation planning | `resource`, `diagnostics` | `incomplete` | `incomplete` | Deterministic plans exist; resources are not created from native heaps. |
 | MEM-02 | Transient attachment lifetime semantic | `render` | `composed-exact` | `composed-exact` | The API treats transient as a lifetime/performance hint; a hardware memoryless guarantee is not currently exposed. |
 | MEM-03 | Hardware memoryless/lazily allocated attachment guarantee | none | `incomplete` | `incomplete` | Metal memoryless and Vulkan transient/lazily-allocated mappings need a separate precise contract and lowering. Vulkan cannot promise that physical backing is never allocated. |
@@ -161,27 +162,26 @@ develops a different lowering or support state.
 | DBG-02 | Command-buffer marker groups | `command` | `native-exact` | `incomplete` | Vulkan currently validates scope without a native command-buffer marker. |
 | DBG-03 | Native capture | `diagnostics` | `native-exact` | `unsupported` | Metal developer-tools capture is opt-in; Vulkan capture is external-tool territory in the current contract. |
 
-## Metal Source-Coverage Queue
+## Metal Source-Coverage Ledger
 
-The tables above inventory current vkmtl concepts. They do not prove that all
-Metal semantics have a vkmtl owner. The following source families must be
-expanded into method/feature-level rows. Until that work is complete, the
-project must not claim exhaustive Metal API coverage.
+Period 45 expanded these source families into the 99-unit Metal semantic
+ledger. Missing vkmtl concepts remain explicit `missing-contract` entries;
+their presence in the ledger does not admit public API or claim execution.
 
 | Source family | Current inventory state | Required action |
 | --- | --- | --- |
-| Core device, queues, command buffers, resources, render/compute/blit encoders | Partially represented by current executable rows | Enumerate every non-deprecated semantic and link it to an existing row or create a gap row. |
-| Pixel/vertex formats, texture types/views, sampler variants | Incomplete | Build full format and usage mapping; separate exact, convertible, and unsupported cases. |
-| Heaps, placement resources, residency sets, sparse resources | Incomplete/planning-only | Define native allocation and residency contracts, then implement both backend mappings. |
-| Argument buffers/tables and indirect command buffers | Incomplete | Separate resource-table binding from GPU-authored command execution and inheritance rules. |
-| Function constants, dynamic libraries, linked functions, function pointers | Incomplete | Define shader/pipeline composition contracts and Vulkan equivalents or typed unsupported outcomes. |
-| Tessellation, object/mesh shaders, layered rendering, amplification | Incomplete | Finish executable pipeline/command hooks and device evidence. |
-| Tile shaders, imageblocks, raster-order groups, programmable blending | Missing public semantic inventory | Decide which observable semantics Vulkan subpasses, input attachments, interlocks, or compatibility passes can preserve. |
-| Counter sample buffers, GPU timestamps, statistics, capture scopes | Partially represented | Add native counter lowering and distinguish GPU measurements from logical/CPU fallbacks. |
-| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Partially represented | Split RT-04 into exact executable units and close Metal/Vulkan-specific gaps. |
-| Fast resource loading / Metal I/O | Missing public semantic inventory | Define async asset-to-resource loading semantics and Vulkan transfer/IO composition. |
-| Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Missing public semantic inventory | Version the baseline and evaluate each Metal 4 semantic without weakening the existing portable core. |
-| External sharing, IOSurface, shared events, platform handles | Planning-only | Finish OS/native imports, ownership transfer, submit synchronization, and examples. |
+| Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus Periods 46-48 gaps. |
+| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closes format and resource breadth. |
+| Heaps, placement resources, residency sets, sparse resources | Audited/incomplete | Period 49 owns native allocation and residency. |
+| Argument buffers/tables and indirect command buffers | Audited/incomplete | Period 50 owns scalable binding and generated commands. |
+| Function constants, dynamic libraries, linked functions, function pointers | Audited/incomplete | Periods 46 and 50 own specialization/linking. |
+| Tessellation, object/mesh shaders, layered rendering, amplification | Audited/incomplete | Period 51 owns executable advanced geometry. |
+| Tile shaders, imageblocks, raster-order groups, programmable blending | Audited/missing-contract | Period 51 decides exact composition or unsupported. |
+| Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 owns native query/counter results. |
+| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited/incomplete | Period 52 owns RT breadth. |
+| Fast resource loading / Metal I/O | Audited/missing-contract | Period 53 owns I/O and transfer composition. |
+| Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited/incomplete | Period 54 owns the new command/pipeline model. |
+| External sharing, IOSurface, shared events, platform handles | Audited/incomplete | Period 53 owns real imports and synchronization. |
 | MetalKit, MetalFX, Metal Performance Shaders | Out of current scope | These adjacent frameworks are excluded from the Metal core baseline until explicitly admitted. |
 
 The Vulkan side must also record which core version and extension set supplies
@@ -207,16 +207,10 @@ capability/limit gates, and focused evidence. If the two backends preserve
 different observable behavior, they are not one row: split the semantic or
 mark one backend incomplete/unsupported.
 
-## Immediate Audit Order
+## Follow-Up Order
 
-1. Correct QRY-03 so the public occlusion feature cannot overstate the logical
-   placeholder implementation.
-2. Expand the Metal source-coverage queue into a versioned symbol/semantic
-   ledger, starting with core resources and render/compute/blit encoders.
-3. Split transient lifetime from hardware memoryless allocation and implement
-   honest capability reporting for each.
-4. Close shader specialization and native query/timeline synchronization.
-5. Finish native heaps/sparse residency and binding tables before using the
-   voxel-world example as production-scale evidence.
-6. Finish native advanced geometry, external interop, pipeline persistence,
-   and the remaining RT maintenance/function-table lanes.
+The source audit and QRY-03 truth correction are complete. The exactly-once gap
+routing in `period45/gap-routing.tsv` establishes Periods 46-54. Period 46 is
+next: native occlusion/counter/query results and Metal function constants.
+`period45/gap-backlog.md` records the remaining dependency order and acceptance
+boundaries.

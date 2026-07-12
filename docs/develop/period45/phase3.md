@@ -1,6 +1,6 @@
 # Phase 3: Vulkan And Compatibility Mapping
 
-Status: planned.
+Status: complete for the 99-unit audited ledger.
 
 ## Mapping Rules
 
@@ -34,3 +34,8 @@ name is not a capability gate.
 - Every Metal ledger row has a Vulkan outcome and reason.
 - Required core/extension/feature/limit gates are explicit.
 - Unsupported and incomplete are distinguishable.
+
+Every row records both backend outcomes and a Vulkan mapping/gate summary.
+Transient attachment lifetime and hardware memoryless allocation are separate
+rows; Vulkan lazily allocated memory is not presented as a no-backing-memory
+guarantee.

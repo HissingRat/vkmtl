@@ -1,6 +1,7 @@
 # Phase 5: Gap Priority And Closeout
 
-Status: planned.
+Status: complete. `gap-backlog.md` and `gap-routing.tsv` route every incomplete
+semantic into Periods 46-54.
 
 ## Priority Policy
 
@@ -30,3 +31,6 @@ claims; native GPU query resolution precedes profiling claims.
 - The next implementation period is unambiguous.
 - Period 45 is marked complete only after the drift check and required API/
   backend validation commands pass.
+
+Period 46 is the unambiguous next slice: native occlusion, GPU counter/query,
+and Metal function-constant specialization closure.

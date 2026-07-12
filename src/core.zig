@@ -2592,7 +2592,6 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .explicit_resource_barriers = true,
         .fences = true,
         .events = true,
-        .occlusion_queries = true,
         .timestamp_queries = true,
     };
 
@@ -15551,7 +15550,7 @@ test "default device features separate period23 defaults from escape hatches" {
         try std.testing.expect(features.explicit_resource_barriers);
         try std.testing.expect(features.fences);
         try std.testing.expect(features.events);
-        try std.testing.expect(features.occlusion_queries);
+        try std.testing.expect(!features.occlusion_queries);
         try std.testing.expect(features.timestamp_queries);
 
         try std.testing.expect(!features.timeline_fences);

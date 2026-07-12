@@ -7,6 +7,15 @@ vkmtl follows the release and compatibility policy in
 project is still in the `0.x` series, intentional portable source breaks are
 reserved for the next minor release and are documented with migration guidance.
 
+## [Unreleased]
+
+### Fixed
+
+- Stopped advertising `occlusion_queries` as usable while both backends still
+  lack native GPU visibility-result lowering. Native availability remains
+  separately queryable, and query creation now returns the existing typed
+  unsupported error.
+
 ## [0.1.0]
 
 This release establishes the first compatibility baseline for vkmtl.

@@ -848,7 +848,9 @@ See `docs/develop/period44/`.
 
 ## Period 45: Native Semantic Coverage Audit
 
-Status: planned.
+Status: complete. The audited baseline contains 99 Metal semantic units, 78
+concrete Metal protocol mappings, complete coverage of all 86 current
+`DeviceFeatures` fields, and exactly-once routing for 77 incomplete semantics.
 
 Goal: expand the feature-family native semantic inventory into a versioned
 Metal source ledger, map every semantic to exact Metal and Vulkan execution or
@@ -862,6 +864,74 @@ and produce the dependency-ordered backend implementation backlog.
 - Phase 5: gap priority and closeout
 
 See `docs/develop/period45/`.
+
+## Period 46: Native Queries, Counters, And Specialization
+
+Status: planned; next implementation slice.
+
+Goal: replace logical/typed-unsupported query lanes with real capability-gated
+GPU visibility, counter, timestamp, and statistics results, and finish Metal
+function-constant specialization.
+
+See `docs/develop/period45/gap-backlog.md`.
+
+## Period 47: Core Resource, Format, Render, And Compute Breadth
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: close common workload gaps in formats, views, samplers, resource modes,
+render attachments/state/binding, compute dispatch, and reflection.
+
+## Period 48: Native Synchronization, Queues, And Presentation Timing
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: lower native GPU fence/event/timeline behavior, physical queues and
+ownership, lifecycle callbacks, and capability-gated presentation timing.
+
+## Period 49: Heaps, Residency, Sparse Resources, And Memoryless
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: create resources from native heaps, execute physical residency/page
+updates, and separate hardware memoryless allocation from transient lifetime.
+
+## Period 50: Binding Tables, Indirect Commands, And Pipeline Persistence
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: complete scalable resource tables, indirect/generated command paths,
+dynamic/linked functions, native object pooling, and driver artifact reuse.
+
+## Period 51: Advanced Rasterization And Geometry
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: execute tessellation and mesh/object/task pipelines and resolve tile,
+imageblock, raster-order, variable-rate, layered, and programmable-blend
+semantics through exact mappings or precise unsupported results.
+
+## Period 52: Ray Tracing Breadth
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: close AS maintenance/geometry, function-table, ray-query, callable/SBT,
+motion, and Metal 4 RT gaps around the existing native vertical slice.
+
+## Period 53: External Interop, Metal I/O, And Device Topology
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: execute real external imports/synchronization/native insertion, map Metal
+I/O through portable transfer work, and define supported multi-device topology.
+
+## Period 54: Metal 4 Command Model, Pipeline Datasets, Tensor, And ML
+
+Status: planned from the Period 45 semantic audit.
+
+Goal: evaluate and implement the newest Metal framework command allocation,
+argument table, compiler/archive/dataset, tensor, and ML semantics with exact
+Vulkan compositions or explicit unsupported outcomes.
 
 ## v0.1.0 Compatibility Release
 
@@ -905,6 +975,10 @@ See `docs/develop/period32+/target.md`.
 - Periods 42 through 44 and all nine Period 44 release-evidence gates are
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
+- Period 45 is complete as the native semantic coverage audit. Period 46 is the
+  next implementation slice; Periods 47-54 are routed from its gap ledger and
+  must not be reordered around their stated dependencies without updating the
+  inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the
   deterministic capability contract and unit coverage because the host had no

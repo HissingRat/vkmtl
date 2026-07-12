@@ -1,6 +1,6 @@
 # Phase 2: Metal Source Semantic Ledger
 
-Status: planned.
+Status: complete for the macOS 26.2 Metal framework baseline.
 
 ## Source Boundary
 
@@ -35,3 +35,9 @@ separate rows.
 - Core and advanced Metal framework families are all present in the ledger.
 - Missing vkmtl concepts remain visible as `missing-contract` rows.
 - The ledger never derives completeness only from the current public API.
+
+`metal-semantic-ledger.md` contains 99 semantic units.
+`metal-protocol-semantic-map.tsv` maps all 78 concrete protocols from the
+pinned SDK source snapshot. The 149 concrete descriptor/helper interfaces are
+folded into their configuring semantic unless they change observable behavior,
+in which case the ledger gives them a dedicated row.

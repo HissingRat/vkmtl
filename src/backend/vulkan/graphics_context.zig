@@ -365,6 +365,10 @@ fn queryNativeFeatures(
     const native = instance.getPhysicalDeviceFeatures(pdev);
     const extensions = try queryExtensionSupport(instance, pdev, allocator);
 
+    // Basic occlusion queries are core Vulkan functionality. Keep this native
+    // fact separate from vkmtl's usable feature until query-pool lowering
+    // replaces the runtime placeholder result.
+    result.occlusion_queries = true;
     result.sampler_anisotropy = native.sampler_anisotropy == .true;
     result.independent_blend = native.independent_blend == .true;
     result.tessellation = native.tessellation_shader == .true;
@@ -401,6 +405,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures
     result.sampler_anisotropy = native_features.sampler_anisotropy;
     result.independent_blend = native_features.independent_blend;
     result.tessellation = false;
+    result.occlusion_queries = false;
     result.wireframe_fill_mode = native_features.wireframe_fill_mode;
     result.vertex_instance_step_rate = native_features.vertex_instance_step_rate;
     result.multi_draw = false;
@@ -1060,6 +1065,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .driver_pipeline_cache = true,
         .native_handles = true,
         .debug_labels = true,
+        .occlusion_queries = true,
     };
     const usable = queryUsableFeatures(native);
     try std.testing.expect(!usable.descriptor_indexing);
@@ -1072,6 +1078,8 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(!usable.mesh_shaders);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expect(!usable.driver_pipeline_cache);
+    try std.testing.expect(!usable.occlusion_queries);
+    try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);
     try std.testing.expect(usable.debug_labels);
 }

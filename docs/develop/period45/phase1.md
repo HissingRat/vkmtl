@@ -1,6 +1,7 @@
 # Phase 1: Capability Truth Audit
 
-Status: planned.
+Status: complete. Usable occlusion queries are closed on both backends while
+native API availability remains separately reported.
 
 ## Decisions
 
@@ -31,3 +32,6 @@ Status: planned.
   implementation remains.
 - Timestamp logical-sequence behavior stays explicitly separate from GPU time.
 - All capability-report tests pass without changing public declarations.
+
+Implemented by the default/backend capability mappings, focused tests,
+development matrix, API capability docs, changelog, and QRY-03 inventory row.

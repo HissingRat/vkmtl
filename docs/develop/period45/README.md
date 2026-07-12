@@ -1,6 +1,9 @@
 # Period 45: Native Semantic Coverage Audit
 
-Status: planned.
+Status: complete. The audit records 99 Metal semantic units, maps all 78
+concrete Metal protocols in the macOS 26.2 SDK baseline, covers all 86 current
+`DeviceFeatures` fields, and routes all 77 incomplete semantics exactly once to
+Periods 46-54.
 
 Goal: turn the initial feature-family native semantic inventory into a
 versioned, source-driven coverage ledger. Every in-scope Metal semantic must
@@ -90,3 +93,8 @@ See `phase5.md`.
 - A repeatable validation command checks ledger shape and feature coverage.
 - Follow-up implementation slices are ordered without promoting incomplete
   rows to executable support.
+
+All acceptance items are complete. Run `zig build
+run-semantic-inventory-check` to validate the committed ledger, protocol map,
+feature map, status/evidence vocabulary, and gap routing. See `closeout.md` for
+the final counts, validation, and next-slice decision.

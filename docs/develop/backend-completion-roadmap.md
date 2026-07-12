@@ -499,14 +499,14 @@ release-readiness gates; deferred native feature lanes remain outside the claim.
 
 Tracked in `docs/develop/period45/`.
 
-- [ ] Correct false-positive usable capabilities, beginning with occlusion
+- [x] Correct false-positive usable capabilities, beginning with occlusion
   query placeholder results.
-- [ ] Expand the Metal source baseline into a stable semantic ledger.
-- [ ] Record Vulkan core/extension, composed, emulated, unsupported, or
+- [x] Expand the Metal source baseline into a stable semantic ledger.
+- [x] Record Vulkan core/extension, composed, emulated, unsupported, or
   incomplete mappings for every ledger entry.
-- [ ] Link public ownership, implementation locations, and evidence.
-- [ ] Add deterministic inventory drift checks.
-- [ ] Route every incomplete semantic into a dependency-ordered implementation
+- [x] Link public ownership, implementation locations, and evidence.
+- [x] Add deterministic inventory drift checks.
+- [x] Route every incomplete semantic into a dependency-ordered implementation
   slice.
 
 Expected result: backend completion is driven by source semantic coverage and

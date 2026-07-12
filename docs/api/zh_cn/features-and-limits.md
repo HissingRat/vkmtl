@@ -105,6 +105,12 @@ occlusion_queries timestamp_queries pipeline_statistics_queries
 driver_pipeline_cache metal_binary_archive
 ```
 
+当前两个 backend 的 usable features 都将 `occlusion_queries` 设为 false。Metal
+visibility result buffer 和 Vulkan occlusion query pool 属于 native capability，
+但在 encoder lowering 和真实 GPU result resolve 替换 runtime placeholder 之前，
+vkmtl 不会宣称该能力可执行。Logical timestamp query 仍然可用，并且明确不代表 GPU
+时间。
+
 ### Transfer、Presentation、Interop 与 Native Access
 
 ```text

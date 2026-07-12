@@ -10138,12 +10138,6 @@ test "runtime query sets support encoder writes and readback" {
         .command_buffer = &command_buffer,
         .impl = null,
     });
-    var blit_encoder = BlitCommandEncoder.init(.{
-        .backend = .vulkan,
-        .command_buffer = &command_buffer,
-        .impl = null,
-    });
-
     var timestamps = try device.makeQuerySet(.{
         .query_type = .timestamp,
         .count = 2,
@@ -10163,40 +10157,10 @@ test "runtime query sets support encoder writes and readback" {
     try std.testing.expectEqual(@as(u64, 2), timestamp_results[1]);
     try std.testing.expectError(core.QueryError.QueryTypeMismatch, render_encoder.beginOcclusionQuery(&timestamps, 0));
 
-    var occlusion = try device.makeQuerySet(.{
+    try std.testing.expectError(core.QueryError.UnsupportedOcclusionQueries, device.makeQuerySet(.{
         .query_type = .occlusion,
         .count = 1,
-    });
-    defer occlusion.deinit();
-    try std.testing.expectEqual(core.TimestampQuerySource.unavailable, occlusion.resultSource());
-    const resolve_destination_state = Buffer.State{
-        .backend = .vulkan,
-        .tracker = &tracker,
-        .impl = undefined,
-
-        .length_value = 8,
-        .usage_value = .{ .copy_destination = true },
-        .storage_mode_value = .shared,
-    };
-    var resolve_destination = Buffer.init(resolve_destination_state);
-    try std.testing.expectError(core.QueryError.QueryNotReady, blit_encoder.resolveQuerySet(&occlusion, &resolve_destination, .{
-        .first_query = 0,
-        .query_count = 1,
     }));
-    var occlusion_results = [_]u64{0};
-    try std.testing.expectError(core.QueryError.QueryNotReady, occlusion.readback(.{
-        .first_query = 0,
-        .query_count = 1,
-        .destination = occlusion_results[0..],
-    }));
-    try render_encoder.beginOcclusionQuery(&occlusion, 0);
-    try render_encoder.endOcclusionQuery(&occlusion);
-    try occlusion.readback(.{
-        .first_query = 0,
-        .query_count = 1,
-        .destination = occlusion_results[0..],
-    });
-    try std.testing.expectEqual(@as(u64, 1), occlusion_results[0]);
 
     var report = core.defaultDeviceCapabilityReport(.vulkan);
     report.features.pipeline_statistics_queries = false;

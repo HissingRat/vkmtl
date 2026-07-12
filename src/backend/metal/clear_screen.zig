@@ -276,6 +276,10 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
 
 fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.metal);
+    // Visibility result buffers are native Metal functionality. vkmtl keeps
+    // the usable feature closed until render-encoder query lowering resolves
+    // real GPU results instead of the runtime placeholder.
+    result.occlusion_queries = true;
     result.debug_markers = true;
     result.sampler_anisotropy = true;
     result.argument_buffers = capabilities.argument_buffers != 0;
@@ -345,6 +349,8 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.argument_buffers);
     try std.testing.expect(native.ray_tracing);
     try std.testing.expect(native.metal_binary_archive);
+    try std.testing.expect(native.occlusion_queries);
+    try std.testing.expect(!usable.occlusion_queries);
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);

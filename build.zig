@@ -677,6 +677,36 @@ pub fn build(b: *std.Build) void {
     });
     const run_api_guard_tests = b.addRunArtifact(api_guard_tests);
 
+    const semantic_inventory = b.addExecutable(.{
+        .name = "vkmtl-semantic-inventory-check",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/semantic_inventory/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const semantic_inventory_cmd = b.addRunArtifact(semantic_inventory);
+    semantic_inventory_cmd.addFileArg(b.path("src/core.zig"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/native-semantic-coverage-inventory.md"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/device-feature-semantic-map.tsv"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/metal-semantic-ledger.md"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/metal-protocol-semantic-map.tsv"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/gap-routing.tsv"));
+    const semantic_inventory_step = b.step(
+        "run-semantic-inventory-check",
+        "Verify native semantic IDs, status vocabulary, and DeviceFeatures coverage",
+    );
+    semantic_inventory_step.dependOn(&semantic_inventory_cmd.step);
+
+    const semantic_inventory_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/semantic_inventory/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_semantic_inventory_tests = b.addRunArtifact(semantic_inventory_tests);
+
     const validation_plan = b.addExecutable(.{
         .name = "vkmtl-validation-plan",
         .root_module = b.createModule(.{
@@ -755,6 +785,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_root_tests.step);
     test_step.dependOn(&run_development_matrix_tests.step);
     test_step.dependOn(&run_api_guard_tests.step);
+    test_step.dependOn(&semantic_inventory_cmd.step);
+    test_step.dependOn(&run_semantic_inventory_tests.step);
     test_step.dependOn(&run_backend_pipeline_tests.step);
     test_step.dependOn(&run_shader_manifest_tests.step);
     test_step.dependOn(&run_shader_build_contract_tests.step);

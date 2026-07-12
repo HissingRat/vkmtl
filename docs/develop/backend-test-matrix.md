@@ -102,7 +102,7 @@ conservative until the relevant backend period lands.
 | Queue ownership transfers | Validated logical ownership; deferred native queue-family lowering | Validation/no-op markers | Advanced escape hatch, feature-gated |
 | Command-buffer synchronization descriptor | Portable wait-before-submit / signal-after-submit validation | Portable wait-before-submit / signal-after-submit validation | `CommandBuffer.commitWithSynchronization(...)`; native submit wait/signal remains backend work |
 | Timestamp queries | Portable runtime query set | Portable runtime query set | Available by default |
-| Occlusion queries | Portable runtime query set | Portable runtime query set | Available by default |
+| Occlusion queries | Native API available; vkmtl lowering deferred | Native API available; vkmtl lowering deferred | Typed unsupported until real GPU visibility results replace the runtime placeholder |
 | Pipeline statistics queries | Capability-gated | Capability-gated | Deferred native query lowering |
 
 ## Period 36 Sync And Queue Semantics Expectations
