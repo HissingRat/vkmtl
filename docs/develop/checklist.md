@@ -2610,6 +2610,49 @@ obvious render and binding blockers.
 - [x] Update semantic inventory, gap routing, capability docs, and matrices.
 - [x] Run full API/backend validation and publish the closeout.
 
+## Period 47 Phase 1 Checklist
+
+- [ ] Split all 15 routed broad rows into executable portable subsets and
+  explicitly deferred advanced semantics.
+- [ ] Record every v0.2.0 public API allocation before implementation.
+- [ ] Keep the root, `Device`, `WindowContext`, and opaque-handle allowlists
+  unchanged.
+
+## Period 47 Phase 2 Checklist
+
+- [ ] Query and report ordinary execution limits without claiming native
+  memory-budget telemetry.
+- [ ] Expand common texture/vertex formats, compatible texture views, sampler
+  behavior, resource modes, and capability-gated buffer GPU addresses.
+- [ ] Add focused resource validation and backend mapping tests.
+
+## Period 47 Phase 3 Checklist
+
+- [ ] Validate and lower every color attachment in an MRT pass.
+- [ ] Close the ordinary render binding and dynamic raster-state subsets while
+  keeping heaps, function tables, sample positions, and advanced raster state
+  deferred.
+- [ ] Implement exact depth/stencil attachment behavior where representable and
+  retain precise typed unsupported results elsewhere.
+
+## Period 47 Phase 4 Checklist
+
+- [ ] Close direct, indirect, and documented exact-grid compute dispatch
+  semantics.
+- [ ] Close ordinary compute binding/barrier, atomics, and threadgroup-memory
+  paths without claiming native fences or advanced function tables.
+- [ ] Expand Slang reflection for the portable binding subset and keep tensor,
+  payload, and advanced threadgroup protocols deferred.
+
+## Period 47 Phase 5 Checklist
+
+- [ ] Decide managed-resource synchronization as an automatic composition or
+  an explicit typed operation on both backends.
+- [ ] Update the semantic ledger, exactly-once routing, public inventory,
+  compatibility docs, and backend matrices.
+- [ ] Run full API/backend validation and bind physical evidence to the
+  closeout before marking Period 47 complete.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

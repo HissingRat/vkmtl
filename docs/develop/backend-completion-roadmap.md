@@ -531,6 +531,24 @@ Expected result: the portable query path returns real visibility or native GPU
 ticks when the selected device supports them, never placeholder data, and both
 backends execute shader specialization without expanding the flat API root.
 
+## Wave 28: Core Resource, Format, Render, And Compute Breadth
+
+Tracked in `docs/develop/period47/`.
+
+- [ ] Split the 15 routed broad Metal rows into precise portable and deferred
+  semantics before changing capability claims.
+- [ ] Expand ordinary limits, formats, views, samplers, resource modes, and
+  capability-gated buffer addresses.
+- [ ] Close common MRT, attachment, binding, and dynamic raster-state paths.
+- [ ] Close common compute dispatch, barrier, atomic, threadgroup-memory, and
+  reflection paths.
+- [ ] Resolve managed synchronization and bind focused backend/physical
+  evidence to the closeout.
+
+Expected result: ordinary rendering and compute applications gain broader
+native coverage without pulling heaps, function tables, advanced raster state,
+native synchronization, or Metal 4 concepts into the common API prematurely.
+
 ## Slice Checklist
 
 Before starting a backend-completion slice:

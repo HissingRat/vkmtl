@@ -879,10 +879,13 @@ See `docs/develop/period46/` and
 
 ## Period 47: Core Resource, Format, Render, And Compute Breadth
 
-Status: planned from the Period 45 semantic audit.
+Status: in progress.
 
 Goal: close common workload gaps in formats, views, samplers, resource modes,
 render attachments/state/binding, compute dispatch, and reflection.
+
+See `docs/develop/period47/` and
+`docs/develop/period45/gap-backlog.md`.
 
 ## Period 48: Native Synchronization, Queues, And Presentation Timing
 
