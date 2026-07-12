@@ -44,14 +44,14 @@ pub fn main() !void {
     var source_buffer = try device.makeBuffer(.{
         .bytes = pixels[0..],
         .usage = .{ .copy_source = true },
-        .storage_mode = .shared,
+        .storage_mode = .managed,
     });
     defer source_buffer.deinit();
 
     var buffer_readback = try device.makeBuffer(.{
         .length = pixels.len,
         .usage = .{ .copy_destination = true },
-        .storage_mode = .shared,
+        .storage_mode = .managed,
     });
     defer buffer_readback.deinit();
 
@@ -70,7 +70,7 @@ pub fn main() !void {
     var texture_readback = try device.makeBuffer(.{
         .length = pixels.len,
         .usage = .{ .copy_destination = true },
-        .storage_mode = .shared,
+        .storage_mode = .managed,
     });
     defer texture_readback.deinit();
 

@@ -37,8 +37,8 @@ closed one by one as vkmtl moves from prototype to library.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
   semantic-support ledger. Period 46 completed its first implementation slice;
-  Period 47 is the active mainline priority, with Phases 1-2 complete and
-  Phase 3 render breadth next.
+  Period 47 is complete. Period 48 native synchronization, queues, and
+  presentation timing is the next mainline priority.
 
 ## Native Semantic Coverage Inventory
 
@@ -2638,20 +2638,20 @@ obvious render and binding blockers.
 
 ## Period 47 Phase 4 Checklist
 
-- [ ] Close direct, indirect, and documented exact-grid compute dispatch
+- [x] Close direct, indirect, and documented exact-grid compute dispatch
   semantics.
-- [ ] Close ordinary compute binding/barrier, atomics, and threadgroup-memory
+- [x] Close ordinary compute binding/barrier, atomics, and threadgroup-memory
   paths without claiming native fences or advanced function tables.
-- [ ] Expand Slang reflection for the portable binding subset and keep tensor,
+- [x] Expand Slang reflection for the portable binding subset and keep tensor,
   payload, and advanced threadgroup protocols deferred.
 
 ## Period 47 Phase 5 Checklist
 
-- [ ] Decide managed-resource synchronization as an automatic composition or
+- [x] Decide managed-resource synchronization as an automatic composition or
   an explicit typed operation on both backends.
-- [ ] Update the semantic ledger, exactly-once routing, public inventory,
+- [x] Update the semantic ledger, exactly-once routing, public inventory,
   compatibility docs, and backend matrices.
-- [ ] Run full API/backend validation and bind physical evidence to the
+- [x] Run full API/backend validation and bind physical evidence to the
   closeout before marking Period 47 complete.
 
 ## First Backend-Independent Triangle Checklist

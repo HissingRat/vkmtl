@@ -101,6 +101,10 @@ const bytes = mapped.bytes();
 
 `BufferMapDescriptor` validates range and access mode. Private buffers are not
 CPU-visible; upload or readback for those resources should use transfer paths.
+Managed synchronization is automatic at these boundaries: Metal publishes CPU
+writes with `didModifyRange` and synchronizes GPU writes before a CPU map/read,
+while Vulkan uses the current host-coherent managed allocation path. Callers do
+not encode a separate managed-resource synchronization command.
 Shader-visible addresses require `DeviceFeatures.buffer_gpu_address` and
 `BufferUsage.shader_device_address`; `buffer.gpuAddress()` then returns the
 native GPU address or a typed unsupported/unavailable error.
@@ -805,7 +809,9 @@ write/readback validation. `DispatchThreadgroupsDescriptor` validates dispatch
 grid and threadgroup dimensions against `DeviceLimits`; `DispatchThreadsDescriptor`
 and `ComputeCommandEncoder.dispatchThreads(...)` are convenience APIs that
 resolve total thread counts into threadgroup counts before using the same
-backend path.
+backend path. Resolution uses ceiling division, so a non-divisible logical grid
+launches extra invocations in the final threadgroup; the shader must bounds-check
+against the requested logical thread count.
 
 `DispatchThreadgroupsIndirectDescriptor` represents indirect dispatch
 arguments. Indirect buffers use `BufferUsage.indirect`; runtime
@@ -818,8 +824,12 @@ Advanced compute shader requirements can be declared with
 `ComputeAtomicDescriptor` and `ThreadgroupMemoryDescriptor`. These are
 validation shapes gated by `DeviceFeatures.compute_atomics`,
 `DeviceFeatures.compute_threadgroup_memory`, and
-`DeviceLimits.max_compute_threadgroup_memory_bytes`; vkmtl does not infer them
-from Slang source yet.
+`DeviceLimits.max_compute_threadgroup_memory_bytes`. The executable portable
+atomic subset is 32-bit integer storage-buffer and threadgroup add/min/max,
+bitwise, exchange, and compare-exchange operations. Storage-texture and wider
+atomic families are not implied. vkmtl does not infer requirements from Slang
+source yet; the compute readback example proves the supported atomic/shared
+memory path with deterministic GPU output.
 
 `ComputePipelineCacheKeyDescriptor` defines the inputs that Period 8 object
 caches must include for compute pipelines: shader source identity, backend,

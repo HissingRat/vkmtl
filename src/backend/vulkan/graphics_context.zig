@@ -420,6 +420,11 @@ fn queryNativeFeatures(
     result.ray_tracing_callable_shaders = ray_tracing.supported;
     result.driver_pipeline_cache = true;
     result.buffer_gpu_address = bufferDeviceAddressSupported(instance, pdev);
+    // 32-bit integer storage-buffer and workgroup atomics, plus workgroup
+    // shared memory, are Vulkan core shader semantics. The queried shared
+    // memory byte ceiling is reported separately through DeviceLimits.
+    result.compute_atomics = true;
+    result.compute_threadgroup_memory = true;
     return result;
 }
 
@@ -447,6 +452,8 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.ray_tracing = false;
     result.driver_pipeline_cache = false;
     result.buffer_gpu_address = native_features.buffer_gpu_address;
+    result.compute_atomics = native_features.compute_atomics;
+    result.compute_threadgroup_memory = native_features.compute_threadgroup_memory;
 
     result.native_handles = native_features.native_handles;
     result.debug_labels = native_features.debug_labels;
@@ -1164,6 +1171,8 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .debug_labels = true,
         .occlusion_queries = true,
         .buffer_gpu_address = true,
+        .compute_atomics = true,
+        .compute_threadgroup_memory = true,
     };
     const usable = queryUsableFeatures(native, true);
     try std.testing.expect(!usable.descriptor_indexing);
@@ -1178,6 +1187,8 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(!usable.driver_pipeline_cache);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.buffer_gpu_address);
+    try std.testing.expect(usable.compute_atomics);
+    try std.testing.expect(usable.compute_threadgroup_memory);
     try std.testing.expect(!queryUsableFeatures(native, false).occlusion_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);

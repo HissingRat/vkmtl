@@ -39,6 +39,17 @@ pub fn main(_: std.process.Init.Minimal) !void {
 
     var device = context.device();
     var queue = context.queue();
+    const features = device.features();
+    const limits = device.limits();
+    if (!features.compute_atomics) return error.ComputeAtomicsUnavailable;
+    if (!features.compute_threadgroup_memory) return error.ComputeThreadgroupMemoryUnavailable;
+    try (vkmtl.compute.ComputeAtomicDescriptor{
+        .operations = .{ .add = true },
+    }).validate(features);
+    try (vkmtl.compute.ThreadgroupMemoryDescriptor{
+        .bytes = 2 * @sizeOf(u32),
+        .alignment = @sizeOf(u32),
+    }).validate(features, limits);
 
     var output_buffer = try device.makeBuffer(.{
         .length = value_count * @sizeOf(u32),
@@ -146,7 +157,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
     try blit.endEncoding();
     try copy_command_buffer.commit();
 
-    const expected_values = [_]u32{ 7, 10, 13, 16 };
+    const expected_values = [_]u32{ 27, 30, 33, 36 };
     var copied: [value_count * @sizeOf(u32)]u8 = undefined;
     try readback_buffer.readBytes(0, copied[0..]);
     if (!std.mem.eql(u8, std.mem.asBytes(&expected_values), copied[0..])) {

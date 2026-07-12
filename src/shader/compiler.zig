@@ -578,9 +578,13 @@ const ReflectionModel = struct {
                 _ = index;
                 try json.print(
                     allocator,
-                    "\n        {{\n          \"binding\": {},\n          \"kind\": \"{s}\",\n          \"visibility\": \"{s}\"\n        }}",
-                    .{ resource.binding, bindingKindName(resource.kind), visibility_name },
+                    "\n        {{\n          \"binding\": {},\n          \"kind\": \"{s}\",\n          \"visibility\": \"{s}\",\n          \"array_count\": {}",
+                    .{ resource.binding, bindingKindName(resource.kind), visibility_name, resource.array_count },
                 );
+                if (resource.storage_access) |access| {
+                    try json.print(allocator, ",\n          \"storage_access\": \"{s}\"", .{storageAccessName(access)});
+                }
+                try json.appendSlice(allocator, "\n        }");
             }
             try json.appendSlice(allocator, "\n      ]\n    }\n  ");
         }
@@ -662,6 +666,8 @@ const ReflectionModel = struct {
                         .binding = binding[0],
                         .group = binding[1],
                         .kind = parsed.kind,
+                        .array_count = parsed.array_count,
+                        .storage_access = parsed.storage_access,
                     });
                     pending_binding = null;
                 }
@@ -692,6 +698,8 @@ const ResourceInfo = struct {
     binding: u32,
     group: u32,
     kind: core.BindingResourceKind,
+    array_count: u32 = 1,
+    storage_access: ?core.StorageAccess = null,
 
     fn deinit(self: *ResourceInfo, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
@@ -725,23 +733,52 @@ fn parseStructFields(
     }
 }
 
-fn parseResourceLine(line: []const u8) ?struct { name: []const u8, kind: core.BindingResourceKind } {
+fn parseResourceLine(line: []const u8) ?struct {
+    name: []const u8,
+    kind: core.BindingResourceKind,
+    array_count: u32,
+    storage_access: ?core.StorageAccess,
+} {
     const kind: core.BindingResourceKind = if (std.mem.startsWith(u8, line, "ConstantBuffer"))
         .uniform_buffer
-    else if (std.mem.startsWith(u8, line, "Texture2D"))
+    else if (std.mem.startsWith(u8, line, "RWStructuredBuffer") or
+        std.mem.startsWith(u8, line, "RWByteAddressBuffer"))
+        .storage_buffer
+    else if (std.mem.startsWith(u8, line, "StructuredBuffer") or
+        std.mem.startsWith(u8, line, "ByteAddressBuffer"))
+        .storage_buffer
+    else if (std.mem.startsWith(u8, line, "RWTexture"))
+        .storage_texture
+    else if (std.mem.startsWith(u8, line, "Texture"))
         .sampled_texture
+    else if (std.mem.startsWith(u8, line, "SamplerComparisonState"))
+        .compare_sampler
     else if (std.mem.startsWith(u8, line, "SamplerState"))
         .sampler
-    else if (std.mem.startsWith(u8, line, "RWTexture2D"))
-        .storage_texture
-    else if (std.mem.startsWith(u8, line, "RWStructuredBuffer"))
-        .storage_buffer
     else
         return null;
 
     const before_register = if (std.mem.indexOfScalar(u8, line, ':')) |colon| line[0..colon] else line;
-    const name = lastToken(before_register) orelse return null;
-    return .{ .name = name, .kind = kind };
+    const name_token = lastToken(before_register) orelse return null;
+    const array_open = std.mem.indexOfScalar(u8, name_token, '[');
+    const name = if (array_open) |open| name_token[0..open] else name_token;
+    const array_count = if (array_open) |open| blk: {
+        const close = std.mem.indexOfScalarPos(u8, name_token, open + 1, ']') orelse return null;
+        break :blk std.fmt.parseInt(u32, name_token[open + 1 .. close], 10) catch return null;
+    } else 1;
+    if (name.len == 0 or array_count == 0) return null;
+
+    const storage_access: ?core.StorageAccess = switch (kind) {
+        .storage_buffer => if (std.mem.startsWith(u8, line, "RW")) .read_write else .read,
+        .storage_texture => .read_write,
+        else => null,
+    };
+    return .{
+        .name = name,
+        .kind = kind,
+        .array_count = array_count,
+        .storage_access = storage_access,
+    };
 }
 
 fn parseBindingAnnotation(text: []const u8) ?[2]u32 {
@@ -910,6 +947,14 @@ fn bindingKindName(kind: core.BindingResourceKind) []const u8 {
     };
 }
 
+fn storageAccessName(access: core.StorageAccess) []const u8 {
+    return switch (access) {
+        .read => "read",
+        .write => "write",
+        .read_write => "read_write",
+    };
+}
+
 test "runtime reflection parser reads rainbow cube shader shape" {
     const source =
         \\struct VertexInput
@@ -1008,6 +1053,39 @@ test "runtime reflection parser reads compute shader shape" {
     try expectContains(compute_json, "\"kind\": \"storage_texture\"");
     try expectContains(compute_json, "\"kind\": \"storage_buffer\"");
     try expectContains(compute_json, "\"visibility\": \"compute\"");
+}
+
+test "runtime reflection parser preserves portable arrays and storage access" {
+    const source =
+        \\[[vk::binding(0, 0)]]
+        \\StructuredBuffer<uint> inputs[4] : register(t0, space0);
+        \\[[vk::binding(1, 0)]]
+        \\RWStructuredBuffer<uint> output : register(u1, space0);
+        \\[[vk::binding(2, 0)]]
+        \\SamplerComparisonState comparison_sampler : register(s2, space0);
+        \\[shader("compute")]
+        \\[numthreads(1, 1, 1)]
+        \\void cs_main()
+        \\{
+        \\    output[0] = inputs[0][0];
+        \\    if (comparison_sampler != comparison_sampler) { output[0] = 0; }
+        \\}
+    ;
+    var model = try ReflectionModel.parse(std.testing.allocator, source);
+    defer model.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 3), model.resources.items.len);
+    try std.testing.expectEqual(@as(u32, 4), model.resources.items[0].array_count);
+    try std.testing.expectEqual(core.StorageAccess.read, model.resources.items[0].storage_access.?);
+    try std.testing.expectEqual(core.StorageAccess.read_write, model.resources.items[1].storage_access.?);
+    try std.testing.expectEqual(core.BindingResourceKind.compare_sampler, model.resources.items[2].kind);
+
+    const json = try model.renderStageJson(std.testing.allocator, "portable_reflection", "portable_reflection.slang", .compute, "cs_main");
+    defer std.testing.allocator.free(json);
+    try expectContains(json, "\"array_count\": 4");
+    try expectContains(json, "\"storage_access\": \"read\"");
+    try expectContains(json, "\"storage_access\": \"read_write\"");
+    try expectContains(json, "\"kind\": \"compare_sampler\"");
 }
 
 test "compiled render shader exposes paired stage descriptors" {

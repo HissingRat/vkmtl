@@ -28,6 +28,7 @@ struct vkmtl_metal_clear_screen {
 
 struct vkmtl_metal_buffer {
     id<MTLBuffer> buffer;
+    id<MTLCommandQueue> queue;
     size_t length;
     vkmtl_metal_storage_mode storage_mode;
 };
@@ -1237,6 +1238,7 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
         }
 
         buffer->buffer = metal_buffer;
+        buffer->queue = [owner->queue retain];
         buffer->length = length;
         buffer->storage_mode = storage_mode;
         *out_buffer = buffer;
@@ -1326,6 +1328,7 @@ void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer) {
 
     @autoreleasepool {
         [buffer->buffer release];
+        [buffer->queue release];
         free(buffer);
     }
 }
@@ -1387,6 +1390,24 @@ vkmtl_metal_status vkmtl_metal_buffer_contents(
     }
 
     @autoreleasepool {
+        if (buffer->storage_mode == VKMTL_METAL_STORAGE_MODE_MANAGED) {
+            if (buffer->queue == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            id<MTLCommandBuffer> command_buffer = [buffer->queue commandBuffer];
+            id<MTLBlitCommandEncoder> encoder = [command_buffer blitCommandEncoder];
+            if (command_buffer == nil || encoder == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            [encoder synchronizeResource:buffer->buffer];
+            [encoder endEncoding];
+            [command_buffer commit];
+            [command_buffer waitUntilCompleted];
+            if ([command_buffer status] == MTLCommandBufferStatusError) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+        }
+
         void *contents = [buffer->buffer contents];
         if (contents == NULL) {
             return VKMTL_METAL_STATUS_INVALID_BUFFER;
@@ -1465,6 +1486,24 @@ vkmtl_metal_status vkmtl_metal_buffer_read_bytes(
     }
 
     @autoreleasepool {
+        if (buffer->storage_mode == VKMTL_METAL_STORAGE_MODE_MANAGED) {
+            if (buffer->queue == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            id<MTLCommandBuffer> command_buffer = [buffer->queue commandBuffer];
+            id<MTLBlitCommandEncoder> encoder = [command_buffer blitCommandEncoder];
+            if (command_buffer == nil || encoder == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            [encoder synchronizeResource:buffer->buffer];
+            [encoder endEncoding];
+            [command_buffer commit];
+            [command_buffer waitUntilCompleted];
+            if ([command_buffer status] == MTLCommandBufferStatusError) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+        }
+
         void *contents = [buffer->buffer contents];
         if (contents == NULL) {
             return VKMTL_METAL_STATUS_INVALID_BUFFER;

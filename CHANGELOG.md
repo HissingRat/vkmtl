@@ -13,6 +13,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 - Completed portable MRT validation/lowering for every color attachment and
   native texture-backed load/store actions, including combined depth/stencil.
+- Added executable 32-bit integer storage-buffer/threadgroup atomics and
+  threadgroup-memory capability reporting with queried byte limits.
+- Added schema-1 reflection preservation for fixed resource arrays and storage
+  access through derived bind group layouts.
 - Added queried ordinary resource limits for maximum buffer length, 1D/2D/3D
   texture dimensions, texture array layers, and Metal threadgroup memory.
 - Added `SamplerDescriptor.normalized_coordinates`; `false` lowers to native
@@ -47,11 +51,19 @@ reserved for the next minor release and are documented with migration guidance.
   `logical_sequence`.
 - Query slots may be written once between resets, and query resolve buffers must
   declare `copy_destination` usage.
+- Managed CPU/GPU synchronization is automatic at map/read/write boundaries:
+  Metal composes `didModifyRange` and `synchronizeResource`, while Vulkan uses
+  host-coherent managed buffers.
+- `dispatchThreads` is explicitly a ceil-divided threadgroup composition;
+  shaders own bounds checks for final-group invocations outside the logical grid.
 
 ### Compatibility
 
 - `RuntimeError.UnsupportedRenderPassAttachmentAction` targets `v0.2.0` and
   distinguishes current-drawable action limits from invalid attachments.
+- `ShaderReflectionBinding.storage_access` defaults to the existing storage
+  resource rules. `ShaderReflectionBindingAccessMismatch` targets `v0.2.0` for
+  exhaustive `ShaderError` switches.
 - The new `DeviceLimits` and sampler descriptor fields, plus
   `BufferLengthExceedsDeviceLimit`, `TextureExtentExceedsDeviceLimit`, and
   `InvalidUnnormalizedCoordinates`, target `v0.2.0`. Exhaustive public error

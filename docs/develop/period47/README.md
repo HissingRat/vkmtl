@@ -1,8 +1,8 @@
 # Period 47: Core Resource, Format, Render, And Compute Breadth
 
-Status: in progress.
+Status: complete.
 
-Progress: Phases 1-3 complete; Phase 4 is next.
+Progress: Phases 1-5 complete.
 
 Goal: close the common-workload subset of the 15 Period 45 rows routed to P47
 without treating each broad Metal protocol family as one portable promise.
@@ -38,6 +38,7 @@ before capability or evidence is upgraded.
 5. Managed synchronization, evidence, inventory updates, and closeout.
 
 See `phase1.md` through `phase5.md`.
+The final implementation and evidence boundary is recorded in `closeout.md`.
 
 ## Compatibility Boundary
 

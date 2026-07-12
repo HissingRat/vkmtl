@@ -38,6 +38,8 @@ was unavailable.
 
 ## Period 47: Core Resource, Format, Render, And Compute Breadth
 
+Status: complete.
+
 Priority: common workload coverage.
 
 - Native limits and memory property reporting needed by ordinary resources.
@@ -141,7 +143,6 @@ gates.
 
 ## Next Slice
 
-Period 47 is active. Period 46 closed the placeholder-query correctness gap and
-added the capability-gated native measurement foundation; Phase 1 of Period 47
-separates its portable targets from the advanced remainders routed to later
-periods.
+Period 47 is complete. Its common resource, render, compute, reflection, and
+managed-synchronization targets are executable; the advanced remainders stay
+routed to Periods 48-54. Period 48 is next.

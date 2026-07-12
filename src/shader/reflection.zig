@@ -205,6 +205,8 @@ fn validateJsonBindGroup(
             .binding = try expectU32(try requiredField(binding_value, "binding")),
             .resource = try parseResourceKind(try requiredField(binding_value, "kind")),
             .visibility = try parseVisibility(try requiredField(binding_value, "visibility")),
+            .array_count = try parseOptionalArrayCount(binding_value),
+            .storage_access = try parseOptionalStorageAccess(binding_value),
         };
         try core.validateShaderReflectionBinding(bind_group_layouts[layout_index], reflected_binding);
     }
@@ -338,6 +340,8 @@ const LayoutBuilder = struct {
                 .binding = try expectU32(try requiredField(binding_value, "binding")),
                 .resource = try parseResourceKind(try requiredField(binding_value, "kind")),
                 .visibility = try parseVisibility(try requiredField(binding_value, "visibility")),
+                .array_count = try parseOptionalArrayCount(binding_value),
+                .storage_access = try parseOptionalStorageAccess(binding_value),
             });
         }
     }
@@ -348,12 +352,25 @@ const LayoutBuilder = struct {
         binding: core.ShaderReflectionBinding,
     ) !void {
         if (binding.visibility.isEmpty()) return core.ShaderError.InvalidShaderReflection;
+        if (binding.array_count == 0) return core.ShaderError.InvalidShaderReflection;
+        if (binding.storage_access != null and
+            binding.resource != .storage_buffer and
+            binding.resource != .storage_texture)
+        {
+            return core.ShaderError.InvalidShaderReflection;
+        }
 
         const group = try self.groupForIndex(group_index);
         for (group.entries.items) |*entry| {
             if (entry.binding == binding.binding) {
                 if (entry.resource != binding.resource) {
                     return core.ShaderError.ShaderReflectionBindingKindMismatch;
+                }
+                if (entry.array_count != binding.array_count) {
+                    return core.ShaderError.ShaderReflectionBindingArrayCountMismatch;
+                }
+                if (entry.resolvedStorageAccess() != binding.resolvedStorageAccess()) {
+                    return core.ShaderError.ShaderReflectionBindingAccessMismatch;
                 }
                 entry.visibility = mergeVisibility(entry.visibility, binding.visibility);
                 return;
@@ -364,6 +381,8 @@ const LayoutBuilder = struct {
             .binding = binding.binding,
             .resource = binding.resource,
             .visibility = binding.visibility,
+            .array_count = binding.array_count,
+            .storage_access = binding.storage_access,
         });
     }
 
@@ -656,6 +675,22 @@ fn parseResourceKind(value: std.json.Value) !core.BindingResourceKind {
     return core.ShaderError.InvalidShaderReflection;
 }
 
+fn parseOptionalArrayCount(value: std.json.Value) !u32 {
+    const field = optionalField(value, "array_count") orelse return 1;
+    const count = try expectU32(field);
+    if (count == 0) return core.ShaderError.InvalidShaderReflection;
+    return count;
+}
+
+fn parseOptionalStorageAccess(value: std.json.Value) !?core.StorageAccess {
+    const field = optionalField(value, "storage_access") orelse return null;
+    const access = try expectString(field);
+    if (std.mem.eql(u8, access, "read")) return .read;
+    if (std.mem.eql(u8, access, "write")) return .write;
+    if (std.mem.eql(u8, access, "read_write")) return .read_write;
+    return core.ShaderError.InvalidShaderReflection;
+}
+
 fn parseVertexFormat(value: std.json.Value) !core.VertexFormat {
     const format = try expectString(value);
     if (std.mem.eql(u8, format, "float16x2")) return .float16x2;
@@ -773,6 +808,40 @@ test "reflection artifact validates bind group layout" {
     var future = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, future_json, .{});
     defer future.deinit();
     try std.testing.expectError(core.ShaderError.UnsupportedShaderReflectionSchema, validateJsonStage(stage_descriptor, .compute, future.value, bind_group_layouts[0..]));
+}
+
+test "reflection derives portable array counts and storage access" {
+    const json =
+        \\{
+        \\  "schema_version": 1,
+        \\  "stage": "compute",
+        \\  "entry_point": "cs_main",
+        \\  "bind_groups": [{
+        \\    "index": 0,
+        \\    "bindings": [{
+        \\      "binding": 0,
+        \\      "kind": "storage_buffer",
+        \\      "visibility": "compute",
+        \\      "array_count": 4,
+        \\      "storage_access": "read"
+        \\    }]
+        \\  }]
+        \\}
+    ;
+    var layouts = try deriveComputePipelineBindGroupLayouts(
+        std.testing.allocator,
+        .{
+            .module = .{ .source = .{ .slang = "compute stage" } },
+            .stage = .compute,
+            .entry_point = "cs_main",
+            .reflection = .{ .json = json },
+        },
+    );
+    defer layouts.deinit();
+
+    const entry = layouts.descriptors()[0].entries[0];
+    try std.testing.expectEqual(@as(u32, 4), entry.array_count);
+    try std.testing.expectEqual(core.StorageAccess.read, entry.storage_access.?);
 }
 
 test "derived render bind group layouts merge stage visibility" {

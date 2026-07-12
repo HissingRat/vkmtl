@@ -84,6 +84,9 @@ const bytes = mapped.bytes();
 
 `BufferMapDescriptor` 会校验 range 和 access mode。Private buffer 不 CPU-visible；这类资源的上传或
 读回应该走 transfer 路径。
+Managed synchronization 在这些边界自动完成：Metal 在 CPU 写后调用 `didModifyRange`，并在
+CPU map/read 前同步 GPU 写；Vulkan 当前使用 host-coherent managed allocation。调用方不需要
+额外编码 managed-resource synchronization command。
 Shader-visible address 需要 `DeviceFeatures.buffer_gpu_address` 和
 `BufferUsage.shader_device_address`；之后 `buffer.gpuAddress()` 会返回 native GPU address，或
 typed unsupported/unavailable error。
@@ -673,6 +676,8 @@ try command_buffer.commit();
 `DispatchThreadgroupsDescriptor` 会根据 `DeviceLimits` 校验 dispatch grid 和 threadgroup
 维度；`DispatchThreadsDescriptor` 与 `ComputeCommandEncoder.dispatchThreads(...)` 是便利 API，
 会把总线程数 resolve 成 threadgroup 数量，然后走同一条 backend path。
+这里使用向上取整；当 logical grid 不能整除 threadgroup size 时，最后一个 threadgroup 会有多余
+invocation，shader 必须按请求的 logical thread count 自行做 bounds check。
 
 `DispatchThreadgroupsIndirectDescriptor` 表示 indirect dispatch arguments。
 Indirect buffer 使用 `BufferUsage.indirect`；runtime `dispatchThreadgroupsIndirect(...)`
@@ -683,8 +688,11 @@ Indirect buffer 使用 `BufferUsage.indirect`；runtime `dispatchThreadgroupsInd
 高级 compute shader 需求可以用 `ComputeAtomicDescriptor` 和
 `ThreadgroupMemoryDescriptor` 显式声明。这些目前是 validation shape，由
 `DeviceFeatures.compute_atomics`、`DeviceFeatures.compute_threadgroup_memory` 和
-`DeviceLimits.max_compute_threadgroup_memory_bytes` gate 控制；vkmtl 还不会从 Slang source
-自动推断这些需求。
+`DeviceLimits.max_compute_threadgroup_memory_bytes` gate 控制。Portable 可执行 atomic 子集是
+32-bit integer storage-buffer/threadgroup 的 add/min/max、bitwise、exchange 和
+compare-exchange；它不隐含 storage-texture 或更宽的 atomic family。vkmtl 还不会从 Slang
+source 自动推断这些需求；compute readback 示例会用确定性 GPU 输出验证 atomic/shared-memory
+路径。
 
 `ComputePipelineCacheKeyDescriptor` 定义 Period 8 对 compute pipeline 做 object cache 时必须纳入
 key 的输入：shader source identity、backend、compile profile、entry point、bind group layout、

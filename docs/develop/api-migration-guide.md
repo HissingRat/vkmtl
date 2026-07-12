@@ -73,6 +73,22 @@ continue to require color clear/store and depth clear/dont-care; other actions
 return `UnsupportedRenderPassAttachmentAction`. Add that arm to exhaustive
 `RuntimeError` switches.
 
+`ShaderReflectionBinding.storage_access` now carries `.read`, `.write`, or
+`.read_write` through schema-1 reflection and derived layouts. Existing values
+default exactly as before. Pipeline validation can now return
+`ShaderReflectionBindingAccessMismatch`; exhaustive `ShaderError` switches need
+that v0.2.0 arm.
+
+The existing `compute_atomics` and `compute_threadgroup_memory` fields now open
+only for the executable 32-bit integer storage-buffer/threadgroup subset and
+queried shared-memory limit. Do not infer storage-texture or 64-bit atomics.
+`dispatchThreads` uses ceiling division, so shaders must reject extra final
+threadgroup invocations when the logical count is not divisible.
+
+Managed buffers require no new API. Existing `replaceBytes`, map/unmap, and
+`readBytes` boundaries automatically compose Metal managed synchronization and
+Vulkan host-coherent visibility.
+
 ## Migration Rules
 
 Apply these rules in order:

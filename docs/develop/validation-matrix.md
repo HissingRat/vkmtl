@@ -15,7 +15,8 @@ Current cases:
   submitted work completes. This still needs backend integration coverage.
 - `unsupported_feature`: feature-gated APIs return typed unsupported errors.
 - `shader_reflection_mismatch`: reflection layout, kind, visibility, and stage
-  mismatches are reported before pipeline creation.
+  mismatches are reported before pipeline creation; fixed array count and
+  storage-access mismatches are also preserved and rejected.
 - `runtime_sync_objects`: fences, events, synchronization commit descriptors,
   and queue waits/signals expose deterministic signal, wait, reset, timeout,
   and unsupported-gate behavior.
@@ -36,8 +37,9 @@ Current cases:
   copy compatibility, backend alignment, mip/layer/3D-slice ranges,
   depth/stencil aspects, scaled blit gates, MSAA resolve/copy behavior,
   per-subresource state transitions, sampler border colors, heap planning,
-  heap aliasing, memory-pressure reports, and transient diagnostics keep typed
-  validation.
+  heap aliasing, memory-pressure reports, transient diagnostics, compute
+  dispatch/barrier/atomic/threadgroup-memory validation, and automatic managed
+  readback keep typed validation.
 - `platform_interop`: surface registries, present-mode diagnostics, external
   interop capability matrices, memory/buffer/texture wrappers, external sync
   wrappers, and native insertion gates keep typed validation.

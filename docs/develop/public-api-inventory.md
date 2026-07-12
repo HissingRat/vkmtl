@@ -590,7 +590,21 @@ non-default actions on the prebuilt current-drawable pass. Texture-backed MRT
 and combined depth/stencil actions remain within existing render descriptors;
 no root, `Device`, `WindowContext`, or handle method is added.
 
-The additions belong to the existing `diagnostics` and `resource` domains and
+`shader.ShaderReflectionBinding` gains optional `storage_access`. Null keeps
+the existing defaults (`read_write` for storage buffers and `write` for storage
+textures); reflected fixed arrays continue to use `array_count`.
+`ShaderError` gains `ShaderReflectionBindingAccessMismatch`. The existing
+`compute_atomics` and `compute_threadgroup_memory` feature fields now mean the
+executable 32-bit integer storage-buffer/threadgroup and shared-memory subset,
+bounded by `max_compute_threadgroup_memory_bytes`.
+
+Managed synchronization remains inside existing buffer methods and adds no
+public command: Metal synchronizes managed GPU writes before CPU maps/reads and
+publishes CPU writes after writes/unmap; Vulkan uses host-coherent managed
+buffers. `dispatchThreads` remains an existing method with clarified
+ceil-composition and shader bounds responsibility.
+
+The additions belong to the existing canonical domains and
 receive no new root aliases or owner methods. Field and error-set growth targets
 `v0.2.0`; callers with exhaustive error switches must add arms.
 

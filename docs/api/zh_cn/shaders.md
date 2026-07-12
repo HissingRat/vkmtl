@@ -155,6 +155,8 @@ Slang 资源声明应该显式写 group 和 binding annotation，这样 reflecti
 - Slang binding -> `BindGroupLayoutEntry.binding`
 - Slang resource class -> `BindingResourceKind`
 - Slang stage usage -> `ShaderVisibility`
+- fixed resource array length -> `BindGroupLayoutEntry.array_count`
+- read/RW storage declaration -> `BindGroupLayoutEntry.storage_access`
 
 Sampled texture 示例使用 binding 0 作为 texture，binding 1 作为 sampler：
 
@@ -194,8 +196,9 @@ Compiled shader handle 会给每个 programmable stage 绑定运行时生成的 
 const stages = compiled.stageDescriptors(context.selectedBackend());
 ```
 
-vkmtl 会校验 stage、entry point、bind group index、binding number、resource kind 和
-shader visibility 是否匹配 pipeline descriptor 提供的 `bind_group_layouts`。Reflection 也能在
+vkmtl 会校验 stage、entry point、bind group index、binding number、resource kind、array
+count、storage access 和 shader visibility 是否匹配 pipeline descriptor 提供的
+`bind_group_layouts`。Reflection 也能在
 pipeline 创建前派生 bind group layout descriptor：
 
 ```zig
@@ -220,3 +223,7 @@ defer vertex_descriptor.deinit();
 
 所有 shader-backed examples 都附带运行时生成的 reflection artifact。更多 binding model 决策见
 `docs/develop/period1/phase6.md`。
+
+Schema 1 覆盖 portable buffer、texture、sampler、fixed array、storage access 和 vertex-input
+子集。Bindless/runtime-sized array、tensor、payload、function table 和 backend-only reflection
+protocol 不会被这个 schema 静默近似。

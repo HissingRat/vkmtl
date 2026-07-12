@@ -2201,6 +2201,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ShaderReflectionMissingBinding,
         error.ShaderReflectionBindingKindMismatch,
         error.ShaderReflectionBindingArrayCountMismatch,
+        error.ShaderReflectionBindingAccessMismatch,
         error.ShaderReflectionVisibilityMismatch,
         error.InvalidVertexStride,
         error.InvalidVertexAttributeOffset,
@@ -2936,9 +2937,18 @@ pub const ShaderReflectionBinding = struct {
     resource: BindingResourceKind,
     visibility: ShaderVisibility,
     array_count: u32 = 1,
+    storage_access: ?StorageAccess = null,
     bindless: bool = false,
     partially_bound: bool = false,
     update_after_bind: bool = false,
+
+    pub fn resolvedStorageAccess(self: ShaderReflectionBinding) ?StorageAccess {
+        return switch (self.resource) {
+            .storage_buffer => self.storage_access orelse .read_write,
+            .storage_texture => self.storage_access orelse .write,
+            .uniform_buffer, .sampled_texture, .sampler, .compare_sampler => null,
+        };
+    }
 };
 
 pub const ShaderReflectionBindGroup = struct {
@@ -4966,6 +4976,7 @@ pub const ShaderError = error{
     ShaderReflectionMissingBinding,
     ShaderReflectionBindingKindMismatch,
     ShaderReflectionBindingArrayCountMismatch,
+    ShaderReflectionBindingAccessMismatch,
     ShaderReflectionVisibilityMismatch,
     UnexpectedShaderStage,
     UnsupportedShaderSpecialization,
@@ -5041,6 +5052,13 @@ pub fn validateShaderReflectionBinding(
     reflection: ShaderReflectionBinding,
 ) ShaderError!void {
     if (reflection.visibility.isEmpty()) return ShaderError.InvalidShaderReflection;
+    if (reflection.array_count == 0) return ShaderError.InvalidShaderReflection;
+    if (reflection.storage_access != null and
+        reflection.resource != .storage_buffer and
+        reflection.resource != .storage_texture)
+    {
+        return ShaderError.InvalidShaderReflection;
+    }
 
     const layout_entry = layout.entryForBinding(reflection.binding) orelse {
         return ShaderError.ShaderReflectionMissingBinding;
@@ -5050,6 +5068,9 @@ pub fn validateShaderReflectionBinding(
     }
     if (layout_entry.array_count != reflection.array_count) {
         return ShaderError.ShaderReflectionBindingArrayCountMismatch;
+    }
+    if (layout_entry.resolvedStorageAccess() != reflection.resolvedStorageAccess()) {
+        return ShaderError.ShaderReflectionBindingAccessMismatch;
     }
     if (!visibilityContains(layout_entry.visibility, reflection.visibility)) {
         return ShaderError.ShaderReflectionVisibilityMismatch;
@@ -5063,6 +5084,12 @@ fn validateShaderStageReflectionShape(reflection: ShaderStageReflection) ShaderE
         for (bind_group.bindings) |binding| {
             if (binding.visibility.isEmpty()) return ShaderError.InvalidShaderReflection;
             if (binding.array_count == 0) return ShaderError.InvalidShaderReflection;
+            if (binding.storage_access != null and
+                binding.resource != .storage_buffer and
+                binding.resource != .storage_texture)
+            {
+                return ShaderError.InvalidShaderReflection;
+            }
         }
     }
 }
@@ -5707,7 +5734,7 @@ pub const ComputeAtomicDescriptor = struct {
 
     pub fn validate(self: ComputeAtomicDescriptor, features: DeviceFeatures) CommandEncodingError!void {
         if (!features.compute_atomics) return CommandEncodingError.UnsupportedComputeAtomics;
-        if (self.storage != .storage_buffer and self.storage != .storage_texture) {
+        if (self.storage != .storage_buffer) {
             return CommandEncodingError.InvalidAtomicStorageResource;
         }
         if (self.operations.isEmpty()) return CommandEncodingError.MissingAtomicOperation;
@@ -11843,6 +11870,27 @@ test "render pipeline descriptor validates reflection against bind group layouts
     }).validate());
 }
 
+test "reflection validates portable storage access" {
+    const layout = BindGroupLayoutDescriptor{ .entries = &.{.{
+        .binding = 0,
+        .resource = .storage_buffer,
+        .visibility = .{ .compute = true },
+        .storage_access = .read,
+    }} };
+    try validateShaderReflectionBinding(layout, .{
+        .binding = 0,
+        .resource = .storage_buffer,
+        .visibility = .{ .compute = true },
+        .storage_access = .read,
+    });
+    try std.testing.expectError(ShaderError.ShaderReflectionBindingAccessMismatch, validateShaderReflectionBinding(layout, .{
+        .binding = 0,
+        .resource = .storage_buffer,
+        .visibility = .{ .compute = true },
+        .storage_access = .read_write,
+    }));
+}
+
 test "reflection derives descriptor indexing layout for bindless resources" {
     const reflected_bindings = [_]ShaderReflectionBinding{
         .{
@@ -13012,6 +13060,10 @@ test "compute atomic and threadgroup memory descriptors validate gates" {
     }).validate(.{ .compute_atomics = true });
     try std.testing.expectError(CommandEncodingError.InvalidAtomicStorageResource, (ComputeAtomicDescriptor{
         .storage = .uniform_buffer,
+        .operations = .{ .add = true },
+    }).validate(.{ .compute_atomics = true }));
+    try std.testing.expectError(CommandEncodingError.InvalidAtomicStorageResource, (ComputeAtomicDescriptor{
+        .storage = .storage_texture,
         .operations = .{ .add = true },
     }).validate(.{ .compute_atomics = true }));
     try std.testing.expectError(CommandEncodingError.MissingAtomicOperation, (ComputeAtomicDescriptor{}).validate(.{ .compute_atomics = true }));

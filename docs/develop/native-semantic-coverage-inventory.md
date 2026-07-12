@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 47 semantic-allocation update, 2026-07-12.
+Status: Period 47 complete, 2026-07-12.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -19,8 +19,9 @@ This document remains the compact feature-family view. Period 45 adds the
 source-driven detail in `period45/metal-semantic-ledger.md`. Period 45 recorded
 the historical 99-unit/77-gap baseline. Period 46 split broad query/counter
 rows into 101 units. Period 47 Phase 1 split six advanced remainders from its
-portable targets, producing 107 stable Metal semantic units, retaining the
-complete 78-protocol map, and routing all 81 incomplete units exactly once.
+portable targets, producing 107 stable Metal semantic units and retaining the
+complete 78-protocol map. Closing Period 47 leaves 66 incomplete units routed
+exactly once.
 It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
 
@@ -95,7 +96,7 @@ develops a different lowering or support state.
 
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
-| DEV-01 | Backend selection, adapter/device discovery, capability report | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately. |
+| DEV-01 | Backend selection, adapter/device discovery, capability report, and ordinary execution limits | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately, while queried resource/dispatch/threadgroup limits feed validation. |
 | DEV-02 | Command queue/buffer creation, commit, completion, presentation | `command`, `presentation` | `native-exact` | `native-exact` | `gpu-soak`. |
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
 | RES-02 | 1D/2D/3D, array, cube, and multisample texture fundamentals | `resource` | `native-exact` | `native-exact` | `unit` plus representative `gpu-pixels`; full shape/format matrix remains unobserved. |
@@ -104,9 +105,9 @@ develops a different lowering or support state.
 | RES-05 | Full-texture mipmap generation | `transfer` | `native-exact` | `native-exact` | `unit`; partial mip/layer ranges remain incomplete. |
 | RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. Metal uses a conservative capability table and Vulkan queries format properties; unallocated native formats remain unsupported. |
 | RES-07 | Capability-gated shader-visible buffer GPU address | `resource`, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke` on Apple M4 Pro plus Vulkan unit/inspection; callers declare `shader_device_address`, creation checks the usable feature, and zero/unavailable native addresses return typed errors. |
-| RES-08 | Automatic/shared/managed/private portable storage behavior | `resource` | `native-exact` | `composed-exact` | `unit`; private CPU access is rejected, while Vulkan composes host-coherent buffers and staged device-local textures. Exact managed CPU/GPU synchronization evidence remains in `XFR-04`. |
+| RES-08 | Automatic/shared/managed/private portable storage behavior and CPU/GPU visibility boundaries | `resource`, `transfer` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal plus Vulkan unit/inspection; Metal composes `didModifyRange` and `synchronizeResource`, Vulkan uses host-coherent managed buffers, and private CPU access is rejected. |
 | SHD-01 | Build-time Slang compilation and embedded runtime shader resolution | `shader` | `composed-exact` | `composed-exact` | Hosted build and `gpu-pixels`; MSL and SPIR-V are produced before runtime. |
-| SHD-02 | Reflection-derived binding and vertex metadata | `shader`, `binding`, `render` | `composed-exact` | `composed-exact` | `unit` and representative rendering. |
+| SHD-02 | Reflection-derived buffer/texture/sampler kinds, arrays, storage access, and vertex metadata | `shader`, `binding`, `render` | `composed-exact` | `composed-exact` | `unit` and representative rendering; schema 1 keeps advanced backend-only protocols outside the portable metadata. |
 | SHD-03 | Shader specialization constants/function constants by stable numeric ID | `shader` | `native-exact` | `native-exact` | `gpu-pixels` on Metal plus unit coverage for both mappings; Metal specializes vertex, fragment, and compute functions, while Vulkan uses specialization info. Generated names are diagnostic only. |
 
 ### Rendering, Binding, Compute, And Transfer
@@ -120,12 +121,12 @@ develops a different lowering or support state.
 | REN-05 | Wireframe/line fill and depth bias | `render` | `native-exact` | `native-exact` | `unit`; native capability gates apply. |
 | REN-06 | Conservative rasterization | `render` | `incomplete` | `incomplete` | Public capability exists, but complete lowering/evidence is absent. |
 | REN-07 | Depth/stencil resolve and texture-view format reinterpretation | `render`, `resource` | `incomplete` | `incomplete` | Compatible linear/sRGB texture views and component swizzles are native-exact in Period 47; depth/stencil resolve remains typed unsupported. |
-| BND-01 | Ordinary bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative rendering. |
+| BND-01 | Ordinary render/compute bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative render/compute `gpu-pixels`. |
 | BND-02 | Root/small constants | `binding` | `native-exact` | `native-exact` | `unit`; Metal bytes and Vulkan push-constant lowering are backend-specific. |
 | BND-03 | Bindless tables, descriptor indexing, and argument buffers | `binding` | `incomplete` | `incomplete` | Runtime/table contracts exist, but usable features remain conservatively closed and large-table GPU evidence is missing. |
-| CMP-01 | Compute pipeline and direct dispatch | `compute` | `native-exact` | `native-exact` | `gpu-pixels` through deterministic compute readback. |
+| CMP-01 | Compute pipeline, direct dispatch, and ceil-composed logical-thread dispatch | `compute` | `native-exact` | `native-exact` | `gpu-pixels` through deterministic compute readback; shaders own out-of-logical-grid bounds checks after ceil composition. |
 | CMP-02 | Indirect compute dispatch | `compute` | `native-exact` | `native-exact` | `unit`; focused physical-device evidence is not recorded. |
-| CMP-03 | Shader atomics and threadgroup memory capability contract | `compute` | `incomplete` | `incomplete` | Public feature fields exist; complete query/lowering/evidence audit is pending. |
+| CMP-03 | 32-bit integer storage-buffer/threadgroup atomics and threadgroup memory within queried limits | `compute` | `native-exact` | `native-exact` | `gpu-pixels` on Metal proves deterministic atomic/shared-memory output; Vulkan has unit/compile evidence and core semantic inspection. Storage-texture and wider atomic families are not promised. |
 | XFR-01 | Buffer/texture copies across current color mip/layer/slice ranges | `transfer` | `composed-exact` | `native-exact` | `gpu-pixels`; Metal may loop over slices. |
 | XFR-02 | Unaligned buffer fill | `transfer` | `native-exact` | `composed-exact` | `unit`; Vulkan uses a staging-copy fallback. |
 | XFR-03 | Scaled texture blit | `transfer` | `unsupported` | `native-exact` | Metal returns typed `UnsupportedTextureBlit`; Vulkan is format-capability-gated. |
@@ -177,8 +178,8 @@ their presence in the ledger does not admit public API or claim execution.
 
 | Source family | Current inventory state | Required action |
 | --- | --- | --- |
-| Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus Periods 46-48 gaps. |
-| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closes format and resource breadth. |
+| Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus Period 48 native synchronization gaps. |
+| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited/incomplete | Period 49 owns native allocation and residency. |
 | Argument buffers/tables and indirect command buffers | Audited/incomplete | Period 50 owns scalable binding and generated commands. |
 | Function constants, dynamic libraries, linked functions, function pointers | Audited/incomplete | Period 46 completed numeric-ID function constants; Period 50 owns linking breadth. |
@@ -216,7 +217,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Period 46 native query/specialization slice are complete.
-The updated exactly-once gap routing establishes Periods 47-54; Period 47 is
-active. `period45/gap-backlog.md` records the remaining dependency order and
+The source audit and Periods 46-47 are complete. The updated exactly-once gap
+routing establishes Periods 48-54; Period 48 is active.
+`period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

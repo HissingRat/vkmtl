@@ -154,6 +154,11 @@ Optional feature family 的 maximum/page-size 为 0 时，表示 limit 不可用
 limit 可能使用保守的非零默认值。`max_sampler_anisotropy == 1` 不能在
 `sampler_anisotropy == false` 时启用 anisotropy。
 
+`compute_atomics` 当前表示可执行的 portable 32-bit integer storage-buffer/threadgroup
+atomic 子集，不表示 storage-texture 或 64-bit atomic breadth。
+`compute_threadgroup_memory` 必须和 `max_compute_threadgroup_memory_bytes` 一起使用；feature
+为 true 也不能越过这个 byte ceiling。
+
 ## FormatCapabilities Fields
 
 每个 texture format 独立报告：

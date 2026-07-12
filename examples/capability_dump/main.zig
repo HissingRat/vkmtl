@@ -130,6 +130,7 @@ fn dumpReport(report: vkmtl.diagnostics.DeviceCapabilityReport) void {
     std.debug.print("  max 2D texture dimension: {}\n", .{report.limits.max_texture_dimension_2d});
     std.debug.print("  max texture array layers: {}\n", .{report.limits.max_texture_array_layers});
     std.debug.print("  max compute threads/threadgroup: {}\n", .{report.limits.max_compute_total_threads_per_threadgroup});
+    std.debug.print("  max compute threadgroup memory bytes: {}\n", .{report.limits.max_compute_threadgroup_memory_bytes});
     std.debug.print("  buffer/texture copy offset alignment: {}\n", .{report.limits.buffer_texture_copy_offset_alignment});
     std.debug.print("  buffer/texture copy row-pitch alignment: {}\n", .{report.limits.buffer_texture_copy_row_pitch_alignment});
     std.debug.print("  max bindless descriptors/range: {}\n", .{report.limits.max_bindless_descriptors_per_range});
@@ -142,6 +143,8 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  shader specialization: {}\n", .{features.shader_specialization});
     std.debug.print("  render pipelines: {}\n", .{features.render_pipelines});
     std.debug.print("  compute pipelines: {}\n", .{features.compute_pipelines});
+    std.debug.print("  compute atomics: {}\n", .{features.compute_atomics});
+    std.debug.print("  compute threadgroup memory: {}\n", .{features.compute_threadgroup_memory});
     std.debug.print("  bind groups: {}\n", .{features.bind_groups});
     std.debug.print("  occlusion queries: {}\n", .{features.occlusion_queries});
     std.debug.print("  timestamp queries: {}\n", .{features.timestamp_queries});

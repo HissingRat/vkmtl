@@ -319,6 +319,8 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.ray_tracing_callable_shaders = false;
     result.metal_binary_archive = capabilities.binary_archive != 0;
     result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
+    result.compute_atomics = true;
+    result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
 }
 
@@ -329,6 +331,8 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.debug_markers = true;
     result.sampler_anisotropy = true;
     result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
+    result.compute_atomics = true;
+    result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
 }
 
@@ -403,9 +407,13 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.timestamp_queries);
     try std.testing.expect(native.shader_specialization);
     try std.testing.expect(native.buffer_gpu_address);
+    try std.testing.expect(native.compute_atomics);
+    try std.testing.expect(native.compute_threadgroup_memory);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.shader_specialization);
     try std.testing.expect(usable.buffer_gpu_address);
+    try std.testing.expect(usable.compute_atomics);
+    try std.testing.expect(usable.compute_threadgroup_memory);
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);

@@ -147,7 +147,20 @@ conservative until the relevant backend period lands.
 | Resource state | Per-mip/per-layer portable tracker plus backend image layouts | Per-mip/per-layer portable tracker; native encoder state remains private | Texture views share state; partial explicit barriers are transactional |
 | Color MSAA resolve | Native render-pass resolve | Native render-pass resolve | Source must be multisampled; destination must be matching single-sample texture |
 | Depth/stencil resolve | Typed unsupported | Typed unsupported | Capability flags remain false until validated lowering exists |
-| View format reinterpretation | Typed unsupported | Typed unsupported | Views currently keep the texture's exact format |
+| View format reinterpretation | Compatible linear/sRGB classes plus component swizzle | Compatible linear/sRGB classes plus component swizzle | Other reinterpretations remain typed unsupported |
+
+## Period 47 Common Breadth Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Ordinary resource/dispatch limits | Native physical-device properties | Native device properties/family floors | Resource and compute validation consume queried limits |
+| Direct/logical-thread compute dispatch | Native dispatch; logical threads ceil-compose | Native dispatch; logical threads ceil-compose | Shader owns final-group bounds checks |
+| Indirect compute dispatch | Native indirect dispatch | Native indirect dispatch | Usage, offset, alignment, and threadgroup size are validated |
+| Compute bind groups/root constants | Descriptor sets/push constants | Resource slots/inline bytes | Ordinary path is executable; function tables/heaps stay deferred |
+| Compute buffer/texture barriers | Native pipeline barriers plus hazard state | Automatic hazard/order composition plus hazard state | Native fences/events stay Period 48 |
+| 32-bit integer atomics/threadgroup memory | Core SPIR-V semantics and queried shared-memory limit | Native atomic/groupshared semantics and queried limit | Storage-texture/64-bit atomic breadth is not promised |
+| Portable reflection | Schema-1 array/access metadata consumed with SPIR-V | Same schema-1 metadata consumed with MSL | Advanced backend-only protocols stay deferred |
+| Managed synchronization | Host-coherent managed buffers | `didModifyRange` plus `synchronizeResource` | Automatic at current map/read/write boundaries |
 
 ## Period 43 Debug Label And Marker Expectations
 

@@ -168,6 +168,8 @@ The intended mapping is:
 - Slang binding -> `BindGroupLayoutEntry.binding`
 - Slang resource class -> `BindingResourceKind`
 - Slang stage usage -> `ShaderVisibility`
+- fixed resource array length -> `BindGroupLayoutEntry.array_count`
+- read/RW storage declaration -> `BindGroupLayoutEntry.storage_access`
 
 The first sampled texture example uses binding 0 for the texture and binding 1
 for the sampler:
@@ -236,8 +238,8 @@ const stages = compiled.stageDescriptors(context.selectedBackend());
 ```
 
 vkmtl checks stage, entry point, bind group index, binding number, resource
-kind, and shader visibility against the `bind_group_layouts` supplied to the
-pipeline descriptor. Reflection can also derive the bind group layout
+kind, array count, storage access, and shader visibility against the
+`bind_group_layouts` supplied to the pipeline descriptor. Reflection can also derive the bind group layout
 descriptors before pipeline creation:
 
 ```zig
@@ -266,5 +268,10 @@ Shader-resource examples use reflection to derive their bind group layout
 descriptors before backend pipeline creation. Single-buffer rendering examples
 derive their vertex descriptors from reflection. `zig build test` covers the
 runtime reflection parser and reflection derivation helpers.
+
+Schema 1 covers the portable buffer, texture, sampler, fixed-array, storage
+access, and vertex-input subset. Bindless/runtime-sized arrays, tensors,
+payloads, function tables, and backend-only reflection protocols are not
+silently approximated by this schema.
 
 See `docs/develop/period1/phase6.md` for the binding-model decision notes.

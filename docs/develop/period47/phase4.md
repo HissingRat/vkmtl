@@ -1,6 +1,6 @@
 # Phase 4: Compute And Reflection Breadth
 
-Status: planned.
+Status: complete.
 
 ## Scope
 
@@ -16,3 +16,18 @@ Status: planned.
 
 Native fences/events, heaps, function tables, tensors, payload bindings, and
 backend-only reflection protocols remain outside this phase.
+
+## Result
+
+- Direct and indirect dispatch share the existing backend command paths.
+  `dispatchThreads` is a ceil-divided threadgroup composition; shaders remain
+  responsible for rejecting invocations beyond the requested logical grid.
+- Ordinary compute bind groups, root constants, buffer barriers, and texture
+  barriers execute on both backends. Native fences and events remain Period 48.
+- Both backends report executable 32-bit integer storage-buffer/threadgroup
+  atomics and queried threadgroup-memory limits. The compute readback probe now
+  validates storage-buffer atomics, threadgroup atomics, shared memory, and a
+  deterministic result on physical Metal.
+- Schema-1 reflection now preserves portable resource arrays and storage
+  access in addition to buffer, texture, sampler, and vertex-input metadata.
+  Advanced reflection protocols remain deferred.

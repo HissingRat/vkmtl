@@ -164,6 +164,12 @@ limits may have conservative nonzero defaults when the capability source is a
 fallback. `max_sampler_anisotropy == 1` does not enable anisotropy when
 `sampler_anisotropy` is false.
 
+`compute_atomics` currently means the executable portable 32-bit integer
+storage-buffer/threadgroup atomic subset, not storage-texture or 64-bit atomic
+breadth. `compute_threadgroup_memory` must be combined with
+`max_compute_threadgroup_memory_bytes`; a true feature does not override that
+byte ceiling.
+
 ## FormatCapabilities Fields
 
 Each texture format independently reports:

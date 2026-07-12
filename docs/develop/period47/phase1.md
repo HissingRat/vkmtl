@@ -28,6 +28,10 @@ Status: complete.
 - Common format and vertex-format additions remain in `resource` and `render`.
 - Compute atomics/threadgroup memory use their existing `compute` descriptors
   and feature/limit fields.
+- Portable reflection access uses optional
+  `shader.ShaderReflectionBinding.storage_access`; schema-1 JSON keeps the
+  field optional and adds `ShaderReflectionBindingAccessMismatch` for precise
+  validation. Both additions target `v0.2.0`.
 - Managed synchronization belongs to `transfer` and the blit encoder only if
   automatic map/copy composition cannot preserve the documented behavior.
 

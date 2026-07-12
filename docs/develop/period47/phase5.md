@@ -1,6 +1,6 @@
 # Phase 5: Managed Synchronization, Evidence, And Closeout
 
-Status: planned.
+Status: complete.
 
 ## Decisions To Complete
 
@@ -22,3 +22,14 @@ Status: planned.
   row receives backend-specific physical evidence status.
 - Exact-commit evidence and an explicit list of unsupported/deferred semantics
   in the closeout.
+
+## Decision
+
+Managed synchronization is automatic at the existing CPU/GPU boundaries; no
+new public transfer command is required. Metal calls `didModifyRange` after CPU
+writes and composes a synchronous blit `synchronizeResource` before CPU maps or
+reads. Vulkan's current portable managed path uses host-coherent allocations,
+so its map/read/write boundaries need no explicit flush or invalidate command.
+Private resources remain inaccessible to CPU helpers on both backends.
+
+The exact validation and evidence boundary is recorded in `closeout.md`.
