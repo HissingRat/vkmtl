@@ -100,7 +100,7 @@ develops a different lowering or support state.
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
 | RES-02 | 1D/2D/3D, array, cube, and multisample texture fundamentals | `resource` | `native-exact` | `native-exact` | `unit` plus representative `gpu-pixels`; full shape/format matrix remains unobserved. |
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |
-| RES-04 | Sampler filtering, comparison, anisotropy, and fixed border color | `resource` | `native-exact` | `native-exact` | `unit`; device gates still apply. |
+| RES-04 | Sampler filtering, addressing, LOD, comparison, anisotropy, normalized/unnormalized coordinates, and fixed border color | `resource` | `native-exact` | `native-exact` | `unit`; unnormalized coordinates use the documented shared constraint set and device gates still apply. |
 | RES-05 | Full-texture mipmap generation | `transfer` | `native-exact` | `native-exact` | `unit`; partial mip/layer ranges remain incomplete. |
 | RES-06 | Current portable texture formats and format capability queries | `resource` | `composed-exact` | `native-exact` | `unit`; Metal uses a conservative table, Vulkan queries format properties. The current format enum is not complete Metal format coverage. |
 | SHD-01 | Build-time Slang compilation and embedded runtime shader resolution | `shader` | `composed-exact` | `composed-exact` | Hosted build and `gpu-pixels`; MSL and SPIR-V are produced before runtime. |

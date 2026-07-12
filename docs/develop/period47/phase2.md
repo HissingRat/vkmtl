@@ -1,6 +1,20 @@
 # Phase 2: Limits And Core Resources
 
-Status: planned.
+Status: in progress.
+
+## Implemented Slice: Limits And Samplers
+
+- `DeviceLimits` now reports maximum buffer length, texture dimensions, array
+  layers, and the queried Metal threadgroup-memory limit. Vulkan uses core 1.3
+  maintenance-4 properties for maximum buffer size and core physical-device
+  properties for texture limits.
+- Buffer and texture factories validate those limits before native creation.
+- `SamplerDescriptor.normalized_coordinates` lowers to
+  `VkSamplerCreateInfo.unnormalizedCoordinates` and
+  `MTLSamplerDescriptor.normalizedCoordinates`. A shared portable constraint
+  set rejects combinations that one of the backends cannot represent.
+- Focused descriptor and native-capability mapping tests cover the new limits
+  and validation. Format/view and buffer-address work remains in this phase.
 
 ## Scope
 

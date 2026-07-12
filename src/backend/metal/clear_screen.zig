@@ -325,6 +325,18 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
 
 fn limitsFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceLimits {
     var result = core.defaultDeviceLimits(.metal);
+    if (capabilities.max_buffer_length != 0) {
+        result.max_buffer_length = capabilities.max_buffer_length;
+    }
+    if (capabilities.max_texture_dimension_1d != 0) {
+        result.max_texture_dimension_1d = capabilities.max_texture_dimension_1d;
+        result.max_texture_dimension_2d = capabilities.max_texture_dimension_2d;
+        result.max_texture_dimension_3d = capabilities.max_texture_dimension_3d;
+        result.max_texture_array_layers = capabilities.max_texture_array_layers;
+    }
+    if (capabilities.max_threadgroup_memory_length != 0) {
+        result.max_compute_threadgroup_memory_bytes = @intCast(capabilities.max_threadgroup_memory_length);
+    }
     result.max_sampler_anisotropy = 16;
     if (capabilities.max_threads_per_threadgroup_total != 0) {
         result.max_compute_threads_per_threadgroup_x = capabilities.max_threads_per_threadgroup_width;
@@ -362,6 +374,12 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .max_buffer_argument_table_entries = 128,
         .max_texture_argument_table_entries = 128,
         .max_sampler_argument_table_entries = 16,
+        .max_buffer_length = 8 * 1024 * 1024 * 1024,
+        .max_threadgroup_memory_length = 32 * 1024,
+        .max_texture_dimension_1d = 16384,
+        .max_texture_dimension_2d = 16384,
+        .max_texture_dimension_3d = 2048,
+        .max_texture_array_layers = 2048,
     };
 
     const native = nativeFeaturesFromMetalCapabilities(capabilities);
@@ -379,6 +397,9 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);
+    try std.testing.expectEqual(@as(u64, 8 * 1024 * 1024 * 1024), queried_limits.max_buffer_length);
+    try std.testing.expectEqual(@as(u32, 16384), queried_limits.max_texture_dimension_2d);
+    try std.testing.expectEqual(@as(u32, 32 * 1024), queried_limits.max_compute_threadgroup_memory_bytes);
     try std.testing.expectEqual(@as(u32, 128), queried_limits.max_bindless_descriptors_per_range);
 }
 

@@ -22,6 +22,24 @@ inspect `QuerySet.resultSource()`: `native_gpu` now means raw native ticks, not
 a calibrated duration. Shader specialization descriptors use the same stable
 numeric ID on Vulkan and Metal; optional names do not control native lookup.
 
+## Period 47 v0.2.0 Resource-Limit And Sampler Update
+
+`DeviceLimits` adds maximum buffer length, 1D/2D/3D texture dimensions, and
+texture array-layer limits. `Device.makeBuffer(...)` and
+`Device.makeTexture(...)` now reject descriptors beyond those selected-device
+limits with `BufferLengthExceedsDeviceLimit` and
+`TextureExtentExceedsDeviceLimit`.
+
+`SamplerDescriptor.normalized_coordinates` defaults to `true`, so existing
+literals keep their behavior. For unnormalized texel coordinates, set it to
+`false` and also use equal min/mag filters, `not_mipmapped`, clamp-to-edge on
+all axes, both LOD clamps at zero, no comparison, unit anisotropy, and no border
+color. Invalid combinations return `InvalidUnnormalizedCoordinates`.
+
+These additions target `v0.2.0`: ordinary `try` propagation is unchanged, but
+exhaustive switches over `BufferError`, `TextureError`, or `SamplerError` need
+one new arm each.
+
 ## Migration Rules
 
 Apply these rules in order:

@@ -1161,6 +1161,28 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
         // a pipeline exists, report the largest guaranteed one-axis group.
         out_capabilities->max_threads_per_threadgroup_total =
             (unsigned int)MAX(max_threads.width, MAX(max_threads.height, max_threads.depth));
+        if ([device respondsToSelector:@selector(maxBufferLength)]) {
+            out_capabilities->max_buffer_length = [device maxBufferLength];
+        }
+        if ([device respondsToSelector:@selector(maxThreadgroupMemoryLength)]) {
+            out_capabilities->max_threadgroup_memory_length = [device maxThreadgroupMemoryLength];
+        }
+
+        // Metal exposes texture limits by GPU family rather than individual
+        // device properties. Start with the portable family floor and raise
+        // only when the queried family guarantees the larger limit.
+        out_capabilities->max_texture_dimension_1d = 8192;
+        out_capabilities->max_texture_dimension_2d = 8192;
+        out_capabilities->max_texture_dimension_3d = 2048;
+        out_capabilities->max_texture_array_layers = 256;
+        if (@available(macOS 10.15, *)) {
+            if ([device supportsFamily:MTLGPUFamilyMac1] ||
+                [device supportsFamily:MTLGPUFamilyApple3]) {
+                out_capabilities->max_texture_dimension_1d = 16384;
+                out_capabilities->max_texture_dimension_2d = 16384;
+                out_capabilities->max_texture_array_layers = 2048;
+            }
+        }
 
         if ([device respondsToSelector:@selector(argumentBuffersSupport)]) {
             MTLArgumentBuffersTier tier = [device argumentBuffersSupport];
@@ -1603,6 +1625,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_compare_function compare_function,
     float max_anisotropy,
     vkmtl_metal_sampler_border_color border_color,
+    unsigned int normalized_coordinates,
     vkmtl_metal_sampler_state **out_sampler
 ) {
     if (out_sampler == NULL) {
@@ -1629,6 +1652,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
         descriptor.lodMinClamp = lod_min_clamp;
         descriptor.lodMaxClamp = lod_max_clamp;
         descriptor.borderColor = vkmtl_sampler_border_color(border_color);
+        descriptor.normalizedCoordinates = normalized_coordinates != 0;
         if (compare_enabled != 0) {
             descriptor.compareFunction = vkmtl_compare_function(compare_function);
         }

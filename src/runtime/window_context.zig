@@ -619,6 +619,7 @@ fn hashSamplerDescriptor(hash: *u64, descriptor: core.SamplerDescriptor) void {
         hashBool(hash, false);
     }
     hashF32(hash, descriptor.max_anisotropy);
+    hashBool(hash, descriptor.normalized_coordinates);
     if (descriptor.border_color) |border_color| {
         hashBool(hash, true);
         hashU64(hash, @intFromEnum(border_color));
@@ -6723,7 +6724,7 @@ pub const Device = struct {
     }
 
     pub fn makeBuffer(self: *Device, descriptor: core.BufferDescriptor) !Buffer {
-        const length = try descriptor.resolvedLength();
+        const length = try descriptor.validateForLimits(self.limits());
         const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| Buffer.Impl{ .vulkan = try vulkan.makeBuffer(descriptor) },
             .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(descriptor) },
@@ -6975,7 +6976,7 @@ pub const Device = struct {
     }
 
     pub fn makeTexture(self: *Device, descriptor: core.TextureDescriptor) !Texture {
-        try descriptor.validate();
+        try descriptor.validateForLimits(self.limits());
         if (!self.getFormatCaps(descriptor.format).supportsTextureDescriptor(descriptor)) {
             return core.TextureError.UnsupportedTextureUsage;
         }

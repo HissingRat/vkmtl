@@ -157,6 +157,11 @@ pub const DeviceFeatures = struct {
 };
 
 pub const DeviceLimits = struct {
+    max_buffer_length: u64 = 256 * 1024 * 1024,
+    max_texture_dimension_1d: u32 = 8192,
+    max_texture_dimension_2d: u32 = 8192,
+    max_texture_dimension_3d: u32 = 2048,
+    max_texture_array_layers: u32 = 256,
     max_vertex_buffer_slots: u32 = default_max_vertex_buffer_slots,
     max_bind_group_slots: u32 = default_max_bind_group_slots,
     max_color_attachments: u32 = default_max_color_attachments,
@@ -6336,6 +6341,35 @@ pub const TextureDescriptor = struct {
         }
     }
 
+    pub fn validateForLimits(self: TextureDescriptor, limits: DeviceLimits) TextureError!void {
+        try self.validate();
+        switch (self.dimension) {
+            .one_d => {
+                if (self.width > limits.max_texture_dimension_1d or
+                    self.depth_or_array_layers > limits.max_texture_array_layers)
+                {
+                    return TextureError.TextureExtentExceedsDeviceLimit;
+                }
+            },
+            .two_d => {
+                if (self.width > limits.max_texture_dimension_2d or
+                    self.height > limits.max_texture_dimension_2d or
+                    self.depth_or_array_layers > limits.max_texture_array_layers)
+                {
+                    return TextureError.TextureExtentExceedsDeviceLimit;
+                }
+            },
+            .three_d => {
+                if (self.width > limits.max_texture_dimension_3d or
+                    self.height > limits.max_texture_dimension_3d or
+                    self.depth_or_array_layers > limits.max_texture_dimension_3d)
+                {
+                    return TextureError.TextureExtentExceedsDeviceLimit;
+                }
+            },
+        }
+    }
+
     pub fn isArray(self: TextureDescriptor) bool {
         return self.dimension != .three_d and self.depth_or_array_layers > 1;
     }
@@ -8064,6 +8098,7 @@ pub const TextureError = error{
     TextureUploadSizeOverflow,
     UnsupportedTextureUploadFormat,
     UnsupportedMipmapGeneration,
+    TextureExtentExceedsDeviceLimit,
 };
 
 pub const SamplerMinMagFilter = enum {
@@ -8103,11 +8138,26 @@ pub const SamplerDescriptor = struct {
     compare_function: ?CompareFunction = null,
     max_anisotropy: f32 = 1,
     border_color: ?SamplerBorderColor = null,
+    normalized_coordinates: bool = true,
     cache_policy: ObjectCachePolicy = .{},
 
     pub fn validate(self: SamplerDescriptor) SamplerError!void {
         if (self.lod_min_clamp > self.lod_max_clamp) return SamplerError.InvalidLodRange;
         if (self.max_anisotropy < 1) return SamplerError.InvalidMaxAnisotropy;
+        if (!self.normalized_coordinates and
+            (self.min_filter != self.mag_filter or
+                self.mip_filter != .not_mipmapped or
+                self.address_mode_u != .clamp_to_edge or
+                self.address_mode_v != .clamp_to_edge or
+                self.address_mode_w != .clamp_to_edge or
+                self.lod_min_clamp != 0 or
+                self.lod_max_clamp != 0 or
+                self.compare_function != null or
+                self.max_anisotropy != 1 or
+                self.border_color != null))
+        {
+            return SamplerError.InvalidUnnormalizedCoordinates;
+        }
     }
 
     pub fn validateForDevice(
@@ -8156,6 +8206,7 @@ pub const SamplerError = error{
     UnsupportedCompareSampler,
     UnsupportedSamplerAnisotropy,
     UnsupportedSamplerBorderColor,
+    InvalidUnnormalizedCoordinates,
 };
 
 pub const HeapStorageMode = enum {
@@ -9577,6 +9628,12 @@ pub const BufferDescriptor = struct {
         return length;
     }
 
+    pub fn validateForLimits(self: BufferDescriptor, limits: DeviceLimits) BufferError!usize {
+        const length = try self.resolvedLength();
+        if (length > limits.max_buffer_length) return BufferError.BufferLengthExceedsDeviceLimit;
+        return length;
+    }
+
     pub fn cpuVisible(self: BufferDescriptor) bool {
         return self.storage_mode.cpuVisible();
     }
@@ -9641,6 +9698,7 @@ pub const BufferError = error{
     InvalidBufferMapRange,
     InvalidBufferMapMode,
     BufferNotCpuVisible,
+    BufferLengthExceedsDeviceLimit,
 };
 
 pub const SurfaceError = error{
@@ -10720,6 +10778,12 @@ test "buffer descriptor validates initial data" {
     try std.testing.expect(!(BufferDescriptor{
         .storage_mode = .private,
     }).cpuVisible());
+    try std.testing.expectEqual(@as(usize, 8), try (BufferDescriptor{
+        .length = 8,
+    }).validateForLimits(.{ .max_buffer_length = 8 }));
+    try std.testing.expectError(BufferError.BufferLengthExceedsDeviceLimit, (BufferDescriptor{
+        .length = 9,
+    }).validateForLimits(.{ .max_buffer_length = 8 }));
 }
 
 test "buffer write descriptor validates ranges" {
@@ -12926,6 +12990,28 @@ test "texture descriptor validates basic 2d textures" {
         .height = 128,
         .usage = .{ .render_attachment = true },
     }).validate();
+
+    try (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 128,
+        .height = 64,
+        .depth_or_array_layers = 4,
+    }).validateForLimits(.{
+        .max_texture_dimension_2d = 128,
+        .max_texture_array_layers = 4,
+    });
+    try std.testing.expectError(TextureError.TextureExtentExceedsDeviceLimit, (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 129,
+        .height = 64,
+    }).validateForLimits(.{ .max_texture_dimension_2d = 128 }));
+    try std.testing.expectError(TextureError.TextureExtentExceedsDeviceLimit, (TextureDescriptor{
+        .dimension = .three_d,
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .depth_or_array_layers = 65,
+    }).validateForLimits(.{ .max_texture_dimension_3d = 64 }));
 }
 
 test "texture descriptor rejects missing extent and automatic format" {
@@ -14626,6 +14712,18 @@ test "sampler descriptor validates lod range" {
     }).validate());
     try std.testing.expectError(SamplerError.InvalidMaxAnisotropy, (SamplerDescriptor{
         .max_anisotropy = 0.5,
+    }).validate());
+    try (SamplerDescriptor{
+        .normalized_coordinates = false,
+        .lod_max_clamp = 0,
+    }).validate();
+    try std.testing.expectError(SamplerError.InvalidUnnormalizedCoordinates, (SamplerDescriptor{
+        .normalized_coordinates = false,
+    }).validate());
+    try std.testing.expectError(SamplerError.InvalidUnnormalizedCoordinates, (SamplerDescriptor{
+        .normalized_coordinates = false,
+        .lod_max_clamp = 0,
+        .min_filter = .linear,
     }).validate());
 }
 

@@ -113,6 +113,9 @@ Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和
 `DeviceFeatures.sampler_border_color` 和 `DeviceLimits.max_sampler_anisotropy` gate。compare
 sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建。固定 border color 在 address mode 使用
 `clamp_to_border` 时也会下沉到 Vulkan 和 Metal sampler 创建；custom border color 暂不覆盖。
+`SamplerDescriptor.normalized_coordinates` 默认为 true。设为 false 时，两端只接受 portable
+unnormalized-coordinate 子集：min/mag filter 相同、无 mip、clamp-to-edge、LOD 为零、无 compare、
+anisotropy 为 1 且无 border color。
 
 `HeapDescriptor` 定义显式 heap planning。`Device.makeHeap(...)` 由 `DeviceFeatures.heaps`
 gate，返回的 runtime `Heap` 可以通过 `reserve(...)` 追踪 aligned reservation。

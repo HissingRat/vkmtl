@@ -321,6 +321,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_compare_function compare_function,
     float max_anisotropy,
     vkmtl_metal_sampler_border_color border_color,
+    unsigned int normalized_coordinates,
     vkmtl_metal_sampler_state **out_sampler
 ) {
     (void)owner;
@@ -336,6 +337,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     (void)compare_function;
     (void)max_anisotropy;
     (void)border_color;
+    (void)normalized_coordinates;
     if (out_sampler != NULL) {
         *out_sampler = NULL;
     }

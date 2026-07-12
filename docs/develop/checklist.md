@@ -2620,11 +2620,11 @@ obvious render and binding blockers.
 
 ## Period 47 Phase 2 Checklist
 
-- [ ] Query and report ordinary execution limits without claiming native
+- [x] Query and report ordinary execution limits without claiming native
   memory-budget telemetry.
 - [ ] Expand common texture/vertex formats, compatible texture views, sampler
   behavior, resource modes, and capability-gated buffer GPU addresses.
-- [ ] Add focused resource validation and backend mapping tests.
+- [x] Add focused resource validation and backend mapping tests.
 
 ## Period 47 Phase 3 Checklist
 

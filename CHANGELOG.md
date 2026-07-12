@@ -11,6 +11,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added queried ordinary resource limits for maximum buffer length, 1D/2D/3D
+  texture dimensions, texture array layers, and Metal threadgroup memory.
+- Added `SamplerDescriptor.normalized_coordinates`; `false` lowers to native
+  unnormalized-coordinate samplers on Vulkan and Metal under the portable
+  constraint set.
 - Added capability-gated native Vulkan query pools and Metal visibility/counter
   query sets for occlusion, timestamp readback, and GPU resolve.
 - Added default-null `RenderPassDescriptor.occlusion_query_set` so a pass can
@@ -20,6 +25,8 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Buffer and texture creation now rejects descriptors that exceed the selected
+  device's queried resource limits before native object creation.
 - Occlusion query results now have portable Boolean visibility semantics: zero
   means no samples passed and any nonzero value means visible; the magnitude is
   not a portable sample count.
@@ -32,6 +39,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- The new `DeviceLimits` and sampler descriptor fields, plus
+  `BufferLengthExceedsDeviceLimit`, `TextureExtentExceedsDeviceLimit`, and
+  `InvalidUnnormalizedCoordinates`, target `v0.2.0`. Exhaustive public error
+  switches need corresponding arms.
 - This Unreleased change targets `v0.2.0`, not a `v0.1.x` patch, because the
   public `QueryError` expansion is source-breaking for exhaustive switches.
 - The pass field defaults to null; the root, common owner methods, and opaque

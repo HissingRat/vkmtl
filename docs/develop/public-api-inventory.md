@@ -544,6 +544,32 @@ GPU ticks from that fallback, and `shader_specialization` means both Vulkan and
 Metal lower stable numeric specialization IDs. Pipeline statistics and GPU
 timestamp-to-duration calibration remain closed.
 
+## Period 47 v0.2.0 Resource-Limit And Sampler Update
+
+This Period 47 slice leaves the guarded root, `Device`, `WindowContext`,
+facade-declaration, and opaque-handle counts unchanged. Existing canonical
+types gain these fields:
+
+```text
+DeviceLimits.max_buffer_length
+DeviceLimits.max_texture_dimension_1d
+DeviceLimits.max_texture_dimension_2d
+DeviceLimits.max_texture_dimension_3d
+DeviceLimits.max_texture_array_layers
+SamplerDescriptor.normalized_coordinates
+```
+
+The sampler field defaults to `true`. Setting it to `false` requests native
+unnormalized coordinates and is accepted only with equal min/mag filters, no
+mip filter, clamp-to-edge addressing, zero LOD clamps, no comparison, unit
+anisotropy, and no explicit border color. `BufferError`, `TextureError`, and
+`SamplerError` respectively gain `BufferLengthExceedsDeviceLimit`,
+`TextureExtentExceedsDeviceLimit`, and `InvalidUnnormalizedCoordinates`.
+
+The additions belong to the existing `diagnostics` and `resource` domains and
+receive no new root aliases or owner methods. Field and error-set growth targets
+`v0.2.0`; callers with exhaustive error switches must add arms.
+
 ## Compatibility Impact
 
 This is an intentional pre-tag breaking migration:

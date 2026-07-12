@@ -137,6 +137,10 @@ Those advanced fields are capability-gated by `DeviceFeatures.sampler_compare`,
 to Vulkan/Metal sampler creation. Fixed border colors also lower to Vulkan and
 Metal sampler creation when address modes use `clamp_to_border`; custom border
 colors remain out of scope.
+`SamplerDescriptor.normalized_coordinates` defaults to true. A false value is
+lowered by both backends only for the portable unnormalized-coordinate subset:
+equal min/mag filters, no mipmapping, clamp-to-edge, zero LOD, no comparison,
+unit anisotropy, and no border color.
 
 `HeapDescriptor` defines explicit heap planning. `Device.makeHeap(...)` is
 feature-gated by `DeviceFeatures.heaps` and returns a runtime `Heap` that tracks

@@ -32,6 +32,7 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.SamplerDescriptor) !Metal
         if (descriptor.compare_function) |compare| compareFunction(compare) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
         descriptor.max_anisotropy,
         borderColor(descriptor.border_color orelse .transparent_black),
+        if (descriptor.normalized_coordinates) 1 else 0,
         &handle,
     ));
 

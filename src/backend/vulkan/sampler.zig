@@ -25,7 +25,7 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.SamplerDescriptor) !Vul
         .min_lod = descriptor.lod_min_clamp,
         .max_lod = descriptor.lod_max_clamp,
         .border_color = borderColor(descriptor.border_color orelse .transparent_black),
-        .unnormalized_coordinates = .false,
+        .unnormalized_coordinates = if (descriptor.normalized_coordinates) .false else .true,
     }, null);
 
     return .{

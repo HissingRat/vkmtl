@@ -137,6 +137,7 @@ Feature 为 true 时，descriptor 仍必须满足对应 limit。
 | 分组 | Fields |
 | --- | --- |
 | Render/binding | `max_vertex_buffer_slots`, `max_bind_group_slots`, `max_color_attachments`, `max_sample_count`, `max_sampler_anisotropy` |
+| Core resource | `max_buffer_length`, `max_texture_dimension_1d`, `max_texture_dimension_2d`, `max_texture_dimension_3d`, `max_texture_array_layers` |
 | Buffer/constants | `min_uniform_buffer_offset_alignment`, `min_storage_buffer_offset_alignment`, `max_small_constant_bytes`, `small_constant_alignment`, `max_root_constant_bytes`, `root_constant_alignment` |
 | Query | `query_result_alignment` |
 | Compute | `max_compute_threadgroups_per_grid_x`, `max_compute_threadgroups_per_grid_y`, `max_compute_threadgroups_per_grid_z`, `max_compute_threads_per_threadgroup_x`, `max_compute_threads_per_threadgroup_y`, `max_compute_threads_per_threadgroup_z`, `max_compute_total_threads_per_threadgroup`, `max_compute_threadgroup_memory_bytes`, `dispatch_indirect_alignment` |

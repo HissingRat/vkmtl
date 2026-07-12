@@ -255,6 +255,12 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int max_buffer_argument_table_entries;
     unsigned int max_texture_argument_table_entries;
     unsigned int max_sampler_argument_table_entries;
+    size_t max_buffer_length;
+    size_t max_threadgroup_memory_length;
+    unsigned int max_texture_dimension_1d;
+    unsigned int max_texture_dimension_2d;
+    unsigned int max_texture_dimension_3d;
+    unsigned int max_texture_array_layers;
 } vkmtl_metal_device_capabilities;
 
 typedef struct vkmtl_metal_acceleration_structure_build_sizes {
@@ -417,6 +423,7 @@ vkmtl_metal_status vkmtl_metal_sampler_state_create(
     vkmtl_metal_compare_function compare_function,
     float max_anisotropy,
     vkmtl_metal_sampler_border_color border_color,
+    unsigned int normalized_coordinates,
     vkmtl_metal_sampler_state **out_sampler
 );
 void vkmtl_metal_sampler_state_destroy(vkmtl_metal_sampler_state *sampler);

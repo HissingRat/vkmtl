@@ -159,7 +159,13 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     self.native_features_value.debug_labels = self.debug_utils_enabled;
     self.native_features_value.debug_markers = self.debug_utils_enabled;
     self.features_value = queryUsableFeatures(self.native_features_value, self.host_query_reset);
-    self.limits_value = queryLimits(self.props, self.features_value, self.ray_tracing_diagnostics_value);
+    self.limits_value = queryLimits(
+        self.instance,
+        self.pdev,
+        self.props,
+        self.features_value,
+        self.ray_tracing_diagnostics_value,
+    );
     self.limits_value.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
 
     return self;
@@ -447,12 +453,28 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
 }
 
 fn queryLimits(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
     props: vk.PhysicalDeviceProperties,
     queried_features: core.DeviceFeatures,
     ray_tracing: core.RayTracingCapabilityDiagnostics,
 ) core.DeviceLimits {
     _ = queried_features;
     var result = core.defaultDeviceLimits(.vulkan);
+    var maintenance4 = vk.PhysicalDeviceMaintenance4Properties{
+        .max_buffer_size = 0,
+    };
+    var properties2 = vk.PhysicalDeviceProperties2{
+        .p_next = &maintenance4,
+        .properties = undefined,
+    };
+    if (getPhysicalDeviceProperties2(instance, pdev, &properties2) and maintenance4.max_buffer_size != 0) {
+        result.max_buffer_length = maintenance4.max_buffer_size;
+    }
+    result.max_texture_dimension_1d = props.limits.max_image_dimension_1d;
+    result.max_texture_dimension_2d = props.limits.max_image_dimension_2d;
+    result.max_texture_dimension_3d = props.limits.max_image_dimension_3d;
+    result.max_texture_array_layers = props.limits.max_image_array_layers;
     result.max_vertex_buffer_slots = @min(props.limits.max_vertex_input_bindings, core.default_max_vertex_buffer_slots);
     result.max_color_attachments = @max(1, props.limits.max_fragment_output_attachments);
     result.max_sampler_anisotropy = props.limits.max_sampler_anisotropy;
