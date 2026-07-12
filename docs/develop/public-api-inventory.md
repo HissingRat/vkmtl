@@ -166,7 +166,7 @@ aliases and with types used by other domains.
 
 | Facade file | Declarations | Operations | Primary ownership |
 | --- | ---: | ---: | --- |
-| `api/resource.zig` | 74 | 18 | formats, buffers, textures, samplers, heaps, portable sparse resources, transient allocation |
+| `api/resource.zig` | 77 | 19 | formats, buffers, textures, samplers, heaps, portable sparse resources, transient allocation |
 | `api/transfer.zig` | 19 | 0 | copy, fill, upload, blit, mipmap, and resolved transfer descriptors |
 | `api/render.zig` | 65 | 6 | pipeline, pass, draw, tessellation, and mesh rendering |
 | `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
@@ -546,9 +546,8 @@ timestamp-to-duration calibration remain closed.
 
 ## Period 47 v0.2.0 Resource-Limit And Sampler Update
 
-This Period 47 slice leaves the guarded root, `Device`, `WindowContext`,
-facade-declaration, and opaque-handle counts unchanged. Existing canonical
-types gain these fields:
+This Period 47 slice leaves the guarded root, `Device`, `WindowContext`, and
+opaque-handle counts unchanged. Existing canonical types gain these fields:
 
 ```text
 DeviceLimits.max_buffer_length
@@ -557,6 +556,7 @@ DeviceLimits.max_texture_dimension_2d
 DeviceLimits.max_texture_dimension_3d
 DeviceLimits.max_texture_array_layers
 SamplerDescriptor.normalized_coordinates
+TextureViewDescriptor.component_mapping
 ```
 
 The sampler field defaults to `true`. Setting it to `false` requests native
@@ -565,6 +565,9 @@ mip filter, clamp-to-edge addressing, zero LOD clamps, no comparison, unit
 anisotropy, and no explicit border color. `BufferError`, `TextureError`, and
 `SamplerError` respectively gain `BufferLengthExceedsDeviceLimit`,
 `TextureExtentExceedsDeviceLimit`, and `InvalidUnnormalizedCoordinates`.
+The `resource` facade also adds `TextureComponent`,
+`TextureComponentMapping`, and `textureViewFormatsCompatible`; `TextureError`
+adds `UnsupportedTextureViewComponentMapping`.
 
 The additions belong to the existing `diagnostics` and `resource` domains and
 receive no new root aliases or owner methods. Field and error-set growth targets

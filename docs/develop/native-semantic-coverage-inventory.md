@@ -117,7 +117,7 @@ develops a different lowering or support state.
 | REN-04 | Indirect and explicit multi-draw behavior | `render` | `composed-exact` | `composed-exact` | `unit`; implementations may expand a multi-draw into repeated native draws. |
 | REN-05 | Wireframe/line fill and depth bias | `render` | `native-exact` | `native-exact` | `unit`; native capability gates apply. |
 | REN-06 | Conservative rasterization | `render` | `incomplete` | `incomplete` | Public capability exists, but complete lowering/evidence is absent. |
-| REN-07 | Depth/stencil resolve and texture-view format reinterpretation | `render`, `resource` | `incomplete` | `incomplete` | Currently typed unsupported. |
+| REN-07 | Depth/stencil resolve and texture-view format reinterpretation | `render`, `resource` | `incomplete` | `incomplete` | Compatible linear/sRGB texture views and component swizzles are native-exact in Period 47; depth/stencil resolve remains typed unsupported. |
 | BND-01 | Ordinary bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative rendering. |
 | BND-02 | Root/small constants | `binding` | `native-exact` | `native-exact` | `unit`; Metal bytes and Vulkan push-constant lowering are backend-specific. |
 | BND-03 | Bindless tables, descriptor indexing, and argument buffers | `binding` | `incomplete` | `incomplete` | Runtime/table contracts exist, but usable features remain conservatively closed and large-table GPU evidence is missing. |

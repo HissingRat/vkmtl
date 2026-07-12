@@ -107,6 +107,9 @@ mip chain。
 
 Runtime `TextureView` 会保存 resolved view format、dimension、mip range 和 layer range。可以通过
 `descriptor()`、`baseMipLevel()`、`mipLevelCount()`、`baseArrayLayer()`、`arrayLayerCount()` 查询。
+RGBA8 或 BGRA8 的 linear/sRGB 变体可以互相创建 view。
+`TextureViewDescriptor.component_mapping` 支持显式 zero、one 和 R/G/B/A swizzle；不兼容的
+format 组合以及 depth/stencil swizzle 会在原生 view 创建前返回 typed error。
 
 `SamplerDescriptor` 包含 compare、anisotropy 和 border-color 字段。这些高级字段通过
 `DeviceFeatures.sampler_compare`、`DeviceFeatures.sampler_anisotropy`、

@@ -34,7 +34,7 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.TextureDescriptor) !Metal
         descriptor.depth_or_array_layers,
         descriptor.mip_level_count,
         descriptor.sample_count,
-        usageFlags(descriptor.usage),
+        usageFlags(descriptor.usage, descriptor.format),
         storageMode(descriptor.storage_mode),
         &handle,
     ));
@@ -132,7 +132,7 @@ pub fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_forma
     };
 }
 
-fn usageFlags(usage: core.TextureUsage) c_uint {
+fn usageFlags(usage: core.TextureUsage, format: core.TextureFormat) c_uint {
     var flags: c_uint = 0;
 
     if (usage.copy_source) flags |= metal.VKMTL_METAL_TEXTURE_USAGE_COPY_SOURCE;
@@ -140,6 +140,9 @@ fn usageFlags(usage: core.TextureUsage) c_uint {
     if (usage.shader_read) flags |= metal.VKMTL_METAL_TEXTURE_USAGE_SHADER_READ;
     if (usage.shader_write) flags |= metal.VKMTL_METAL_TEXTURE_USAGE_SHADER_WRITE;
     if (usage.render_attachment) flags |= metal.VKMTL_METAL_TEXTURE_USAGE_RENDER_ATTACHMENT;
+    if (core.textureFormatSupportsViewReinterpretation(format)) {
+        flags |= metal.VKMTL_METAL_TEXTURE_USAGE_PIXEL_FORMAT_VIEW;
+    }
 
     return flags;
 }

@@ -1079,6 +1079,7 @@ pub const Texture = struct {
             .mip_level_count_value = resolved.mip_level_count,
             .base_array_layer_value = resolved.base_array_layer,
             .array_layer_count_value = resolved.array_layer_count,
+            .component_mapping_value = resolved.component_mapping,
             .owner_queue_value = self.state().owner_queue_value,
             .impl = impl,
         });
@@ -1526,6 +1527,7 @@ pub const TextureView = struct {
         mip_level_count_value: u32 = 1,
         base_array_layer_value: u32 = 0,
         array_layer_count_value: u32 = 1,
+        component_mapping_value: core.TextureComponentMapping = .{},
         owner_queue_value: core.QueueKind = .graphics,
         usage_state: core.ResourceUsageState = .{},
         subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
@@ -1610,6 +1612,7 @@ pub const TextureView = struct {
             .mip_level_count = self.state().mip_level_count_value,
             .base_array_layer = self.state().base_array_layer_value,
             .array_layer_count = self.state().array_layer_count_value,
+            .component_mapping = self.state().component_mapping_value,
         };
     }
 

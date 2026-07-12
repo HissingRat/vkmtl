@@ -27,12 +27,27 @@ pub fn init(texture: *const MetalTexture, descriptor: core.TextureViewDescriptor
         resolved.mip_level_count,
         resolved.base_array_layer,
         resolved.array_layer_count,
+        componentSwizzle(resolved.component_mapping.red),
+        componentSwizzle(resolved.component_mapping.green),
+        componentSwizzle(resolved.component_mapping.blue),
+        componentSwizzle(resolved.component_mapping.alpha),
         &handle,
     ));
 
     return .{
         .handle = handle orelse return Error.InvalidTextureView,
         .sample_count = texture.sampleCount(),
+    };
+}
+
+fn componentSwizzle(component: core.TextureComponent) metal.vkmtl_metal_texture_swizzle {
+    return switch (component) {
+        .zero => metal.VKMTL_METAL_TEXTURE_SWIZZLE_ZERO,
+        .one => metal.VKMTL_METAL_TEXTURE_SWIZZLE_ONE,
+        .red => metal.VKMTL_METAL_TEXTURE_SWIZZLE_RED,
+        .green => metal.VKMTL_METAL_TEXTURE_SWIZZLE_GREEN,
+        .blue => metal.VKMTL_METAL_TEXTURE_SWIZZLE_BLUE,
+        .alpha => metal.VKMTL_METAL_TEXTURE_SWIZZLE_ALPHA,
     };
 }
 

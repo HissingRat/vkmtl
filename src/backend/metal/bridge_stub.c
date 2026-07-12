@@ -288,6 +288,10 @@ vkmtl_metal_status vkmtl_metal_texture_view_create(
     unsigned int mip_level_count,
     unsigned int base_array_layer,
     unsigned int array_layer_count,
+    vkmtl_metal_texture_swizzle swizzle_red,
+    vkmtl_metal_texture_swizzle swizzle_green,
+    vkmtl_metal_texture_swizzle swizzle_blue,
+    vkmtl_metal_texture_swizzle swizzle_alpha,
     vkmtl_metal_texture_view **out_view
 ) {
     (void)texture;
@@ -297,6 +301,10 @@ vkmtl_metal_status vkmtl_metal_texture_view_create(
     (void)mip_level_count;
     (void)base_array_layer;
     (void)array_layer_count;
+    (void)swizzle_red;
+    (void)swizzle_green;
+    (void)swizzle_blue;
+    (void)swizzle_alpha;
     if (out_view != NULL) {
         *out_view = NULL;
     }

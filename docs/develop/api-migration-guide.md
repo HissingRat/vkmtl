@@ -40,6 +40,13 @@ These additions target `v0.2.0`: ordinary `try` propagation is unchanged, but
 exhaustive switches over `BufferError`, `TextureError`, or `SamplerError` need
 one new arm each.
 
+Texture views may now reinterpret `rgba8_unorm` with `rgba8_unorm_srgb`, or
+`bgra8_unorm` with `bgra8_unorm_srgb`. Other cross-format pairs remain typed
+unsupported. `TextureViewDescriptor.component_mapping` defaults to identity;
+use `vkmtl.resource.TextureComponentMapping` for explicit zero/one/R/G/B/A
+swizzles. Exhaustive `TextureError` switches also need an
+`UnsupportedTextureViewComponentMapping` arm.
+
 ## Migration Rules
 
 Apply these rules in order:

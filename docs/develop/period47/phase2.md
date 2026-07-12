@@ -14,7 +14,12 @@ Status: in progress.
   `MTLSamplerDescriptor.normalizedCoordinates`. A shared portable constraint
   set rejects combinations that one of the backends cannot represent.
 - Focused descriptor and native-capability mapping tests cover the new limits
-  and validation. Format/view and buffer-address work remains in this phase.
+  and validation.
+- Texture views now admit only the documented RGBA8 and BGRA8 linear/sRGB
+  compatibility classes. Metal enables pixel-format views and lowers native
+  swizzle channels; Vulkan creates mutable images and lowers component mapping
+  through `VkImageView`.
+- Broader texture/vertex formats and buffer-address work remain in this phase.
 
 ## Scope
 

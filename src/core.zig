@@ -7139,6 +7139,7 @@ pub const TextureViewDescriptor = struct {
     mip_level_count: u32 = 0,
     base_array_layer: u32 = 0,
     array_layer_count: u32 = 0,
+    component_mapping: TextureComponentMapping = .{},
 
     pub fn resolveForTexture(
         self: TextureViewDescriptor,
@@ -7147,7 +7148,17 @@ pub const TextureViewDescriptor = struct {
         try texture.validate();
 
         const format = if (self.format == .automatic) texture.format else self.format;
-        if (format != texture.format) return TextureError.UnsupportedTextureViewFormat;
+        if (!textureViewFormatsCompatible(texture.format, format)) {
+            return TextureError.UnsupportedTextureViewFormat;
+        }
+        if (texture.sample_count > 1 and format != texture.format) {
+            return TextureError.UnsupportedTextureViewFormat;
+        }
+        if (!self.component_mapping.isIdentity() and
+            (!isColorFormat(format) or texture.sample_count > 1))
+        {
+            return TextureError.UnsupportedTextureViewComponentMapping;
+        }
 
         if (self.base_mip_level >= texture.mip_level_count) {
             return TextureError.InvalidTextureViewRange;
@@ -7189,9 +7200,50 @@ pub const TextureViewDescriptor = struct {
             .mip_level_count = mip_level_count,
             .base_array_layer = self.base_array_layer,
             .array_layer_count = array_layer_count,
+            .component_mapping = self.component_mapping,
         };
     }
 };
+
+pub const TextureComponent = enum {
+    zero,
+    one,
+    red,
+    green,
+    blue,
+    alpha,
+};
+
+pub const TextureComponentMapping = struct {
+    red: TextureComponent = .red,
+    green: TextureComponent = .green,
+    blue: TextureComponent = .blue,
+    alpha: TextureComponent = .alpha,
+
+    pub fn isIdentity(self: TextureComponentMapping) bool {
+        return self.red == .red and
+            self.green == .green and
+            self.blue == .blue and
+            self.alpha == .alpha;
+    }
+};
+
+pub fn textureViewFormatsCompatible(texture_format: TextureFormat, view_format: TextureFormat) bool {
+    if (texture_format == .automatic or view_format == .automatic) return false;
+    if (texture_format == view_format) return true;
+    return switch (texture_format) {
+        .rgba8_unorm, .rgba8_unorm_srgb => view_format == .rgba8_unorm or view_format == .rgba8_unorm_srgb,
+        .bgra8_unorm, .bgra8_unorm_srgb => view_format == .bgra8_unorm or view_format == .bgra8_unorm_srgb,
+        else => false,
+    };
+}
+
+pub fn textureFormatSupportsViewReinterpretation(format: TextureFormat) bool {
+    return switch (format) {
+        .rgba8_unorm, .rgba8_unorm_srgb, .bgra8_unorm, .bgra8_unorm_srgb => true,
+        else => false,
+    };
+}
 
 pub const ResolvedTextureViewDescriptor = struct {
     format: TextureFormat,
@@ -7200,6 +7252,7 @@ pub const ResolvedTextureViewDescriptor = struct {
     mip_level_count: u32,
     base_array_layer: u32,
     array_layer_count: u32,
+    component_mapping: TextureComponentMapping,
 };
 
 pub const Origin3D = struct {
@@ -8090,6 +8143,7 @@ pub const TextureError = error{
     InvalidTextureViewRange,
     UnsupportedTextureViewDimension,
     UnsupportedTextureViewFormat,
+    UnsupportedTextureViewComponentMapping,
     InvalidTextureRegion,
     InvalidTextureSlice,
     InvalidBytesPerRow,
@@ -14702,6 +14756,27 @@ test "texture view descriptor validates ranges and format compatibility" {
     try std.testing.expectError(TextureError.UnsupportedTextureViewDimension, (TextureViewDescriptor{
         .dimension = .two_d,
     }).resolveForTexture(texture));
+
+    const srgb_view = try (TextureViewDescriptor{
+        .format = .rgba8_unorm_srgb,
+        .component_mapping = .{
+            .red = .blue,
+            .blue = .red,
+            .alpha = .one,
+        },
+    }).resolveForTexture(texture);
+    try std.testing.expectEqual(TextureFormat.rgba8_unorm_srgb, srgb_view.format);
+    try std.testing.expect(!srgb_view.component_mapping.isIdentity());
+    try std.testing.expect(textureViewFormatsCompatible(.rgba8_unorm, .rgba8_unorm_srgb));
+    try std.testing.expect(!textureViewFormatsCompatible(.rgba8_unorm, .bgra8_unorm));
+
+    try std.testing.expectError(TextureError.UnsupportedTextureViewComponentMapping, (TextureViewDescriptor{
+        .component_mapping = .{ .red = .zero },
+    }).resolveForTexture(.{
+        .format = .depth32_float,
+        .width = 64,
+        .height = 64,
+    }));
 }
 
 test "sampler descriptor validates lod range" {

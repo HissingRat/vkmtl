@@ -16,6 +16,8 @@ reserved for the next minor release and are documented with migration guidance.
 - Added `SamplerDescriptor.normalized_coordinates`; `false` lowers to native
   unnormalized-coordinate samplers on Vulkan and Metal under the portable
   constraint set.
+- Added `TextureComponent`, `TextureComponentMapping`, and compatible
+  linear/sRGB texture-view reinterpretation with native component swizzles.
 - Added capability-gated native Vulkan query pools and Metal visibility/counter
   query sets for occlusion, timestamp readback, and GPU resolve.
 - Added default-null `RenderPassDescriptor.occlusion_query_set` so a pass can
@@ -43,6 +45,9 @@ reserved for the next minor release and are documented with migration guidance.
   `BufferLengthExceedsDeviceLimit`, `TextureExtentExceedsDeviceLimit`, and
   `InvalidUnnormalizedCoordinates`, target `v0.2.0`. Exhaustive public error
   switches need corresponding arms.
+- `TextureViewDescriptor.component_mapping` defaults to identity. The new
+  `UnsupportedTextureViewComponentMapping` error and resource-facade
+  declarations target `v0.2.0`.
 - This Unreleased change targets `v0.2.0`, not a `v0.1.x` patch, because the
   public `QueryError` expansion is source-breaking for exhaustive switches.
 - The pass field defaults to null; the root, common owner methods, and opaque

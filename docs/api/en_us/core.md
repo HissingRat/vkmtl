@@ -129,6 +129,10 @@ full-texture mip chains with `generateMipmaps(...)`.
 Runtime `TextureView` stores the resolved view format, dimension, mip range,
 and layer range. Query them with `descriptor()`, `baseMipLevel()`,
 `mipLevelCount()`, `baseArrayLayer()`, and `arrayLayerCount()`.
+Linear and sRGB variants of RGBA8 or BGRA8 are compatible view formats.
+`TextureViewDescriptor.component_mapping` provides explicit zero, one, and
+R/G/B/A swizzles; incompatible format pairs and depth/stencil swizzles fail
+before native view creation.
 
 `SamplerDescriptor` includes compare, anisotropy, and border-color fields.
 Those advanced fields are capability-gated by `DeviceFeatures.sampler_compare`,

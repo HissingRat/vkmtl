@@ -29,7 +29,7 @@ pub fn init(texture: *VulkanTexture, descriptor: core.TextureViewDescriptor) !Vu
         .image = texture.handle,
         .view_type = viewType(resolved.dimension),
         .format = VulkanTexture.imageFormat(resolved.format),
-        .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+        .components = componentMapping(resolved.component_mapping),
         .subresource_range = subresource_range,
     }, null);
 
@@ -43,6 +43,26 @@ pub fn init(texture: *VulkanTexture, descriptor: core.TextureViewDescriptor) !Vu
         .sample_count = texture.sampleCount(),
         .layout = &texture.layout,
         .subresource_range = subresource_range,
+    };
+}
+
+fn componentMapping(mapping: core.TextureComponentMapping) vk.ComponentMapping {
+    return .{
+        .r = componentSwizzle(mapping.red),
+        .g = componentSwizzle(mapping.green),
+        .b = componentSwizzle(mapping.blue),
+        .a = componentSwizzle(mapping.alpha),
+    };
+}
+
+fn componentSwizzle(component: core.TextureComponent) vk.ComponentSwizzle {
+    return switch (component) {
+        .zero => .zero,
+        .one => .one,
+        .red => .r,
+        .green => .g,
+        .blue => .b,
+        .alpha => .a,
     };
 }
 

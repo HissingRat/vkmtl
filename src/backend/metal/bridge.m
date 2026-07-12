@@ -915,6 +915,24 @@ static MTLTextureType vkmtl_texture_view_type(vkmtl_metal_texture_view_dimension
     }
 }
 
+static MTLTextureSwizzle vkmtl_texture_swizzle(vkmtl_metal_texture_swizzle swizzle) {
+    switch (swizzle) {
+        case VKMTL_METAL_TEXTURE_SWIZZLE_ZERO:
+            return MTLTextureSwizzleZero;
+        case VKMTL_METAL_TEXTURE_SWIZZLE_ONE:
+            return MTLTextureSwizzleOne;
+        case VKMTL_METAL_TEXTURE_SWIZZLE_GREEN:
+            return MTLTextureSwizzleGreen;
+        case VKMTL_METAL_TEXTURE_SWIZZLE_BLUE:
+            return MTLTextureSwizzleBlue;
+        case VKMTL_METAL_TEXTURE_SWIZZLE_ALPHA:
+            return MTLTextureSwizzleAlpha;
+        case VKMTL_METAL_TEXTURE_SWIZZLE_RED:
+        default:
+            return MTLTextureSwizzleRed;
+    }
+}
+
 static MTLSamplerMinMagFilter vkmtl_sampler_filter(vkmtl_metal_filter filter) {
     switch (filter) {
         case VKMTL_METAL_FILTER_LINEAR:
@@ -1091,6 +1109,9 @@ static MTLTextureUsage vkmtl_texture_usage(unsigned int usage_flags) {
     }
     if ((usage_flags & VKMTL_METAL_TEXTURE_USAGE_RENDER_ATTACHMENT) != 0) {
         usage |= MTLTextureUsageRenderTarget;
+    }
+    if ((usage_flags & VKMTL_METAL_TEXTURE_USAGE_PIXEL_FORMAT_VIEW) != 0) {
+        usage |= MTLTextureUsagePixelFormatView;
     }
     return usage;
 }
@@ -1534,6 +1555,10 @@ vkmtl_metal_status vkmtl_metal_texture_view_create(
     unsigned int mip_level_count,
     unsigned int base_array_layer,
     unsigned int array_layer_count,
+    vkmtl_metal_texture_swizzle swizzle_red,
+    vkmtl_metal_texture_swizzle swizzle_green,
+    vkmtl_metal_texture_swizzle swizzle_blue,
+    vkmtl_metal_texture_swizzle swizzle_alpha,
     vkmtl_metal_texture_view **out_view
 ) {
     if (out_view == NULL) {
@@ -1561,11 +1586,32 @@ vkmtl_metal_status vkmtl_metal_texture_view_create(
             }
             view_texture = [texture->texture retain];
         } else {
-            view_texture = [texture->texture
-                newTextureViewWithPixelFormat:vkmtl_texture_pixel_format(format)
-                textureType:vkmtl_texture_view_type(dimension)
-                levels:NSMakeRange(base_mip_level, mip_level_count)
-                slices:NSMakeRange(base_array_layer, array_layer_count)];
+            BOOL identity_swizzle =
+                swizzle_red == VKMTL_METAL_TEXTURE_SWIZZLE_RED &&
+                swizzle_green == VKMTL_METAL_TEXTURE_SWIZZLE_GREEN &&
+                swizzle_blue == VKMTL_METAL_TEXTURE_SWIZZLE_BLUE &&
+                swizzle_alpha == VKMTL_METAL_TEXTURE_SWIZZLE_ALPHA;
+            if (identity_swizzle) {
+                view_texture = [texture->texture
+                    newTextureViewWithPixelFormat:vkmtl_texture_pixel_format(format)
+                    textureType:vkmtl_texture_view_type(dimension)
+                    levels:NSMakeRange(base_mip_level, mip_level_count)
+                    slices:NSMakeRange(base_array_layer, array_layer_count)];
+            } else if (@available(macOS 10.15, *)) {
+                MTLTextureSwizzleChannels swizzle = MTLTextureSwizzleChannelsMake(
+                    vkmtl_texture_swizzle(swizzle_red),
+                    vkmtl_texture_swizzle(swizzle_green),
+                    vkmtl_texture_swizzle(swizzle_blue),
+                    vkmtl_texture_swizzle(swizzle_alpha));
+                view_texture = [texture->texture
+                    newTextureViewWithPixelFormat:vkmtl_texture_pixel_format(format)
+                    textureType:vkmtl_texture_view_type(dimension)
+                    levels:NSMakeRange(base_mip_level, mip_level_count)
+                    slices:NSMakeRange(base_array_layer, array_layer_count)
+                    swizzle:swizzle];
+            } else {
+                return VKMTL_METAL_STATUS_UNSUPPORTED;
+            }
         }
         if (view_texture == nil) {
             return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;

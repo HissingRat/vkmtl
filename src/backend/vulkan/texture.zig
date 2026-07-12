@@ -23,6 +23,10 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.TextureDescriptor) !Vul
     }
 
     const handle = try gc.dev.createImage(&.{
+        .flags = if (core.textureFormatSupportsViewReinterpretation(descriptor.format))
+            .{ .mutable_format_bit = true }
+        else
+            .{},
         .image_type = imageType(descriptor.dimension),
         .format = imageFormat(descriptor.format),
         .extent = .{

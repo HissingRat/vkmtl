@@ -108,7 +108,17 @@ typedef enum vkmtl_metal_texture_usage {
     VKMTL_METAL_TEXTURE_USAGE_SHADER_READ = 1u << 2,
     VKMTL_METAL_TEXTURE_USAGE_SHADER_WRITE = 1u << 3,
     VKMTL_METAL_TEXTURE_USAGE_RENDER_ATTACHMENT = 1u << 4,
+    VKMTL_METAL_TEXTURE_USAGE_PIXEL_FORMAT_VIEW = 1u << 5,
 } vkmtl_metal_texture_usage;
+
+typedef enum vkmtl_metal_texture_swizzle {
+    VKMTL_METAL_TEXTURE_SWIZZLE_ZERO = 0,
+    VKMTL_METAL_TEXTURE_SWIZZLE_ONE = 1,
+    VKMTL_METAL_TEXTURE_SWIZZLE_RED = 2,
+    VKMTL_METAL_TEXTURE_SWIZZLE_GREEN = 3,
+    VKMTL_METAL_TEXTURE_SWIZZLE_BLUE = 4,
+    VKMTL_METAL_TEXTURE_SWIZZLE_ALPHA = 5,
+} vkmtl_metal_texture_swizzle;
 
 typedef enum vkmtl_metal_acceleration_structure_kind {
     VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL = 0,
@@ -400,6 +410,10 @@ vkmtl_metal_status vkmtl_metal_texture_view_create(
     unsigned int mip_level_count,
     unsigned int base_array_layer,
     unsigned int array_layer_count,
+    vkmtl_metal_texture_swizzle swizzle_red,
+    vkmtl_metal_texture_swizzle swizzle_green,
+    vkmtl_metal_texture_swizzle swizzle_blue,
+    vkmtl_metal_texture_swizzle swizzle_alpha,
     vkmtl_metal_texture_view **out_view
 );
 void vkmtl_metal_texture_view_destroy(vkmtl_metal_texture_view *view);
