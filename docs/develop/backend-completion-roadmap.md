@@ -495,6 +495,24 @@ documented device matrix without treating configured but unobserved lanes as
 proof. The hosted matrix and physical GPU evidence now satisfy all 9 explicit
 release-readiness gates; deferred native feature lanes remain outside the claim.
 
+## Wave 26: Native Semantic Coverage Audit
+
+Tracked in `docs/develop/period45/`.
+
+- [ ] Correct false-positive usable capabilities, beginning with occlusion
+  query placeholder results.
+- [ ] Expand the Metal source baseline into a stable semantic ledger.
+- [ ] Record Vulkan core/extension, composed, emulated, unsupported, or
+  incomplete mappings for every ledger entry.
+- [ ] Link public ownership, implementation locations, and evidence.
+- [ ] Add deterministic inventory drift checks.
+- [ ] Route every incomplete semantic into a dependency-ordered implementation
+  slice.
+
+Expected result: backend completion is driven by source semantic coverage and
+truthful executable evidence rather than by public API shape or roadmap
+checkbox count.
+
 ## Slice Checklist
 
 Before starting a backend-completion slice:

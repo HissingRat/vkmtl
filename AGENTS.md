@@ -41,6 +41,13 @@ public surface changes. `docs/develop/api-migration-guide.md` records the
 intentional Phase 9 break and is the compatibility reference for callers
 updating from the prototype surface.
 
+`docs/develop/native-semantic-coverage-inventory.md` is the authoritative
+backend execution inventory. Read it before claiming that a capability is
+supported, changing native lowering or fallback behavior, or changing the
+meaning of a feature, limit, or format capability. Update the relevant row and
+evidence in the same change. Planning-only, validation-only, or native-query
+availability must never be reported as executable support.
+
 `docs/develop/release-policy.md` defines the versioned compatibility promise.
 For `v0.1.x`, preserve the documented portable Zig source API; intentional
 portable source breaks require `v0.2.0` or later, changelog coverage, and

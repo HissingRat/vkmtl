@@ -10,6 +10,9 @@ Use these companion documents for the other views:
   namespacing, compatibility, and removal rules.
 - `docs/develop/public-api-inventory.md` tracks the current root surface,
   owner-method pressure, canonical namespaces, and compatibility candidates.
+- `docs/develop/native-semantic-coverage-inventory.md` tracks whether each
+  Metal/Vulkan semantic is native, composed, emulated, unsupported, or still
+  incomplete, together with its evidence.
 - `docs/develop/api-migration-roadmap.md` records the completed staged pre-tag
   API migration and its exit gates.
 - `docs/develop/release-policy.md` defines versioned compatibility and release
@@ -842,6 +845,23 @@ documented backend/device matrix.
 - Phase 5: release readiness and parity report
 
 See `docs/develop/period44/`.
+
+## Period 45: Native Semantic Coverage Audit
+
+Status: planned.
+
+Goal: expand the feature-family native semantic inventory into a versioned
+Metal source ledger, map every semantic to exact Metal and Vulkan execution or
+an explicit incomplete/unsupported result, correct false capability claims,
+and produce the dependency-ordered backend implementation backlog.
+
+- Phase 1: capability truth audit
+- Phase 2: Metal source semantic ledger
+- Phase 3: Vulkan and compatibility mapping
+- Phase 4: ownership, evidence, and drift checks
+- Phase 5: gap priority and closeout
+
+See `docs/develop/period45/`.
 
 ## v0.1.0 Compatibility Release
 

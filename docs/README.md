@@ -42,6 +42,8 @@ vkmtl documentation is organized by audience and purpose.
   namespacing, compatibility, and removal rules
 - `develop/public-api-inventory.md`: current root export, owner method,
   namespace, and compatibility inventory
+- `develop/native-semantic-coverage-inventory.md`: Metal/Vulkan semantic
+  lowering status, unsupported behavior, and execution evidence
 - `develop/api-migration-roadmap.md`: completed staged plan for canonical
   facades, caller migration, owner convergence, and pre-tag cleanup
 - `develop/api-migration-map.md`: implemented final root, namespace,
@@ -72,6 +74,8 @@ vkmtl documentation is organized by audience and purpose.
 - `develop/period43/`: profiling, capture, and debug-marker diagnostics
 - `develop/period44/`: CI/device evidence, pixel regression, GPU soak, and
   current parity report
+- `develop/period45/`: native semantic source audit, backend mappings, and gap
+  priority
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

@@ -34,6 +34,30 @@ closed one by one as vkmtl moves from prototype to library.
 - The active mainline work is the `v0.1.0` release review for the first tagged
   compatibility surface. Later feature work must use the canonical facades and
   public API admission and release rules.
+- Native backend work now uses
+  `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
+  semantic-support ledger. The immediate audit starts with occlusion-query
+  truthfulness, exhaustive Metal source coverage, and transient versus
+  hardware-memoryless attachment semantics.
+
+## Native Semantic Coverage Inventory
+
+- [x] Define native-exact, composed-exact, emulated-exact, unsupported, and
+  incomplete support states.
+- [x] Separate semantic support from inspection, unit, physical GPU, pixel, and
+  soak evidence.
+- [x] Record a conservative baseline for current resource, render, compute,
+  transfer, synchronization, memory, RT, interop, and diagnostics families.
+- [x] Add a Metal source-coverage queue so missing public concepts cannot be
+  hidden by the existing `DeviceFeatures` list.
+- [ ] Audit and correct the occlusion-query usable feature versus placeholder
+  runtime result.
+- [ ] Expand the Metal source-coverage queue into a versioned
+  method/feature-level ledger.
+- [ ] Define separate transient-lifetime and hardware-memoryless attachment
+  contracts and backend gates.
+- [x] Require inventory updates in every future backend lowering or capability
+  change.
 
 ## v0.1.0 Release Checklist
 
@@ -2520,6 +2544,38 @@ obvious render and binding blockers.
 - [x] Document known unsupported items and native escape hatch requirements.
 - [x] Decide whether the voxel-world pressure test can move from deferred to
   active.
+
+## Period 45 Phase 1 Checklist
+
+- [ ] Audit every usable `DeviceFeatures` assignment against executable work.
+- [ ] Disable the occlusion-query usable feature while results are placeholders.
+- [ ] Preserve native availability separately from usable capability.
+- [ ] Add focused capability and query rejection tests.
+
+## Period 45 Phase 2 Checklist
+
+- [ ] Pin the Metal source baseline and adjacent-framework exclusions.
+- [ ] Enumerate every in-scope Metal semantic family with stable IDs.
+- [ ] Record current vkmtl ownership or `missing-contract`.
+
+## Period 45 Phase 3 Checklist
+
+- [ ] Classify Metal and Vulkan lowering for every semantic.
+- [ ] Record Vulkan core/extension/feature/limit requirements.
+- [ ] Separate transient lifetime from hardware memoryless guarantees.
+
+## Period 45 Phase 4 Checklist
+
+- [ ] Link implementation locations and strongest truthful evidence.
+- [ ] Add deterministic semantic-ID, status, evidence, and feature-field drift
+  checks.
+- [ ] Keep the public API guard baseline unchanged.
+
+## Period 45 Phase 5 Checklist
+
+- [ ] Route every incomplete row to one dependency-ordered follow-up slice.
+- [ ] Update the inventory and backend-completion roadmap with accepted order.
+- [ ] Run API/backend validation and publish the Period 45 closeout.
 
 ## First Backend-Independent Triangle Checklist
 

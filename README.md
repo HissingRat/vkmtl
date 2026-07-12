@@ -31,6 +31,8 @@ hatches.
 - [Roadmap](docs/develop/roadmap.md): route and stage boundaries.
 - [Checklist](docs/develop/checklist.md): checkable implementation and polish
   tasks.
+- [Native semantic coverage](docs/develop/native-semantic-coverage-inventory.md):
+  Metal/Vulkan lowering status, unsupported semantics, and evidence gaps.
 - [API migration guide](docs/develop/api-migration-guide.md): updating callers
   from the prototype surface to the final pre-tag namespaces and owners.
 - [Core API zh_CN](docs/api/zh_cn/core.md): current public API surface in
