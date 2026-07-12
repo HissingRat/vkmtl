@@ -1,6 +1,6 @@
 # Phase 2: Vulkan Query Pools
 
-Status: planned.
+Status: complete.
 
 ## Mapping
 

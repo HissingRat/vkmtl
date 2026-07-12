@@ -1,13 +1,11 @@
 # v0.1.0 Release Review
 
-Status: in progress. Version metadata, compatibility policy, changelog, the
-package/shader contract, and local validation are complete; exact-commit hosted
-and physical-device evidence plus publication gates remain open.
+Status: complete. The annotated `v0.1.0` tag and published release use commit
+`96c5b08c34163a148f9811efff04a6f78936778a`.
 
-This review owns the first tagged compatibility release after the Phase 9 API
-migration. The tag must be created from a release commit that satisfies every
-gate below; recorded evidence from an older commit is useful history but does
-not substitute for validation of the release commit.
+This review records the first tagged compatibility release after the Phase 9
+API migration. The release commit satisfied every gate below; evidence from
+older commits was not used as a substitute for exact-commit validation.
 
 ## Compatibility Decision
 
@@ -55,8 +53,18 @@ not substitute for validation of the release commit.
 - [x] Pass an external local-path package smoke with a consumer-owned shader.
 - [x] Pass formatting, API guard, all tests, default build, Vulkan build, and
   package metadata fetch from a clean worktree.
-- [ ] Pass hosted macOS, Linux, and Windows CI on the exact release commit.
-- [ ] Record physical Metal and Vulkan evidence against the release commit.
-- [ ] Create an annotated `v0.1.0` tag only after the preceding gates pass.
-- [ ] Fetch the tag archive from a fresh external project and repeat the
+- [x] Pass hosted macOS, Linux, and Windows CI on the exact release commit.
+- [x] Record physical Metal and Vulkan evidence against the release commit.
+- [x] Create an annotated `v0.1.0` tag only after the preceding gates pass.
+- [x] Fetch the tag archive from a fresh external project and repeat the
   package smoke before publishing the GitHub release.
+
+## Release Result
+
+- Release commit: `96c5b08c34163a148f9811efff04a6f78936778a`.
+- Annotated tag: `v0.1.0`.
+- Readiness evaluator: 9/9 observed, `release ready: true`.
+- Physical Metal and Vulkan smoke/pixel/soak evidence was recorded against the
+  release line, including the Vulkan/NVIDIA evidence bundle imported during
+  the release review.
+- The tag archive consumer smoke passed before publication.

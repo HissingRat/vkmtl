@@ -1,6 +1,6 @@
 # Period 46: Native Queries, Counters, And Specialization
 
-Status: in progress.
+Status: complete.
 
 Goal: replace the Period 45 query placeholders with real capability-gated GPU
 results and finish Metal function-constant specialization. The public changes
@@ -59,7 +59,7 @@ See `phase4.md`.
 - Add a physical-GPU query smoke path where ordinary CI cannot prove results.
 - Update the semantic ledger, gap routing, capability docs, and parity matrix.
 
-See `phase5.md`.
+See `phase5.md` and `closeout.md`.
 
 ## Acceptance
 

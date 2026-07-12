@@ -517,15 +517,15 @@ checkbox count.
 
 Tracked in `docs/develop/period46/`.
 
-- [ ] Replace occlusion placeholders with capability-gated zero/nonzero native
+- [x] Replace occlusion placeholders with capability-gated zero/nonzero native
   visibility on Vulkan and Metal.
-- [ ] Lower timestamp writes, CPU readback, and GPU resolve while preserving
+- [x] Lower timestamp writes, CPU readback, and GPU resolve while preserving
   truthful logical versus native result sources.
-- [ ] Keep pipeline statistics and device-specific counter breadth closed until
+- [x] Keep pipeline statistics and device-specific counter breadth closed until
   their result shapes and sampling contracts are representable.
-- [ ] Specialize Metal vertex, fragment, and compute functions by stable
+- [x] Specialize Metal vertex, fragment, and compute functions by stable
   numeric function-constant ID.
-- [ ] Bind deterministic tests and physical GPU evidence to the closeout.
+- [x] Bind deterministic tests and physical GPU evidence to the closeout.
 
 Expected result: the portable query path returns real visibility or native GPU
 ticks when the selected device supports them, never placeholder data, and both

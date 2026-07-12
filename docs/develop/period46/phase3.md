@@ -1,6 +1,6 @@
 # Phase 3: Metal Visibility And Counter Sampling
 
-Status: planned.
+Status: complete.
 
 ## Mapping
 
@@ -17,7 +17,8 @@ Status: planned.
 - Timestamp query sets use `MTLCounterSampleBuffer` with the common timestamp
   counter set only when the device reports the required encoder sampling
   points.
-- Counter resolve uses a blit encoder and a shared result buffer. Unavailable
+- Counter resolve uses a blit encoder to resolve into an internal aligned
+  private buffer, then copies into the caller's destination offset. Unavailable
   sampling points leave native GPU timestamps unsupported.
 - Native timestamps are advertised only when the common timestamp counter and
   draw-, dispatch-, and blit-boundary sampling are all available. Partial

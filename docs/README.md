@@ -36,7 +36,7 @@ vkmtl documentation is organized by audience and purpose.
 
 - `develop/release-policy.md`: release versioning, compatibility, package,
   toolchain, capability, and release-gate contract
-- `develop/release-review-v0.1.0.md`: live checklist for the first tagged
+- `develop/release-review-v0.1.0.md`: completed record for the first tagged
   compatibility release
 - `develop/public-api-rules.md`: authoritative public API evolution,
   namespacing, compatibility, and removal rules

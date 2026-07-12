@@ -104,7 +104,7 @@ develops a different lowering or support state.
 | RES-06 | Current portable texture formats and format capability queries | `resource` | `composed-exact` | `native-exact` | `unit`; Metal uses a conservative table, Vulkan queries format properties. The current format enum is not complete Metal format coverage. |
 | SHD-01 | Build-time Slang compilation and embedded runtime shader resolution | `shader` | `composed-exact` | `composed-exact` | Hosted build and `gpu-pixels`; MSL and SPIR-V are produced before runtime. |
 | SHD-02 | Reflection-derived binding and vertex metadata | `shader`, `binding`, `render` | `composed-exact` | `composed-exact` | `unit` and representative rendering. |
-| SHD-03 | Shader specialization constants/function constants by stable numeric ID | `shader` | `native-exact` | `native-exact` | `unit`; Metal specializes vertex, fragment, and compute functions, while Vulkan uses specialization info. Generated names are diagnostic only. |
+| SHD-03 | Shader specialization constants/function constants by stable numeric ID | `shader` | `native-exact` | `native-exact` | `gpu-pixels` on Metal plus unit coverage for both mappings; Metal specializes vertex, fragment, and compute functions, while Vulkan uses specialization info. Generated names are diagnostic only. |
 
 ### Rendering, Binding, Compute, And Transfer
 

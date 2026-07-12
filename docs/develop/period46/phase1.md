@@ -1,6 +1,6 @@
 # Phase 1: Native Query ABI And Lifetime
 
-Status: in progress.
+Status: complete.
 
 ## Decisions
 

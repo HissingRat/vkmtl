@@ -1,6 +1,6 @@
 # Phase 5: Evidence And Closeout
 
-Status: planned.
+Status: complete.
 
 ## Required Evidence
 
@@ -14,8 +14,9 @@ Status: planned.
   that device exposes the complete timestamp lane. The other backend must pass
   focused deterministic tests, inspection, and forced-backend compilation;
   adding its physical rerun remains follow-up evidence, not a closure gate.
-- A Metal specialization smoke in which two numeric-ID values produce
-  observably different GPU output when the physical lane is available.
+- A Metal specialization smoke whose default-zero shader would render black,
+  while supplying numeric ID 7 with value 1.0 must produce the expected
+  non-black output.
 
 Physical GPU evidence on a backend is required before upgrading that executed
 path beyond the code and deterministic-test evidence class. Evidence must

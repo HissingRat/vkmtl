@@ -1,6 +1,6 @@
 # Phase 4: Metal Function Constants
 
-Status: planned.
+Status: complete.
 
 ## Mapping
 

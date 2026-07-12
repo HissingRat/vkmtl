@@ -31,14 +31,13 @@ closed one by one as vkmtl moves from prototype to library.
 - Period 1 Phase 9 and the staged pre-tag API migration are complete. The
   frozen baseline is 68 root declarations, 34 public `Device` methods, and 10
   public `WindowContext` methods, enforced by `zig build run-api-guard`.
-- The active mainline work is the `v0.1.0` release review for the first tagged
-  compatibility surface. Later feature work must use the canonical facades and
-  public API admission and release rules.
-- Native backend work now uses
+- The `v0.1.0` release review and publication are complete at tagged commit
+  `96c5b08c34163a148f9811efff04a6f78936778a`. Later feature work uses the
+  canonical facades and public API admission and release rules.
+- Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. The immediate audit starts with occlusion-query
-  truthfulness, exhaustive Metal source coverage, and transient versus
-  hardware-memoryless attachment semantics.
+  semantic-support ledger. Period 46 completed its first implementation slice;
+  Period 47 is the active mainline priority.
 
 ## Native Semantic Coverage Inventory
 
@@ -72,10 +71,10 @@ closed one by one as vkmtl moves from prototype to library.
 - [x] Pass the external local-path package smoke with a consumer-owned shader.
 - [x] Pass formatting, API guard, all tests, default and Vulkan builds, and
   package metadata fetch from a clean release worktree.
-- [ ] Pass hosted macOS, Linux, and Windows CI on the exact release commit.
-- [ ] Record physical Metal and Vulkan evidence against the release commit.
-- [ ] Create the annotated `v0.1.0` tag after all preceding gates pass.
-- [ ] Fetch the tag archive into a fresh external project and repeat the
+- [x] Pass hosted macOS, Linux, and Windows CI on the exact release commit.
+- [x] Record physical Metal and Vulkan evidence against the release commit.
+- [x] Create the annotated `v0.1.0` tag after all preceding gates pass.
+- [x] Fetch the tag archive into a fresh external project and repeat the
   package smoke before publishing the GitHub release.
 
 ## Open Design Decisions
@@ -2579,37 +2578,37 @@ obvious render and binding blockers.
 
 ## Period 46 Phase 1 Checklist
 
-- [ ] Add backend-private query set implementations while keeping the opaque
-  `QuerySet` layout unchanged; add only the default-null render-pass query-set
-  association required by Metal visibility storage.
-- [ ] Define reset, pending, readback, resolve, and lifetime behavior.
-- [ ] Keep logical and native timestamp sources distinct.
+- [x] Add backend-private query set implementations while keeping the opaque
+  `QuerySet` layout unchanged; add the default-null render-pass query-set
+  association and the precise v0.2.0 native-readback error.
+- [x] Define reset, pending, readback, resolve, and lifetime behavior.
+- [x] Keep logical and native timestamp sources distinct.
 
 ## Period 46 Phase 2 Checklist
 
-- [ ] Implement Vulkan occlusion/timestamp query pool creation and commands.
-- [ ] Implement native CPU readback and GPU resolve with not-ready handling.
-- [ ] Keep ambiguous pipeline-statistics result shapes typed unsupported.
+- [x] Implement Vulkan occlusion/timestamp query pool creation and commands.
+- [x] Implement native CPU readback and GPU resolve with not-ready handling.
+- [x] Keep ambiguous pipeline-statistics result shapes typed unsupported.
 
 ## Period 46 Phase 3 Checklist
 
-- [ ] Implement Metal visibility-buffer range allocation and render encoding.
-- [ ] Implement capability-gated Metal timestamp counter sampling and resolve.
-- [ ] Keep unavailable/native-device-specific counters closed.
+- [x] Implement Metal visibility-buffer range allocation and render encoding.
+- [x] Implement capability-gated Metal timestamp counter sampling and resolve.
+- [x] Keep unavailable/native-device-specific counters closed.
 
 ## Period 46 Phase 4 Checklist
 
-- [ ] Translate all four specialization value kinds to Metal function values.
-- [ ] Specialize vertex, fragment, and compute functions before pipeline
+- [x] Translate all four specialization value kinds to Metal function values.
+- [x] Specialize vertex, fragment, and compute functions before pipeline
   creation.
-- [ ] Open shader specialization only for executable backend paths.
+- [x] Open shader specialization only for executable backend paths.
 
 ## Period 46 Phase 5 Checklist
 
-- [ ] Add deterministic query/specialization tests and physical GPU smoke
+- [x] Add deterministic query/specialization tests and physical GPU smoke
   instructions.
-- [ ] Update semantic inventory, gap routing, capability docs, and matrices.
-- [ ] Run full API/backend validation and publish the closeout.
+- [x] Update semantic inventory, gap routing, capability docs, and matrices.
+- [x] Run full API/backend validation and publish the closeout.
 
 ## First Backend-Independent Triangle Checklist
 

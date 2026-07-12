@@ -17,7 +17,8 @@ Use these companion documents for the other views:
   API migration and its exit gates.
 - `docs/develop/release-policy.md` defines versioned compatibility and release
   gates.
-- `docs/develop/release-review-v0.1.0.md` tracks the active first-tag review.
+- `docs/develop/release-review-v0.1.0.md` records the completed first-tag
+  review.
 - `docs/develop/backend-completion-roadmap.md` tracks native Vulkan / Metal
   backend catch-up work after API shapes exist.
 - `docs/api/zh_cn/core.md` and `docs/api/en_us/core.md` describe the public API.
@@ -867,7 +868,7 @@ See `docs/develop/period45/`.
 
 ## Period 46: Native Queries, Counters, And Specialization
 
-Status: in progress.
+Status: complete.
 
 Goal: replace placeholder/typed-unsupported query lanes with capability-gated
 GPU visibility and timestamp results, keep unrepresentable statistics precise
@@ -936,9 +937,10 @@ Vulkan compositions or explicit unsupported outcomes.
 
 ## v0.1.0 Compatibility Release
 
-Status: in progress. Package metadata, compatibility policy, external package
-smoke, and local validation are complete; exact-commit CI/device evidence, tag,
-and archive gates remain open until their results are recorded.
+Status: complete. The annotated tag points to
+`96c5b08c34163a148f9811efff04a6f78936778a`; exact-commit hosted and physical
+evidence, archive consumer smoke, and publication gates were completed before
+the release was published.
 
 Goal: publish the completed Phase 9 API migration as the first tagged portable
 source compatibility baseline.
@@ -969,17 +971,17 @@ See `docs/develop/period32+/target.md`.
 
 ## Priority Notes
 
-- Period 1 Phase 9 staged API migration is complete. The frozen baseline is 68
-  root declarations, 34 public `Device` methods, and 10 public
-  `WindowContext` methods. The `v0.1.0` exact-commit release review is now the
-  active gate before later feature work resumes.
+- Period 1 Phase 9 staged API migration and the `v0.1.0` release are complete.
+  The guarded baseline remains 68 root declarations, 34 public `Device`
+  methods, and 10 public `WindowContext` methods. Period 46's public error-set
+  expansion is explicitly targeted at `v0.2.0`.
 - Periods 42 through 44 and all nine Period 44 release-evidence gates are
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
-- Period 45 is complete as the native semantic coverage audit. Period 46 is the
-  next implementation slice; Periods 47-54 are routed from its gap ledger and
-  must not be reordered around their stated dependencies without updating the
-  inventory and backlog.
+- Period 45 is complete as the native semantic coverage audit, and Period 46
+  is complete as its first implementation slice. Period 47 is next;
+  Periods 47-54 remain routed from the gap ledger and must not be reordered
+  around their stated dependencies without updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the
   deterministic capability contract and unit coverage because the host had no
