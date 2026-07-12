@@ -148,6 +148,17 @@ size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer) {
     return 0;
 }
 
+vkmtl_metal_status vkmtl_metal_buffer_gpu_address(
+    const vkmtl_metal_buffer *buffer,
+    uint64_t *out_address
+) {
+    (void)buffer;
+    if (out_address != NULL) {
+        *out_address = 0;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_contents(
     vkmtl_metal_buffer *buffer,
     void **out_contents

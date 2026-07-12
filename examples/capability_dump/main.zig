@@ -31,12 +31,32 @@ pub fn main() !void {
     var device = context.device();
     dumpAdapter(device.adapterInfo());
     dumpReport(device.capabilityReport());
+    try probeBufferGpuAddress(&device);
     try dumpDiagnostics(device);
     dumpFormatCaps(&device, .rgba8_unorm);
+    dumpFormatCaps(&device, .rgba16_float);
+    dumpFormatCaps(&device, .r32_uint);
     dumpFormatCaps(&device, .bgra8_unorm);
     dumpFormatCaps(&device, .bgra8_unorm_srgb);
     dumpFormatCaps(&device, .depth32_float);
+    dumpFormatCaps(&device, .depth16_unorm);
+    dumpFormatCaps(&device, .stencil8);
     dumpFormatCaps(&device, .depth32_float_stencil8);
+}
+
+fn probeBufferGpuAddress(device: *vkmtl.Device) !void {
+    if (!device.features().buffer_gpu_address) {
+        std.debug.print("buffer GPU address probe: unsupported\n", .{});
+        return;
+    }
+    var buffer = try device.makeBuffer(.{
+        .length = 16,
+        .usage = .{ .shader_device_address = true },
+        .storage_mode = .private,
+    });
+    defer buffer.deinit();
+    const address = try buffer.gpuAddress();
+    std.debug.print("buffer GPU address probe: nonzero={}\n", .{address != 0});
 }
 
 fn dumpDiagnostics(device: vkmtl.Device) !void {
@@ -106,6 +126,9 @@ fn dumpReport(report: vkmtl.diagnostics.DeviceCapabilityReport) void {
     std.debug.print("  max bind groups: {}\n", .{report.limits.max_bind_group_slots});
     std.debug.print("  max color attachments: {}\n", .{report.limits.max_color_attachments});
     std.debug.print("  max sample count: {}\n", .{report.limits.max_sample_count});
+    std.debug.print("  max buffer length: {}\n", .{report.limits.max_buffer_length});
+    std.debug.print("  max 2D texture dimension: {}\n", .{report.limits.max_texture_dimension_2d});
+    std.debug.print("  max texture array layers: {}\n", .{report.limits.max_texture_array_layers});
     std.debug.print("  max compute threads/threadgroup: {}\n", .{report.limits.max_compute_total_threads_per_threadgroup});
     std.debug.print("  buffer/texture copy offset alignment: {}\n", .{report.limits.buffer_texture_copy_offset_alignment});
     std.debug.print("  buffer/texture copy row-pitch alignment: {}\n", .{report.limits.buffer_texture_copy_row_pitch_alignment});
@@ -124,6 +147,7 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  timestamp queries: {}\n", .{features.timestamp_queries});
     std.debug.print("  pipeline statistics queries: {}\n", .{features.pipeline_statistics_queries});
     std.debug.print("  native handles: {}\n", .{features.native_handles});
+    std.debug.print("  buffer GPU address: {}\n", .{features.buffer_gpu_address});
     std.debug.print("  descriptor indexing: {}\n", .{features.descriptor_indexing});
     std.debug.print("  argument buffers: {}\n", .{features.argument_buffers});
     std.debug.print("  sparse buffers: {}\n", .{features.sparse_buffers});

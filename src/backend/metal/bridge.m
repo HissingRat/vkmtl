@@ -23,6 +23,7 @@ struct vkmtl_metal_clear_screen {
     id<MTLTexture> depth_texture;
     unsigned int width;
     unsigned int height;
+    unsigned int buffer_gpu_address;
 };
 
 struct vkmtl_metal_buffer {
@@ -595,6 +596,15 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
             [clear_screen->device release];
             free(clear_screen);
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        if (@available(macOS 10.13, *)) {
+            id<MTLBuffer> address_probe = [device newBufferWithLength:4 options:MTLResourceStorageModePrivate];
+            if (address_probe != nil &&
+                [address_probe respondsToSelector:@selector(gpuAddress)] &&
+                [address_probe gpuAddress] != 0) {
+                clear_screen->buffer_gpu_address = 1;
+            }
+            [address_probe release];
         }
         *out_clear_screen = clear_screen;
         return VKMTL_METAL_STATUS_OK;
@@ -1246,6 +1256,7 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
         if ([device respondsToSelector:@selector(maxThreadgroupMemoryLength)]) {
             out_capabilities->max_threadgroup_memory_length = [device maxThreadgroupMemoryLength];
         }
+        out_capabilities->buffer_gpu_address = clear_screen->buffer_gpu_address;
 
         // Metal exposes texture limits by GPU family rather than individual
         // device properties. Start with the portable family floor and raise
@@ -1309,6 +1320,24 @@ size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer) {
         return 0;
     }
     return buffer->length;
+}
+
+vkmtl_metal_status vkmtl_metal_buffer_gpu_address(
+    const vkmtl_metal_buffer *buffer,
+    uint64_t *out_address
+) {
+    if (buffer == NULL || buffer->buffer == nil || out_address == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    *out_address = 0;
+    if (@available(macOS 10.13, *)) {
+        if (![buffer->buffer respondsToSelector:@selector(gpuAddress)]) {
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        *out_address = (uint64_t)[buffer->buffer gpuAddress];
+        return *out_address == 0 ? VKMTL_METAL_STATUS_UNSUPPORTED : VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
 vkmtl_metal_status vkmtl_metal_buffer_set_label(

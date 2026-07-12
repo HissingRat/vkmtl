@@ -111,14 +111,21 @@ pub fn readBytes(self: *VulkanBuffer, offset: usize, destination: []u8) !void {
     @memcpy(destination, src[0..destination.len]);
 }
 
-pub fn deviceAddress(self: VulkanBuffer) !vk.DeviceAddress {
+pub fn gpuAddress(self: VulkanBuffer) core.BufferError!u64 {
+    var address: vk.DeviceAddress = 0;
     if (self.gc.dev.wrapper.dispatch.vkGetBufferDeviceAddressKHR != null) {
-        return self.gc.dev.getBufferDeviceAddressKHR(&.{ .buffer = self.handle });
+        address = self.gc.dev.getBufferDeviceAddressKHR(&.{ .buffer = self.handle });
+    } else if (self.gc.dev.wrapper.dispatch.vkGetBufferDeviceAddress != null) {
+        address = self.gc.dev.getBufferDeviceAddress(&.{ .buffer = self.handle });
+    } else {
+        return core.BufferError.UnsupportedBufferGpuAddress;
     }
-    if (self.gc.dev.wrapper.dispatch.vkGetBufferDeviceAddress != null) {
-        return self.gc.dev.getBufferDeviceAddress(&.{ .buffer = self.handle });
-    }
-    return error.VulkanUnavailable;
+    if (address == 0) return core.BufferError.BufferGpuAddressUnavailable;
+    return address;
+}
+
+pub fn deviceAddress(self: VulkanBuffer) core.BufferError!u64 {
+    return self.gpuAddress();
 }
 
 fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
@@ -143,6 +150,7 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
         flags.shader_binding_table_bit_khr = true;
         flags.shader_device_address_bit = true;
     }
+    if (usage.shader_device_address) flags.shader_device_address_bit = true;
 
     if (usage.isEmpty()) {
         flags.transfer_dst_bit = true;
@@ -154,7 +162,8 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
 fn requiresDeviceAddress(usage: core.BufferUsage) bool {
     return usage.acceleration_structure_scratch or
         usage.acceleration_structure_build_input or
-        usage.shader_binding_table;
+        usage.shader_binding_table or
+        usage.shader_device_address;
 }
 
 fn memoryFlags(descriptor: core.BufferDescriptor) vk.MemoryPropertyFlags {
@@ -165,4 +174,10 @@ fn memoryFlags(descriptor: core.BufferDescriptor) vk.MemoryPropertyFlags {
         .host_visible_bit = true,
         .host_coherent_bit = true,
     };
+}
+
+test "Vulkan buffer GPU address usage requests native usage and allocation flags" {
+    const usage = core.BufferUsage{ .shader_device_address = true };
+    try std.testing.expect(usageFlags(usage).shader_device_address_bit);
+    try std.testing.expect(requiresDeviceAddress(usage));
 }

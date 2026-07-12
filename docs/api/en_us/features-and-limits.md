@@ -70,6 +70,7 @@ cube_textures multisample_textures samplers sampler_compare
 sampler_anisotropy sampler_border_color heaps
 sparse_buffers sparse_textures tiled_textures memory_budget memory_pressure
 storage_buffers storage_textures
+buffer_gpu_address
 ```
 
 ### Binding

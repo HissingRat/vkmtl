@@ -365,7 +365,7 @@ The current major runtime owner counts are:
 | `Texture` | 19 | resource lifetime and texture operations |
 | `TextureView` | 18 | view lifetime and queries |
 | `AccelerationStructure` | 14 | capability-gated RT owner |
-| `Buffer` | 14 | mapping, read, write, and lifetime |
+| `Buffer` | 15 | mapping, read, write, GPU address, and lifetime |
 | `ShaderBindingTable` | 13 | capability-gated RT owner |
 | `ResourceTable` | 13 | advanced binding owner |
 
@@ -576,6 +576,14 @@ adds `UnsupportedTextureViewComponentMapping`.
 8-bit x2/x4, and signed/unsigned 32-bit scalar/x2/x3/x4 tags. These are enum
 expansions inside existing canonical domains; no root alias or owner method is
 added.
+
+`diagnostics.DeviceFeatures` gains `buffer_gpu_address`, and
+`resource.BufferUsage` gains `shader_device_address`. A buffer created with
+that usage can call the new `Buffer.gpuAddress()` method; missing capability,
+missing usage, or an unavailable zero native address returns a distinct
+`BufferError`. `TextureError` gains `TextureNotCpuVisible` so private CPU
+uploads fail consistently before backend access. `Buffer` now has 15 public
+methods; its opaque one-field layout is unchanged.
 
 The additions belong to the existing `diagnostics` and `resource` domains and
 receive no new root aliases or owner methods. Field and error-set growth targets

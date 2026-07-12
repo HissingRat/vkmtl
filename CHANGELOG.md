@@ -21,6 +21,8 @@ reserved for the next minor release and are documented with migration guidance.
 - Added a finite common-format expansion covering 8-bit normalized/integer,
   16/32-bit floating-point, 32-bit integer, depth16, stencil8 textures, plus
   half, normalized 8-bit, and signed/unsigned 32-bit vertex inputs.
+- Added capability-gated `BufferUsage.shader_device_address` and
+  `Buffer.gpuAddress()` with native Metal/Vulkan address queries.
 - Added capability-gated native Vulkan query pools and Metal visibility/counter
   query sets for occlusion, timestamp readback, and GPU resolve.
 - Added default-null `RenderPassDescriptor.occlusion_query_set` so a pass can
@@ -32,6 +34,8 @@ reserved for the next minor release and are documented with migration guidance.
 
 - Buffer and texture creation now rejects descriptors that exceed the selected
   device's queried resource limits before native object creation.
+- Private textures now reject CPU `replaceRegion` uploads consistently before
+  backend access; use transfer commands for private storage.
 - Occlusion query results now have portable Boolean visibility semantics: zero
   means no samples passed and any nonzero value means visible; the magnitude is
   not a portable sample count.
@@ -53,6 +57,9 @@ reserved for the next minor release and are documented with migration guidance.
   declarations target `v0.2.0`.
 - New `TextureFormat` and `VertexFormat` tags target `v0.2.0`; downstream
   exhaustive enum switches must handle the expanded finite set.
+- `DeviceFeatures.buffer_gpu_address`, `BufferUsage.shader_device_address`, the
+  `Buffer.gpuAddress()` method, and the new buffer/texture errors target
+  `v0.2.0`.
 - This Unreleased change targets `v0.2.0`, not a `v0.1.x` patch, because the
   public `QueryError` expansion is source-breaking for exhaustive switches.
 - The pass field defaults to null; the root, common owner methods, and opaque

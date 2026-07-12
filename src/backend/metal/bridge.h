@@ -299,6 +299,7 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int max_texture_dimension_2d;
     unsigned int max_texture_dimension_3d;
     unsigned int max_texture_array_layers;
+    unsigned int buffer_gpu_address;
 } vkmtl_metal_device_capabilities;
 
 typedef struct vkmtl_metal_acceleration_structure_build_sizes {
@@ -364,6 +365,10 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
 );
 void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer);
 size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer);
+vkmtl_metal_status vkmtl_metal_buffer_gpu_address(
+    const vkmtl_metal_buffer *buffer,
+    uint64_t *out_address
+);
 vkmtl_metal_status vkmtl_metal_buffer_set_label(
     vkmtl_metal_buffer *buffer,
     const char *label,

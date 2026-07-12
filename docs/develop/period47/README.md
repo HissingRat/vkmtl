@@ -2,6 +2,8 @@
 
 Status: in progress.
 
+Progress: Phases 1-2 complete; Phase 3 is next.
+
 Goal: close the common-workload subset of the 15 Period 45 rows routed to P47
 without treating each broad Metal protocol family as one portable promise.
 Every row is split into an executable vkmtl semantic and any advanced remainder

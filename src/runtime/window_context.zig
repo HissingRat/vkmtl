@@ -744,6 +744,18 @@ pub const Buffer = struct {
         return self.state().storage_mode_value.cpuVisible();
     }
 
+    pub fn gpuAddress(self: Buffer) core.BufferError!u64 {
+        const state_value = self.state();
+        assertAlive(state_value.alive, .buffer);
+        if (!state_value.usage_value.shader_device_address) {
+            return core.BufferError.BufferMissingGpuAddressUsage;
+        }
+        return switch (state_value.impl) {
+            .vulkan => |vulkan| try vulkan.gpuAddress(),
+            .metal => |metal| try metal.gpuAddress(),
+        };
+    }
+
     pub fn currentUsage(self: Buffer) ?core.ResourceUsageKind {
         return self.state().usage_state.current;
     }
@@ -903,6 +915,7 @@ pub const Texture = struct {
         dimension_value: core.TextureDimension = .two_d,
         format_value: core.TextureFormat,
         usage_value: core.TextureUsage,
+        storage_mode_value: core.ResourceStorageMode = .automatic,
         sample_count_value: u32,
         usage_state: core.ResourceUsageState = .{},
         subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
@@ -1045,6 +1058,7 @@ pub const Texture = struct {
             .mip_level_count = self.mipLevelCount(),
             .sample_count = self.state().sample_count_value,
             .usage = self.state().usage_value,
+            .storage_mode = self.state().storage_mode_value,
         };
     }
 
@@ -1094,6 +1108,9 @@ pub const Texture = struct {
         descriptor: core.TextureReplaceRegionDescriptor,
     ) !void {
         assertAlive(self.state().alive, .texture);
+        if (!self.state().storage_mode_value.cpuVisible()) {
+            return core.TextureError.TextureNotCpuVisible;
+        }
         switch (self.state().impl) {
             .vulkan => |*vulkan| try vulkan.replaceRegion(region, descriptor),
             .metal => |*metal| try metal.replaceRegion(region, descriptor),
@@ -6727,7 +6744,7 @@ pub const Device = struct {
     }
 
     pub fn makeBuffer(self: *Device, descriptor: core.BufferDescriptor) !Buffer {
-        const length = try descriptor.validateForLimits(self.limits());
+        const length = try descriptor.validateForDevice(self.features(), self.limits());
         const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| Buffer.Impl{ .vulkan = try vulkan.makeBuffer(descriptor) },
             .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(descriptor) },
@@ -6998,6 +7015,7 @@ pub const Device = struct {
             .dimension_value = descriptor.dimension,
             .format_value = descriptor.format,
             .usage_value = descriptor.usage,
+            .storage_mode_value = descriptor.storage_mode,
             .sample_count_value = descriptor.sample_count,
             .subresource_usage_tracker = subresource_usage_tracker,
             .impl = impl,
@@ -11577,6 +11595,25 @@ test "runtime buffers expose storage and cpu visibility" {
 
     try std.testing.expectEqual(core.ResourceStorageMode.private, buffer.storageMode());
     try std.testing.expect(!buffer.cpuVisible());
+}
+
+test "runtime private textures reject CPU upload before backend access" {
+    var tracker = ResourceTracker{};
+    var texture = Texture.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .copy_destination = true },
+        .storage_mode_value = .private,
+        .sample_count_value = 1,
+        .impl = undefined,
+    });
+
+    try std.testing.expectError(core.TextureError.TextureNotCpuVisible, texture.replaceRegion(.{
+        .size = .{ .width = 1, .height = 1 },
+    }, .{
+        .bytes = &.{ 0, 0, 0, 0 },
+    }));
 }
 
 test "runtime texture views expose resolved ranges" {

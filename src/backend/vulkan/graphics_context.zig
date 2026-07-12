@@ -419,6 +419,7 @@ fn queryNativeFeatures(
     result.ray_tracing_custom_intersection = ray_tracing.supported;
     result.ray_tracing_callable_shaders = ray_tracing.supported;
     result.driver_pipeline_cache = true;
+    result.buffer_gpu_address = bufferDeviceAddressSupported(instance, pdev);
     return result;
 }
 
@@ -445,6 +446,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.acceleration_structures = false;
     result.ray_tracing = false;
     result.driver_pipeline_cache = false;
+    result.buffer_gpu_address = native_features.buffer_gpu_address;
 
     result.native_handles = native_features.native_handles;
     result.debug_labels = native_features.debug_labels;
@@ -840,6 +842,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     const enable_vertex_divisor = vertexAttributeDivisorFeatureSupported(instance, candidate.pdev, extensions);
     const ray_tracing_diagnostics = try queryRayTracingCapabilityDiagnostics(instance, candidate.pdev, allocator, null);
     const enable_ray_tracing = ray_tracing_diagnostics.supported;
+    const enable_buffer_device_address = bufferDeviceAddressSupported(instance, candidate.pdev);
     const enable_host_query_reset = candidate.host_query_reset;
 
     var extension_names: std.ArrayList([*:0]const u8) = .empty;
@@ -847,6 +850,11 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     try extension_names.appendSlice(allocator, &required_device_extensions);
     if (enable_ray_tracing) {
         try extension_names.appendSlice(allocator, &required_ray_tracing_device_extensions);
+    } else if (enable_buffer_device_address and
+        candidate.props.api_version < vk.API_VERSION_1_2.toU32() and
+        extensions.buffer_device_address)
+    {
+        try extension_names.append(allocator, vk.extensions.khr_buffer_device_address.name);
     }
     if (enable_vertex_divisor) {
         if (vertexAttributeDivisorExtensionName(extensions)) |extension_name| {
@@ -866,7 +874,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         .vertex_attribute_instance_rate_divisor = if (enable_vertex_divisor) .true else .false,
     };
     var buffer_device_address_features = vk.PhysicalDeviceBufferDeviceAddressFeatures{
-        .buffer_device_address = if (enable_ray_tracing) .true else .false,
+        .buffer_device_address = if (enable_buffer_device_address) .true else .false,
     };
     var ray_tracing_pipeline_features = vk.PhysicalDeviceRayTracingPipelineFeaturesKHR{
         .ray_tracing_pipeline = if (enable_ray_tracing) .true else .false,
@@ -886,9 +894,12 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         vertex_divisor_features.p_next = device_p_next;
         device_p_next = &vertex_divisor_features;
     }
-    if (enable_ray_tracing) {
+    if (enable_buffer_device_address) {
         buffer_device_address_features.p_next = device_p_next;
-        ray_tracing_pipeline_features.p_next = &buffer_device_address_features;
+        device_p_next = &buffer_device_address_features;
+    }
+    if (enable_ray_tracing) {
+        ray_tracing_pipeline_features.p_next = device_p_next;
         acceleration_structure_features.p_next = &ray_tracing_pipeline_features;
         device_p_next = &acceleration_structure_features;
     }
@@ -992,6 +1003,16 @@ fn hostQueryResetSupported(instance: Instance, pdev: vk.PhysicalDevice) bool {
         .features = .{},
     };
     return getPhysicalDeviceFeatures2(instance, pdev, &features2) and host_query_reset.host_query_reset == .true;
+}
+
+fn bufferDeviceAddressSupported(instance: Instance, pdev: vk.PhysicalDevice) bool {
+    var buffer_device_address = vk.PhysicalDeviceBufferDeviceAddressFeatures{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &buffer_device_address,
+        .features = .{},
+    };
+    return getPhysicalDeviceFeatures2(instance, pdev, &features2) and
+        buffer_device_address.buffer_device_address == .true;
 }
 
 fn checkSurfaceSupport(instance: Instance, pdev: vk.PhysicalDevice, surface: vk.SurfaceKHR) !bool {
@@ -1142,6 +1163,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .native_handles = true,
         .debug_labels = true,
         .occlusion_queries = true,
+        .buffer_gpu_address = true,
     };
     const usable = queryUsableFeatures(native, true);
     try std.testing.expect(!usable.descriptor_indexing);
@@ -1155,6 +1177,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expect(!usable.driver_pipeline_cache);
     try std.testing.expect(usable.occlusion_queries);
+    try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(!queryUsableFeatures(native, false).occlusion_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);

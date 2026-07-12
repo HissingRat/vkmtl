@@ -55,6 +55,17 @@ signed/unsigned 32-bit vertex inputs. Use `Device.getFormatCaps(...)` for every
 new texture format; enum presence does not override the selected device's
 native capability result.
 
+To request a shader-visible address, first check
+`device.features().buffer_gpu_address`, create the buffer with
+`usage.shader_device_address = true`, then call `buffer.gpuAddress()`.
+Addresses are process/device-lifetime values, not portable serialized handles.
+Exhaustive `BufferError` switches must add `UnsupportedBufferGpuAddress`,
+`BufferMissingGpuAddressUsage`, and `BufferGpuAddressUnavailable`.
+
+Private texture CPU uploads now return `TextureNotCpuVisible` on both backends.
+Use a copy-source staging buffer and a transfer encoder for private textures.
+Automatic, shared, and managed modes retain their documented CPU upload path.
+
 ## Migration Rules
 
 Apply these rules in order:

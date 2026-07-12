@@ -1,6 +1,6 @@
 # Phase 2: Limits And Core Resources
 
-Status: in progress.
+Status: complete.
 
 ## Implemented Slice: Limits And Samplers
 
@@ -22,7 +22,14 @@ Status: in progress.
 - The documented finite texture/vertex format set now has core byte/aspect
   rules, shader reflection names, direct Metal/Vulkan mappings, and explicit
   capability reporting. Formats outside that set remain closed.
-- Buffer-address and final storage-mode audit work remain in this phase.
+- Buffer GPU addresses now require an explicit usage bit and executable device
+  feature. Metal queries `MTLBuffer.gpuAddress`; Vulkan enables and validates
+  the buffer-device-address feature, usage, allocation, and query path.
+- Storage modes now have one portable CPU-access boundary. Private buffer
+  mapping/read/write and private texture `replaceRegion` fail before backend
+  access; Vulkan composes the other texture uploads through staging.
+- Physical Metal evidence on Apple M4 Pro reports
+  `buffer GPU address probe: nonzero=true` from `run-capability-dump`.
 
 ## Scope
 

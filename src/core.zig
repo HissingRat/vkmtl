@@ -154,6 +154,7 @@ pub const DeviceFeatures = struct {
     debug_markers: bool = false,
     compute_atomics: bool = false,
     compute_threadgroup_memory: bool = false,
+    buffer_gpu_address: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -8217,6 +8218,7 @@ pub const TextureError = error{
     UnsupportedTextureUploadFormat,
     UnsupportedMipmapGeneration,
     TextureExtentExceedsDeviceLimit,
+    TextureNotCpuVisible,
 };
 
 pub const SamplerMinMagFilter = enum {
@@ -9765,6 +9767,7 @@ pub const BufferUsage = struct {
     acceleration_structure_scratch: bool = false,
     acceleration_structure_build_input: bool = false,
     shader_binding_table: bool = false,
+    shader_device_address: bool = false,
 
     pub fn isEmpty(self: BufferUsage) bool {
         return !self.copy_source and
@@ -9776,7 +9779,8 @@ pub const BufferUsage = struct {
             !self.indirect and
             !self.acceleration_structure_scratch and
             !self.acceleration_structure_build_input and
-            !self.shader_binding_table;
+            !self.shader_binding_table and
+            !self.shader_device_address;
     }
 };
 
@@ -9811,6 +9815,14 @@ pub const BufferDescriptor = struct {
     pub fn validateForLimits(self: BufferDescriptor, limits: DeviceLimits) BufferError!usize {
         const length = try self.resolvedLength();
         if (length > limits.max_buffer_length) return BufferError.BufferLengthExceedsDeviceLimit;
+        return length;
+    }
+
+    pub fn validateForDevice(self: BufferDescriptor, features: DeviceFeatures, limits: DeviceLimits) BufferError!usize {
+        const length = try self.validateForLimits(limits);
+        if (self.usage.shader_device_address and !features.buffer_gpu_address) {
+            return BufferError.UnsupportedBufferGpuAddress;
+        }
         return length;
     }
 
@@ -9879,6 +9891,9 @@ pub const BufferError = error{
     InvalidBufferMapMode,
     BufferNotCpuVisible,
     BufferLengthExceedsDeviceLimit,
+    UnsupportedBufferGpuAddress,
+    BufferMissingGpuAddressUsage,
+    BufferGpuAddressUnavailable,
 };
 
 pub const SurfaceError = error{
@@ -10964,6 +10979,15 @@ test "buffer descriptor validates initial data" {
     try std.testing.expectError(BufferError.BufferLengthExceedsDeviceLimit, (BufferDescriptor{
         .length = 9,
     }).validateForLimits(.{ .max_buffer_length = 8 }));
+    try std.testing.expectError(BufferError.UnsupportedBufferGpuAddress, (BufferDescriptor{
+        .length = 8,
+        .usage = .{ .shader_device_address = true },
+    }).validateForDevice(.{}, .{ .max_buffer_length = 8 }));
+    try std.testing.expectEqual(@as(usize, 8), try (BufferDescriptor{
+        .length = 8,
+        .usage = .{ .shader_device_address = true },
+    }).validateForDevice(.{ .buffer_gpu_address = true }, .{ .max_buffer_length = 8 }));
+    try std.testing.expect(!(BufferUsage{ .shader_device_address = true }).isEmpty());
 }
 
 test "buffer write descriptor validates ranges" {
@@ -13192,6 +13216,16 @@ test "texture descriptor validates basic 2d textures" {
         .height = 64,
         .depth_or_array_layers = 65,
     }).validateForLimits(.{ .max_texture_dimension_3d = 64 }));
+    try std.testing.expect((TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 1,
+        .storage_mode = .managed,
+    }).storage_mode.cpuVisible());
+    try std.testing.expect(!(TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 1,
+        .storage_mode = .private,
+    }).storage_mode.cpuVisible());
 }
 
 test "texture descriptor rejects missing extent and automatic format" {

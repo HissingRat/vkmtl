@@ -37,7 +37,8 @@ closed one by one as vkmtl moves from prototype to library.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
   semantic-support ledger. Period 46 completed its first implementation slice;
-  Period 47 is the active mainline priority.
+  Period 47 is the active mainline priority, with Phases 1-2 complete and
+  Phase 3 render breadth next.
 
 ## Native Semantic Coverage Inventory
 
@@ -2622,7 +2623,7 @@ obvious render and binding blockers.
 
 - [x] Query and report ordinary execution limits without claiming native
   memory-budget telemetry.
-- [ ] Expand common texture/vertex formats, compatible texture views, sampler
+- [x] Expand common texture/vertex formats, compatible texture views, sampler
   behavior, resource modes, and capability-gated buffer GPU addresses.
 - [x] Add focused resource validation and backend mapping tests.
 

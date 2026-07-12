@@ -287,6 +287,13 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
         .max_buffer_argument_table_entries = 0,
         .max_texture_argument_table_entries = 0,
         .max_sampler_argument_table_entries = 0,
+        .max_buffer_length = 0,
+        .max_threadgroup_memory_length = 0,
+        .max_texture_dimension_1d = 0,
+        .max_texture_dimension_2d = 0,
+        .max_texture_dimension_3d = 0,
+        .max_texture_array_layers = 0,
+        .buffer_gpu_address = 0,
     };
 }
 
@@ -311,6 +318,7 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.ray_tracing_custom_intersection = capabilities.ray_tracing != 0;
     result.ray_tracing_callable_shaders = false;
     result.metal_binary_archive = capabilities.binary_archive != 0;
+    result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
     return result;
 }
 
@@ -320,6 +328,7 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.shader_specialization = capabilities.function_constants != 0;
     result.debug_markers = true;
     result.sampler_anisotropy = true;
+    result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
     return result;
 }
 
@@ -380,6 +389,7 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .max_texture_dimension_2d = 16384,
         .max_texture_dimension_3d = 2048,
         .max_texture_array_layers = 2048,
+        .buffer_gpu_address = 1,
     };
 
     const native = nativeFeaturesFromMetalCapabilities(capabilities);
@@ -392,8 +402,10 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(native.timestamp_queries);
     try std.testing.expect(native.shader_specialization);
+    try std.testing.expect(native.buffer_gpu_address);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.shader_specialization);
+    try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);

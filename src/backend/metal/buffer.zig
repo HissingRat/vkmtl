@@ -52,6 +52,18 @@ pub fn length(self: MetalBuffer) usize {
     return self.length_value;
 }
 
+pub fn gpuAddress(self: MetalBuffer) core.BufferError!u64 {
+    var address: u64 = 0;
+    const status = metal.vkmtl_metal_buffer_gpu_address(self.handle, &address);
+    if (status == metal.VKMTL_METAL_STATUS_UNSUPPORTED) {
+        return core.BufferError.UnsupportedBufferGpuAddress;
+    }
+    if (status != metal.VKMTL_METAL_STATUS_OK or address == 0) {
+        return core.BufferError.BufferGpuAddressUnavailable;
+    }
+    return address;
+}
+
 pub fn setLabel(self: *MetalBuffer, label_value: ?[]const u8) void {
     debug.ignore(metal.vkmtl_metal_buffer_set_label(
         self.handle,

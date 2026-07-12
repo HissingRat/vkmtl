@@ -66,7 +66,7 @@ Runtime `Device` 是资源创建入口。`WindowContext.device()` 返回当前 c
 `AdapterSelectionDescriptor.name` 会和 runtime 解析出的 adapter 名称做精确校验。创建 runtime
 context 后，`context.adapterInfo()` 和 `device.adapterInfo()` 会尽量返回后端查询到的 selected
 adapter 名称/vendor/type。`Device.limits()` 现在会询问当前 runtime 后端的已知 limits；format
-capability 仍使用 portable 默认表，后续可以继续接 backend-specific format query。
+capability 在 Vulkan 查询 native format properties，在 Metal 使用文档化的保守 per-format table。
 
 CPU 可见 buffer 可以用 `buffer.replaceBytes(...)` 更新，也可以用
 `buffer.readBytes(...)` 读回。Period 3 也提供显式 range mapping：
@@ -84,6 +84,12 @@ const bytes = mapped.bytes();
 
 `BufferMapDescriptor` 会校验 range 和 access mode。Private buffer 不 CPU-visible；这类资源的上传或
 读回应该走 transfer 路径。
+Shader-visible address 需要 `DeviceFeatures.buffer_gpu_address` 和
+`BufferUsage.shader_device_address`；之后 `buffer.gpuAddress()` 会返回 native GPU address，或
+typed unsupported/unavailable error。
+
+Automatic/shared/managed texture 支持 CPU upload helper。Private texture 会拒绝
+`replaceRegion(...)`；应使用 staging buffer 和 transfer encoder，使 Metal/Vulkan 保持同一合同。
 
 Texture 通过 `texture.makeTextureView(...)` 创建 view，上传 helper 包括
 `texture.replaceRegion(...)` 和 `texture.replaceAll2D(...)`。`TextureDescriptor.shape()` 可以把

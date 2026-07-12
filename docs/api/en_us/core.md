@@ -81,8 +81,8 @@ backend, while `AdapterSelectionDescriptor.name` is validated against the
 resolved runtime adapter name. After runtime context creation,
 `context.adapterInfo()` and `device.adapterInfo()` try to return
 backend-queried selected-adapter name/vendor/type. `Device.limits()` now asks
-the selected runtime backend for known limits; format capabilities still use the
-portable default table until backend-specific format queries are added.
+the selected runtime backend for known limits. Vulkan queries native format
+properties; Metal applies the documented conservative per-format table.
 
 Buffers created with CPU-visible storage can be updated with
 `buffer.replaceBytes(...)` and read back with `buffer.readBytes(...)`.
@@ -101,6 +101,13 @@ const bytes = mapped.bytes();
 
 `BufferMapDescriptor` validates range and access mode. Private buffers are not
 CPU-visible; upload or readback for those resources should use transfer paths.
+Shader-visible addresses require `DeviceFeatures.buffer_gpu_address` and
+`BufferUsage.shader_device_address`; `buffer.gpuAddress()` then returns the
+native GPU address or a typed unsupported/unavailable error.
+
+Automatic/shared/managed textures support the CPU upload helpers. Private
+textures reject `replaceRegion(...)`; upload them through a staging buffer and
+transfer encoder so Metal and Vulkan share one portable boundary.
 
 Textures create views through `texture.makeTextureView(...)`, and upload
 helpers include `texture.replaceRegion(...)` and `texture.replaceAll2D(...)`.
