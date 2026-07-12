@@ -265,6 +265,8 @@ typedef struct vkmtl_metal_render_pass_color_attachment {
     float clear_green;
     float clear_blue;
     float clear_alpha;
+    unsigned int load_action;
+    unsigned int store_action;
 } vkmtl_metal_render_pass_color_attachment;
 
 typedef struct vkmtl_metal_native_handles {
@@ -689,6 +691,12 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
+    unsigned int depth_load_action,
+    unsigned int depth_store_action,
+    unsigned int use_stencil,
+    unsigned int clear_stencil,
+    unsigned int stencil_load_action,
+    unsigned int stencil_store_action,
     vkmtl_metal_query_set *occlusion_query_set,
     vkmtl_metal_render_command_encoder **out_encoder
 );

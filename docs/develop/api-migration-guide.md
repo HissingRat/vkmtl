@@ -66,6 +66,13 @@ Private texture CPU uploads now return `TextureNotCpuVisible` on both backends.
 Use a copy-source staging buffer and a transfer encoder for private textures.
 Automatic, shared, and managed modes retain their documented CPU upload path.
 
+Texture-backed render attachments now honor every color attachment and native
+load/store actions. Combined depth/stencil requires the depth and stencil
+descriptors to reference the same depth-stencil view. Current-drawable passes
+continue to require color clear/store and depth clear/dont-care; other actions
+return `UnsupportedRenderPassAttachmentAction`. Add that arm to exhaustive
+`RuntimeError` switches.
+
 ## Migration Rules
 
 Apply these rules in order:

@@ -558,10 +558,11 @@ scheduling 后续再接。
 Render pass 可以渲染到当前 drawable，也可以渲染到显式 texture view。Texture-backed color
 attachment 在 MSAA 场景下还可以提供 single-sample `resolve_target`。Descriptor model
 也包含 stencil attachment、transient attachment hint 和多个 color attachment。当前 runtime
-lowering 支持 texture-backed MRT render pass；current drawable render pass 仍保持单个
-color attachment。`transient` 目前作为 no-op 性能 hint 保留。Combined depth/stencil
-attachment 会通过 depth attachment 路径下沉；独立 stencil-only attachment 仍会返回
-typed unsupported error。Multisampled texture 的普通 copy/readback 会被拒绝；color resolve
+lowering 会处理 texture-backed MRT 的每个 attachment 及其 load/store action；current drawable
+render pass 仍保持单个 color attachment。`transient` 目前作为 no-op 性能 hint 保留。
+Depth/stencil descriptor 指向同一个 combined view 时会下沉；独立 stencil-only 和 current-drawable
+stencil 仍返回 typed unsupported。Current drawable 只接受文档化的 clear/store 默认 action，
+其他 action 会明确拒绝。Multisampled texture 的普通 copy/readback 会被拒绝；color resolve
 是显式转换到 single-sample target 的路径。Depth 和 stencil resolve target 已有公开 shape，
 但在两个 backend 都完成验证 lowering 前会返回 `UnsupportedTextureResolve`。
 

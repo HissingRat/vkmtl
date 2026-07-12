@@ -668,11 +668,14 @@ Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample
 `resolve_target` when rendering from an MSAA texture. The descriptor model also
 includes stencil attachments, transient attachment hints, and multiple color
-attachments. Texture-backed MRT render passes lower to Vulkan and Metal, while
+attachments. Every texture-backed MRT attachment and its load/store action now
+lowers to Vulkan and Metal, while
 current-drawable render passes remain single-color. `transient` is currently
 preserved as a no-op performance hint. Combined depth/stencil attachments lower
-through the depth attachment path; separate stencil-only attachments still
-return typed unsupported errors. Ordinary copy/readback of multisampled
+when both descriptors reference the same depth-stencil view; separate
+stencil-only and current-drawable stencil attachments remain typed unsupported.
+Current-drawable attachments use their documented clear/store defaults and
+reject other actions explicitly. Ordinary copy/readback of multisampled
 textures is rejected; color resolve is the explicit path to a single-sample
 target. Depth and stencil resolve targets are represented in the public shape
 but return `UnsupportedTextureResolve` until both backends have validated

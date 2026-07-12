@@ -11,6 +11,8 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Completed portable MRT validation/lowering for every color attachment and
+  native texture-backed load/store actions, including combined depth/stencil.
 - Added queried ordinary resource limits for maximum buffer length, 1D/2D/3D
   texture dimensions, texture array layers, and Metal threadgroup memory.
 - Added `SamplerDescriptor.normalized_coordinates`; `false` lowers to native
@@ -48,6 +50,8 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- `RuntimeError.UnsupportedRenderPassAttachmentAction` targets `v0.2.0` and
+  distinguishes current-drawable action limits from invalid attachments.
 - The new `DeviceLimits` and sampler descriptor fields, plus
   `BufferLengthExceedsDeviceLimit`, `TextureExtentExceedsDeviceLimit`, and
   `InvalidUnnormalizedCoordinates`, target `v0.2.0`. Exhaustive public error

@@ -1,6 +1,20 @@
 # Phase 3: Render Breadth
 
-Status: planned.
+Status: complete.
+
+## Implemented Contract
+
+- Runtime validation, debug state, usage tracking, ownership, extent, sample
+  count, resolve, and backend lowering now consume every MRT color attachment.
+- Texture-backed color and depth/stencil attachments lower load/store/clear
+  actions on both backends. Combined depth/stencil is supported when both
+  descriptors reference the same depth-stencil view.
+- Current-drawable passes retain their exact prebuilt defaults; non-default
+  load/store requests return `UnsupportedRenderPassAttachmentAction`.
+- Depth/stencil resolve, separate stencil-only views, and current-drawable
+  stencil remain typed unsupported and stay outside the portable promise.
+- Existing render buffer/bind-group/root-constant paths and pipeline/dynamic
+  raster state have complete backend mappings and focused validation coverage.
 
 ## Scope
 

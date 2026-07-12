@@ -40,11 +40,18 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
     clear_depth: f32 = 1.0,
 };
 
+pub const RenderPassStencilAttachmentDescriptor = struct {
+    load_action: core.LoadAction = .clear,
+    store_action: core.StoreAction = .dont_care,
+    clear_stencil: u32 = 0,
+};
+
 pub const RenderPassDescriptor = struct {
     label: ?[]const u8 = null,
     color_attachments: [core.default_max_color_attachments]RenderPassColorAttachmentDescriptor,
     color_attachment_count: usize,
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+    stencil_attachment: ?RenderPassStencilAttachmentDescriptor = null,
     occlusion_query_set: ?*const MetalQuerySet = null,
 
     fn colorAttachmentSlice(self: *const RenderPassDescriptor) []const RenderPassColorAttachmentDescriptor {
@@ -113,6 +120,7 @@ pub const CommandBuffer = struct {
         const color_attachments = makeRenderPassColorAttachments(descriptor.colorAttachmentSlice());
         const color_attachment_slice = color_attachments[0..descriptor.color_attachment_count];
         const depth_attachment = descriptor.depth_attachment;
+        const stencil_attachment = descriptor.stencil_attachment;
 
         var handle: ?*metal.vkmtl_metal_render_command_encoder = null;
         try check(metal.vkmtl_metal_render_command_encoder_create(
@@ -123,6 +131,12 @@ pub const CommandBuffer = struct {
             if (depth_attachment != null) 1 else 0,
             if (depth_attachment) |depth| depthTextureViewHandle(depth.target) else null,
             if (depth_attachment) |depth| depth.clear_depth else 1.0,
+            if (depth_attachment) |depth| @intFromEnum(depth.load_action) else 0,
+            if (depth_attachment) |depth| @intFromEnum(depth.store_action) else 0,
+            if (stencil_attachment != null) 1 else 0,
+            if (stencil_attachment) |stencil| stencil.clear_stencil else 0,
+            if (stencil_attachment) |stencil| @intFromEnum(stencil.load_action) else 0,
+            if (stencil_attachment) |stencil| @intFromEnum(stencil.store_action) else 0,
             if (descriptor.occlusion_query_set) |query_set| query_set.handle else null,
             &handle,
         ));
@@ -1064,6 +1078,8 @@ fn makeRenderPassColorAttachments(
             .clear_green = clear_color.green,
             .clear_blue = clear_color.blue,
             .clear_alpha = clear_color.alpha,
+            .load_action = @intFromEnum(descriptor.load_action),
+            .store_action = @intFromEnum(descriptor.store_action),
         };
     }
     return out;

@@ -982,8 +982,8 @@ See `docs/develop/period32+/target.md`.
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Period 46
-  is complete as its first implementation slice. Period 47 Phases 1-2 are
-  complete and Phase 3 render breadth is the active mainline target;
+  is complete as its first implementation slice. Period 47 Phases 1-3 are
+  complete and Phase 4 compute/reflection breadth is the active mainline target;
   Periods 47-54 remain routed from the gap ledger and must not be reordered
   around their stated dependencies without updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on

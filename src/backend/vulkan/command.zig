@@ -39,11 +39,18 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
     clear_depth: f32 = 1.0,
 };
 
+pub const RenderPassStencilAttachmentDescriptor = struct {
+    load_action: core.LoadAction = .clear,
+    store_action: core.StoreAction = .dont_care,
+    clear_stencil: u32 = 0,
+};
+
 pub const RenderPassDescriptor = struct {
     label: ?[]const u8 = null,
     color_attachments: [core.default_max_color_attachments]RenderPassColorAttachmentDescriptor,
     color_attachment_count: usize,
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+    stencil_attachment: ?RenderPassStencilAttachmentDescriptor = null,
 
     fn colorAttachmentSlice(self: *const RenderPassDescriptor) []const RenderPassColorAttachmentDescriptor {
         return self.color_attachments[0..self.color_attachment_count];
@@ -147,7 +154,7 @@ pub const CommandBuffer = struct {
             clear_values[clear_value_count] = vk.ClearValue{
                 .depth_stencil = .{
                     .depth = depth_attachment.clear_depth,
-                    .stencil = 0,
+                    .stencil = if (descriptor.stencil_attachment) |stencil| stencil.clear_stencil else 0,
                 },
             };
             clear_value_count += 1;
@@ -454,6 +461,8 @@ pub const CommandBuffer = struct {
 
         var color_views: [core.default_max_color_attachments]*const VulkanTextureView = undefined;
         var color_formats: [core.default_max_color_attachments]vk.Format = undefined;
+        var color_load_actions: [core.default_max_color_attachments]core.LoadAction = undefined;
+        var color_store_actions: [core.default_max_color_attachments]core.StoreAction = undefined;
         var color_initial_layouts: [core.default_max_color_attachments]vk.ImageLayout = undefined;
         var resolve_views: [core.default_max_color_attachments]?*const VulkanTextureView = undefined;
         var resolve_initial_layouts: [core.default_max_color_attachments]vk.ImageLayout = undefined;
@@ -488,6 +497,8 @@ pub const CommandBuffer = struct {
             }
             color_views[i] = attachment_view;
             color_formats[i] = VulkanTexture.imageFormat(attachment_view.format);
+            color_load_actions[i] = attachment.load_action;
+            color_store_actions[i] = attachment.store_action;
             color_initial_layouts[i] = attachment_view.layout.*;
             resolve_views[i] = resolve_view;
             resolve_initial_layouts[i] = if (resolve_view) |view| view.layout.* else .undefined;
@@ -528,6 +539,8 @@ pub const CommandBuffer = struct {
             self.gc,
             color_formats[0..color_attachments.len],
             color_initial_layouts[0..color_attachments.len],
+            color_load_actions[0..color_attachments.len],
+            color_store_actions[0..color_attachments.len],
             color_view.sample_count,
             uses_resolve,
             resolve_initial_layouts[0..color_attachments.len],
@@ -537,6 +550,10 @@ pub const CommandBuffer = struct {
                 .current_drawable => .undefined,
                 .texture_view => |depth_view| depth_view.layout.*,
             } else .undefined,
+            if (descriptor.depth_attachment) |depth| depth.load_action else .dont_care,
+            if (descriptor.depth_attachment) |depth| depth.store_action else .dont_care,
+            if (descriptor.stencil_attachment) |stencil| stencil.load_action else .dont_care,
+            if (descriptor.stencil_attachment) |stencil| stencil.store_action else .dont_care,
         );
         errdefer self.destroyTemporaryRenderPassResources();
 
@@ -623,23 +640,29 @@ fn createTextureRenderPass(
     gc: *const GraphicsContext,
     color_formats: []const vk.Format,
     color_initial_layouts: []const vk.ImageLayout,
+    color_load_actions: []const core.LoadAction,
+    color_store_actions: []const core.StoreAction,
     color_sample_count: u32,
     uses_resolve: bool,
     resolve_initial_layouts: []const vk.ImageLayout,
     uses_depth: bool,
     depth_format: ?vk.Format,
     depth_initial_layout: vk.ImageLayout,
+    depth_load_action: core.LoadAction,
+    depth_store_action: core.StoreAction,
+    stencil_load_action: core.LoadAction,
+    stencil_store_action: core.StoreAction,
 ) !vk.RenderPass {
     var attachments: [core.default_max_color_attachments * 2 + 1]vk.AttachmentDescription = undefined;
     var color_attachment_refs: [core.default_max_color_attachments]vk.AttachmentReference = undefined;
     var resolve_attachment_refs: [core.default_max_color_attachments]vk.AttachmentReference = undefined;
     var attachment_count: u32 = 0;
-    for (color_formats, color_initial_layouts, 0..) |color_format, color_initial_layout, i| {
+    for (color_formats, color_initial_layouts, color_load_actions, color_store_actions, 0..) |color_format, color_initial_layout, load_action, store_action, i| {
         attachments[attachment_count] = .{
             .format = color_format,
             .samples = VulkanTexture.sampleCountFlags(color_sample_count),
-            .load_op = .clear,
-            .store_op = .store,
+            .load_op = attachmentLoadOp(load_action),
+            .store_op = attachmentStoreOp(store_action),
             .stencil_load_op = .dont_care,
             .stencil_store_op = .dont_care,
             .initial_layout = color_initial_layout,
@@ -676,10 +699,10 @@ fn createTextureRenderPass(
         attachments[attachment_count] = .{
             .format = depth_format orelse return error.InvalidRenderPassAttachment,
             .samples = VulkanTexture.sampleCountFlags(color_sample_count),
-            .load_op = .clear,
-            .store_op = .dont_care,
-            .stencil_load_op = if (depth_format == .d32_sfloat_s8_uint) .clear else .dont_care,
-            .stencil_store_op = .dont_care,
+            .load_op = attachmentLoadOp(depth_load_action),
+            .store_op = attachmentStoreOp(depth_store_action),
+            .stencil_load_op = attachmentLoadOp(stencil_load_action),
+            .stencil_store_op = attachmentStoreOp(stencil_store_action),
             .initial_layout = depth_initial_layout,
             .final_layout = .depth_stencil_attachment_optimal,
         };
@@ -706,6 +729,21 @@ fn createTextureRenderPass(
         .subpass_count = 1,
         .p_subpasses = @ptrCast(&subpass),
     }, null);
+}
+
+fn attachmentLoadOp(action: core.LoadAction) vk.AttachmentLoadOp {
+    return switch (action) {
+        .dont_care => .dont_care,
+        .load => .load,
+        .clear => .clear,
+    };
+}
+
+fn attachmentStoreOp(action: core.StoreAction) vk.AttachmentStoreOp {
+    return switch (action) {
+        .dont_care => .dont_care,
+        .store => .store,
+    };
 }
 
 pub const RenderCommandEncoder = struct {

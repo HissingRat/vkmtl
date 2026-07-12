@@ -2629,11 +2629,11 @@ obvious render and binding blockers.
 
 ## Period 47 Phase 3 Checklist
 
-- [ ] Validate and lower every color attachment in an MRT pass.
-- [ ] Close the ordinary render binding and dynamic raster-state subsets while
+- [x] Validate and lower every color attachment in an MRT pass.
+- [x] Close the ordinary render binding and dynamic raster-state subsets while
   keeping heaps, function tables, sample positions, and advanced raster state
   deferred.
-- [ ] Implement exact depth/stencil attachment behavior where representable and
+- [x] Implement exact depth/stencil attachment behavior where representable and
   retain precise typed unsupported results elsewhere.
 
 ## Period 47 Phase 4 Checklist

@@ -1184,6 +1184,21 @@ static MTLTextureUsage vkmtl_texture_usage(unsigned int usage_flags) {
     return usage;
 }
 
+static MTLLoadAction vkmtl_load_action(unsigned int action) {
+    switch (action) {
+        case 1:
+            return MTLLoadActionLoad;
+        case 2:
+            return MTLLoadActionClear;
+        default:
+            return MTLLoadActionDontCare;
+    }
+}
+
+static MTLStoreAction vkmtl_store_action(unsigned int action) {
+    return action == 1 ? MTLStoreActionStore : MTLStoreActionDontCare;
+}
+
 vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_clear_screen *owner,
     size_t length,
@@ -3259,6 +3274,12 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
+    unsigned int depth_load_action,
+    unsigned int depth_store_action,
+    unsigned int use_stencil,
+    unsigned int clear_stencil,
+    unsigned int stencil_load_action,
+    unsigned int stencil_store_action,
     vkmtl_metal_query_set *occlusion_query_set,
     vkmtl_metal_render_command_encoder **out_encoder
 ) {
@@ -3308,7 +3329,7 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
             }
 
             descriptor.colorAttachments[i].texture = color_texture;
-            descriptor.colorAttachments[i].loadAction = MTLLoadActionClear;
+            descriptor.colorAttachments[i].loadAction = vkmtl_load_action(attachment.load_action);
             if (attachment.resolve_texture_view != NULL) {
                 if (attachment.texture_view == NULL ||
                     attachment.texture_view->sample_count <= 1 ||
@@ -3317,9 +3338,11 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
                     return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
                 }
                 descriptor.colorAttachments[i].resolveTexture = attachment.resolve_texture_view->texture;
-                descriptor.colorAttachments[i].storeAction = MTLStoreActionMultisampleResolve;
+                descriptor.colorAttachments[i].storeAction = attachment.store_action == 1
+                    ? MTLStoreActionStoreAndMultisampleResolve
+                    : MTLStoreActionMultisampleResolve;
             } else {
-                descriptor.colorAttachments[i].storeAction = MTLStoreActionStore;
+                descriptor.colorAttachments[i].storeAction = vkmtl_store_action(attachment.store_action);
             }
             descriptor.colorAttachments[i].clearColor =
                 MTLClearColorMake(
@@ -3337,14 +3360,17 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
                 return VKMTL_METAL_STATUS_INVALID_COMMAND;
             }
             descriptor.depthAttachment.texture = depth_texture;
-            descriptor.depthAttachment.loadAction = MTLLoadActionClear;
-            descriptor.depthAttachment.storeAction = MTLStoreActionDontCare;
+            descriptor.depthAttachment.loadAction = vkmtl_load_action(depth_load_action);
+            descriptor.depthAttachment.storeAction = vkmtl_store_action(depth_store_action);
             descriptor.depthAttachment.clearDepth = clear_depth;
-            if (depth_texture.pixelFormat == MTLPixelFormatDepth32Float_Stencil8) {
+            if (use_stencil != 0) {
+                if (depth_texture.pixelFormat != MTLPixelFormatDepth32Float_Stencil8) {
+                    return VKMTL_METAL_STATUS_INVALID_COMMAND;
+                }
                 descriptor.stencilAttachment.texture = depth_texture;
-                descriptor.stencilAttachment.loadAction = MTLLoadActionClear;
-                descriptor.stencilAttachment.storeAction = MTLStoreActionDontCare;
-                descriptor.stencilAttachment.clearStencil = 0;
+                descriptor.stencilAttachment.loadAction = vkmtl_load_action(stencil_load_action);
+                descriptor.stencilAttachment.storeAction = vkmtl_store_action(stencil_store_action);
+                descriptor.stencilAttachment.clearStencil = clear_stencil;
             }
         }
 

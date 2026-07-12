@@ -3692,6 +3692,9 @@ pub const RenderPassColorAttachmentDescriptor = struct {
         switch (self.target) {
             .current_drawable => {
                 if (self.resolve_target != null) return RuntimeError.InvalidRenderPassAttachment;
+                if (self.load_action != .clear or self.store_action != .store) {
+                    return RuntimeError.UnsupportedRenderPassAttachmentAction;
+                }
             },
             .texture_view => |texture_view| {
                 assertAlive(texture_view.state().alive, .texture_view);
@@ -3749,7 +3752,11 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
         try self.toCore().validate();
         if (self.resolve_target != null) return core.CommandEncodingError.UnsupportedTextureResolve;
         switch (self.target) {
-            .current_drawable => {},
+            .current_drawable => {
+                if (self.load_action != .clear or self.store_action != .dont_care) {
+                    return RuntimeError.UnsupportedRenderPassAttachmentAction;
+                }
+            },
             .texture_view => |texture_view| {
                 assertAlive(texture_view.state().alive, .texture_view);
                 try expectSameBackend(backend, texture_view.selectedBackend());
@@ -3791,7 +3798,11 @@ pub const RenderPassStencilAttachmentDescriptor = struct {
         try self.toCore().validate();
         if (self.resolve_target != null) return core.CommandEncodingError.UnsupportedTextureResolve;
         switch (self.target) {
-            .current_drawable => {},
+            .current_drawable => {
+                if (self.load_action != .clear or self.store_action != .dont_care or self.clear_stencil != 0) {
+                    return RuntimeError.UnsupportedRenderPassAttachmentAction;
+                }
+            },
             .texture_view => |texture_view| {
                 assertAlive(texture_view.state().alive, .texture_view);
                 try expectSameBackend(backend, texture_view.selectedBackend());
@@ -3834,12 +3845,15 @@ pub const RenderPassDescriptor = struct {
         try validateColorAttachmentCompatibility(self.color_attachments);
         if (self.depth_attachment) |depth_attachment| {
             try depth_attachment.validateRuntime(backend);
-            try validateAttachmentExtents(self.color_attachments[0], depth_attachment);
-            try validateAttachmentSampleCounts(self.color_attachments[0], depth_attachment);
+            for (self.color_attachments) |color_attachment| {
+                try validateAttachmentExtents(color_attachment, depth_attachment);
+                try validateAttachmentSampleCounts(color_attachment, depth_attachment);
+            }
         }
         if (self.stencil_attachment) |stencil_attachment| {
             try stencil_attachment.validateRuntime(backend);
-            return RuntimeError.UnsupportedStencilAttachment;
+            const depth_attachment = self.depth_attachment orelse return RuntimeError.UnsupportedStencilAttachment;
+            try validateDepthStencilAttachmentCompatibility(depth_attachment, stencil_attachment);
         }
     }
 
@@ -3869,6 +3883,26 @@ fn validateColorAttachmentCompatibility(color_attachments: []const RenderPassCol
         if (view.sampleCount() != first_view.sampleCount()) {
             return RuntimeError.InvalidRenderPassAttachment;
         }
+    }
+}
+
+fn validateDepthStencilAttachmentCompatibility(
+    depth: RenderPassDepthAttachmentDescriptor,
+    stencil: RenderPassStencilAttachmentDescriptor,
+) RuntimeError!void {
+    switch (depth.target) {
+        .current_drawable => switch (stencil.target) {
+            .current_drawable => return RuntimeError.UnsupportedStencilAttachment,
+            .texture_view => return RuntimeError.UnsupportedStencilAttachment,
+        },
+        .texture_view => |depth_view| switch (stencil.target) {
+            .current_drawable => return RuntimeError.UnsupportedStencilAttachment,
+            .texture_view => |stencil_view| {
+                if (depth_view != stencil_view or !core.isDepthStencilFormat(depth_view.format())) {
+                    return RuntimeError.UnsupportedStencilAttachment;
+                }
+            },
+        },
     }
 }
 
@@ -3947,6 +3981,11 @@ fn vulkanRenderPassDescriptor(descriptor: RenderPassDescriptor) VulkanCommand.Re
             .store_action = depth_attachment.store_action,
             .clear_depth = depth_attachment.clear_depth,
         } else null,
+        .stencil_attachment = if (descriptor.stencil_attachment) |stencil_attachment| .{
+            .load_action = stencil_attachment.load_action,
+            .store_action = stencil_attachment.store_action,
+            .clear_stencil = stencil_attachment.clear_stencil,
+        } else null,
     };
 }
 
@@ -3988,6 +4027,11 @@ fn metalRenderPassDescriptor(descriptor: RenderPassDescriptor) MetalCommand.Rend
             .load_action = depth_attachment.load_action,
             .store_action = depth_attachment.store_action,
             .clear_depth = depth_attachment.clear_depth,
+        } else null,
+        .stencil_attachment = if (descriptor.stencil_attachment) |stencil_attachment| .{
+            .load_action = stencil_attachment.load_action,
+            .store_action = stencil_attachment.store_action,
+            .clear_stencil = stencil_attachment.clear_stencil,
         } else null,
         .occlusion_query_set = metalOcclusionQuerySet(descriptor.occlusion_query_set),
     };
@@ -4150,13 +4194,14 @@ pub const CommandBuffer = struct {
         validateRenderPassOwnership(self.privateState().queue_kind_value, descriptor) catch |err| return err;
         recordRenderPassUsage(descriptor);
 
-        const core_color_attachments = [_]core.RenderPassColorAttachmentDescriptor{
-            descriptor.color_attachments[0].toCore(),
-        };
+        var core_color_attachments: [core.default_max_color_attachments]core.RenderPassColorAttachmentDescriptor = undefined;
+        for (descriptor.color_attachments, 0..) |attachment, i| {
+            core_color_attachments[i] = attachment.toCore();
+        }
         const core_depth_attachment = if (descriptor.depth_attachment) |depth_attachment| depth_attachment.toCore() else null;
         const core_descriptor = core.RenderPassDescriptor{
             .label = descriptor.label,
-            .color_attachments = core_color_attachments[0..],
+            .color_attachments = core_color_attachments[0..descriptor.color_attachments.len],
             .depth_attachment = core_depth_attachment,
             .stencil_attachment = if (descriptor.stencil_attachment) |stencil_attachment| stencil_attachment.toCore() else null,
         };
@@ -5769,6 +5814,7 @@ pub const RuntimeError = error{
     InvalidRenderPassAttachment,
     UnsupportedMultipleRenderTargets,
     UnsupportedStencilAttachment,
+    UnsupportedRenderPassAttachmentAction,
     UnsupportedTransientAttachment,
     UnsupportedDynamicRenderState,
     InvalidStorageBufferUsage,
@@ -11705,6 +11751,12 @@ test "runtime render pass descriptor accepts texture-backed color targets" {
     try (RenderPassDescriptor{
         .color_attachments = mrt_attachments[0..],
     }).validateRuntime(.vulkan);
+
+    var command_buffer = CommandBuffer.init(.{ .backend = .vulkan });
+    var encoder = try command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = mrt_attachments[0..],
+    });
+    try encoder.endEncoding();
 }
 
 test "runtime render pass descriptor rejects invalid texture targets" {
@@ -11742,8 +11794,50 @@ test "runtime render pass descriptor rejects invalid texture targets" {
     const drawable_color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
     try std.testing.expectError(RuntimeError.UnsupportedStencilAttachment, (RenderPassDescriptor{
         .color_attachments = drawable_color_attachments[0..],
-        .stencil_attachment = .{ .clear_stencil = 1 },
+        .stencil_attachment = .{},
     }).validateRuntime(.vulkan));
+}
+
+test "runtime render pass supports combined depth stencil texture actions" {
+    var tracker = ResourceTracker{};
+    var color_view = TextureView.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .render_attachment = true },
+        .sample_count_value = 1,
+        .width_value = 64,
+        .height_value = 64,
+        .impl = undefined,
+    });
+    var depth_stencil_view = TextureView.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .depth32_float_stencil8,
+        .usage_value = .{ .render_attachment = true },
+        .sample_count_value = 1,
+        .width_value = 64,
+        .height_value = 64,
+        .impl = undefined,
+    });
+    const colors = [_]RenderPassColorAttachmentDescriptor{.{
+        .target = .{ .texture_view = &color_view },
+        .load_action = .load,
+        .store_action = .dont_care,
+    }};
+    try (RenderPassDescriptor{
+        .color_attachments = &colors,
+        .depth_attachment = .{
+            .target = .{ .texture_view = &depth_stencil_view },
+            .load_action = .load,
+            .store_action = .store,
+        },
+        .stencil_attachment = .{
+            .target = .{ .texture_view = &depth_stencil_view },
+            .clear_stencil = 7,
+            .store_action = .store,
+        },
+    }).validateRuntime(.vulkan);
 }
 
 test "runtime render pass descriptor validates msaa resolve targets" {

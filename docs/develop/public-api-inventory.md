@@ -585,6 +585,11 @@ missing usage, or an unavailable zero native address returns a distinct
 uploads fail consistently before backend access. `Buffer` now has 15 public
 methods; its opaque one-field layout is unchanged.
 
+`diagnostics.RuntimeError` gains `UnsupportedRenderPassAttachmentAction` for
+non-default actions on the prebuilt current-drawable pass. Texture-backed MRT
+and combined depth/stencil actions remain within existing render descriptors;
+no root, `Device`, `WindowContext`, or handle method is added.
+
 The additions belong to the existing `diagnostics` and `resource` domains and
 receive no new root aliases or owner methods. Field and error-set growth targets
 `v0.2.0`; callers with exhaustive error switches must add arms.
