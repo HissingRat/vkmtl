@@ -1,6 +1,6 @@
 # Phase 1: Semantic Splits And Public Allocation
 
-Status: in progress.
+Status: complete.
 
 ## Decisions
 
@@ -34,3 +34,19 @@ Status: in progress.
 No candidate is admitted merely because Metal exposes a method. Phase 2-5 may
 close a candidate as precisely unsupported if Vulkan composition or ownership
 cannot preserve its observable contract.
+
+## Completed Splits
+
+- `MTL-DEV-005`: native working-set/budget telemetry, Period 49.
+- `MTL-RES-017`: explicit CPU cache policy, Period 49.
+- `MTL-RES-018`: explicit hazard-tracking modes, Period 48.
+- `MTL-REN-020`: depth clip, sample positions, and advanced raster controls,
+  Period 51.
+- `MTL-XFR-008`: CPU/GPU content optimization hints, Period 49.
+- `MTL-SHD-009`: tensor, payload, function-table, and advanced threadgroup
+  reflection, Period 54.
+
+Existing heap, function-table, native-fence, tile/render-pass counter, and
+advanced geometry rows already own the other deferred pieces. They were not
+duplicated. The ledger now contains 107 units and routes all 81 incomplete IDs
+exactly once.

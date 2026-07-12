@@ -2612,10 +2612,10 @@ obvious render and binding blockers.
 
 ## Period 47 Phase 1 Checklist
 
-- [ ] Split all 15 routed broad rows into executable portable subsets and
+- [x] Split all 15 routed broad rows into executable portable subsets and
   explicitly deferred advanced semantics.
-- [ ] Record every v0.2.0 public API allocation before implementation.
-- [ ] Keep the root, `Device`, `WindowContext`, and opaque-handle allowlists
+- [x] Record every v0.2.0 public API allocation before implementation.
+- [x] Keep the root, `Device`, `WindowContext`, and opaque-handle allowlists
   unchanged.
 
 ## Period 47 Phase 2 Checklist

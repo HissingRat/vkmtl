@@ -1,6 +1,7 @@
 # Metal Semantic Ledger
 
-Status: Period 46 update to the macOS SDK 26.2 audited baseline.
+Status: Period 47 semantic-allocation update to the macOS SDK 26.2 audited
+baseline.
 
 This ledger groups Objective-C overloads and descriptor helper classes by
 observable GPU/runtime semantic. It covers the non-deprecated Metal framework
@@ -18,10 +19,11 @@ or `missing-contract`; it does not admit new public API.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | MTL-DEV-001 | `MTLDevice`, `MTLArchitecture` | Enumerate devices and report identity, location, architecture, and removable/headless state | diagnostics | native-exact | native-exact | `vkEnumeratePhysicalDevices`, properties, memory properties; core 1.0 | gpu-smoke |
 | MTL-DEV-002 | `MTLDevice` feature/family queries | Query API/GPU-family feature availability without turning native facts into usable vkmtl paths | diagnostics | native-exact | composed-exact | Core/extension feature chains and format queries | unit |
-| MTL-DEV-003 | `MTLDevice` limits and recommended working set | Report execution limits and memory-budget facts | diagnostics | incomplete | incomplete | Physical-device limits plus memory-budget extension where available | unit |
+| MTL-DEV-003 | `MTLDevice` execution limits | Report ordinary resource, render, and compute limits used by validation | diagnostics | incomplete | incomplete | Physical-device properties and limits | unit |
 | MTL-DEV-004 | `MTLDevice` peer groups and registry identity | Identify peer devices and cross-device topology | missing-contract | incomplete | incomplete | Device groups and LUID/UUID properties where available | missing |
+| MTL-DEV-005 | `MTLDevice` recommended working set and memory budget | Report native budget, usage, and working-set telemetry without substituting fallback estimates | diagnostics | incomplete | incomplete | Metal recommended working set plus `VK_EXT_memory_budget` where available | unit |
 | MTL-RES-001 | `MTLAllocation`, `MTLResource` | Resource identity, labels, allocated size, ownership, and lifetime | resource | native-exact | native-exact | `VkBuffer`/`VkImage` objects plus allocation metadata | gpu-soak |
-| MTL-RES-002 | `MTLResource` cache/storage/hazard modes | Select CPU cache, storage, and hazard tracking behavior | resource | incomplete | incomplete | Memory property/type selection plus vkmtl hazard state; public storage modes are narrower | unit |
+| MTL-RES-002 | Portable resource storage modes | Select automatic, shared, managed, or private storage with documented CPU visibility and automatic hazard behavior | resource | incomplete | incomplete | Memory property/type selection plus vkmtl hazard state | unit |
 | MTL-RES-003 | `MTLBuffer` | Create GPU buffers, map allowed storage, obtain length, and use byte ranges | resource | native-exact | native-exact | `VkBuffer`, memory binding, map/unmap | gpu-pixels |
 | MTL-RES-004 | `MTLBuffer` GPU address | Obtain stable shader-visible buffer address when supported | missing-contract | incomplete | incomplete | Buffer device address feature | inspection |
 | MTL-RES-005 | `MTLTexture`, `MTLTextureDescriptor` | Create 1D/2D/3D, array, cube, and multisample textures with mip levels and usage | resource | native-exact | native-exact | `VkImage` creation and image views | gpu-pixels |
@@ -36,6 +38,8 @@ or `missing-contract`; it does not admit new public API.
 | MTL-RES-014 | Sparse buffers/textures and tile mappings | Create sparse resources and commit/decommit physical pages | resource | incomplete | incomplete | Sparse binding/residency features and `vkQueueBindSparse` | unit |
 | MTL-RES-015 | `MTLTexture` shared handles and IOSurface-backed textures | Share texture storage across process/API boundaries | interop | incomplete | incomplete | External memory/image extensions and platform handles | unit |
 | MTL-RES-016 | `MTLTensor`, `MTLTensorDescriptor` | Typed multidimensional tensor storage and views | missing-contract | incomplete | incomplete | Buffer/image representation or optional tensor extensions; exact contract undecided | missing |
+| MTL-RES-017 | `MTLCPUCacheMode` and explicit resource cache policy | Select write-combined/default CPU cache behavior with truthful host-memory properties | resource | incomplete | incomplete | Vulkan host memory property/type selection; exact performance contract undecided | missing |
+| MTL-RES-018 | `MTLHazardTrackingMode` | Select tracked, untracked, or default native hazard ownership | sync | incomplete | incomplete | Explicit vkmtl hazard state and Vulkan synchronization; caller responsibility contract undecided | missing |
 
 ## Command, Submission, Synchronization, And Presentation
 
@@ -58,14 +62,14 @@ or `missing-contract`; it does not admit new public API.
 
 | ID | Metal source family | Semantic contract | Owner | Metal | Vulkan | Vulkan mapping / gates | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| MTL-REN-001 | `MTLRenderPassDescriptor` attachment families | Color/depth/stencil attachments, clear/load/store, resolve, slices, levels, and render-target extent | render | incomplete | incomplete | Dynamic rendering/render passes; common subset exact, full attachment breadth incomplete | gpu-pixels |
+| MTL-REN-001 | Common `MTLRenderPassDescriptor` attachment families | Color/depth/stencil attachments, clear/load/store, resolve, slices, levels, and render-target extent in the portable subset | render | incomplete | incomplete | Dynamic rendering/render passes; advanced pass families have separate rows | gpu-pixels |
 | MTL-REN-002 | Visibility result buffer and `MTLVisibilityResultModeBoolean` | Write portable zero/nonzero visibility from rasterized samples | diagnostics | composed-exact | native-exact | Non-precise Vulkan occlusion query pools; Metal uses per-pass scratch visibility storage copied into the canonical query buffer | gpu-smoke |
 | MTL-REN-003 | `MTLRenderPassSampleBufferAttachmentDescriptor` | Sample hardware counters at pass boundaries | diagnostics | incomplete | incomplete | Timestamp/statistics query pools | missing |
 | MTL-REN-004 | `MTLRasterizationRateMap` | Variable rasterization rate maps and coordinate transforms | missing-contract | incomplete | incomplete | Fragment shading rate attachment/extensions | missing |
 | MTL-REN-005 | `MTLRenderPipelineState`, `MTLRenderPipelineDescriptor` | Compile vertex/fragment pipelines with formats, sample count, raster state, and reflection | render | native-exact | native-exact | Graphics pipeline creation and shader modules | gpu-pixels |
 | MTL-REN-006 | `MTLDepthStencilState`, descriptors | Depth/stencil compare, write, masks, and front/back operations | render | native-exact | native-exact | Depth/stencil pipeline state | gpu-pixels |
-| MTL-REN-007 | `MTLRenderCommandEncoder` resource binding | Bind vertex/fragment buffers, textures, samplers, bytes, heaps, and function tables | binding | incomplete | incomplete | Descriptor sets, push constants, vertex buffers, and residency; common subset exact | gpu-pixels |
-| MTL-REN-008 | `MTLRenderCommandEncoder` raster state | Viewports, scissors, winding, cull, fill, depth clip/bias, blend color, stencil ref, sample positions | render | incomplete | incomplete | Dynamic pipeline state and extensions; common subset exact | gpu-pixels |
+| MTL-REN-007 | Common `MTLRenderCommandEncoder` resource binding | Bind portable vertex/fragment buffers, textures, samplers, bind groups, and root bytes | binding | incomplete | incomplete | Descriptor sets, push constants, and vertex buffers; heaps/function tables have separate rows | gpu-pixels |
+| MTL-REN-008 | Common `MTLRenderCommandEncoder` raster state | Viewports, scissors, winding, cull, fill, depth bias, blend color, and stencil reference | render | incomplete | incomplete | Core/dynamic pipeline state; advanced raster controls have separate rows | gpu-pixels |
 | MTL-REN-009 | `MTLRenderCommandEncoder` direct/indexed/instanced draws | Draw primitive and indexed ranges with base vertex/instance | render | native-exact | native-exact | `vkCmdDraw`/`vkCmdDrawIndexed` | gpu-pixels |
 | MTL-REN-010 | `MTLRenderCommandEncoder` indirect draws | Execute draw arguments from buffers | render | native-exact | native-exact | Indirect draw commands; count/multi behavior may be composed | unit |
 | MTL-REN-011 | Tessellation draw methods and factor buffers | Compile tessellation stages and draw patches with factor ownership | render | incomplete | incomplete | Tessellation pipelines and patch lists | unit |
@@ -77,15 +81,16 @@ or `missing-contract`; it does not admit new public API.
 | MTL-REN-017 | `MTL4RenderPipelineState`, flexible pipeline descriptors | Compile/link flexible Metal 4 render, mesh, and tile pipeline state | missing-contract | incomplete | incomplete | Graphics pipeline libraries and dynamic state extensions | missing |
 | MTL-REN-018 | `MTL4RenderCommandEncoder` | Encode Metal 4 render bindings, draws, barriers, counters, and ICB execution | missing-contract | incomplete | incomplete | Existing render mappings plus argument-table/allocator model | missing |
 | MTL-REN-019 | Counting visibility / precise occlusion queries | Report exact samples passed rather than Boolean visibility | missing-contract | incomplete | incomplete | `MTLVisibilityResultModeCounting` and Vulkan precise occlusion feature; no portable exact-count contract exists | missing |
+| MTL-REN-020 | Depth clip modes, programmable sample positions, and advanced dynamic raster controls | Configure raster behavior beyond the common viewport/scissor/cull/fill/depth-bias subset | render | incomplete | incomplete | Depth-clip-control and sample-location extensions where available | missing |
 
 ## Compute, Machine Learning, And Transfer Semantics
 
 | ID | Metal source family | Semantic contract | Owner | Metal | Vulkan | Vulkan mapping / gates | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | MTL-CMP-001 | `MTLComputePipelineState`, descriptor/reflection | Compile compute functions and report thread execution limits | compute | native-exact | native-exact | Compute pipeline and device limits | gpu-pixels |
-| MTL-CMP-002 | `MTLComputeCommandEncoder` binding | Bind buffers, textures, samplers, bytes, heaps, and function tables | binding | incomplete | incomplete | Descriptor sets/push constants; common subset exact | gpu-pixels |
+| MTL-CMP-002 | Common `MTLComputeCommandEncoder` binding | Bind portable buffers, textures, samplers, bind groups, and root bytes | binding | incomplete | incomplete | Descriptor sets/push constants; heaps/function tables have separate rows | gpu-pixels |
 | MTL-CMP-003 | `MTLComputeCommandEncoder` dispatch | Direct, indirect, exact/nonuniform thread/grid dispatch | compute | incomplete | incomplete | Direct/indirect dispatch; nonuniform/exact grid semantics require capability audit | gpu-pixels |
-| MTL-CMP-004 | Compute barriers, fences, and resource usage | Order threadgroup/resource access within and across dispatches | sync | incomplete | incomplete | Compute pipeline barriers and vkmtl hazard state | unit |
+| MTL-CMP-004 | Compute resource barriers and usage | Order portable buffer/texture access within and across dispatches | sync | incomplete | incomplete | Compute pipeline barriers and vkmtl hazard state; native fences/events have separate rows | unit |
 | MTL-CMP-005 | Compute atomics and threadgroup memory | Execute shader atomic and shared-memory semantics | compute | incomplete | incomplete | SPIR-V capabilities and device limits | unit |
 | MTL-CMP-006 | `MTL4ComputeCommandEncoder` | Encode Metal 4 argument tables, dispatches, barriers, counters, and ICB execution | missing-contract | incomplete | incomplete | Compute commands plus Metal 4 resource model composition | missing |
 | MTL-CMP-007 | `MTL4MachineLearningPipelineState`, descriptor/reflection | Compile machine-learning pipeline state and tensor bindings | missing-contract | incomplete | incomplete | Compute/cooperative-matrix or tensor extension mapping undecided | missing |
@@ -93,10 +98,11 @@ or `missing-contract`; it does not admit new public API.
 | MTL-XFR-001 | `MTLBlitCommandEncoder` buffer copies/fills | Copy and fill byte ranges | transfer | native-exact | composed-exact | Copy/fill commands; unaligned fill uses staging fallback | gpu-pixels |
 | MTL-XFR-002 | `MTLBlitCommandEncoder` texture copies | Copy texture subresources and buffer/texture layouts | transfer | composed-exact | native-exact | Copy commands with per-slice Metal loops and Vulkan alignment validation | gpu-pixels |
 | MTL-XFR-003 | `MTLBlitCommandEncoder` mipmap generation | Generate a complete mip chain | transfer | native-exact | native-exact | Metal mip generation and Vulkan image blits | unit |
-| MTL-XFR-004 | `MTLBlitCommandEncoder` synchronize/optimize resources | Synchronize managed storage and optimize CPU/GPU access | missing-contract | incomplete | incomplete | Flush/invalidate mapped ranges and implementation-specific transitions | missing |
+| MTL-XFR-004 | Managed/host-visible resource synchronization | Make CPU and GPU writes visible across documented transfer/map boundaries | transfer | incomplete | incomplete | Metal managed-resource synchronization plus Vulkan flush/invalidate composition | missing |
 | MTL-XFR-005 | `MTLBlitCommandEncoder` query/counter resolve | Resolve Boolean visibility or timestamp samples into buffers | diagnostics | native-exact | native-exact | Vulkan query-pool result copies; Metal resolves counters to aligned internal storage before copying to the portable destination offset | gpu-smoke |
 | MTL-XFR-006 | `MTLIOFileHandle`, `MTLIOCommandQueue`, `MTLIOCommandBuffer` | Load file ranges asynchronously into buffers/textures with queue status | missing-contract | incomplete | incomplete | OS async I/O plus staging/transfer queue composition | missing |
 | MTL-XFR-007 | `MTLIOScratchBuffer`, allocator, compressor | Manage scratch storage and Metal I/O compressed streams | missing-contract | incomplete | incomplete | Application decompression plus transfer composition | missing |
+| MTL-XFR-008 | `MTLBlitCommandEncoder` CPU/GPU content optimization hints | Preserve explicit resource-content optimization intent where it has a truthful backend effect | missing-contract | incomplete | incomplete | Vulkan memory/layout hints do not expose an exact direct equivalent | missing |
 
 ## Shader, Binding, Indirect Command, And Pipeline Persistence
 
@@ -104,12 +110,13 @@ or `missing-contract`; it does not admit new public API.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | MTL-SHD-001 | `MTLLibrary`, `MTLFunction`, compile options | Create libraries/functions from precompiled or source artifacts | shader | composed-exact | composed-exact | vkmtl build-time Slang produces embedded MSL/SPIR-V | gpu-pixels |
 | MTL-SHD-002 | `MTLFunctionConstantValues` | Specialize vertex, fragment, and compute functions by stable numeric typed constant IDs | shader | native-exact | native-exact | Metal `setConstantValue:type:atIndex:` and specialized function creation; Vulkan specialization info uses the same IDs | gpu-pixels |
-| MTL-SHD-003 | Function reflection and binding protocols | Reflect buffers, textures, samplers, tensors, threadgroup and payload bindings | shader | incomplete | incomplete | Slang reflection covers current subset; full Metal reflection model is wider | unit |
+| MTL-SHD-003 | Portable function reflection and binding protocols | Reflect buffers, textures, samplers, arrays, access, and vertex inputs used by portable layouts | shader | incomplete | incomplete | Slang reflection covers the portable subset on both generated backends | unit |
 | MTL-SHD-004 | `MTLFunctionDescriptor`, linked functions | Compose visible/private functions and linked function sets | shader | incomplete | incomplete | SPIR-V/library linking or multiple module composition | missing |
 | MTL-SHD-005 | `MTLFunctionHandle`, visible/intersection function tables | Obtain callable handles and populate GPU function tables | ray_tracing | incomplete | incomplete | SBT/callable shader records and descriptor buffers/sets | unit |
 | MTL-SHD-006 | Function stitching graph/node protocols | Build specialized functions by stitching callable graph nodes | missing-contract | incomplete | incomplete | Shader generation/link-time composition | missing |
 | MTL-SHD-007 | `MTLDynamicLibrary` | Load/install dynamic shader libraries and resolve functions | missing-contract | incomplete | incomplete | Pipeline library/shader object composition where available | missing |
 | MTL-SHD-008 | Function logs and `MTLLogState` | Capture shader compilation/execution log messages and locations | diagnostics | incomplete | incomplete | Debug printf/validation tooling; no portable exact path defined | missing |
+| MTL-SHD-009 | Tensor, payload, function-table, and advanced threadgroup reflection | Reflect Metal-only or advanced shader binding protocols outside portable layouts | missing-contract | incomplete | incomplete | Requires tensor, callable/function-table, payload, and advanced shared-memory contracts | missing |
 | MTL-BND-001 | `MTLArgumentEncoder` | Encode buffers, textures, samplers, constants, and nested argument buffers | binding | incomplete | incomplete | Descriptor sets/indexing and CPU table encoding | unit |
 | MTL-BND-002 | `MTL4ArgumentTable` | Allocate/update Metal 4 argument tables with residency semantics | binding | incomplete | incomplete | Descriptor sets/buffers and update-after-bind | missing |
 | MTL-IND-001 | `MTLIndirectCommandBuffer`, descriptor | Allocate/reset command slots and inherit pipeline/buffer state | missing-contract | incomplete | incomplete | Secondary/generated command buffers; device-generated commands extensions | missing |

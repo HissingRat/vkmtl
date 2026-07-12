@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 46 query/specialization update, 2026-07-12.
+Status: Period 47 semantic-allocation update, 2026-07-12.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -18,9 +18,10 @@ vkmtl must report a capability-gated or typed unsupported result.
 This document remains the compact feature-family view. Period 45 adds the
 source-driven detail in `period45/metal-semantic-ledger.md`. Period 45 recorded
 the historical 99-unit/77-gap baseline. Period 46 split broad query/counter
-rows into 101 stable Metal semantic units, retains the complete 78-protocol
-map, and routes all 75 remaining incomplete units exactly once. It is a
-coverage inventory, not a claim that incomplete source semantics are
+rows into 101 units. Period 47 Phase 1 split six advanced remainders from its
+portable targets, producing 107 stable Metal semantic units, retaining the
+complete 78-protocol map, and routing all 81 incomplete units exactly once.
+It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
 
 ## Source Baseline And Scope
@@ -167,9 +168,9 @@ develops a different lowering or support state.
 
 ## Metal Source-Coverage Ledger
 
-Period 45 established the source ledger; Period 46 refined it to 101 units by
-splitting exact occlusion/timestamp subsets from broader counter/statistics
-semantics. Missing vkmtl concepts remain explicit `missing-contract` entries;
+Period 45 established the source ledger; Periods 46-47 refined it to 107 units
+by splitting exact query subsets and Period 47's portable targets from their
+advanced remainders. Missing vkmtl concepts remain explicit `missing-contract` entries;
 their presence in the ledger does not admit public API or claim execution.
 
 | Source family | Current inventory state | Required action |
@@ -215,5 +216,5 @@ mark one backend incomplete/unsupported.
 
 The source audit and Period 46 native query/specialization slice are complete.
 The updated exactly-once gap routing establishes Periods 47-54; Period 47 is
-next. `period45/gap-backlog.md` records the remaining dependency order and
+active. `period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

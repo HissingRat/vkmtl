@@ -6,8 +6,8 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Period 46 refined two broad query rows, so the current ledger contains 101
-units and exactly-once routes 75 remaining incomplete IDs.
+Periods 46-47 refined broad query and common-workload rows, so the current
+ledger contains 107 units and exactly-once routes 81 incomplete IDs.
 
 The periods below are implementation slices, not promises to add all source
 concepts to the public API. Each period must apply the public API admission
@@ -141,7 +141,7 @@ gates.
 
 ## Next Slice
 
-Period 47 is next. Period 46 closed the placeholder-query correctness gap and
-added the capability-gated native measurement foundation; core resource,
-format, render, and compute breadth can now proceed against truthful query and
-specialization capability reports.
+Period 47 is active. Period 46 closed the placeholder-query correctness gap and
+added the capability-gated native measurement foundation; Phase 1 of Period 47
+separates its portable targets from the advanced remainders routed to later
+periods.
