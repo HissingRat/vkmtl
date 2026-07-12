@@ -39,9 +39,11 @@ Vulkan returns `UnsupportedCapture`, and a capture-manager/tool failure returns
 
 ## Profiling Semantics
 
-Current timestamp query results are deterministic command-order sequence
-values, not GPU clock ticks. Check `vkmtl.diagnostics.QuerySet.resultSource()` before interpreting
-results. `logical_sequence` values cannot be used for GPU duration.
+Timestamp query results are either deterministic command-order sequence values
+or raw native GPU ticks. Check `vkmtl.diagnostics.QuerySet.resultSource()`
+before interpreting them. `logical_sequence` is ordering only; `native_gpu` is
+uncalibrated backend-native ticks. Neither source currently exposes the scale
+needed to convert a delta into duration.
 
 Resolve an honest profiling plan through:
 
@@ -49,9 +51,11 @@ Resolve an honest profiling plan through:
 const plan = try vkmtl.diagnostics.planProfiling(device, .{});
 ```
 
-The current plan uses application-supplied CPU wall-clock measurement or marker
-scopes. Setting `require_gpu_timestamps = true` returns
-`UnsupportedGpuTimestamps` until a backend exposes real GPU timestamps.
+The plan uses native GPU ticks when the selected queried device exposes the
+complete path, otherwise application-supplied CPU wall-clock measurement or
+marker scopes. Setting `require_gpu_timestamps = true` returns
+`UnsupportedGpuTimestamps` on the fallback path. Even a native-tick plan keeps
+`gpu_duration_available` false until timestamp calibration is public.
 
 The headless planner makes this visible:
 

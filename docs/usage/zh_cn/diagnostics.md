@@ -36,8 +36,10 @@ try capture.end();
 
 ## Profiling 语义
 
-当前 timestamp query result 是确定性的 command-order sequence，不是 GPU clock tick。
-解释结果前先检查 `vkmtl.diagnostics.QuerySet.resultSource()`；`logical_sequence` 不能计算 GPU duration。
+Timestamp query result 可能是确定性的 command-order sequence，也可能是 raw native GPU
+tick。解释结果前先检查 `vkmtl.diagnostics.QuerySet.resultSource()`：`logical_sequence`
+只表示顺序，`native_gpu` 是未校准的 backend-native tick。当前两种 source 都没有公开把
+delta 转成 duration 所需的 scale。
 
 通过下面的 API 解析不会夸大能力的 profiling plan：
 
@@ -45,9 +47,10 @@ try capture.end();
 const plan = try vkmtl.diagnostics.planProfiling(device, .{});
 ```
 
-当前 plan 使用应用自己提供的 CPU wall-clock measurement 或 marker scope。设置
-`require_gpu_timestamps = true` 会返回 `UnsupportedGpuTimestamps`，直到 backend 真正暴露
-GPU timestamp。
+Selected queried device 有完整路径时，plan 使用 native GPU tick；否则使用应用自己提供的
+CPU wall-clock measurement 或 marker scope。Fallback 路径设置
+`require_gpu_timestamps = true` 会返回 `UnsupportedGpuTimestamps`。即使 native tick 可用，
+在 timestamp calibration 公开前，`gpu_duration_available` 仍是 false。
 
 Headless planner 可以直接查看结果：
 

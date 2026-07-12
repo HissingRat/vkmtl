@@ -259,9 +259,13 @@ defer vertex_descriptor.deinit();
 `ProgrammableStageDescriptor.specialization` 可以携带
 `ShaderSpecializationDescriptor` 来描述 shader variants。Descriptor 层会校验重复 ID、
 重复名称和空名称。Runtime pipeline fingerprint 包含 specialization 输入，这样 variant
-cache 可以区分不同 specialization。Vulkan 在 `DeviceFeatures.shader_specialization`
-启用时会把 specialization values 下沉到 pipeline specialization info。未声明该 feature
-的后端仍然会用 `UnsupportedShaderSpecialization` 拒绝非空 specialization。
+cache 可以区分不同 specialization。Vulkan 把 value 下沉到 pipeline specialization info；
+Metal 用 `MTLFunctionConstantValues` 创建 specialized vertex、fragment 和 compute
+function。两条路径都使用必填 numeric `id`。生成的 MSL symbol name 可能被改写，因此可选
+`name` 只参与 validation、diagnostics 和 cache identity。Slang source 应显式声明与
+descriptor ID 一致的 `[vk::constant_id(N)]`。未声明
+`DeviceFeatures.shader_specialization` 的后端仍用
+`UnsupportedShaderSpecialization` 拒绝非空 descriptor。
 
 Render pipeline raster state 包含 cull mode、front face、fill mode、depth bias 和
 conservative-rasterization flag。Cull mode 和 front face 已在现有 lowering 路径里。
@@ -559,13 +563,39 @@ stride 拆成多条 single indirect draw。显式 `drawPrimitivesMulti(...)` /
 `drawIndexedPrimitivesMulti(...)` 也先通过 repeated direct draws lowering，后续可以在
 backend 支持真正 multi-draw 时替换为单条 native path。
 
-Query support 现在从 portable `vkmtl.diagnostics.QuerySet` 对象开始。timestamp query 可以从 blit、
-compute 和 render encoder 写入，occlusion query 可以从 render encoder begin/end，
-query data 可以直接 readback，也可以 resolve 到 buffer。vkmtl 会校验 query range、
-result alignment、resource ownership 和 availability。pipeline statistics query 仍然
-通过 feature gate 保守关闭，等 native backend lowering 补齐后再开放。
-当前 timestamp value 是确定性的 logical sequence number。把结果当作 GPU tick/duration 前，
-必须调用 `QuerySet.resultSource()` 并确认 source 是 `native_gpu`。
+Query support 从 portable `vkmtl.diagnostics.QuerySet` 对象开始。Timestamp query 可从
+blit、compute 和 render encoder 写入。Occlusion set 必须在创建 render pass 时绑定，
+begin/end 必须使用同一个 borrowed set：
+
+```zig
+var visibility = try device.makeQuerySet(.{
+    .query_type = .occlusion,
+    .count = 2,
+});
+defer visibility.deinit();
+
+var render_encoder = try command_buffer.makeRenderCommandEncoder(.{
+    .color_attachments = color_attachments,
+    .occlusion_query_set = &visibility,
+});
+try render_encoder.beginOcclusionQuery(&visibility, 0);
+// Encode the measured draws.
+try render_encoder.endOcclusionQuery(&visibility);
+```
+
+Occlusion value 是 Boolean visibility：zero 表示没有 sample 通过，任意 nonzero 表示
+visible，数值大小不是 portable sample count。每个 slot 在 reset 之间只能写一次。
+QuerySet 必须活到同步完成的 command-buffer commit 返回；resolve destination 必须声明
+`copy_destination` usage。vkmtl 会校验 range、alignment、同 device ownership、pass
+association 和 availability。Native backend failure 不会伪装成 `QueryNotReady`；pipeline
+statistics 仍保持 typed unsupported。
+
+必须先 commit producer，再录制单独的 resolve command buffer。当前 resolve path 会先检查
+native readiness；尚未提交的 work 会返回 `QueryNotReady`，而不是录制无法满足的 wait。
+
+Timestamp fallback value 是确定性的 logical sequence number；`native_gpu` value 是 raw
+backend-native tick。解释前必须检查 `resultSource()`。当前 API 没有公开 tick calibration，
+因此即使 native tick delta 也不能直接当作 duration。
 
 Transfer 使用 Metal 风格的 blit encoder：
 
@@ -759,11 +789,12 @@ Metal capture 通过 `vkmtl.diagnostics.beginCaptureScope(&device, descriptor)` 
 `WindowContext` 前结束。当前 destination 是 Apple developer tools。Vulkan 返回
 `UnsupportedCapture`；capture manager 启动失败返回 `CaptureFailed`。
 
-当前 timestamp `vkmtl.diagnostics.QuerySet` value 只保留 command order。`QuerySet.resultSource()` 会报告
-`logical_sequence`；这些值不是 GPU tick，不能计算 GPU duration。使用
-`vkmtl.diagnostics.planProfiling(device, descriptor)` 选择 CPU wall-clock fallback 或
-marker-only mode。真实 backend timing 接好之前，要求 native GPU timestamp 会返回
-`UnsupportedGpuTimestamps`。
+Timestamp `vkmtl.diagnostics.QuerySet` value 可能是确定性的 command-order sequence，也可能是
+raw native GPU tick；解释前必须检查 `QuerySet.resultSource()`。只有所选 backend 的完整 query
+lane 可执行时才会暴露 native tick，但 vkmtl 尚未公开 calibration，所以 tick delta 不能当作
+duration。使用 `vkmtl.diagnostics.planProfiling(device, descriptor)` 选择 native raw-tick、CPU
+wall-clock fallback 或 marker-only mode。完整 native lane 不可用时，要求 native GPU timestamp
+会返回 `UnsupportedGpuTimestamps`。
 
 `vkmtl.diagnostics.issueReport(device, descriptor)` 会打包 backend/adapter、精确 error/category、
 usable/native features、limits、marker/capture/profiling capabilities 和 runtime diagnostics。

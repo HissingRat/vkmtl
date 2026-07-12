@@ -8,6 +8,7 @@ const VulkanBuffer = @import("buffer.zig");
 const VulkanComputePipelineState = @import("compute_pipeline.zig");
 const VulkanRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const VulkanRenderPipelineState = @import("render_pipeline.zig");
+const VulkanQuerySet = @import("query_set.zig");
 const VulkanTexture = @import("texture.zig");
 const VulkanTextureView = @import("texture_view.zig");
 const GraphicsContext = @import("graphics_context.zig");
@@ -868,6 +869,18 @@ pub const RenderCommandEncoder = struct {
         );
     }
 
+    pub fn beginOcclusionQuery(self: *RenderCommandEncoder, query_set: *VulkanQuerySet, query_index: u32) void {
+        query_set.beginOcclusion(self.cmdbuf, query_index);
+    }
+
+    pub fn endOcclusionQuery(self: *RenderCommandEncoder, query_set: *VulkanQuerySet, query_index: u32) void {
+        query_set.endOcclusion(self.cmdbuf, query_index);
+    }
+
+    pub fn writeTimestamp(self: *RenderCommandEncoder, query_set: *VulkanQuerySet, query_index: u32) void {
+        query_set.writeTimestamp(self.cmdbuf, query_index);
+    }
+
     pub fn drawPrimitives(
         self: *RenderCommandEncoder,
         descriptor: core.DrawPrimitivesDescriptor,
@@ -976,6 +989,19 @@ pub const BlitCommandEncoder = struct {
 
     pub fn insertDebugSignpost(self: *BlitCommandEncoder, label_value: []const u8) void {
         self.gc.insertDebugLabel(self.cmdbuf, label_value);
+    }
+
+    pub fn writeTimestamp(self: *BlitCommandEncoder, query_set: *VulkanQuerySet, query_index: u32) void {
+        query_set.writeTimestamp(self.cmdbuf, query_index);
+    }
+
+    pub fn resolveQuerySet(
+        self: *BlitCommandEncoder,
+        query_set: *VulkanQuerySet,
+        destination: *const VulkanBuffer,
+        descriptor: core.QueryResolveDescriptor,
+    ) void {
+        query_set.resolve(self.cmdbuf, destination, descriptor);
     }
 
     pub fn copyBufferToBuffer(
@@ -1284,6 +1310,10 @@ pub const ComputeCommandEncoder = struct {
 
     pub fn insertDebugSignpost(self: *ComputeCommandEncoder, label_value: []const u8) void {
         self.gc.insertDebugLabel(self.cmdbuf, label_value);
+    }
+
+    pub fn writeTimestamp(self: *ComputeCommandEncoder, query_set: *VulkanQuerySet, query_index: u32) void {
+        query_set.writeTimestamp(self.cmdbuf, query_index);
     }
 
     pub fn setComputePipelineState(self: *ComputeCommandEncoder, pipeline: *VulkanComputePipelineState) !void {

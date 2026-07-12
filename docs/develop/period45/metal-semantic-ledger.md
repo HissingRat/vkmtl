@@ -1,6 +1,6 @@
 # Metal Semantic Ledger
 
-Status: Period 45 audited baseline for macOS SDK 26.2.
+Status: Period 46 update to the macOS SDK 26.2 audited baseline.
 
 This ledger groups Objective-C overloads and descriptor helper classes by
 observable GPU/runtime semantic. It covers the non-deprecated Metal framework
@@ -59,7 +59,7 @@ or `missing-contract`; it does not admit new public API.
 | ID | Metal source family | Semantic contract | Owner | Metal | Vulkan | Vulkan mapping / gates | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | MTL-REN-001 | `MTLRenderPassDescriptor` attachment families | Color/depth/stencil attachments, clear/load/store, resolve, slices, levels, and render-target extent | render | incomplete | incomplete | Dynamic rendering/render passes; common subset exact, full attachment breadth incomplete | gpu-pixels |
-| MTL-REN-002 | Visibility result buffer and `MTLVisibilityResultMode` | Write real occlusion counts/booleans from rasterized samples | diagnostics | incomplete | incomplete | Vulkan occlusion query pools; usable feature closed until both lowerings resolve GPU results | unit |
+| MTL-REN-002 | Visibility result buffer and `MTLVisibilityResultModeBoolean` | Write portable zero/nonzero visibility from rasterized samples | diagnostics | composed-exact | native-exact | Non-precise Vulkan occlusion query pools; Metal uses per-pass scratch visibility storage copied into the canonical query buffer | gpu-smoke |
 | MTL-REN-003 | `MTLRenderPassSampleBufferAttachmentDescriptor` | Sample hardware counters at pass boundaries | diagnostics | incomplete | incomplete | Timestamp/statistics query pools | missing |
 | MTL-REN-004 | `MTLRasterizationRateMap` | Variable rasterization rate maps and coordinate transforms | missing-contract | incomplete | incomplete | Fragment shading rate attachment/extensions | missing |
 | MTL-REN-005 | `MTLRenderPipelineState`, `MTLRenderPipelineDescriptor` | Compile vertex/fragment pipelines with formats, sample count, raster state, and reflection | render | native-exact | native-exact | Graphics pipeline creation and shader modules | gpu-pixels |
@@ -76,6 +76,7 @@ or `missing-contract`; it does not admit new public API.
 | MTL-REN-016 | `MTLLogicalToPhysicalColorAttachmentMap` | Remap logical shader outputs to physical attachments | missing-contract | incomplete | incomplete | Pipeline shader/output remapping or dynamic rendering location extension | missing |
 | MTL-REN-017 | `MTL4RenderPipelineState`, flexible pipeline descriptors | Compile/link flexible Metal 4 render, mesh, and tile pipeline state | missing-contract | incomplete | incomplete | Graphics pipeline libraries and dynamic state extensions | missing |
 | MTL-REN-018 | `MTL4RenderCommandEncoder` | Encode Metal 4 render bindings, draws, barriers, counters, and ICB execution | missing-contract | incomplete | incomplete | Existing render mappings plus argument-table/allocator model | missing |
+| MTL-REN-019 | Counting visibility / precise occlusion queries | Report exact samples passed rather than Boolean visibility | missing-contract | incomplete | incomplete | `MTLVisibilityResultModeCounting` and Vulkan precise occlusion feature; no portable exact-count contract exists | missing |
 
 ## Compute, Machine Learning, And Transfer Semantics
 
@@ -93,7 +94,7 @@ or `missing-contract`; it does not admit new public API.
 | MTL-XFR-002 | `MTLBlitCommandEncoder` texture copies | Copy texture subresources and buffer/texture layouts | transfer | composed-exact | native-exact | Copy commands with per-slice Metal loops and Vulkan alignment validation | gpu-pixels |
 | MTL-XFR-003 | `MTLBlitCommandEncoder` mipmap generation | Generate a complete mip chain | transfer | native-exact | native-exact | Metal mip generation and Vulkan image blits | unit |
 | MTL-XFR-004 | `MTLBlitCommandEncoder` synchronize/optimize resources | Synchronize managed storage and optimize CPU/GPU access | missing-contract | incomplete | incomplete | Flush/invalidate mapped ranges and implementation-specific transitions | missing |
-| MTL-XFR-005 | `MTLBlitCommandEncoder` counter resolve | Resolve counter samples into buffers | diagnostics | incomplete | incomplete | Query-pool result copies | missing |
+| MTL-XFR-005 | `MTLBlitCommandEncoder` query/counter resolve | Resolve Boolean visibility or timestamp samples into buffers | diagnostics | native-exact | native-exact | Vulkan query-pool result copies; Metal resolves counters to aligned internal storage before copying to the portable destination offset | gpu-smoke |
 | MTL-XFR-006 | `MTLIOFileHandle`, `MTLIOCommandQueue`, `MTLIOCommandBuffer` | Load file ranges asynchronously into buffers/textures with queue status | missing-contract | incomplete | incomplete | OS async I/O plus staging/transfer queue composition | missing |
 | MTL-XFR-007 | `MTLIOScratchBuffer`, allocator, compressor | Manage scratch storage and Metal I/O compressed streams | missing-contract | incomplete | incomplete | Application decompression plus transfer composition | missing |
 
@@ -102,7 +103,7 @@ or `missing-contract`; it does not admit new public API.
 | ID | Metal source family | Semantic contract | Owner | Metal | Vulkan | Vulkan mapping / gates | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | MTL-SHD-001 | `MTLLibrary`, `MTLFunction`, compile options | Create libraries/functions from precompiled or source artifacts | shader | composed-exact | composed-exact | vkmtl build-time Slang produces embedded MSL/SPIR-V | gpu-pixels |
-| MTL-SHD-002 | `MTLFunctionConstantValues` | Specialize functions by indexed/named typed constants | shader | incomplete | native-exact | Vulkan specialization constants; Metal function-constant lowering deferred | unit |
+| MTL-SHD-002 | `MTLFunctionConstantValues` | Specialize vertex, fragment, and compute functions by stable numeric typed constant IDs | shader | native-exact | native-exact | Metal `setConstantValue:type:atIndex:` and specialized function creation; Vulkan specialization info uses the same IDs | unit |
 | MTL-SHD-003 | Function reflection and binding protocols | Reflect buffers, textures, samplers, tensors, threadgroup and payload bindings | shader | incomplete | incomplete | Slang reflection covers current subset; full Metal reflection model is wider | unit |
 | MTL-SHD-004 | `MTLFunctionDescriptor`, linked functions | Compose visible/private functions and linked function sets | shader | incomplete | incomplete | SPIR-V/library linking or multiple module composition | missing |
 | MTL-SHD-005 | `MTLFunctionHandle`, visible/intersection function tables | Obtain callable handles and populate GPU function tables | ray_tracing | incomplete | incomplete | SBT/callable shader records and descriptor buffers/sets | unit |
@@ -135,8 +136,9 @@ or `missing-contract`; it does not admit new public API.
 | MTL-RT-009 | Metal 4 acceleration structure descriptors | Express Metal 4 AS geometry and instance families | ray_tracing | incomplete | incomplete | KHR/extension AS descriptors | missing |
 | MTL-DBG-001 | Labels and command/encoder debug groups | Name objects and nest diagnostic regions | command | native-exact | native-exact | Debug utils when enabled | gpu-smoke |
 | MTL-DBG-002 | `MTLCaptureScope`, `MTLCaptureManager` | Start/end developer-tools GPU capture scopes | diagnostics | native-exact | unsupported | Vulkan capture remains external-tool-specific | gpu-smoke |
-| MTL-DBG-003 | Counter protocols and sample buffers | Discover counters, sample at stages, resolve values, and report GPU timing/statistics | diagnostics | incomplete | incomplete | Query pools/performance query extensions | missing |
+| MTL-DBG-003 | Common timestamp counter set and sample buffers | Discover the timestamp counter, sample at draw/dispatch/blit boundaries, and report raw GPU ticks | diagnostics | native-exact | native-exact | Capability-gated Metal counter sample buffers and Vulkan timestamp query pools; duration calibration is not part of this row | unit |
 | MTL-DBG-004 | `MTL4CounterHeap` | Allocate and sample Metal 4 counter storage | diagnostics | incomplete | incomplete | Query pools and performance counters | missing |
+| MTL-DBG-005 | Non-timestamp and device-specific counter/statistics families | Discover, sample, resolve, and interpret counter sets beyond raw timestamps | missing-contract | incomplete | incomplete | Metal device counter sets and Vulkan pipeline/performance queries require result-shape and calibration contracts | missing |
 | MTL-INT-001 | Shared event/texture handles | Export/import cross-process resource and synchronization handles | interop | incomplete | incomplete | External memory/semaphore platform extensions | unit |
 | MTL-INT-002 | Native object escape hatches | Borrow tagged native devices, queues, resources, and drawables | native | native-exact | native-exact | Explicit backend-tagged borrowed handles | inspection |
 | MTL-INT-003 | Native command insertion | Insert backend-specific commands while preserving encoder ownership/lifetime | native | incomplete | incomplete | Raw command handles plus validated callback scope | unit |

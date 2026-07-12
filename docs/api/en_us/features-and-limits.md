@@ -112,11 +112,14 @@ occlusion_queries timestamp_queries pipeline_statistics_queries
 driver_pipeline_cache metal_binary_archive
 ```
 
-`occlusion_queries` is currently false in usable features on both backends.
-Metal visibility result buffers and Vulkan occlusion query pools are native
-capabilities, but vkmtl does not advertise execution until encoder lowering and
-real GPU result resolution replace the runtime placeholder. Logical timestamp
-queries remain available and explicitly do not represent GPU time.
+`occlusion_queries` is usable only when the selected backend can allocate and
+reset its native result storage. Vulkan requires enabled host-query reset;
+Metal uses pass-bound visibility buffers. Results are portable Boolean
+visibility (zero/nonzero), not exact sample counts. `timestamp_queries` remains
+usable through a logical ordering fallback. `native_features` reports the
+underlying queue/counter timestamp fact, while `QuerySet.resultSource()` becomes
+`native_gpu` only when vkmtl's complete allocation/reset/encoder path is also
+usable; otherwise it remains logical. Pipeline statistics remain false.
 
 ### Transfer, Presentation, Interop, And Native Access
 

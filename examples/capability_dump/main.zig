@@ -116,9 +116,13 @@ fn dumpReport(report: vkmtl.diagnostics.DeviceCapabilityReport) void {
 fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  runtime slang: {}\n", .{features.runtime_slang});
     std.debug.print("  shader reflection: {}\n", .{features.shader_reflection});
+    std.debug.print("  shader specialization: {}\n", .{features.shader_specialization});
     std.debug.print("  render pipelines: {}\n", .{features.render_pipelines});
     std.debug.print("  compute pipelines: {}\n", .{features.compute_pipelines});
     std.debug.print("  bind groups: {}\n", .{features.bind_groups});
+    std.debug.print("  occlusion queries: {}\n", .{features.occlusion_queries});
+    std.debug.print("  timestamp queries: {}\n", .{features.timestamp_queries});
+    std.debug.print("  pipeline statistics queries: {}\n", .{features.pipeline_statistics_queries});
     std.debug.print("  native handles: {}\n", .{features.native_handles});
     std.debug.print("  descriptor indexing: {}\n", .{features.descriptor_indexing});
     std.debug.print("  argument buffers: {}\n", .{features.argument_buffers});

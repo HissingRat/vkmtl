@@ -13,6 +13,7 @@ const MetalComputePipelineState = @import("../backend/metal/compute_pipeline.zig
 const MetalClearScreen = @import("../backend/metal/clear_screen.zig");
 const MetalRayTracingPipelineState = @import("../backend/metal/ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("../backend/metal/render_pipeline.zig");
+const MetalQuerySet = @import("../backend/metal/query_set.zig");
 const MetalSamplerState = @import("../backend/metal/sampler.zig");
 const MetalShaderModule = @import("../backend/metal/shader_module.zig");
 const MetalTexture = @import("../backend/metal/texture.zig");
@@ -26,6 +27,7 @@ const VulkanComputePipelineState = @import("../backend/vulkan/compute_pipeline.z
 const VulkanClearScreen = @import("../backend/vulkan/clear_screen.zig");
 const VulkanRayTracingPipelineState = @import("../backend/vulkan/ray_tracing_pipeline.zig");
 const VulkanRenderPipelineState = @import("../backend/vulkan/render_pipeline.zig");
+const VulkanQuerySet = @import("../backend/vulkan/query_set.zig");
 const VulkanSamplerState = @import("../backend/vulkan/sampler.zig");
 const VulkanShaderModule = @import("../backend/vulkan/shader_module.zig");
 const VulkanTexture = @import("../backend/vulkan/texture.zig");
@@ -2762,6 +2764,11 @@ fn alignForwardU64(value: u64, alignment: u64) !u64 {
 pub const QuerySet = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
+    const Impl = union(core.Backend) {
+        vulkan: VulkanQuerySet,
+        metal: MetalQuerySet,
+    };
+
     const State = struct {
         backend: core.Backend,
         tracker: *ResourceTracker,
@@ -2772,8 +2779,11 @@ pub const QuerySet = struct {
         values: []u64,
         available: []bool,
         active_occlusion_query: ?u32 = null,
+        active_occlusion_encoder: ?*const anyopaque = null,
+        pending_command_borrows: usize = 0,
         timestamp_counter: u64 = 1,
         alive: bool = true,
+        impl: ?Impl = null,
     };
 
     fn init(state_value: State) QuerySet {
@@ -2788,6 +2798,15 @@ pub const QuerySet = struct {
 
     pub fn deinit(self: *QuerySet) void {
         assertObjectAlive(self.state().alive, "query_set");
+        std.debug.assert(self.state().active_occlusion_query == null);
+        if (self.hasPendingNativeWork()) {
+            if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) @panic("vkmtl query_set deinit before command buffer completion");
+            return;
+        }
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => |*metal| metal.deinit(),
+        };
         self.state().alive = false;
         self.state().allocator.free(self.state().values);
         self.state().allocator.free(self.state().available);
@@ -2805,6 +2824,10 @@ pub const QuerySet = struct {
     pub fn setLabel(self: *QuerySet, label_value: ?[]const u8) void {
         assertObjectAlive(self.state().alive, "query_set");
         self.state().label_value = label_value;
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.setLabel(label_value),
+            .metal => |*metal| metal.setLabel(label_value),
+        };
     }
 
     pub fn descriptor(self: QuerySet) core.QuerySetDescriptor {
@@ -2819,36 +2842,85 @@ pub const QuerySet = struct {
 
     pub fn reset(self: *QuerySet) void {
         assertObjectAlive(self.state().alive, "query_set");
+        std.debug.assert(self.state().active_occlusion_query == null);
+        if (self.hasPendingNativeWork()) {
+            if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) @panic("vkmtl query_set reset before command buffer completion");
+            return;
+        }
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.reset(),
+            .metal => |*metal| metal.reset(),
+        };
         @memset(self.state().values, 0);
         @memset(self.state().available, false);
         self.state().active_occlusion_query = null;
+        self.state().active_occlusion_encoder = null;
         self.state().timestamp_counter = 1;
     }
 
     pub fn beginOcclusionQuery(self: *QuerySet, query_index: u32) core.QueryError!void {
         assertObjectAlive(self.state().alive, "query_set");
+        if (self.state().impl != null) return core.QueryError.QueryNotReady;
+        try self.prepareBeginOcclusionQuery(query_index);
+        self.markBeginOcclusionQuery(query_index, null);
+    }
+
+    fn prepareBeginOcclusionQuery(self: *QuerySet, query_index: u32) core.QueryError!void {
+        assertObjectAlive(self.state().alive, "query_set");
         try self.validateQueryType(.occlusion);
         try self.validateQueryIndex(query_index);
         if (self.state().active_occlusion_query != null) return core.QueryError.QueryNotReady;
-        self.state().available[query_index] = false;
+        if (self.state().available[query_index]) return core.QueryError.QueryNotReady;
+    }
+
+    fn markBeginOcclusionQuery(
+        self: *QuerySet,
+        query_index: u32,
+        encoder_identity: ?*const anyopaque,
+    ) void {
         self.state().active_occlusion_query = query_index;
+        self.state().active_occlusion_encoder = encoder_identity;
     }
 
     pub fn endOcclusionQuery(self: *QuerySet) core.QueryError!void {
         assertObjectAlive(self.state().alive, "query_set");
+        if (self.state().impl != null) return core.QueryError.QueryNotReady;
+        const query_index = try self.prepareEndOcclusionQuery();
+        self.markEndOcclusionQuery(query_index);
+    }
+
+    fn prepareEndOcclusionQuery(self: *QuerySet) core.QueryError!u32 {
+        assertObjectAlive(self.state().alive, "query_set");
         try self.validateQueryType(.occlusion);
-        const query_index = self.state().active_occlusion_query orelse return core.QueryError.QueryNotReady;
-        self.state().values[query_index] = 1;
+        return self.state().active_occlusion_query orelse return core.QueryError.QueryNotReady;
+    }
+
+    fn markEndOcclusionQuery(self: *QuerySet, query_index: u32) void {
+        if (self.state().impl == null) self.state().values[query_index] = 1;
         self.state().available[query_index] = true;
         self.state().active_occlusion_query = null;
+        self.state().active_occlusion_encoder = null;
     }
 
     pub fn writeTimestamp(self: *QuerySet, query_index: u32) core.QueryError!void {
         assertObjectAlive(self.state().alive, "query_set");
+        if (self.state().impl != null) return core.QueryError.QueryNotReady;
+        try self.prepareTimestamp(query_index);
+        self.markTimestamp(query_index);
+    }
+
+    fn prepareTimestamp(self: *QuerySet, query_index: u32) core.QueryError!void {
+        assertObjectAlive(self.state().alive, "query_set");
         try self.validateQueryType(.timestamp);
         try self.validateQueryIndex(query_index);
-        self.state().values[query_index] = self.state().timestamp_counter;
-        self.state().timestamp_counter += 1;
+        if (self.state().available[query_index]) return core.QueryError.QueryNotReady;
+    }
+
+    fn markTimestamp(self: *QuerySet, query_index: u32) void {
+        if (self.state().impl == null) {
+            self.state().values[query_index] = self.state().timestamp_counter;
+            self.state().timestamp_counter += 1;
+        }
         self.state().available[query_index] = true;
     }
 
@@ -2858,6 +2930,18 @@ pub const QuerySet = struct {
         const first: usize = @intCast(readback_descriptor.first_query);
         const count: usize = @intCast(readback_descriptor.query_count);
         try self.requireAvailable(first, count);
+        if (self.state().impl) |*impl| return switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.readback(
+                readback_descriptor.first_query,
+                readback_descriptor.query_count,
+                readback_descriptor.destination[0..count],
+            ),
+            .metal => |*metal| metal.readback(
+                readback_descriptor.first_query,
+                readback_descriptor.query_count,
+                readback_descriptor.destination[0..count],
+            ),
+        };
         @memcpy(readback_descriptor.destination[0..count], self.state().values[first..][0..count]);
     }
 
@@ -2873,6 +2957,38 @@ pub const QuerySet = struct {
         for (self.state().available[first..][0..count]) |available| {
             if (!available) return core.QueryError.QueryNotReady;
         }
+    }
+
+    fn hasPendingNativeWork(self: *QuerySet) bool {
+        if (self.state().pending_command_borrows != 0) return true;
+        if (self.state().impl == null) return false;
+        var scratch = [_]u64{0};
+        for (self.state().available, 0..) |available, index| {
+            if (!available) continue;
+            const result = if (self.state().impl) |*impl| switch (impl.*) {
+                .vulkan => |*vulkan| vulkan.readback(@intCast(index), 1, scratch[0..]),
+                .metal => |*metal| metal.readback(@intCast(index), 1, scratch[0..]),
+            } else unreachable;
+            result catch |err| {
+                if (err == core.QueryError.QueryNotReady) return true;
+            };
+        }
+        return false;
+    }
+
+    fn requireReadyForResolve(self: *QuerySet, first_query: u32, query_count: u32) core.QueryError!void {
+        const first: usize = @intCast(first_query);
+        const count: usize = @intCast(query_count);
+        try self.requireAvailable(first, count);
+        if (self.state().impl == null) return;
+
+        const scratch = self.state().allocator.alloc(u64, count) catch return core.QueryError.QueryBackendFailure;
+        defer self.state().allocator.free(scratch);
+        try self.readback(.{
+            .first_query = first_query,
+            .query_count = query_count,
+            .destination = scratch,
+        });
     }
 };
 
@@ -3684,6 +3800,9 @@ pub const RenderPassDescriptor = struct {
     color_attachments: []const RenderPassColorAttachmentDescriptor = &.{},
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
     stencil_attachment: ?RenderPassStencilAttachmentDescriptor = null,
+    /// The occlusion query set whose native storage is bound for this pass.
+    /// It must remain alive until the command buffer has completed.
+    occlusion_query_set: ?*QuerySet = null,
 
     fn validateRuntime(self: RenderPassDescriptor, backend: core.Backend) !void {
         if (self.color_attachments.len == 0) return core.CommandEncodingError.MissingColorAttachment;
@@ -3849,7 +3968,17 @@ fn metalRenderPassDescriptor(descriptor: RenderPassDescriptor) MetalCommand.Rend
             .store_action = depth_attachment.store_action,
             .clear_depth = depth_attachment.clear_depth,
         } else null,
+        .occlusion_query_set = metalOcclusionQuerySet(descriptor.occlusion_query_set),
     };
+}
+
+fn metalOcclusionQuerySet(query_set: ?*QuerySet) ?*const MetalQuerySet {
+    const set = query_set orelse return null;
+    if (set.state().impl) |*impl| return switch (impl.*) {
+        .vulkan => null,
+        .metal => |*metal| metal,
+    };
+    return null;
 }
 
 fn metalColorAttachmentTarget(target: RenderPassColorAttachmentTarget) MetalCommand.RenderPassColorAttachmentTarget {
@@ -3925,6 +4054,8 @@ pub const CommandBuffer = struct {
         native_handle_view: ?core.NativeHandleView = null,
         debug: core.CommandBufferDebugState = .{},
         debug_groups: core.DebugGroupStack = .{},
+        borrowed_query_sets: std.ArrayList(*QuerySet) = .empty,
+        borrowed_query_sets_allocator: ?std.mem.Allocator = null,
         impl: ?Impl = null,
     };
 
@@ -3938,6 +4069,49 @@ pub const CommandBuffer = struct {
         return @ptrCast(@alignCast(@constCast(&self._state)));
     }
 
+    fn retainQuerySetForResolve(self: *CommandBuffer, query_set: *QuerySet) !void {
+        const state_value = self.privateState();
+        if (state_value.tracker) |tracker| {
+            if (tracker != query_set.state().tracker) return RuntimeError.BackendMismatch;
+        }
+
+        const allocator = state_value.borrowed_query_sets_allocator orelse query_set.state().allocator;
+        try state_value.borrowed_query_sets.append(allocator, query_set);
+        if (state_value.borrowed_query_sets_allocator == null) {
+            state_value.borrowed_query_sets_allocator = allocator;
+        }
+        query_set.state().pending_command_borrows += 1;
+    }
+
+    fn rollbackQuerySetResolveBorrow(self: *CommandBuffer, query_set: *QuerySet) void {
+        const state_value = self.privateState();
+        std.debug.assert(state_value.borrowed_query_sets.items.len != 0);
+        std.debug.assert(state_value.borrowed_query_sets.items[state_value.borrowed_query_sets.items.len - 1] == query_set);
+        state_value.borrowed_query_sets.items.len -= 1;
+        std.debug.assert(query_set.state().pending_command_borrows != 0);
+        query_set.state().pending_command_borrows -= 1;
+
+        if (state_value.borrowed_query_sets.items.len == 0) {
+            state_value.borrowed_query_sets.deinit(state_value.borrowed_query_sets_allocator.?);
+            state_value.borrowed_query_sets = .empty;
+            state_value.borrowed_query_sets_allocator = null;
+        }
+    }
+
+    fn releaseQuerySetResolveBorrows(self: *CommandBuffer) void {
+        const state_value = self.privateState();
+        for (state_value.borrowed_query_sets.items) |query_set| {
+            assertObjectAlive(query_set.state().alive, "query_set");
+            std.debug.assert(query_set.state().pending_command_borrows != 0);
+            query_set.state().pending_command_borrows -= 1;
+        }
+        if (state_value.borrowed_query_sets_allocator) |allocator| {
+            state_value.borrowed_query_sets.deinit(allocator);
+        }
+        state_value.borrowed_query_sets = .empty;
+        state_value.borrowed_query_sets_allocator = null;
+    }
+
     pub fn makeRenderCommandEncoder(
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
@@ -3945,6 +4119,13 @@ pub const CommandBuffer = struct {
         assertObjectAlive(self.privateState().alive, "command_buffer");
         if (self.privateState().queue_kind_value != .graphics) return core.CommandEncodingError.InvalidQueueCapability;
         try descriptor.validateRuntime(self.privateState().backend);
+        if (descriptor.occlusion_query_set) |query_set| {
+            assertObjectAlive(query_set.state().alive, "query_set");
+            try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
+            if (self.privateState().tracker != query_set.state().tracker) return RuntimeError.BackendMismatch;
+            try query_set.validateQueryType(.occlusion);
+            if (query_set.state().active_occlusion_query != null) return core.QueryError.QueryNotReady;
+        }
         validateRenderPassOwnership(self.privateState().queue_kind_value, descriptor) catch |err| return err;
         recordRenderPassUsage(descriptor);
 
@@ -3973,6 +4154,7 @@ pub const CommandBuffer = struct {
             .command_buffer = self,
             .label_value = descriptor.label,
             .debug = debug_encoder,
+            .occlusion_query_set = descriptor.occlusion_query_set,
             .impl = encoder_impl,
         });
         encoder.setLabel(descriptor.label);
@@ -4327,6 +4509,7 @@ pub const CommandBuffer = struct {
         switch (self.privateState().impl orelse {
             self.privateState().alive = false;
             if (self.privateState().tracker) |tracker| tracker.completeWork(work_serial);
+            self.releaseQuerySetResolveBorrows();
             return;
         }) {
             .vulkan => |*vulkan| {
@@ -4339,6 +4522,7 @@ pub const CommandBuffer = struct {
             },
         }
         if (self.privateState().tracker) |tracker| tracker.completeWork(work_serial);
+        self.releaseQuerySetResolveBorrows();
         self.privateState().alive = false;
     }
 
@@ -4645,7 +4829,23 @@ pub const BlitCommandEncoder = struct {
         assertObjectAlive(self.privateState().alive, "blit_command_encoder");
         assertObjectAlive(query_set.state().alive, "query_set");
         try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
-        try query_set.writeTimestamp(query_index);
+        if (self.privateState().command_buffer.privateState().tracker != query_set.state().tracker) {
+            return RuntimeError.BackendMismatch;
+        }
+        try query_set.prepareTimestamp(query_index);
+        if (query_set.state().impl) |*query_impl| {
+            if (self.privateState().impl) |*encoder_impl| switch (encoder_impl.*) {
+                .vulkan => |*vulkan| switch (query_impl.*) {
+                    .vulkan => |*query| vulkan.writeTimestamp(query, query_index),
+                    .metal => unreachable,
+                },
+                .metal => |*metal| switch (query_impl.*) {
+                    .vulkan => unreachable,
+                    .metal => |*query| try metal.writeTimestamp(query, query_index),
+                },
+            };
+        }
+        query_set.markTimestamp(query_index);
     }
 
     pub fn insertNativeCommands(self: *BlitCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
@@ -4664,18 +4864,38 @@ pub const BlitCommandEncoder = struct {
         assertAlive(destination.state().alive, .buffer);
         try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
         try expectSameBackend(self.privateState().backend, destination.selectedBackend());
+        const command_tracker = self.privateState().command_buffer.privateState().tracker;
+        if (command_tracker != query_set.state().tracker or command_tracker != destination.state().tracker) {
+            return RuntimeError.BackendMismatch;
+        }
+        if (!destination.state().usage_value.copy_destination) return core.CommandEncodingError.InvalidCopyBufferUsage;
         try ensureBufferOwnedByQueue(self.privateState().command_buffer.privateState().queue_kind_value, destination);
-        try descriptor.validate(query_set.state().descriptor_value, core.defaultDeviceLimits(self.privateState().backend));
+        try descriptor.validate(query_set.state().descriptor_value, self.privateState().command_buffer.privateState().limits_value);
         const first: usize = @intCast(descriptor.first_query);
         const count: usize = @intCast(descriptor.query_count);
-        try query_set.requireAvailable(first, count);
+        try query_set.requireReadyForResolve(descriptor.first_query, descriptor.query_count);
         const byte_count = std.math.mul(u64, descriptor.query_count, @sizeOf(u64)) catch return core.QueryError.InvalidQueryRange;
         const end = std.math.add(u64, descriptor.destination_offset, byte_count) catch return core.QueryError.InvalidQueryRange;
         if (end > destination.length()) return core.QueryError.InvalidQueryRange;
-        try destination.replaceBytes(
-            @intCast(descriptor.destination_offset),
-            std.mem.sliceAsBytes(query_set.state().values[first..][0..count]),
-        );
+        try self.privateState().command_buffer.retainQuerySetForResolve(query_set);
+        errdefer self.privateState().command_buffer.rollbackQuerySetResolveBorrow(query_set);
+        if (query_set.state().impl) |*query_impl| {
+            if (self.privateState().impl) |*encoder_impl| switch (encoder_impl.*) {
+                .vulkan => |*vulkan| switch (query_impl.*) {
+                    .vulkan => |*query| vulkan.resolveQuerySet(query, &destination.state().impl.vulkan, descriptor),
+                    .metal => unreachable,
+                },
+                .metal => |*metal| switch (query_impl.*) {
+                    .vulkan => unreachable,
+                    .metal => |*query| try metal.resolveQuerySet(query, &destination.state().impl.metal, descriptor),
+                },
+            };
+        } else {
+            try destination.replaceBytes(
+                @intCast(descriptor.destination_offset),
+                std.mem.sliceAsBytes(query_set.state().values[first..][0..count]),
+            );
+        }
         _ = destination.recordUsage(.copy_destination);
     }
 
@@ -4997,7 +5217,23 @@ pub const ComputeCommandEncoder = struct {
         assertObjectAlive(self.privateState().alive, "compute_command_encoder");
         assertObjectAlive(query_set.state().alive, "query_set");
         try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
-        try query_set.writeTimestamp(query_index);
+        if (self.privateState().command_buffer.privateState().tracker != query_set.state().tracker) {
+            return RuntimeError.BackendMismatch;
+        }
+        try query_set.prepareTimestamp(query_index);
+        if (query_set.state().impl) |*query_impl| {
+            if (self.privateState().impl) |*encoder_impl| switch (encoder_impl.*) {
+                .vulkan => |*vulkan| switch (query_impl.*) {
+                    .vulkan => |*query| vulkan.writeTimestamp(query, query_index),
+                    .metal => unreachable,
+                },
+                .metal => |*metal| switch (query_impl.*) {
+                    .vulkan => unreachable,
+                    .metal => |*query| try metal.writeTimestamp(query, query_index),
+                },
+            };
+        }
+        query_set.markTimestamp(query_index);
     }
 
     pub fn insertNativeCommands(self: *ComputeCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
@@ -5080,6 +5316,7 @@ pub const RenderCommandEncoder = struct {
         debug: core.RenderCommandEncoderDebugState = .{},
         debug_groups: core.DebugGroupStack = .{},
         active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
+        occlusion_query_set: ?*QuerySet = null,
         impl: ?Impl = null,
     };
 
@@ -5239,21 +5476,69 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.privateState().alive, "render_command_encoder");
         assertObjectAlive(query_set.state().alive, "query_set");
         try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
-        try query_set.beginOcclusionQuery(query_index);
+        try query_set.validateQueryType(.occlusion);
+        if (self.privateState().occlusion_query_set != query_set) return core.CommandEncodingError.InvalidRenderCommandEncoderState;
+        try query_set.prepareBeginOcclusionQuery(query_index);
+        if (query_set.state().impl) |*query_impl| {
+            if (self.privateState().impl) |*encoder_impl| switch (encoder_impl.*) {
+                .vulkan => |*vulkan| switch (query_impl.*) {
+                    .vulkan => |*query| vulkan.beginOcclusionQuery(query, query_index),
+                    .metal => unreachable,
+                },
+                .metal => |*metal| switch (query_impl.*) {
+                    .vulkan => unreachable,
+                    .metal => |*query| try metal.beginOcclusionQuery(query, query_index),
+                },
+            };
+        }
+        query_set.markBeginOcclusionQuery(query_index, @ptrCast(self.privateState()));
     }
 
     pub fn endOcclusionQuery(self: *RenderCommandEncoder, query_set: *QuerySet) !void {
         assertObjectAlive(self.privateState().alive, "render_command_encoder");
         assertObjectAlive(query_set.state().alive, "query_set");
         try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
-        try query_set.endOcclusionQuery();
+        if (self.privateState().occlusion_query_set != query_set) return core.CommandEncodingError.InvalidRenderCommandEncoderState;
+        if (query_set.state().active_occlusion_encoder != @as(*const anyopaque, @ptrCast(self.privateState()))) {
+            return core.CommandEncodingError.InvalidRenderCommandEncoderState;
+        }
+        const query_index = try query_set.prepareEndOcclusionQuery();
+        if (query_set.state().impl) |*query_impl| {
+            if (self.privateState().impl) |*encoder_impl| switch (encoder_impl.*) {
+                .vulkan => |*vulkan| switch (query_impl.*) {
+                    .vulkan => |*query| vulkan.endOcclusionQuery(query, query_index),
+                    .metal => unreachable,
+                },
+                .metal => |*metal| switch (query_impl.*) {
+                    .vulkan => unreachable,
+                    .metal => |*query| try metal.endOcclusionQuery(query),
+                },
+            };
+        }
+        query_set.markEndOcclusionQuery(query_index);
     }
 
     pub fn writeTimestamp(self: *RenderCommandEncoder, query_set: *QuerySet, query_index: u32) !void {
         assertObjectAlive(self.privateState().alive, "render_command_encoder");
         assertObjectAlive(query_set.state().alive, "query_set");
         try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
-        try query_set.writeTimestamp(query_index);
+        if (self.privateState().command_buffer.privateState().tracker != query_set.state().tracker) {
+            return RuntimeError.BackendMismatch;
+        }
+        try query_set.prepareTimestamp(query_index);
+        if (query_set.state().impl) |*query_impl| {
+            if (self.privateState().impl) |*encoder_impl| switch (encoder_impl.*) {
+                .vulkan => |*vulkan| switch (query_impl.*) {
+                    .vulkan => |*query| vulkan.writeTimestamp(query, query_index),
+                    .metal => unreachable,
+                },
+                .metal => |*metal| switch (query_impl.*) {
+                    .vulkan => unreachable,
+                    .metal => |*query| try metal.writeTimestamp(query, query_index),
+                },
+            };
+        }
+        query_set.markTimestamp(query_index);
     }
 
     pub fn insertNativeCommands(self: *RenderCommandEncoder, descriptor: core.NativeCommandInsertionDescriptor) !void {
@@ -5384,6 +5669,10 @@ pub const RenderCommandEncoder = struct {
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
         assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        if (self.privateState().occlusion_query_set) |query_set| {
+            assertObjectAlive(query_set.state().alive, "query_set");
+            if (query_set.state().active_occlusion_query != null) return core.QueryError.QueryNotReady;
+        }
         try self.privateState().debug_groups.requireEmpty();
         try self.privateState().debug.endEncoding(&self.privateState().command_buffer.privateState().debug);
         if (self.privateState().impl) |*impl| switch (impl.*) {
@@ -5479,6 +5768,7 @@ const RuntimeState = struct {
     presentation_descriptor: core.PresentationDescriptor,
     adapter_info: core.AdapterInfo,
     capability_report: core.DeviceCapabilityReport,
+    native_gpu_timestamp_queries: bool = false,
     owned_adapter_name: ?[]u8 = null,
     impl: BackendRuntime,
 };
@@ -6289,17 +6579,39 @@ pub const Device = struct {
         @memset(values, 0);
         @memset(available, false);
 
+        var impl: ?QuerySet.Impl = null;
+        const capability_source = self.state().capability_report.source;
+        if (capability_source == .vulkan_query or capability_source == .metal_query) {
+            const native_query = switch (self.state().impl) {
+                .vulkan => |*vulkan| if (try vulkan.makeQuerySet(descriptor)) |query|
+                    QuerySet.Impl{ .vulkan = query }
+                else
+                    null,
+                .metal => |*metal| if (try metal.makeQuerySet(descriptor)) |query|
+                    QuerySet.Impl{ .metal = query }
+                else
+                    null,
+            };
+            impl = native_query;
+        }
+
         self.state().tracker.retain(.query_set);
-        return QuerySet.init(.{
+        var result = QuerySet.init(.{
             .backend = self.state().backend,
             .tracker = self.state().tracker,
             .allocator = self.state().allocator,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
-            .result_source_value = if (descriptor.query_type == .timestamp) .logical_sequence else .unavailable,
+            .result_source_value = if (descriptor.query_type == .timestamp)
+                if (impl != null) .native_gpu else .logical_sequence
+            else
+                .unavailable,
             .values = values,
             .available = available,
+            .impl = impl,
         });
+        result.setLabel(descriptor.label);
+        return result;
     }
 
     pub fn makeHeap(self: *Device, descriptor: core.HeapDescriptor) !Heap {
@@ -6931,7 +7243,13 @@ pub fn beginCaptureScope(
 }
 
 pub fn profilingCapabilities(device: Device) core.ProfilingCapabilities {
-    return core.ProfilingCapabilities.fromFeatures(device.selectedBackend(), device.features());
+    var result = core.ProfilingCapabilities.fromFeatures(device.selectedBackend(), device.features());
+    const source = device.capabilityReport().source;
+    if ((source == .vulkan_query or source == .metal_query) and device.state().native_gpu_timestamp_queries) {
+        result.timestamp_source = .native_gpu;
+        result.native_gpu_timestamps = true;
+    }
+    return result;
 }
 
 pub fn planProfiling(
@@ -7078,6 +7396,10 @@ pub const WindowContext = struct {
         errdefer adapter_info.deinit(allocator);
         try validateAdapterSelection(adapter_selection, adapter_info.info);
         const capability_report = resolveCapabilityReport(&impl);
+        const native_gpu_timestamp_queries = switch (impl) {
+            .vulkan => |*vulkan| vulkan.supportsNativeTimestampQueries(),
+            .metal => |*metal| metal.supportsNativeTimestampQueries(),
+        };
 
         const state_value = try allocator.create(RuntimeState);
         errdefer allocator.destroy(state_value);
@@ -7089,6 +7411,7 @@ pub const WindowContext = struct {
             .presentation_descriptor = options.presentation,
             .adapter_info = adapter_info.info,
             .capability_report = capability_report,
+            .native_gpu_timestamp_queries = native_gpu_timestamp_queries,
             .owned_adapter_name = adapter_info.owned_name,
             .impl = impl,
         };
@@ -10124,6 +10447,7 @@ test "runtime query sets support encoder writes and readback" {
 
     var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
+        .tracker = &tracker,
         .queue_kind_value = .graphics,
         .features_value = device.features(),
         .impl = null,
@@ -10147,6 +10471,7 @@ test "runtime query sets support encoder writes and readback" {
     try std.testing.expectEqual(@as(usize, 1), tracker.query_sets);
     try compute_encoder.writeTimestamp(&timestamps, 0);
     try render_encoder.writeTimestamp(&timestamps, 1);
+    try std.testing.expectError(core.QueryError.QueryNotReady, compute_encoder.writeTimestamp(&timestamps, 0));
     var timestamp_results = [_]u64{0} ** 2;
     try timestamps.readback(.{
         .first_query = 0,
@@ -10172,6 +10497,170 @@ test "runtime query sets support encoder writes and readback" {
     }));
 }
 
+test "query commands reject resources from another runtime" {
+    var query_tracker = ResourceTracker{};
+    var command_tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var device_state = testRuntimeState(
+        std.testing.allocator,
+        &query_tracker,
+        .vulkan,
+        &backend_runtime,
+        "query owner adapter",
+        core.defaultDeviceCapabilityReport(.vulkan),
+    );
+    var device = Device{ ._state = &device_state };
+    var timestamps = try device.makeQuerySet(.{
+        .query_type = .timestamp,
+        .count = 1,
+    });
+    defer timestamps.deinit();
+
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .tracker = &command_tracker,
+    });
+    var render_encoder = RenderCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+    });
+    var compute_encoder = ComputeCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+    });
+    var blit_encoder = BlitCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+    });
+
+    try std.testing.expectError(RuntimeError.BackendMismatch, render_encoder.writeTimestamp(&timestamps, 0));
+    try std.testing.expectError(RuntimeError.BackendMismatch, compute_encoder.writeTimestamp(&timestamps, 0));
+    try std.testing.expectError(RuntimeError.BackendMismatch, blit_encoder.writeTimestamp(&timestamps, 0));
+
+    var owner_command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .tracker = &query_tracker,
+    });
+    var owner_blit_encoder = BlitCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &owner_command_buffer,
+    });
+    var foreign_destination = Buffer.init(.{
+        .backend = .vulkan,
+        .tracker = &command_tracker,
+        .length_value = @sizeOf(u64),
+        .usage_value = .{ .copy_destination = true },
+        .impl = undefined,
+    });
+    try std.testing.expectError(RuntimeError.BackendMismatch, owner_blit_encoder.resolveQuerySet(
+        &timestamps,
+        &foreign_destination,
+        .{ .query_count = 1 },
+    ));
+}
+
+test "query resolve borrows survive until command buffer completion" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var device_state = testRuntimeState(
+        std.testing.allocator,
+        &tracker,
+        .vulkan,
+        &backend_runtime,
+        "query resolve borrow adapter",
+        core.defaultDeviceCapabilityReport(.vulkan),
+    );
+    var device = Device{ ._state = &device_state };
+    var timestamps = try device.makeQuerySet(.{
+        .query_type = .timestamp,
+        .count = 1,
+    });
+    defer timestamps.deinit();
+
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+    });
+
+    try command_buffer.retainQuerySetForResolve(&timestamps);
+    try std.testing.expect(timestamps.hasPendingNativeWork());
+    try std.testing.expectEqual(@as(usize, 1), timestamps.state().pending_command_borrows);
+
+    // A native/logical resolve encoding error rolls back the borrow immediately.
+    command_buffer.rollbackQuerySetResolveBorrow(&timestamps);
+    try std.testing.expect(!timestamps.hasPendingNativeWork());
+    try std.testing.expectEqual(@as(usize, 0), command_buffer.privateState().borrowed_query_sets.items.len);
+
+    // A successfully encoded resolve remains borrowed while unsubmitted, then
+    // the synchronous commit releases it only after completion.
+    try command_buffer.retainQuerySetForResolve(&timestamps);
+    try std.testing.expect(timestamps.hasPendingNativeWork());
+    try command_buffer.commit();
+    try std.testing.expect(!timestamps.hasPendingNativeWork());
+    try std.testing.expectEqual(@as(usize, 0), timestamps.state().pending_command_borrows);
+    try std.testing.expectEqual(@as(usize, 0), command_buffer.privateState().borrowed_query_sets.items.len);
+
+    timestamps.reset();
+}
+
+test "runtime occlusion queries require pass binding and reset before slot reuse" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.occlusion_queries = true;
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "query validation adapter", report);
+    var device = Device{ ._state = &device_state };
+
+    var visibility = try device.makeQuerySet(.{
+        .query_type = .occlusion,
+        .count = 1,
+    });
+    defer visibility.deinit();
+
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .queue_kind_value = .graphics,
+        .features_value = device.features(),
+        .impl = null,
+    });
+    var unbound = RenderCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .impl = null,
+    });
+    try std.testing.expectError(core.CommandEncodingError.InvalidRenderCommandEncoderState, unbound.beginOcclusionQuery(&visibility, 0));
+
+    var bound = RenderCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .occlusion_query_set = &visibility,
+        .impl = null,
+    });
+    var other_bound = RenderCommandEncoder.init(.{
+        .backend = .vulkan,
+        .command_buffer = &command_buffer,
+        .occlusion_query_set = &visibility,
+        .impl = null,
+    });
+    try bound.beginOcclusionQuery(&visibility, 0);
+    try std.testing.expectError(core.CommandEncodingError.InvalidRenderCommandEncoderState, other_bound.endOcclusionQuery(&visibility));
+    try std.testing.expectError(core.QueryError.QueryNotReady, bound.endEncoding());
+    try bound.endOcclusionQuery(&visibility);
+    try std.testing.expectError(core.QueryError.QueryNotReady, bound.beginOcclusionQuery(&visibility, 0));
+
+    var values = [_]u64{0};
+    try visibility.readback(.{
+        .query_count = 1,
+        .destination = values[0..],
+    });
+    try std.testing.expectEqual(@as(u64, 1), values[0]);
+
+    visibility.reset();
+    try bound.beginOcclusionQuery(&visibility, 0);
+    try bound.endOcclusionQuery(&visibility);
+}
+
 test "Period 43 runtime diagnostics expose markers profiling capture and issue reports" {
     var tracker = ResourceTracker{};
     tracker.retain(.buffer);
@@ -10193,6 +10682,17 @@ test "Period 43 runtime diagnostics expose markers profiling capture and issue r
     const plan = try planProfiling(device, .{});
     try std.testing.expectEqual(core.ProfilingMode.cpu_fallback, plan.mode);
     try std.testing.expect(!plan.gpu_duration_available);
+
+    report.source = .vulkan_query;
+    report.native_features.timestamp_queries = true;
+    device.state().capability_report = report;
+    device.state().native_gpu_timestamp_queries = true;
+    const native_profiling = profilingCapabilities(device);
+    try std.testing.expectEqual(core.TimestampQuerySource.native_gpu, native_profiling.timestamp_source);
+    try std.testing.expect(native_profiling.native_gpu_timestamps);
+    const native_plan = try planProfiling(device, .{ .require_gpu_timestamps = true });
+    try std.testing.expectEqual(core.ProfilingMode.native_gpu_timestamps, native_plan.mode);
+    try std.testing.expect(!native_plan.gpu_duration_available);
 
     const issue = try issueReport(device, .{
         .operation = "blitTexture",

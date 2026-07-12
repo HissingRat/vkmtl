@@ -101,9 +101,9 @@ conservative until the relevant backend period lands.
 | Logical compute/transfer queues | Logical queue views with graphics fallback until native queue families are exposed | Logical queue views with graphics fallback until dedicated queue use is exposed | `QueueSelectionPlan` reports requested/resolved/fallback state |
 | Queue ownership transfers | Validated logical ownership; deferred native queue-family lowering | Validation/no-op markers | Advanced escape hatch, feature-gated |
 | Command-buffer synchronization descriptor | Portable wait-before-submit / signal-after-submit validation | Portable wait-before-submit / signal-after-submit validation | `CommandBuffer.commitWithSynchronization(...)`; native submit wait/signal remains backend work |
-| Timestamp queries | Portable runtime query set | Portable runtime query set | Available by default |
-| Occlusion queries | Native API available; vkmtl lowering deferred | Native API available; vkmtl lowering deferred | Typed unsupported until real GPU visibility results replace the runtime placeholder |
-| Pipeline statistics queries | Capability-gated | Capability-gated | Deferred native query lowering |
+| Timestamp queries | Native query pools when host reset and graphics timestamps are available; logical fallback otherwise | Native common-counter samples only when draw/dispatch/blit boundaries are all available; logical fallback otherwise | Available by default, with `resultSource()` distinguishing raw native ticks from logical order |
+| Occlusion queries | Non-precise native query pools | Pass-bound Boolean visibility scratch copied into query storage | Capability-gated zero/nonzero visibility; pass must bind the exact set |
+| Pipeline statistics queries | Typed unsupported | Typed unsupported | One-`u64` result shape cannot represent variable multi-counter results |
 
 ## Period 36 Sync And Queue Semantics Expectations
 
@@ -161,8 +161,8 @@ conservative until the relevant backend period lands.
 | Capture naming | Exact caller-buffer formatting | Exact caller-buffer formatting | `scope:name`, optional backend and frame fields |
 | Marker capability report | Object/encoder native when debug utils is enabled; command-buffer validation-only | Object/command-buffer/encoder native | `DebugMarkerCapabilities` reports each lane independently |
 | Native capture | Typed `UnsupportedCapture` | Opt-in developer-tools capture scope | `CaptureScope` borrows the backend owner and ends explicitly |
-| Timestamp source | Logical command-order sequence | Logical command-order sequence | Not GPU time; `require_gpu_timestamps` returns typed unsupported |
-| Profiling fallback | CPU wall clock or markers only | CPU wall clock or markers only | `run-profiling-plan` prints the selected truthful plan |
+| Timestamp source | Raw native ticks behind query-pool gates, otherwise logical sequence | Raw native ticks behind complete counter-sampling gates, otherwise logical sequence | Source is truthful; duration calibration remains unavailable |
+| Profiling fallback | Native ticks, CPU wall clock, or markers | Native ticks, CPU wall clock, or markers | `gpu_duration_available` stays false until a portable tick scale exists |
 | Issue snapshot | Backend, adapter, features, limits, operations, errors, runtime counters | Same portable bundle | `vkmtl.diagnostics.issueReport(device, descriptor)` plus expanded capability dump |
 
 ## Period 25 Platform And Interop Expectations

@@ -211,9 +211,11 @@ Semantic corrections applied during the migration include:
 
 Post-baseline capability truth corrections preserve the declaration surface:
 
-- `occlusion_queries` remains a public `DeviceFeatures` field, but usable
-  reports keep it false until Metal and Vulkan resolve real native visibility
-  results. Native availability may still appear in `native_features`.
+- `occlusion_queries` remains a public `DeviceFeatures` field. Period 46 makes
+  it usable only when the selected backend can create, encode, reset, read, and
+  resolve real zero/nonzero visibility results. `native_features` remains the
+  raw adapter fact and may be true when an additional executable-path gate is
+  missing.
 
 Compile-time facade assertions in `src/vkmtl.zig` lock the sparse lowering
 ownership and reject a reintroduced `ray_tracing.RayQueryLoweringMode` route.
@@ -505,6 +507,42 @@ Advanced examples now use canonical nested paths, including
 `shader.Reflection`, `ray_tracing.*`, `interop.*`, `render.*`,
 `resource.*`, `native.vulkan.*`, and `native.metal.*`. Example use remains
 regression evidence, not automatic root-admission justification.
+
+## Period 46 v0.2.0 Query Update
+
+Period 46 leaves the guarded counts unchanged: root 68, `Device` 34 methods,
+`WindowContext` 10 methods, and 35 opaque runtime handles. It adds no facade
+declaration, root alias, common-owner method, or runtime handle field.
+
+The existing canonical `render.RenderPassDescriptor` gains one defaulted field:
+
+```zig
+occlusion_query_set: ?*diagnostics.QuerySet = null
+```
+
+The default preserves every existing render-pass literal. A non-null set is a
+borrowed same-device occlusion set that must remain alive through synchronous
+command-buffer completion; render-encoder occlusion commands must use that
+exact set. This association is necessary because Metal chooses visibility
+storage when the pass encoder is created.
+
+`diagnostics.QueryError` gains `QueryBackendFailure` for the newly executable
+native-readback lane, keeping driver failures distinct from `QueryNotReady`.
+Invalid pass/query association reuses
+`command.CommandEncodingError.InvalidRenderCommandEncoderState`. Ordinary
+error propagation is unchanged, but callers with exhaustive `QueryError`
+switches need one new arm.
+
+The descriptor field is source-additive, but expanding the public error set is
+a source break for exhaustive switches. Period 46 therefore targets `v0.2.0`
+and is not eligible for a `v0.1.x` patch release.
+
+Capability meaning changes with the executable path: `occlusion_queries`
+means native zero/nonzero visibility, `timestamp_queries` may still use a
+logical sequence fallback, `QuerySet.resultSource()` distinguishes native raw
+GPU ticks from that fallback, and `shader_specialization` means both Vulkan and
+Metal lower stable numeric specialization IDs. Pipeline statistics and GPU
+timestamp-to-duration calibration remain closed.
 
 ## Compatibility Impact
 

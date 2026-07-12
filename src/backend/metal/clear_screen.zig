@@ -4,6 +4,7 @@ const MetalAccelerationStructure = @import("acceleration_structure.zig");
 const MetalBuffer = @import("buffer.zig");
 const MetalCommand = @import("command.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
+const MetalQuerySet = @import("query_set.zig");
 const MetalRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("render_pipeline.zig");
 const MetalSamplerState = @import("sampler.zig");
@@ -184,6 +185,15 @@ pub fn makeComputePipelineState(
     return try MetalComputePipelineState.init(self, allocator, descriptor);
 }
 
+pub fn makeQuerySet(self: *MetalClearScreen, descriptor: core.QuerySetDescriptor) !?MetalQuerySet {
+    if (descriptor.query_type == .timestamp and !self.supportsNativeTimestampQueries()) return null;
+    return try MetalQuerySet.init(self, descriptor);
+}
+
+pub fn supportsNativeTimestampQueries(self: *const MetalClearScreen) bool {
+    return self.queryCapabilities().timestamp_queries != 0;
+}
+
 pub fn accelerationStructureBuildSizes(
     self: *MetalClearScreen,
     descriptor: core.AccelerationStructureDescriptor,
@@ -264,6 +274,12 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
         .ray_tracing = 0,
         .sparse_textures = 0,
         .binary_archive = 0,
+        .function_constants = 0,
+        .timestamp_counter_set = 0,
+        .timestamp_draw_boundary = 0,
+        .timestamp_dispatch_boundary = 0,
+        .timestamp_blit_boundary = 0,
+        .timestamp_queries = 0,
         .max_threads_per_threadgroup_width = 0,
         .max_threads_per_threadgroup_height = 0,
         .max_threads_per_threadgroup_depth = 0,
@@ -276,10 +292,9 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
 
 fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.metal);
-    // Visibility result buffers are native Metal functionality. vkmtl keeps
-    // the usable feature closed until render-encoder query lowering resolves
-    // real GPU results instead of the runtime placeholder.
     result.occlusion_queries = true;
+    result.timestamp_queries = capabilities.timestamp_queries != 0;
+    result.shader_specialization = capabilities.function_constants != 0;
     result.debug_markers = true;
     result.sampler_anisotropy = true;
     result.argument_buffers = capabilities.argument_buffers != 0;
@@ -300,8 +315,9 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
 }
 
 fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
-    _ = capabilities;
     var result = core.defaultDeviceFeatures(.metal);
+    result.occlusion_queries = true;
+    result.shader_specialization = capabilities.function_constants != 0;
     result.debug_markers = true;
     result.sampler_anisotropy = true;
     return result;
@@ -333,6 +349,12 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .ray_tracing = 1,
         .sparse_textures = 1,
         .binary_archive = 1,
+        .function_constants = 1,
+        .timestamp_counter_set = 1,
+        .timestamp_draw_boundary = 1,
+        .timestamp_dispatch_boundary = 1,
+        .timestamp_blit_boundary = 1,
+        .timestamp_queries = 1,
         .max_threads_per_threadgroup_width = 1024,
         .max_threads_per_threadgroup_height = 1024,
         .max_threads_per_threadgroup_depth = 64,
@@ -350,7 +372,10 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.ray_tracing);
     try std.testing.expect(native.metal_binary_archive);
     try std.testing.expect(native.occlusion_queries);
-    try std.testing.expect(!usable.occlusion_queries);
+    try std.testing.expect(native.timestamp_queries);
+    try std.testing.expect(native.shader_specialization);
+    try std.testing.expect(usable.occlusion_queries);
+    try std.testing.expect(usable.shader_specialization);
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);

@@ -19,6 +19,7 @@ Resources created through `Device` and tracked by the debug tracker include:
 - `makeRenderPipelineState(...)`
 - `makeBindGroupLayout(...)`
 - `makeBindGroup(...)`
+- `makeQuerySet(...)`
 
 Texture views are created from textures with `texture.makeTextureView(...)` and
 are tracked by the same owner.
@@ -75,6 +76,20 @@ command encoders are short-lived recording objects. Encoders must be ended with
 submits/presents work and releases the native command buffer wrapper.
 
 Debug groups must be balanced before `endEncoding()` or `commit()`.
+
+## Query Sets
+
+An occlusion `QuerySet` bound through
+`RenderPassDescriptor.occlusion_query_set` is borrowed by that pass and every
+matching begin/end command. Timestamp sets are borrowed by each encoder write,
+and all query sets are borrowed by resolve commands. Keep the set alive until
+`commit()` returns; the current backends complete synchronously.
+
+Do not reset or destroy a set from its first encoded write/begin until the
+producer command buffer's synchronous `commit()` returns; ending the encoder
+does not release this borrow. A slot may be written once after each reset. The
+resolve destination is also borrowed through completion and must have
+`copy_destination` usage.
 
 ## Owner Migration Direction
 

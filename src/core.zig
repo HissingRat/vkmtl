@@ -2103,6 +2103,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.FenceWaitTimeout,
         error.EventWaitTimeout,
         error.CaptureFailed,
+        error.QueryBackendFailure,
         => .backend,
 
         error.NoSupportedBackend,
@@ -2593,6 +2594,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .fences = true,
         .events = true,
         .timestamp_queries = true,
+        .shader_specialization = true,
     };
 
     if (backend == .metal) {
@@ -5352,8 +5354,8 @@ pub const ProfilingPlanDescriptor = struct {
             return .{
                 .mode = .native_gpu_timestamps,
                 .timestamp_source = .native_gpu,
-                .gpu_duration_available = true,
-                .reason = "native GPU timestamps",
+                .gpu_duration_available = false,
+                .reason = "native GPU timestamp ticks; duration conversion unavailable",
             };
         }
         if (self.require_gpu_timestamps) return QueryError.UnsupportedGpuTimestamps;
@@ -5487,6 +5489,7 @@ pub const QueryError = error{
     InvalidQueryResultAlignment,
     QueryTypeMismatch,
     QueryNotReady,
+    QueryBackendFailure,
     MissingPipelineStatistics,
     UnsupportedOcclusionQueries,
     UnsupportedTimestampQueries,
@@ -12656,7 +12659,7 @@ test "query descriptors validate feature gates and ranges" {
     }).validate(.{ .timestamp_queries = true });
 }
 
-test "Period 43 profiling plans distinguish logical queries CPU fallback and GPU time" {
+test "profiling plans distinguish logical fallback and uncalibrated native ticks" {
     const current = ProfilingCapabilities.fromFeatures(.metal, .{
         .timestamp_queries = true,
         .debug_markers = true,
@@ -12683,7 +12686,7 @@ test "Period 43 profiling plans distinguish logical queries CPU fallback and GPU
         .require_gpu_timestamps = true,
     }).resolve(native);
     try std.testing.expectEqual(ProfilingMode.native_gpu_timestamps, gpu.mode);
-    try std.testing.expect(gpu.gpu_duration_available);
+    try std.testing.expect(!gpu.gpu_duration_available);
 }
 
 test "compute dispatch descriptors validate limits and resolve thread counts" {

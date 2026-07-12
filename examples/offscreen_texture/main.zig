@@ -36,6 +36,12 @@ const screen_vertices = [_]ScreenVertex{
 
 const screen_indices = [_]u16{ 0, 1, 2, 0, 2, 3 };
 
+const offscreen_specialization_constants = [_]vkmtl.shader.ShaderSpecializationConstant{.{
+    .id = 7,
+    .name = "color_scale",
+    .value = .{ .f32 = 1.0 },
+}};
+
 const offscreen_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
     .{ .format = .rgba8_unorm },
 };
@@ -189,6 +195,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     ));
     defer screen_pipeline.deinit();
 
+    var query_regression = try QueryRegression.init(&device);
+    defer query_regression.deinit();
+
     while (!glfw.windowShouldClose(window)) {
         const extent = common.framebufferExtent(window);
         if (extent.isZero()) {
@@ -209,17 +218,21 @@ pub fn main(_: std.process.Init.Minimal) !void {
                     .alpha = 1.0,
                 },
             }},
+            .occlusion_query_set = query_regression.visibilitySet(),
         });
+        try query_regression.beginPass(&offscreen_encoder);
         try offscreen_encoder.setRenderPipelineState(&offscreen_pipeline);
         try offscreen_encoder.setVertexBuffer(&color_vertex_buffer, .{ .index = 0 });
         try offscreen_encoder.drawPrimitives(.{
             .primitive_type = .triangle,
             .vertex_count = @intCast(color_vertices.len),
         });
+        try query_regression.endPass(&offscreen_encoder);
         try offscreen_encoder.endEncoding();
         try offscreen_command_buffer.commit();
 
         if (pixelRegressionEnabled()) {
+            if (try query_regression.validateAndPrepareReuse(&device, &queue)) continue;
             const max_channel_delta = try validateOffscreenPixels(
                 allocator,
                 &device,
@@ -259,6 +272,137 @@ pub fn main(_: std.process.Init.Minimal) !void {
 
         glfw.pollEvents();
     }
+}
+
+const QueryRegression = struct {
+    visibility: ?vkmtl.diagnostics.QuerySet = null,
+    timestamps: ?vkmtl.diagnostics.QuerySet = null,
+    generation: u32 = 0,
+
+    fn init(device: *vkmtl.Device) !QueryRegression {
+        if (!queryRegressionEnabled()) return .{};
+
+        var result = QueryRegression{};
+        errdefer result.deinit();
+        if (device.features().occlusion_queries) {
+            result.visibility = try device.makeQuerySet(.{
+                .label = "offscreen visibility regression",
+                .query_type = .occlusion,
+                .count = 2,
+            });
+        }
+        if (device.nativeFeatures().timestamp_queries) {
+            result.timestamps = try device.makeQuerySet(.{
+                .label = "offscreen timestamp regression",
+                .query_type = .timestamp,
+                .count = 2,
+            });
+            if (result.timestamps.?.resultSource() != .native_gpu) return error.ExpectedNativeGpuTimestamps;
+        }
+        return result;
+    }
+
+    fn deinit(self: *QueryRegression) void {
+        if (self.timestamps) |*timestamps| timestamps.deinit();
+        if (self.visibility) |*visibility| visibility.deinit();
+        self.* = .{};
+    }
+
+    fn visibilitySet(self: *QueryRegression) ?*vkmtl.diagnostics.QuerySet {
+        if (self.visibility) |*visibility| return visibility;
+        return null;
+    }
+
+    fn beginPass(
+        self: *QueryRegression,
+        encoder: *vkmtl.command.RenderCommandEncoder,
+    ) !void {
+        if (self.timestamps) |*timestamps| try encoder.writeTimestamp(timestamps, 0);
+        if (self.visibility) |*visibility| try encoder.beginOcclusionQuery(visibility, 0);
+    }
+
+    fn endPass(
+        self: *QueryRegression,
+        encoder: *vkmtl.command.RenderCommandEncoder,
+    ) !void {
+        if (self.visibility) |*visibility| {
+            try encoder.endOcclusionQuery(visibility);
+            try encoder.beginOcclusionQuery(visibility, 1);
+            try encoder.endOcclusionQuery(visibility);
+        }
+        if (self.timestamps) |*timestamps| try encoder.writeTimestamp(timestamps, 1);
+    }
+
+    fn validateAndPrepareReuse(
+        self: *QueryRegression,
+        device: *vkmtl.Device,
+        queue: *vkmtl.Queue,
+    ) !bool {
+        if (self.visibility == null and self.timestamps == null) {
+            if (self.generation == 0) {
+                std.debug.print("native query regression skipped: selected device exposes no native query lane\n", .{});
+                self.generation = 2;
+            }
+            return false;
+        }
+
+        if (self.visibility) |*visibility| {
+            const values = try validateQueryReadbackAndResolve(device, queue, visibility);
+            if (values[0] == 0) return error.ExpectedVisibleOcclusionResult;
+            if (values[1] != 0) return error.ExpectedEmptyOcclusionResult;
+            std.debug.print("native occlusion regression ok visible={} empty={}\n", .{ values[0], values[1] });
+        }
+        if (self.timestamps) |*timestamps| {
+            const values = try validateQueryReadbackAndResolve(device, queue, timestamps);
+            if (values[1] <= values[0]) return error.ExpectedMonotonicGpuTimestamps;
+            std.debug.print("native timestamp regression ok begin={} end={} source=native_gpu\n", .{ values[0], values[1] });
+        }
+
+        if (self.generation == 0) {
+            if (self.visibility) |*visibility| visibility.reset();
+            if (self.timestamps) |*timestamps| timestamps.reset();
+            self.generation = 1;
+            return true;
+        }
+        std.debug.print("native query reset/reuse regression ok\n", .{});
+        self.generation = 2;
+        return false;
+    }
+};
+
+fn validateQueryReadbackAndResolve(
+    device: *vkmtl.Device,
+    queue: *vkmtl.Queue,
+    query_set: *vkmtl.diagnostics.QuerySet,
+) ![2]u64 {
+    var direct = [_]u64{ 0, 0 };
+    try query_set.readback(.{
+        .first_query = 0,
+        .query_count = direct.len,
+        .destination = direct[0..],
+    });
+
+    var resolve_buffer = try device.makeBuffer(.{
+        .label = "native query resolve regression",
+        .length = @sizeOf(@TypeOf(direct)),
+        .usage = .{ .copy_destination = true },
+        .storage_mode = .shared,
+    });
+    defer resolve_buffer.deinit();
+
+    var command_buffer = try queue.makeCommandBuffer();
+    var blit = try command_buffer.makeBlitCommandEncoder();
+    try blit.resolveQuerySet(query_set, &resolve_buffer, .{
+        .first_query = 0,
+        .query_count = direct.len,
+    });
+    try blit.endEncoding();
+    try command_buffer.commit();
+
+    var resolved = [_]u64{ 0, 0 };
+    try resolve_buffer.readBytes(0, std.mem.sliceAsBytes(resolved[0..]));
+    if (!std.mem.eql(u64, direct[0..], resolved[0..])) return error.QueryResolveMismatch;
+    return direct;
 }
 
 fn validateOffscreenPixels(
@@ -336,14 +480,23 @@ fn pixelRegressionEnabled() bool {
     return std.mem.eql(u8, value, "1") or std.ascii.eqlIgnoreCase(value, "true");
 }
 
+fn queryRegressionEnabled() bool {
+    const value = std.mem.span(getenv("VKMTL_QUERY_REGRESSION") orelse return false);
+    return std.mem.eql(u8, value, "1") or std.ascii.eqlIgnoreCase(value, "true");
+}
+
 fn offscreenPipelineDescriptor(
     vertex_stage: vkmtl.ProgrammableStageDescriptor,
     fragment_stage: vkmtl.ProgrammableStageDescriptor,
     vertex_descriptor: vkmtl.VertexDescriptor,
 ) vkmtl.RenderPipelineDescriptor {
+    var specialized_fragment = fragment_stage;
+    specialized_fragment.specialization = .{
+        .constants = offscreen_specialization_constants[0..],
+    };
     return .{
         .vertex = vertex_stage,
-        .fragment = fragment_stage,
+        .fragment = specialized_fragment,
         .vertex_descriptor = vertex_descriptor,
         .primitive_topology = .triangle,
         .color_attachments = offscreen_color_attachments[0..],

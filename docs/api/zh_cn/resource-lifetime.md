@@ -17,6 +17,7 @@ vkmtl 资源是显式资源。任何 runtime resource handle 都应该在销毁 
 - `makeRenderPipelineState(...)`
 - `makeBindGroupLayout(...)`
 - `makeBindGroup(...)`
+- `makeQuerySet(...)`
 
 Texture view 通过 `texture.makeTextureView(...)` 从 texture 创建，并由同一个 owner 追踪。
 
@@ -67,6 +68,18 @@ recording object。Encoder 必须用 `endEncoding()` 结束。Command buffer 会
 `commit()` 会提交/呈现工作并释放 native command buffer wrapper。
 
 Debug group 必须在 `endEncoding()` 或 `commit()` 前保持 push/pop 平衡。
+
+## QuerySet
+
+通过 `RenderPassDescriptor.occlusion_query_set` 绑定的 occlusion `QuerySet` 会被 pass
+和匹配的 begin/end command borrow。Timestamp set 会被每次 encoder write borrow，所有
+query set 都会被 resolve command borrow。必须让 set 活到 `commit()` 返回；当前 backend
+会同步完成。
+
+从首次 encode write/begin 到 producer command buffer 的同步 `commit()` 返回之前，不能
+reset/destroy set；只结束 encoder 并不会释放 borrow。每次 reset 后一个 slot 只能写一次。
+Resolve destination 同样要活到 completion，并且必须有
+`copy_destination` usage。
 
 ## Owner 迁移方向
 

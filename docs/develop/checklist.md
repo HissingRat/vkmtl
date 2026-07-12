@@ -2577,6 +2577,40 @@ obvious render and binding blockers.
 - [x] Update the inventory and backend-completion roadmap with accepted order.
 - [x] Run API/backend validation and publish the Period 45 closeout.
 
+## Period 46 Phase 1 Checklist
+
+- [ ] Add backend-private query set implementations while keeping the opaque
+  `QuerySet` layout unchanged; add only the default-null render-pass query-set
+  association required by Metal visibility storage.
+- [ ] Define reset, pending, readback, resolve, and lifetime behavior.
+- [ ] Keep logical and native timestamp sources distinct.
+
+## Period 46 Phase 2 Checklist
+
+- [ ] Implement Vulkan occlusion/timestamp query pool creation and commands.
+- [ ] Implement native CPU readback and GPU resolve with not-ready handling.
+- [ ] Keep ambiguous pipeline-statistics result shapes typed unsupported.
+
+## Period 46 Phase 3 Checklist
+
+- [ ] Implement Metal visibility-buffer range allocation and render encoding.
+- [ ] Implement capability-gated Metal timestamp counter sampling and resolve.
+- [ ] Keep unavailable/native-device-specific counters closed.
+
+## Period 46 Phase 4 Checklist
+
+- [ ] Translate all four specialization value kinds to Metal function values.
+- [ ] Specialize vertex, fragment, and compute functions before pipeline
+  creation.
+- [ ] Open shader specialization only for executable backend paths.
+
+## Period 46 Phase 5 Checklist
+
+- [ ] Add deterministic query/specialization tests and physical GPU smoke
+  instructions.
+- [ ] Update semantic inventory, gap routing, capability docs, and matrices.
+- [ ] Run full API/backend validation and publish the closeout.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

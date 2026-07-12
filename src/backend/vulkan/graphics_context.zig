@@ -51,6 +51,8 @@ features_value: core.DeviceFeatures,
 native_features_value: core.DeviceFeatures,
 limits_value: core.DeviceLimits,
 ray_tracing_diagnostics_value: core.RayTracingCapabilityDiagnostics,
+host_query_reset: bool,
+native_timestamp_queries: bool,
 
 pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: core.VulkanSurfaceProvider) !GraphicsContext {
     var self: GraphicsContext = undefined;
@@ -138,6 +140,8 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
 
     self.graphics_queue = Queue.init(self.dev, candidate.queues.graphics_family);
     self.present_queue = Queue.init(self.dev, candidate.queues.present_family);
+    self.host_query_reset = candidate.host_query_reset and self.dev.wrapper.dispatch.vkResetQueryPool != null;
+    self.native_timestamp_queries = self.host_query_reset and candidate.queues.graphics_timestamp_valid_bits != 0;
     self.mem_props = self.instance.getPhysicalDeviceMemoryProperties(self.pdev);
     self.ray_tracing_diagnostics_value = try queryRayTracingCapabilityDiagnostics(
         self.instance,
@@ -145,10 +149,16 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
         allocator,
         &self.dev.wrapper.dispatch,
     );
-    self.native_features_value = try queryNativeFeatures(self.instance, self.pdev, allocator, self.ray_tracing_diagnostics_value);
+    self.native_features_value = try queryNativeFeatures(
+        self.instance,
+        self.pdev,
+        allocator,
+        self.ray_tracing_diagnostics_value,
+        candidate.queues.graphics_timestamp_valid_bits != 0,
+    );
     self.native_features_value.debug_labels = self.debug_utils_enabled;
     self.native_features_value.debug_markers = self.debug_utils_enabled;
-    self.features_value = queryUsableFeatures(self.native_features_value);
+    self.features_value = queryUsableFeatures(self.native_features_value, self.host_query_reset);
     self.limits_value = queryLimits(self.props, self.features_value, self.ray_tracing_diagnostics_value);
     self.limits_value.max_sample_count = self.maxSupportedSampleCount(.rgba8_unorm);
 
@@ -193,6 +203,14 @@ pub fn limits(self: GraphicsContext) core.DeviceLimits {
 
 pub fn rayTracingDiagnostics(self: GraphicsContext) core.RayTracingCapabilityDiagnostics {
     return self.ray_tracing_diagnostics_value;
+}
+
+pub fn supportsHostQueryReset(self: GraphicsContext) bool {
+    return self.host_query_reset;
+}
+
+pub fn supportsNativeTimestampQueries(self: GraphicsContext) bool {
+    return self.native_timestamp_queries;
 }
 
 pub fn formatCapabilities(self: GraphicsContext, format: core.TextureFormat) core.FormatCapabilities {
@@ -360,15 +378,14 @@ fn queryNativeFeatures(
     pdev: vk.PhysicalDevice,
     allocator: Allocator,
     ray_tracing: core.RayTracingCapabilityDiagnostics,
+    timestamp_query_capability: bool,
 ) !core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.vulkan);
     const native = instance.getPhysicalDeviceFeatures(pdev);
     const extensions = try queryExtensionSupport(instance, pdev, allocator);
 
-    // Basic occlusion queries are core Vulkan functionality. Keep this native
-    // fact separate from vkmtl's usable feature until query-pool lowering
-    // replaces the runtime placeholder result.
     result.occlusion_queries = true;
+    result.timestamp_queries = timestamp_query_capability;
     result.sampler_anisotropy = native.sampler_anisotropy == .true;
     result.independent_blend = native.independent_blend == .true;
     result.tessellation = native.tessellation_shader == .true;
@@ -399,13 +416,13 @@ fn queryNativeFeatures(
     return result;
 }
 
-fn queryUsableFeatures(native_features: core.DeviceFeatures) core.DeviceFeatures {
+fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: bool) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.vulkan);
 
     result.sampler_anisotropy = native_features.sampler_anisotropy;
     result.independent_blend = native_features.independent_blend;
     result.tessellation = false;
-    result.occlusion_queries = false;
+    result.occlusion_queries = native_features.occlusion_queries and host_query_reset;
     result.wireframe_fill_mode = native_features.wireframe_fill_mode;
     result.vertex_instance_step_rate = native_features.vertex_instance_step_rate;
     result.multi_draw = false;
@@ -787,6 +804,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     const enable_vertex_divisor = vertexAttributeDivisorFeatureSupported(instance, candidate.pdev, extensions);
     const ray_tracing_diagnostics = try queryRayTracingCapabilityDiagnostics(instance, candidate.pdev, allocator, null);
     const enable_ray_tracing = ray_tracing_diagnostics.supported;
+    const enable_host_query_reset = candidate.host_query_reset;
 
     var extension_names: std.ArrayList([*:0]const u8) = .empty;
     defer extension_names.deinit(allocator);
@@ -820,7 +838,14 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     var acceleration_structure_features = vk.PhysicalDeviceAccelerationStructureFeaturesKHR{
         .acceleration_structure = if (enable_ray_tracing) .true else .false,
     };
+    var host_query_reset_features = vk.PhysicalDeviceHostQueryResetFeatures{
+        .host_query_reset = if (enable_host_query_reset) .true else .false,
+    };
     var device_p_next: ?*anyopaque = null;
+    if (enable_host_query_reset) {
+        host_query_reset_features.p_next = device_p_next;
+        device_p_next = &host_query_reset_features;
+    }
     if (enable_vertex_divisor) {
         vertex_divisor_features.p_next = device_p_next;
         device_p_next = &vertex_divisor_features;
@@ -859,11 +884,13 @@ const DeviceCandidate = struct {
     pdev: vk.PhysicalDevice,
     props: vk.PhysicalDeviceProperties,
     queues: QueueAllocation,
+    host_query_reset: bool,
 };
 
 const QueueAllocation = struct {
     graphics_family: u32,
     present_family: u32,
+    graphics_timestamp_valid_bits: u32,
 };
 
 fn pickPhysicalDevice(instance: Instance, allocator: Allocator, surface: vk.SurfaceKHR) !DeviceCandidate {
@@ -887,6 +914,7 @@ fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocat
             .pdev = pdev,
             .props = instance.getPhysicalDeviceProperties(pdev),
             .queues = allocation,
+            .host_query_reset = hostQueryResetSupported(instance, pdev),
         };
     }
     return null;
@@ -897,12 +925,14 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
     defer allocator.free(families);
 
     var graphics_family: ?u32 = null;
+    var graphics_timestamp_valid_bits: u32 = 0;
     var present_family: ?u32 = null;
 
     for (families, 0..) |properties, i| {
         const family: u32 = @intCast(i);
         if (graphics_family == null and properties.queue_flags.graphics_bit) {
             graphics_family = family;
+            graphics_timestamp_valid_bits = properties.timestamp_valid_bits;
         }
         if (present_family == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(pdev, family, surface)) == .true) {
             present_family = family;
@@ -913,9 +943,19 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
         return .{
             .graphics_family = graphics_family.?,
             .present_family = present_family.?,
+            .graphics_timestamp_valid_bits = graphics_timestamp_valid_bits,
         };
     }
     return null;
+}
+
+fn hostQueryResetSupported(instance: Instance, pdev: vk.PhysicalDevice) bool {
+    var host_query_reset = vk.PhysicalDeviceHostQueryResetFeatures{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &host_query_reset,
+        .features = .{},
+    };
+    return getPhysicalDeviceFeatures2(instance, pdev, &features2) and host_query_reset.host_query_reset == .true;
 }
 
 fn checkSurfaceSupport(instance: Instance, pdev: vk.PhysicalDevice, surface: vk.SurfaceKHR) !bool {
@@ -1067,7 +1107,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .debug_labels = true,
         .occlusion_queries = true,
     };
-    const usable = queryUsableFeatures(native);
+    const usable = queryUsableFeatures(native, true);
     try std.testing.expect(!usable.descriptor_indexing);
     try std.testing.expect(usable.wireframe_fill_mode);
     try std.testing.expect(usable.independent_blend);
@@ -1078,7 +1118,8 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(!usable.mesh_shaders);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expect(!usable.driver_pipeline_cache);
-    try std.testing.expect(!usable.occlusion_queries);
+    try std.testing.expect(usable.occlusion_queries);
+    try std.testing.expect(!queryUsableFeatures(native, false).occlusion_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);
     try std.testing.expect(usable.debug_labels);

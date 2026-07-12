@@ -318,6 +318,7 @@ pub fn build(b: *std.Build) void {
     const pixel_render_cmd = b.addRunArtifact(offscreen_texture);
     pixel_render_cmd.step.dependOn(&pixel_compute_cmd.step);
     pixel_render_cmd.setEnvironmentVariable("VKMTL_PIXEL_REGRESSION", "1");
+    pixel_render_cmd.setEnvironmentVariable("VKMTL_QUERY_REGRESSION", "1");
     configureVulkanRuntimeForRun(b, pixel_render_cmd, target.result.os.tag, vulkan_runtime);
 
     const pixel_regression_step = b.step("run-pixel-regression", "Run deterministic transfer, compute, and render pixel readback checks");

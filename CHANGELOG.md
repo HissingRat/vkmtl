@@ -9,12 +9,37 @@ reserved for the next minor release and are documented with migration guidance.
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- Stopped advertising `occlusion_queries` as usable while both backends still
-  lack native GPU visibility-result lowering. Native availability remains
-  separately queryable, and query creation now returns the existing typed
-  unsupported error.
+- Added capability-gated native Vulkan query pools and Metal visibility/counter
+  query sets for occlusion, timestamp readback, and GPU resolve.
+- Added default-null `RenderPassDescriptor.occlusion_query_set` so a pass can
+  bind the exact visibility storage used by its occlusion commands.
+- Added Metal vertex, fragment, and compute function-constant specialization by
+  stable numeric ID.
+
+### Changed
+
+- Occlusion query results now have portable Boolean visibility semantics: zero
+  means no samples passed and any nonzero value means visible; the magnitude is
+  not a portable sample count.
+- Timestamp query sets report `native_gpu` only when the selected backend has a
+  complete native encoder path. Values remain backend-native ticks and do not
+  claim duration conversion; logical fallback sets still report
+  `logical_sequence`.
+- Query slots may be written once between resets, and query resolve buffers must
+  declare `copy_destination` usage.
+
+### Compatibility
+
+- This Unreleased change targets `v0.2.0`, not a `v0.1.x` patch, because the
+  public `QueryError` expansion is source-breaking for exhaustive switches.
+- The pass field defaults to null; the root, common owner methods, and opaque
+  handle shapes are unchanged.
+- `QueryBackendFailure` extends `QueryError` for newly executable native
+  readback failures, which had no supported result in v0.1.0. Exhaustive
+  downstream `QueryError` switches may need one new arm. Invalid pass/query
+  association reuses the existing `InvalidRenderCommandEncoderState` error.
 
 ## [0.1.0]
 

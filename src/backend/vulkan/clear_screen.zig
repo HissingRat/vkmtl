@@ -7,6 +7,7 @@ const VulkanCommand = @import("command.zig");
 const VulkanComputePipelineState = @import("compute_pipeline.zig");
 const VulkanRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const VulkanRenderPipelineState = @import("render_pipeline.zig");
+const VulkanQuerySet = @import("query_set.zig");
 const VulkanSamplerState = @import("sampler.zig");
 const VulkanShaderModule = @import("shader_module.zig");
 const VulkanTexture = @import("texture.zig");
@@ -207,6 +208,15 @@ pub fn makeRenderPipelineState(self: *VulkanClearScreen, descriptor: core.Render
 
 pub fn makeComputePipelineState(self: *VulkanClearScreen, descriptor: core.ComputePipelineDescriptor) !VulkanComputePipelineState {
     return try VulkanComputePipelineState.init(self.gc, self.allocator, descriptor);
+}
+
+pub fn makeQuerySet(self: *VulkanClearScreen, descriptor: core.QuerySetDescriptor) !?VulkanQuerySet {
+    if (descriptor.query_type == .timestamp and !self.gc.supportsNativeTimestampQueries()) return null;
+    return try VulkanQuerySet.init(self.gc, descriptor);
+}
+
+pub fn supportsNativeTimestampQueries(self: *const VulkanClearScreen) bool {
+    return self.gc.supportsNativeTimestampQueries();
 }
 
 pub fn makeRayTracingPipelineState(self: *VulkanClearScreen, descriptor: core.RayTracingPipelineDescriptor) !VulkanRayTracingPipelineState {

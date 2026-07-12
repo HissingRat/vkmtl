@@ -86,7 +86,7 @@ This wave owns the explicit deferred items from Period 21:
 - [x] Root constant command writes and native Vulkan / Metal lowering.
 - [x] Shader specialization variant validation and Vulkan native pipeline
   lowering.
-- [ ] Metal function-constant specialization native lowering.
+- [x] Metal function-constant specialization native lowering.
 
 Expected result: the advanced binding and shader shapes stop being
 metadata-only paths. Unsupported backend cases remain capability-gated, but
@@ -512,6 +512,24 @@ Tracked in `docs/develop/period45/`.
 Expected result: backend completion is driven by source semantic coverage and
 truthful executable evidence rather than by public API shape or roadmap
 checkbox count.
+
+## Wave 27: Native Queries, Counters, And Specialization
+
+Tracked in `docs/develop/period46/`.
+
+- [ ] Replace occlusion placeholders with capability-gated zero/nonzero native
+  visibility on Vulkan and Metal.
+- [ ] Lower timestamp writes, CPU readback, and GPU resolve while preserving
+  truthful logical versus native result sources.
+- [ ] Keep pipeline statistics and device-specific counter breadth closed until
+  their result shapes and sampling contracts are representable.
+- [ ] Specialize Metal vertex, fragment, and compute functions by stable
+  numeric function-constant ID.
+- [ ] Bind deterministic tests and physical GPU evidence to the closeout.
+
+Expected result: the portable query path returns real visibility or native GPU
+ticks when the selected device supports them, never placeholder data, and both
+backends execute shader specialization without expanding the flat API root.
 
 ## Slice Checklist
 

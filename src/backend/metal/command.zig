@@ -8,6 +8,7 @@ const MetalBindGroup = @import("bind_group.zig").MetalBindGroup;
 const MetalBuffer = @import("buffer.zig");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
+const MetalQuerySet = @import("query_set.zig");
 const MetalRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("render_pipeline.zig");
 const MetalTexture = @import("texture.zig");
@@ -44,6 +45,7 @@ pub const RenderPassDescriptor = struct {
     color_attachments: [core.default_max_color_attachments]RenderPassColorAttachmentDescriptor,
     color_attachment_count: usize,
     depth_attachment: ?RenderPassDepthAttachmentDescriptor = null,
+    occlusion_query_set: ?*const MetalQuerySet = null,
 
     fn colorAttachmentSlice(self: *const RenderPassDescriptor) []const RenderPassColorAttachmentDescriptor {
         return self.color_attachments[0..self.color_attachment_count];
@@ -121,6 +123,7 @@ pub const CommandBuffer = struct {
             if (depth_attachment != null) 1 else 0,
             if (depth_attachment) |depth| depthTextureViewHandle(depth.target) else null,
             if (depth_attachment) |depth| depth.clear_depth else 1.0,
+            if (descriptor.occlusion_query_set) |query_set| query_set.handle else null,
             &handle,
         ));
 
@@ -258,6 +261,30 @@ pub const BlitCommandEncoder = struct {
             descriptor.source_offset,
             descriptor.destination_offset,
             descriptor.size,
+        ));
+    }
+
+    pub fn writeTimestamp(self: *BlitCommandEncoder, query_set: *MetalQuerySet, query_index: u32) !void {
+        try check(metal.vkmtl_metal_blit_command_encoder_write_timestamp(
+            self.handle,
+            query_set.handle,
+            query_index,
+        ));
+    }
+
+    pub fn resolveQuerySet(
+        self: *BlitCommandEncoder,
+        query_set: *MetalQuerySet,
+        destination: *const MetalBuffer,
+        descriptor: core.QueryResolveDescriptor,
+    ) !void {
+        try check(metal.vkmtl_metal_blit_command_encoder_resolve_query_set(
+            self.handle,
+            query_set.handle,
+            descriptor.first_query,
+            descriptor.query_count,
+            destination.handle,
+            descriptor.destination_offset,
         ));
     }
 
@@ -554,6 +581,14 @@ pub const ComputeCommandEncoder = struct {
         ));
     }
 
+    pub fn writeTimestamp(self: *ComputeCommandEncoder, query_set: *MetalQuerySet, query_index: u32) !void {
+        try check(metal.vkmtl_metal_compute_command_encoder_write_timestamp(
+            self.handle,
+            query_set.handle,
+            query_index,
+        ));
+    }
+
     pub fn bufferBarrier(
         self: *ComputeCommandEncoder,
         buffer: *const MetalBuffer,
@@ -764,6 +799,36 @@ pub const RenderCommandEncoder = struct {
                 slots.root_constant_buffer_slot,
             ));
         }
+    }
+
+    pub fn beginOcclusionQuery(
+        self: *RenderCommandEncoder,
+        query_set: *MetalQuerySet,
+        query_index: u32,
+    ) !void {
+        try check(metal.vkmtl_metal_render_command_encoder_begin_occlusion_query(
+            self.handle,
+            query_set.handle,
+            query_index,
+        ));
+    }
+
+    pub fn endOcclusionQuery(
+        self: *RenderCommandEncoder,
+        query_set: *MetalQuerySet,
+    ) !void {
+        try check(metal.vkmtl_metal_render_command_encoder_end_occlusion_query(
+            self.handle,
+            query_set.handle,
+        ));
+    }
+
+    pub fn writeTimestamp(self: *RenderCommandEncoder, query_set: *MetalQuerySet, query_index: u32) !void {
+        try check(metal.vkmtl_metal_render_command_encoder_write_timestamp(
+            self.handle,
+            query_set.handle,
+            query_index,
+        ));
     }
 
     pub fn drawPrimitives(
@@ -1035,6 +1100,7 @@ fn check(status: metal.vkmtl_metal_status) CommandBuffer.Error!void {
         metal.VKMTL_METAL_STATUS_UNSUPPORTED => CommandBuffer.Error.MetalUnsupported,
         metal.VKMTL_METAL_STATUS_NO_DRAWABLE => CommandBuffer.Error.NoDrawable,
         metal.VKMTL_METAL_STATUS_INVALID_COMMAND => CommandBuffer.Error.InvalidCommand,
+        metal.VKMTL_METAL_STATUS_INVALID_QUERY => CommandBuffer.Error.InvalidCommand,
         metal.VKMTL_METAL_STATUS_COMMAND_FAILED => CommandBuffer.Error.CommandFailed,
         else => CommandBuffer.Error.UnexpectedMetalStatus,
     };

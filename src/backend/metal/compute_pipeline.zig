@@ -4,6 +4,7 @@ const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalShaderModule = @import("shader_module.zig");
+const specialization = @import("specialization.zig");
 
 const MetalComputePipelineState = @This();
 
@@ -27,12 +28,17 @@ pub fn init(
     var compute_module = try MetalShaderModule.init(owner, allocator, descriptor.compute.module);
     defer compute_module.deinit();
 
+    const constants = try specialization.translate(allocator, descriptor.compute.specialization);
+    defer allocator.free(constants);
+
     var handle: ?*metal.vkmtl_metal_compute_pipeline_state = null;
     try check(metal.vkmtl_metal_compute_pipeline_state_create(
         owner.handle,
         compute_module.handle,
         descriptor.compute.entry_point.ptr,
         descriptor.compute.entry_point.len,
+        if (constants.len == 0) null else constants.ptr,
+        constants.len,
         &handle,
     ));
 

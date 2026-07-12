@@ -6,6 +6,9 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
+Period 46 refined two broad query rows, so the current ledger contains 101
+units and exactly-once routes 75 remaining incomplete IDs.
+
 The periods below are implementation slices, not promises to add all source
 concepts to the public API. Each period must apply the public API admission
 rules and may close a row with an exact implementation or a precise unsupported
@@ -15,14 +18,23 @@ decision.
 
 Priority: correctness and truthful diagnostics.
 
-- Native Metal/Vulkan occlusion result allocation, encoding, resolve, and
+- [x] Native Metal/Vulkan Boolean occlusion allocation, encoding, resolve, and
   readback.
-- Native GPU timestamp/counter paths and pipeline statistics where possible.
-- Metal function-constant specialization.
-- Shader/compiler execution log diagnostics.
+- [x] Capability-gated raw native GPU timestamp paths, with logical fallback
+  kept distinct and duration calibration deliberately unclaimed.
+- [x] Metal numeric-ID function-constant specialization for vertex, fragment,
+  and compute stages.
+- [x] Keep pipeline statistics typed unsupported because the current result
+  shape cannot represent variable multi-counter results.
+- [x] Reroute exact sample counts, pass-boundary sampling, device-specific
+  counters/statistics, and shader log state to Period 54 after splitting the
+  broad source rows.
 
-Acceptance: QRY-03 can become executable only after real GPU visibility values
-are observed; logical timestamps remain separately named and reported.
+Acceptance: complete. Metal physical evidence observed visible=1 and empty=0,
+plus readback/resolve agreement and reset/reuse. Both backend implementations
+keep native timestamp support behind device gates; the current Metal evidence
+host correctly selected `logical_sequence` because its full sampling-point set
+was unavailable.
 
 ## Period 47: Core Resource, Format, Render, And Compute Breadth
 
@@ -119,6 +131,9 @@ Priority: newest specialized Metal framework surface.
 - Flexible Metal 4 pipelines, compiler tasks, archives, binary functions, and
   pipeline dataset serialization.
 - Tensor resources and machine-learning pipeline/encoder semantics.
+- Exact occlusion sample counts and pass-boundary sample attachments.
+- Non-timestamp/device-specific counters, pipeline statistics result shapes,
+  timestamp calibration, and shader/function log state.
 
 Acceptance: each semantic receives an exact Vulkan composition or an explicit
 unsupported result; no broad Metal 4 feature flag substitutes for per-semantic
@@ -126,6 +141,7 @@ gates.
 
 ## Next Slice
 
-Period 46 is next. It closes the known occlusion-query correctness gap before
-broader resource or production work and adds the native measurement foundation
-needed by later evidence.
+Period 47 is next. Period 46 closed the placeholder-query correctness gap and
+added the capability-gated native measurement foundation; core resource,
+format, render, and compute breadth can now proceed against truthful query and
+specialization capability reports.

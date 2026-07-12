@@ -779,7 +779,8 @@ pub const Period44FeatureExpectation = struct {
 pub const period44_feature_expectations = [_]Period44FeatureExpectation{
     .{ .name = "object_and_encoder_debug_markers", .vulkan = .capability_gated, .metal = .executable, .evidence = "capability dump and native capture/debug tool" },
     .{ .name = "command_buffer_debug_markers", .vulkan = .validation_only, .metal = .executable, .evidence = "DebugMarkerCapabilities" },
-    .{ .name = "native_gpu_timestamps", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "run-profiling-plan -- --require-gpu" },
+    .{ .name = "native_gpu_timestamps", .vulkan = .capability_gated, .metal = .capability_gated, .evidence = "native query regression plus QuerySet.resultSource" },
+    .{ .name = "boolean_occlusion_visibility", .vulkan = .capability_gated, .metal = .capability_gated, .evidence = "offscreen native query readback/resolve and reset/reuse regression" },
     .{ .name = "scaled_texture_blit", .vulkan = .capability_gated, .metal = .typed_unsupported, .evidence = "format capability dump and UnsupportedTextureBlit" },
     .{ .name = "pipeline_statistics_queries", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "QuerySet creation gate" },
     .{ .name = "native_heap_backing", .vulkan = .planning_only, .metal = .planning_only, .evidence = "heap and aliasing plans" },
@@ -926,18 +927,18 @@ pub const sync_query_matrix = [_]SyncQueryMatrixEntry{
         .public_api = "vkmtl.diagnostics.QuerySet timestamp writes, resultSource, and readback/resolve",
         .portable_default = true,
         .escape_hatch = false,
-        .vulkan_status = .portable_runtime,
-        .metal_status = .portable_runtime,
-        .validation = "timestamp query writes produce deterministic logical-sequence values and never claim native GPU duration",
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "timestamp queries select raw native GPU ticks only behind backend device gates, otherwise use logical sequence values; neither path claims calibrated duration",
     },
     .{
         .feature = .occlusion_queries,
         .public_api = "vkmtl.diagnostics.QuerySet occlusion begin/end and readback/resolve",
         .portable_default = false,
         .escape_hatch = false,
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .validation = "occlusion query creation returns typed unsupported until native GPU visibility results replace the runtime placeholder",
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "pass-bound query sets produce zero/nonzero native visibility, reject repeated slots until reset, and keep readback/resolve consistent",
     },
     .{
         .feature = .pipeline_statistics_queries,
@@ -1736,7 +1737,7 @@ pub const validation_cases = [_]ValidationCase{
         .name = "query_readback",
         .kind = .query_readback,
         .test_location = "src/runtime/window_context.zig runtime query sets support encoder writes and readback",
-        .expectation = "timestamp and occlusion query sets validate availability, type, range, and feature gates",
+        .expectation = "query sets validate bound-pass identity, availability, one-write-per-reset slots, copy usage, type/range gates, native readback/resolve agreement, and truthful timestamp sources",
     },
     .{
         .name = "debug_marker_contract",
@@ -1983,7 +1984,7 @@ test "Period 44 validation jobs separate hosted builds from physical GPU evidenc
     try std.testing.expect(release_gpu_jobs >= 4);
 }
 
-test "Period 44 feature expectations keep unsupported and planning lanes explicit" {
+test "feature expectations keep remaining unsupported and planning lanes explicit" {
     try validatePeriod44FeatureExpectations(period44_feature_expectations[0..]);
 
     var typed_unsupported: usize = 0;
@@ -1995,7 +1996,7 @@ test "Period 44 feature expectations keep unsupported and planning lanes explici
         if (entry.vulkan == .native_escape_hatch or entry.metal == .native_escape_hatch) native_escape_hatches += 1;
     }
 
-    try std.testing.expect(typed_unsupported >= 4);
+    try std.testing.expect(typed_unsupported >= 3);
     try std.testing.expect(planning_only >= 4);
     try std.testing.expect(native_escape_hatches >= 1);
 }

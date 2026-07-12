@@ -867,13 +867,14 @@ See `docs/develop/period45/`.
 
 ## Period 46: Native Queries, Counters, And Specialization
 
-Status: planned; next implementation slice.
+Status: in progress.
 
-Goal: replace logical/typed-unsupported query lanes with real capability-gated
-GPU visibility, counter, timestamp, and statistics results, and finish Metal
-function-constant specialization.
+Goal: replace placeholder/typed-unsupported query lanes with capability-gated
+GPU visibility and timestamp results, keep unrepresentable statistics precise
+and closed, and finish Metal function-constant specialization.
 
-See `docs/develop/period45/gap-backlog.md`.
+See `docs/develop/period46/` and
+`docs/develop/period45/gap-backlog.md`.
 
 ## Period 47: Core Resource, Format, Render, And Compute Breadth
 

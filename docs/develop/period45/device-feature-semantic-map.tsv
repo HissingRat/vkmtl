@@ -45,7 +45,7 @@ indirect_draw	REN-04
 multi_draw	REN-04
 occlusion_queries	QRY-03
 timestamp_queries	QRY-01,QRY-02
-pipeline_statistics_queries	QRY-02
+pipeline_statistics_queries	QRY-04
 render_pipelines	REN-01
 compute_pipelines	CMP-01
 compute_dispatch_indirect	CMP-02

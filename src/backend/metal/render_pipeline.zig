@@ -4,6 +4,7 @@ const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalShaderModule = @import("shader_module.zig");
+const specialization = @import("specialization.zig");
 const slots = @import("slots.zig");
 
 const MetalRenderPipelineState = @This();
@@ -38,6 +39,14 @@ pub fn init(
         null;
     defer if (fragment_module) |*module| module.deinit();
 
+    const vertex_constants = try specialization.translate(allocator, descriptor.vertex.specialization);
+    defer allocator.free(vertex_constants);
+    const fragment_constants = if (descriptor.fragment) |fragment|
+        try specialization.translate(allocator, fragment.specialization)
+    else
+        try allocator.alloc(metal.vkmtl_metal_function_constant, 0);
+    defer allocator.free(fragment_constants);
+
     const vertex_buffers = try makeVertexBufferLayouts(allocator, descriptor.vertex_descriptor);
     defer allocator.free(vertex_buffers);
     const vertex_attributes = try makeVertexAttributes(allocator, descriptor.vertex_descriptor);
@@ -52,9 +61,13 @@ pub fn init(
         vertex_module.handle,
         descriptor.vertex.entry_point.ptr,
         descriptor.vertex.entry_point.len,
+        if (vertex_constants.len == 0) null else vertex_constants.ptr,
+        vertex_constants.len,
         if (fragment_module) |module| module.handle else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.ptr else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.len else 0,
+        if (fragment_constants.len == 0) null else fragment_constants.ptr,
+        fragment_constants.len,
         color_attachment_slice.ptr,
         color_attachment_slice.len,
         if (descriptor.depth_stencil) |depth| textureFormat(depth.format) else metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,

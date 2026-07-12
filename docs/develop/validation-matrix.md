@@ -22,13 +22,16 @@ Current cases:
 - `logical_queue_ownership`: queue planning, queue views, and ownership
   transfers reject cross-queue use until an explicit ownership transfer is
   recorded.
-- `query_readback`: timestamp and occlusion query sets validate availability,
-  type, range, readback, and resolve paths before native work.
+- `query_readback`: timestamp and occlusion query sets validate bound-pass
+  identity, availability, type/range, one write per reset, resolve-buffer
+  usage, backend failures, and readback/resolve agreement. Physical smoke also
+  verifies visible/nonzero, empty/zero, and reset/reuse behavior.
 - `debug_marker_contract`: borrowed object-label and call-only marker lifetime,
   UTF-8/NUL validation, exact capture names, stack balance, and
   command-buffer/encoder marker scope remain deterministic before native work;
-  backend marker capabilities, capture gates, logical timestamp sources,
-  profiling fallback, and issue-report snapshots stay truthful.
+  backend marker capabilities, capture gates, logical/native timestamp sources,
+  uncalibrated-duration reporting, profiling fallback, and issue-report
+  snapshots stay truthful.
 - `resource_utilities`: mipmap generation, fill fallback selection, texture
   copy compatibility, backend alignment, mip/layer/3D-slice ranges,
   depth/stencil aspects, scaled blit gates, MSAA resolve/copy behavior,

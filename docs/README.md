@@ -76,6 +76,7 @@ vkmtl documentation is organized by audience and purpose.
   current parity report
 - `develop/period45/`: native semantic source audit, backend mappings, and gap
   priority
+- `develop/period46/`: native queries, GPU counters, and Metal specialization
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

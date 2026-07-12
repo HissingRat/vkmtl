@@ -10,6 +10,9 @@ struct ColorVertexOutput
     float3 color : COLOR0;
 };
 
+[vk::constant_id(7)]
+const float color_scale = 0.0;
+
 [shader("vertex")]
 ColorVertexOutput offscreen_vs(ColorVertexInput input)
 {
@@ -22,7 +25,7 @@ ColorVertexOutput offscreen_vs(ColorVertexInput input)
 [shader("fragment")]
 float4 offscreen_fs(ColorVertexOutput input) : SV_Target0
 {
-    return float4(input.color, 1.0);
+    return float4(input.color * color_scale, 1.0);
 }
 
 struct ScreenVertexInput

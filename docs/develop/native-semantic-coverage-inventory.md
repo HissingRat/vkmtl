@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 45 audited baseline, 2026-07-12.
+Status: Period 46 query/specialization update, 2026-07-12.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -16,10 +16,12 @@ documented behavior is preserved. If a backend cannot preserve that behavior,
 vkmtl must report a capability-gated or typed unsupported result.
 
 This document remains the compact feature-family view. Period 45 adds the
-source-driven detail in `period45/metal-semantic-ledger.md`: 99 stable Metal
-semantic units, a complete 78-protocol map for the pinned SDK baseline, and
-exactly-once routing for all 77 incomplete units. It is a coverage inventory,
-not a claim that incomplete source semantics are executable.
+source-driven detail in `period45/metal-semantic-ledger.md`. Period 45 recorded
+the historical 99-unit/77-gap baseline. Period 46 split broad query/counter
+rows into 101 stable Metal semantic units, retains the complete 78-protocol
+map, and routes all 75 remaining incomplete units exactly once. It is a
+coverage inventory, not a claim that incomplete source semantics are
+executable.
 
 ## Source Baseline And Scope
 
@@ -102,7 +104,7 @@ develops a different lowering or support state.
 | RES-06 | Current portable texture formats and format capability queries | `resource` | `composed-exact` | `native-exact` | `unit`; Metal uses a conservative table, Vulkan queries format properties. The current format enum is not complete Metal format coverage. |
 | SHD-01 | Build-time Slang compilation and embedded runtime shader resolution | `shader` | `composed-exact` | `composed-exact` | Hosted build and `gpu-pixels`; MSL and SPIR-V are produced before runtime. |
 | SHD-02 | Reflection-derived binding and vertex metadata | `shader`, `binding`, `render` | `composed-exact` | `composed-exact` | `unit` and representative rendering. |
-| SHD-03 | Shader specialization constants/function constants | `shader` | `incomplete` | `native-exact` | Vulkan native variant lowering exists; Metal function-constant lowering remains deferred. |
+| SHD-03 | Shader specialization constants/function constants by stable numeric ID | `shader` | `native-exact` | `native-exact` | `unit`; Metal specializes vertex, fragment, and compute functions, while Vulkan uses specialization info. Generated names are diagnostic only. |
 
 ### Rendering, Binding, Compute, And Transfer
 
@@ -136,8 +138,9 @@ develops a different lowering or support state.
 | SYN-04 | Logical compute/transfer queues with graphics fallback | `command`, `sync` | `emulated-exact` | `emulated-exact` | `unit`; exact for the documented logical fallback contract. |
 | SYN-05 | Physical dedicated queues and Vulkan queue-family ownership | `command`, `sync` | `incomplete` | `incomplete` | Planning and hazard validation exist; physical execution/evidence does not. |
 | QRY-01 | Logical timestamp sequence and CPU/marker profiling fallback | `diagnostics` | `emulated-exact` | `emulated-exact` | `unit`; explicitly not GPU time. |
-| QRY-02 | Native GPU timestamps and pipeline statistics | `diagnostics` | `incomplete` | `incomplete` | Typed unsupported or usable feature closed. |
-| QRY-03 | Occlusion result queries | `diagnostics`, render encoder | `incomplete` | `incomplete` | Period 45 closed the usable feature on both backends and preserves native availability separately. Period 46 owns real GPU visibility-result lowering. |
+| QRY-02 | Capability-gated native GPU timestamp ticks, CPU readback, and GPU resolve | `diagnostics` | `native-exact` | `native-exact` | `unit`; Metal requires the common timestamp set plus draw/dispatch/blit sampling, Vulkan requires host reset plus graphics-queue timestamp bits. Tick-to-duration calibration remains outside this row. |
+| QRY-03 | Boolean occlusion visibility, where zero is occluded and nonzero is visible | `diagnostics`, render encoder | `composed-exact` | `native-exact` | `gpu-smoke` on Metal plus unit/inspection for both mappings; Metal uses pass scratch plus canonical copy, Vulkan uses non-precise query pools. Vulkan physical rerun remains useful evidence, not a capability prerequisite. |
+| QRY-04 | Pipeline statistics and multi-counter result shapes | `diagnostics` | `incomplete` | `incomplete` | `unit`; the current one-`u64`-per-query contract cannot represent variable multi-counter results, so the feature remains closed. |
 | MEM-01 | Heap reservation, aliasing, and transient allocation planning | `resource`, `diagnostics` | `incomplete` | `incomplete` | Deterministic plans exist; resources are not created from native heaps. |
 | MEM-02 | Transient attachment lifetime semantic | `render` | `composed-exact` | `composed-exact` | The API treats transient as a lifetime/performance hint; a hardware memoryless guarantee is not currently exposed. |
 | MEM-03 | Hardware memoryless/lazily allocated attachment guarantee | none | `incomplete` | `incomplete` | Metal memoryless and Vulkan transient/lazily-allocated mappings need a separate precise contract and lowering. Vulkan cannot promise that physical backing is never allocated. |
@@ -164,8 +167,9 @@ develops a different lowering or support state.
 
 ## Metal Source-Coverage Ledger
 
-Period 45 expanded these source families into the 99-unit Metal semantic
-ledger. Missing vkmtl concepts remain explicit `missing-contract` entries;
+Period 45 established the source ledger; Period 46 refined it to 101 units by
+splitting exact occlusion/timestamp subsets from broader counter/statistics
+semantics. Missing vkmtl concepts remain explicit `missing-contract` entries;
 their presence in the ledger does not admit public API or claim execution.
 
 | Source family | Current inventory state | Required action |
@@ -174,10 +178,10 @@ their presence in the ledger does not admit public API or claim execution.
 | Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closes format and resource breadth. |
 | Heaps, placement resources, residency sets, sparse resources | Audited/incomplete | Period 49 owns native allocation and residency. |
 | Argument buffers/tables and indirect command buffers | Audited/incomplete | Period 50 owns scalable binding and generated commands. |
-| Function constants, dynamic libraries, linked functions, function pointers | Audited/incomplete | Periods 46 and 50 own specialization/linking. |
+| Function constants, dynamic libraries, linked functions, function pointers | Audited/incomplete | Period 46 completed numeric-ID function constants; Period 50 owns linking breadth. |
 | Tessellation, object/mesh shaders, layered rendering, amplification | Audited/incomplete | Period 51 owns executable advanced geometry. |
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited/missing-contract | Period 51 decides exact composition or unsupported. |
-| Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 owns native query/counter results. |
+| Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 completed native timestamp/Boolean visibility subsets; Period 54 owns calibrated and device-specific counter breadth. |
 | Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited/incomplete | Period 52 owns RT breadth. |
 | Fast resource loading / Metal I/O | Audited/missing-contract | Period 53 owns I/O and transfer composition. |
 | Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited/incomplete | Period 54 owns the new command/pipeline model. |
@@ -209,8 +213,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and QRY-03 truth correction are complete. The exactly-once gap
-routing in `period45/gap-routing.tsv` establishes Periods 46-54. Period 46 is
-next: native occlusion/counter/query results and Metal function constants.
-`period45/gap-backlog.md` records the remaining dependency order and acceptance
-boundaries.
+The source audit and Period 46 native query/specialization slice are complete.
+The updated exactly-once gap routing establishes Periods 47-54; Period 47 is
+next. `period45/gap-backlog.md` records the remaining dependency order and
+acceptance boundaries.

@@ -2,6 +2,7 @@
 #define VKMTL_METAL_BRIDGE_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +19,7 @@ typedef struct vkmtl_metal_render_pipeline_state vkmtl_metal_render_pipeline_sta
 typedef struct vkmtl_metal_compute_pipeline_state vkmtl_metal_compute_pipeline_state;
 typedef struct vkmtl_metal_acceleration_structure vkmtl_metal_acceleration_structure;
 typedef struct vkmtl_metal_ray_tracing_pipeline_state vkmtl_metal_ray_tracing_pipeline_state;
+typedef struct vkmtl_metal_query_set vkmtl_metal_query_set;
 typedef struct vkmtl_metal_command_buffer vkmtl_metal_command_buffer;
 typedef struct vkmtl_metal_render_command_encoder vkmtl_metal_render_command_encoder;
 typedef struct vkmtl_metal_blit_command_encoder vkmtl_metal_blit_command_encoder;
@@ -38,7 +40,14 @@ typedef enum vkmtl_metal_status {
     VKMTL_METAL_STATUS_INVALID_SHADER = 11,
     VKMTL_METAL_STATUS_INVALID_PIPELINE = 12,
     VKMTL_METAL_STATUS_INVALID_COMMAND = 13,
+    VKMTL_METAL_STATUS_INVALID_QUERY = 14,
+    VKMTL_METAL_STATUS_QUERY_NOT_READY = 15,
 } vkmtl_metal_status;
+
+typedef enum vkmtl_metal_query_type {
+    VKMTL_METAL_QUERY_TYPE_OCCLUSION = 0,
+    VKMTL_METAL_QUERY_TYPE_TIMESTAMP = 1,
+} vkmtl_metal_query_type;
 
 typedef enum vkmtl_metal_storage_mode {
     VKMTL_METAL_STORAGE_MODE_AUTOMATIC = 0,
@@ -186,6 +195,19 @@ typedef struct vkmtl_metal_vertex_attribute {
     unsigned int offset;
 } vkmtl_metal_vertex_attribute;
 
+typedef enum vkmtl_metal_function_constant_kind {
+    VKMTL_METAL_FUNCTION_CONSTANT_BOOL = 0,
+    VKMTL_METAL_FUNCTION_CONSTANT_I32 = 1,
+    VKMTL_METAL_FUNCTION_CONSTANT_U32 = 2,
+    VKMTL_METAL_FUNCTION_CONSTANT_F32 = 3,
+} vkmtl_metal_function_constant_kind;
+
+typedef struct vkmtl_metal_function_constant {
+    unsigned int id;
+    vkmtl_metal_function_constant_kind kind;
+    uint32_t value_bits;
+} vkmtl_metal_function_constant;
+
 typedef struct vkmtl_metal_render_pipeline_color_attachment {
     vkmtl_metal_texture_format format;
     unsigned int color_write_mask;
@@ -220,6 +242,12 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int ray_tracing;
     unsigned int sparse_textures;
     unsigned int binary_archive;
+    unsigned int function_constants;
+    unsigned int timestamp_counter_set;
+    unsigned int timestamp_draw_boundary;
+    unsigned int timestamp_dispatch_boundary;
+    unsigned int timestamp_blit_boundary;
+    unsigned int timestamp_queries;
     unsigned int max_threads_per_threadgroup_width;
     unsigned int max_threads_per_threadgroup_height;
     unsigned int max_threads_per_threadgroup_depth;
@@ -416,9 +444,13 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_shader_module *vertex_shader,
     const char *vertex_entry,
     size_t vertex_entry_len,
+    const vkmtl_metal_function_constant *vertex_constants,
+    size_t vertex_constant_count,
     vkmtl_metal_shader_module *fragment_shader,
     const char *fragment_entry,
     size_t fragment_entry_len,
+    const vkmtl_metal_function_constant *fragment_constants,
+    size_t fragment_constant_count,
     const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
     size_t color_attachment_count,
     vkmtl_metal_texture_format depth_format,
@@ -454,6 +486,8 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     vkmtl_metal_shader_module *compute_shader,
     const char *compute_entry,
     size_t compute_entry_len,
+    const vkmtl_metal_function_constant *constants,
+    size_t constant_count,
     vkmtl_metal_compute_pipeline_state **out_pipeline
 );
 void vkmtl_metal_compute_pipeline_state_destroy(vkmtl_metal_compute_pipeline_state *pipeline);
@@ -461,6 +495,26 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
     vkmtl_metal_compute_pipeline_state *pipeline,
     const char *label,
     size_t label_len
+);
+
+vkmtl_metal_status vkmtl_metal_query_set_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_query_type query_type,
+    unsigned int count,
+    vkmtl_metal_query_set **out_query_set
+);
+void vkmtl_metal_query_set_destroy(vkmtl_metal_query_set *query_set);
+vkmtl_metal_status vkmtl_metal_query_set_set_label(
+    vkmtl_metal_query_set *query_set,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_query_set_reset(vkmtl_metal_query_set *query_set);
+vkmtl_metal_status vkmtl_metal_query_set_read_values(
+    vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count,
+    uint64_t *destination
 );
 
 vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
@@ -581,6 +635,7 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
+    vkmtl_metal_query_set *occlusion_query_set,
     vkmtl_metal_render_command_encoder **out_encoder
 );
 void vkmtl_metal_render_command_encoder_destroy(vkmtl_metal_render_command_encoder *encoder);
@@ -691,6 +746,20 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
     float slope,
     float clamp
 );
+vkmtl_metal_status vkmtl_metal_render_command_encoder_begin_occlusion_query(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_end_occlusion_query(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_write_timestamp(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+);
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     vkmtl_metal_render_command_encoder *encoder,
     unsigned int primitive_type,
@@ -792,6 +861,11 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups_ind
     unsigned int threads_per_threadgroup_y,
     unsigned int threads_per_threadgroup_z
 );
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_write_timestamp(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+);
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_end_encoding(
     vkmtl_metal_compute_command_encoder *encoder
 );
@@ -826,6 +900,19 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_buffer(
     size_t source_offset,
     size_t destination_offset,
     size_t size
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_write_timestamp(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+);
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_resolve_query_set(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count,
+    vkmtl_metal_buffer *destination,
+    size_t destination_offset
 );
 vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_texture(
     vkmtl_metal_blit_command_encoder *encoder,

@@ -80,7 +80,10 @@ Inspect the current profiling semantics without opening a window:
 zig build run-profiling-plan
 ```
 
-Current timestamp query values are logical command-order sequence numbers, not
-GPU time. The default plan therefore selects application-supplied CPU wall-clock
-fallback. Use `--markers-only` to disable that fallback or `--require-gpu` to
-verify the typed `UnsupportedGpuTimestamps` gate.
+Timestamp query values are either logical command-order sequence numbers or raw
+native GPU ticks; inspect `QuerySet.resultSource()` before interpreting them.
+Native ticks preserve ordering but are not durations because calibration is not
+yet public. The default plan uses the native raw-tick lane when executable and
+otherwise selects application-supplied CPU wall-clock fallback. Use
+`--markers-only` to disable that fallback or `--require-gpu` to require the
+complete native lane and receive typed `UnsupportedGpuTimestamps` otherwise.

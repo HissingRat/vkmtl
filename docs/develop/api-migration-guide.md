@@ -5,6 +5,23 @@ Period 1 Phase 9 surface. The cutover is breaking because vkmtl has not yet made
 a tagged compatibility promise. It reorganizes names and owners without
 intentionally changing backend behavior.
 
+## Period 46 v0.2.0 Query Update
+
+Existing render-pass literals continue to compile because
+`RenderPassDescriptor.occlusion_query_set` defaults to null. Callers that use
+occlusion queries must now create the set first, bind its pointer in the pass
+descriptor, and pass the same pointer to encoder begin/end calls. This replaces
+the former unusable placeholder lane with native zero/nonzero visibility.
+
+`QueryError` adds `QueryBackendFailure` for the newly executable native
+readback path. Ordinary `try`/propagation code needs no change; exhaustive
+switches need one new arm, so this update targets `v0.2.0` rather than a
+`v0.1.x` patch. Invalid pass/query association uses the existing
+`InvalidRenderCommandEncoderState`. Timestamp callers must continue to
+inspect `QuerySet.resultSource()`: `native_gpu` now means raw native ticks, not
+a calibrated duration. Shader specialization descriptors use the same stable
+numeric ID on Vulkan and Metal; optional names do not control native lookup.
+
 ## Migration Rules
 
 Apply these rules in order:

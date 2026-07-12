@@ -72,6 +72,8 @@ counter 推断出来。
 zig build run-profiling-plan
 ```
 
-当前 timestamp query value 是 logical command-order sequence，不是 GPU 时间。因此默认 plan 会选择
-由应用提供的 CPU wall-clock fallback。使用 `--markers-only` 可以关闭该 fallback；使用
-`--require-gpu` 可以验证 typed `UnsupportedGpuTimestamps` gate。
+Timestamp query value 可能是 logical command-order sequence，也可能是 raw native GPU tick；
+解释前先检查 `QuerySet.resultSource()`。Native tick 可以表达顺序，但 calibration 尚未公开，因此
+不能当作 duration。默认 plan 会在完整 native lane 可执行时选择 raw-tick path，否则选择应用提供的
+CPU wall-clock fallback。使用 `--markers-only` 可以关闭 fallback；使用 `--require-gpu` 会要求完整
+native lane，不可用时返回 typed `UnsupportedGpuTimestamps`。

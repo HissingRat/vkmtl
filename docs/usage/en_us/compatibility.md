@@ -12,6 +12,11 @@ typed error categories, ownership/lifetime rules, and supported capability
 meanings. An intentional portable source break requires `v0.2.0` or later and
 migration guidance.
 
+The current Unreleased Period 46 work extends `QueryError` with
+`QueryBackendFailure` and therefore targets `v0.2.0`, not a `v0.1.x` patch.
+Exhaustive error switches need one new arm; ordinary error propagation is
+unchanged. See the migration guide for the complete query update.
+
 This is not a stable binary ABI. Applications must not depend on the size,
 alignment, or contents of opaque `_state` storage, raw native-handle values, or
 the stability of backend-native escape hatches. The supported toolchain for
@@ -99,17 +104,19 @@ or typed-unsupported path is not an executable feature claim.
 ## Sync And Query Defaults
 
 vkmtl keeps the ordinary command path portable: resource usage tracking, binary
-fences, events, timestamp queries, and occlusion queries are available through
-backend-neutral runtime objects. Current timestamp values preserve command order
-but are not native GPU time; require `native_gpu` explicitly before computing a
-GPU duration. Explicit barriers and queue ownership transfers
+fences, events, timestamp queries, and capability-gated occlusion queries are
+available through backend-neutral runtime objects. Timestamp values are either
+logical ordering values or raw native GPU ticks; inspect `resultSource()`, and
+do not compute duration because calibration is not yet public. Occlusion uses
+zero/nonzero visibility and requires the render pass to bind the set. Explicit
+barriers and queue ownership transfers
 are advanced escape hatches; Vulkan lowers the barrier path natively, while
 Metal uses validation/no-op markers where encoder boundaries already define
 ordering. Timeline fences, shared events, and logical queue planning now have
 portable descriptor and validation entry points. Native timeline/shared-event
-submit, native dedicated queues, native queue-family ownership transfers, and
-pipeline statistics queries remain capability-gated until their backend
-lowering is complete.
+submit, native dedicated queues, native queue-family ownership transfers, exact
+occlusion sample counts, and pipeline statistics queries remain
+capability-gated until their backend lowering is complete.
 
 ## Advanced Features
 
@@ -137,9 +144,10 @@ stress evidence remains part of the backend/device validation matrix.
 Root constants lower to Vulkan push constants and Metal `set*Bytes` calls after
 a pipeline declares a compatible `root_constant_layout`.
 
-Shader specialization is capability-gated. Vulkan pipeline specialization info
-is wired for enabled devices. Metal function-constant specialization remains
-closed until the Metal bridge exposes that variant path.
+Shader specialization is capability-gated. Vulkan specialization info and
+Metal vertex, fragment, and compute function constants are wired by stable
+numeric ID when `shader_specialization` is usable. Optional constant names do
+not control native lookup.
 
 Sparse buffers/textures map toward Vulkan sparse resources and Metal tiled or
 sparse texture concepts. The current descriptors validate page-aligned mapping

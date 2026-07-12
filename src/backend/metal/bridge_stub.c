@@ -4,6 +4,10 @@ struct vkmtl_metal_probe {
     int unused;
 };
 
+struct vkmtl_metal_query_set {
+    int unused;
+};
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe) {
     if (out_probe != NULL) {
         *out_probe = NULL;
@@ -366,9 +370,13 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_shader_module *vertex_shader,
     const char *vertex_entry,
     size_t vertex_entry_len,
+    const vkmtl_metal_function_constant *vertex_constants,
+    size_t vertex_constant_count,
     vkmtl_metal_shader_module *fragment_shader,
     const char *fragment_entry,
     size_t fragment_entry_len,
+    const vkmtl_metal_function_constant *fragment_constants,
+    size_t fragment_constant_count,
     const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
     size_t color_attachment_count,
     vkmtl_metal_texture_format depth_format,
@@ -396,9 +404,13 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     (void)vertex_shader;
     (void)vertex_entry;
     (void)vertex_entry_len;
+    (void)vertex_constants;
+    (void)vertex_constant_count;
     (void)fragment_shader;
     (void)fragment_entry;
     (void)fragment_entry_len;
+    (void)fragment_constants;
+    (void)fragment_constant_count;
     (void)color_attachments;
     (void)color_attachment_count;
     (void)depth_format;
@@ -435,12 +447,16 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     vkmtl_metal_shader_module *compute_shader,
     const char *compute_entry,
     size_t compute_entry_len,
+    const vkmtl_metal_function_constant *constants,
+    size_t constant_count,
     vkmtl_metal_compute_pipeline_state **out_pipeline
 ) {
     (void)owner;
     (void)compute_shader;
     (void)compute_entry;
     (void)compute_entry_len;
+    (void)constants;
+    (void)constant_count;
     if (out_pipeline != NULL) {
         *out_pipeline = NULL;
     }
@@ -449,6 +465,54 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
 
 void vkmtl_metal_compute_pipeline_state_destroy(vkmtl_metal_compute_pipeline_state *pipeline) {
     (void)pipeline;
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_query_type query_type,
+    unsigned int count,
+    vkmtl_metal_query_set **out_query_set
+) {
+    (void)owner;
+    (void)query_type;
+    (void)count;
+    if (out_query_set != NULL) {
+        *out_query_set = NULL;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_query_set_destroy(vkmtl_metal_query_set *query_set) {
+    (void)query_set;
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_set_label(
+    vkmtl_metal_query_set *query_set,
+    const char *label,
+    size_t label_len
+) {
+    (void)query_set;
+    (void)label;
+    (void)label_len;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_reset(vkmtl_metal_query_set *query_set) {
+    (void)query_set;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_read_values(
+    vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count,
+    uint64_t *destination
+) {
+    (void)query_set;
+    (void)first_query;
+    (void)query_count;
+    (void)destination;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
@@ -488,6 +552,7 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
+    vkmtl_metal_query_set *occlusion_query_set,
     vkmtl_metal_render_command_encoder **out_encoder
 ) {
     (void)owner;
@@ -497,6 +562,7 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     (void)use_depth;
     (void)depth_texture_view;
     (void)clear_depth;
+    (void)occlusion_query_set;
     if (out_encoder != NULL) {
         *out_encoder = NULL;
     }
@@ -701,6 +767,37 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_begin_occlusion_query(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    (void)encoder;
+    (void)query_set;
+    (void)query_index;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_end_occlusion_query(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set
+) {
+    (void)encoder;
+    (void)query_set;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_write_timestamp(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    (void)encoder;
+    (void)query_set;
+    (void)query_index;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     vkmtl_metal_render_command_encoder *encoder,
     unsigned int primitive_type,
@@ -882,6 +979,17 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups_ind
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_write_timestamp(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    (void)encoder;
+    (void)query_set;
+    (void)query_index;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_end_encoding(
     vkmtl_metal_compute_command_encoder *encoder
 ) {
@@ -918,6 +1026,34 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_buffer(
     (void)source_offset;
     (void)destination_offset;
     (void)size;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_write_timestamp(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    (void)encoder;
+    (void)query_set;
+    (void)query_index;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_resolve_query_set(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count,
+    vkmtl_metal_buffer *destination,
+    size_t destination_offset
+) {
+    (void)encoder;
+    (void)query_set;
+    (void)first_query;
+    (void)query_count;
+    (void)destination;
+    (void)destination_offset;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 

@@ -305,10 +305,14 @@ defer vertex_descriptor.deinit();
 `ShaderSpecializationDescriptor` data for shader variants. The descriptor layer
 validates duplicate IDs, duplicate names, and empty names. Runtime pipeline
 fingerprints include specialization inputs so variant caches can distinguish
-them. Vulkan lowers specialization values into pipeline specialization info
-when `DeviceFeatures.shader_specialization` is enabled. Backends that do not
-advertise that feature still reject non-empty specialization descriptors with
-`UnsupportedShaderSpecialization`.
+them. Vulkan lowers values into pipeline specialization info; Metal creates
+specialized vertex, fragment, and compute functions with
+`MTLFunctionConstantValues`. Both paths use the required numeric `id`.
+Generated MSL names may be rewritten, so the optional constant `name` is only
+validation, diagnostics, and cache identity. Slang sources should declare an
+explicit `[vk::constant_id(N)]` matching the descriptor ID. Backends that do
+not advertise `DeviceFeatures.shader_specialization` reject non-empty
+descriptors with `UnsupportedShaderSpecialization`.
 
 Render pipeline raster state includes cull mode, front face, fill mode, depth
 bias, and a conservative-rasterization flag. Cull mode and front face are part
@@ -672,15 +676,44 @@ stride into multiple single indirect draw commands. Explicit
 repeated direct draws for now, with room to replace that loop with a true
 backend-native multi-draw path later.
 
-Runtime query support starts with portable `vkmtl.diagnostics.QuerySet` objects. Timestamp queries
-can be written from blit, compute, and render encoders, occlusion queries can be
-begun and ended from render encoders, and query data can be read back directly
-or resolved into a buffer. Query ranges, result alignment, resource ownership,
-and availability are validated by vkmtl. Pipeline statistics queries remain
-feature-gated until the native backend lowering is filled in.
-Current timestamp values are deterministic logical sequence numbers. Call
-`QuerySet.resultSource()` and require `native_gpu` before treating results as
-GPU ticks or durations.
+Runtime query support starts with portable `vkmtl.diagnostics.QuerySet`
+objects. Timestamp queries can be written from blit, compute, and render
+encoders. An occlusion set must be bound when the render pass is created, and
+begin/end must use that exact borrowed set:
+
+```zig
+var visibility = try device.makeQuerySet(.{
+    .query_type = .occlusion,
+    .count = 2,
+});
+defer visibility.deinit();
+
+var render_encoder = try command_buffer.makeRenderCommandEncoder(.{
+    .color_attachments = color_attachments,
+    .occlusion_query_set = &visibility,
+});
+try render_encoder.beginOcclusionQuery(&visibility, 0);
+// Encode the measured draws.
+try render_encoder.endOcclusionQuery(&visibility);
+```
+
+Occlusion values are Boolean visibility: zero means no samples passed and any
+nonzero value means visible. The magnitude is not a portable sample count.
+Each slot can be written once between resets. The set must remain alive until
+the synchronously completing command-buffer commit returns, and a resolve
+destination must have `copy_destination` usage. Query ranges, result alignment,
+same-device ownership, association, and availability are validated. Native
+backend failures are distinct from `QueryNotReady`; pipeline statistics remain
+typed unsupported.
+
+Commit the producer before recording a separate resolve command buffer. The
+current resolve path preflights native readiness and returns `QueryNotReady`
+instead of recording a wait for work that has not been submitted.
+
+Timestamp fallback values are deterministic logical sequence numbers;
+`native_gpu` values are raw backend-native ticks. Call `resultSource()` before
+interpreting them. The current API exposes no tick calibration, so even native
+tick deltas must not be treated as durations.
 
 Transfer work uses a Metal-style blit encoder:
 
@@ -907,12 +940,14 @@ and must finish before `WindowContext` is destroyed. The current destination is
 Apple developer tools. Vulkan reports `UnsupportedCapture`; capture-manager
 startup failures report `CaptureFailed`.
 
-Timestamp `vkmtl.diagnostics.QuerySet` values currently preserve command order only.
-`QuerySet.resultSource()` reports `logical_sequence`; those values are not GPU
-ticks and cannot produce a GPU duration. Use
-`vkmtl.diagnostics.planProfiling(device, descriptor)` to select CPU wall-clock
-fallback or marker-only mode. Requiring native GPU timestamps returns
-`UnsupportedGpuTimestamps` until real backend timing is implemented.
+Timestamp `vkmtl.diagnostics.QuerySet` values may be deterministic command-order
+sequences or raw native GPU ticks. Inspect `QuerySet.resultSource()` before
+interpreting a value. Native ticks are exposed only when the selected backend's
+complete query lane is executable, but vkmtl does not yet expose calibration,
+so a tick delta is not a duration. Use
+`vkmtl.diagnostics.planProfiling(device, descriptor)` to select native raw-tick,
+CPU wall-clock fallback, or marker-only mode. Requiring native GPU timestamps
+returns `UnsupportedGpuTimestamps` when the complete native lane is unavailable.
 
 `vkmtl.diagnostics.issueReport(device, descriptor)` bundles backend and adapter
 identity, exact error/category, usable and native features, limits, marker/

@@ -62,6 +62,15 @@ struct vkmtl_metal_compute_pipeline_state {
     id<MTLComputePipelineState> pipeline;
 };
 
+struct vkmtl_metal_query_set {
+    vkmtl_metal_query_type query_type;
+    NSUInteger count;
+    id<MTLBuffer> result_buffer;
+    id<MTLCounterSampleBuffer> counter_sample_buffer;
+    id<MTLBuffer> counter_resolve_buffer;
+    id<MTLCommandBuffer> *writer_command_buffers;
+};
+
 struct vkmtl_metal_acceleration_structure {
     id<MTLAccelerationStructure> acceleration_structure;
     MTLAccelerationStructureDescriptor *descriptor;
@@ -89,14 +98,24 @@ struct vkmtl_metal_command_buffer {
 struct vkmtl_metal_render_command_encoder {
     id<MTLRenderCommandEncoder> encoder;
     id<MTLBuffer> index_buffer;
+    id<MTLCommandBuffer> command_buffer;
+    id<MTLBuffer> visibility_scratch_buffer;
+    id<MTLBuffer> visibility_result_buffer;
+    unsigned char *visibility_slots;
+    NSUInteger visibility_slot_count;
+    NSUInteger active_visibility_index;
+    unsigned int visibility_active;
+    unsigned int ended;
 };
 
 struct vkmtl_metal_blit_command_encoder {
     id<MTLBlitCommandEncoder> encoder;
+    id<MTLCommandBuffer> command_buffer;
 };
 
 struct vkmtl_metal_compute_command_encoder {
     id<MTLComputeCommandEncoder> encoder;
+    id<MTLCommandBuffer> command_buffer;
 };
 
 static NSString *vkmtl_new_string_from_bytes(const char *bytes, size_t len) {
@@ -239,6 +258,52 @@ static BOOL vkmtl_device_supports_raytracing(id<MTLDevice> device) {
         (BOOL (*)(id, SEL))[device methodForSelector:@selector(supportsRaytracing)];
     return supports_raytracing != NULL &&
         supports_raytracing(device, @selector(supportsRaytracing));
+}
+
+static id<MTLCounterSet> vkmtl_timestamp_counter_set(id<MTLDevice> device) {
+    if (device == nil) {
+        return nil;
+    }
+
+    if (@available(macOS 10.15, *)) {
+        NSArray<id<MTLCounterSet>> *counter_sets = [device counterSets];
+        for (id<MTLCounterSet> counter_set in counter_sets) {
+            if (![[counter_set name] isEqualToString:MTLCommonCounterSetTimestamp]) {
+                continue;
+            }
+            for (id<MTLCounter> counter in [counter_set counters]) {
+                if ([[counter name] isEqualToString:MTLCommonCounterTimestamp]) {
+                    return counter_set;
+                }
+            }
+        }
+    }
+    return nil;
+}
+
+static void vkmtl_copy_timestamp_capabilities(
+    id<MTLDevice> device,
+    vkmtl_metal_device_capabilities *capabilities
+) {
+    if (device == nil || capabilities == NULL) {
+        return;
+    }
+
+    if (@available(macOS 11.0, *)) {
+        capabilities->timestamp_counter_set =
+            vkmtl_timestamp_counter_set(device) != nil ? 1u : 0u;
+        capabilities->timestamp_draw_boundary =
+            [device supportsCounterSampling:MTLCounterSamplingPointAtDrawBoundary] ? 1u : 0u;
+        capabilities->timestamp_dispatch_boundary =
+            [device supportsCounterSampling:MTLCounterSamplingPointAtDispatchBoundary] ? 1u : 0u;
+        capabilities->timestamp_blit_boundary =
+            [device supportsCounterSampling:MTLCounterSamplingPointAtBlitBoundary] ? 1u : 0u;
+        capabilities->timestamp_queries =
+            capabilities->timestamp_counter_set != 0 &&
+            capabilities->timestamp_draw_boundary != 0 &&
+            capabilities->timestamp_dispatch_boundary != 0 &&
+            capabilities->timestamp_blit_boundary != 0;
+    }
 }
 
 static void vkmtl_fill_default_triangle(float *vertices, unsigned int primitive_count) {
@@ -1118,6 +1183,11 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
             out_capabilities->binary_archive = 1;
         }
 
+        if (@available(macOS 10.12, *)) {
+            out_capabilities->function_constants = 1;
+        }
+        vkmtl_copy_timestamp_capabilities(device, out_capabilities);
+
         return VKMTL_METAL_STATUS_OK;
     }
 }
@@ -1683,14 +1753,84 @@ vkmtl_metal_status vkmtl_metal_shader_module_set_label(
     );
 }
 
+static id<MTLFunction> vkmtl_new_function_with_constants(
+    id<MTLLibrary> library,
+    NSString *name,
+    const vkmtl_metal_function_constant *constants,
+    size_t constant_count
+) {
+    if (library == nil || name == nil || (constant_count != 0 && constants == NULL)) {
+        return nil;
+    }
+    if (constant_count == 0) {
+        return [library newFunctionWithName:name];
+    }
+
+    MTLFunctionConstantValues *values = [[MTLFunctionConstantValues alloc] init];
+    if (values == nil) {
+        return nil;
+    }
+
+    for (size_t i = 0; i < constant_count; i += 1) {
+        const vkmtl_metal_function_constant constant = constants[i];
+        MTLDataType data_type = MTLDataTypeNone;
+        const void *value = NULL;
+        bool bool_value = constant.value_bits != 0;
+        int32_t i32_value = 0;
+        uint32_t u32_value = constant.value_bits;
+        float f32_value = 0.0f;
+        memcpy(&i32_value, &constant.value_bits, sizeof(i32_value));
+        memcpy(&f32_value, &constant.value_bits, sizeof(f32_value));
+
+        switch (constant.kind) {
+            case VKMTL_METAL_FUNCTION_CONSTANT_BOOL:
+                data_type = MTLDataTypeBool;
+                value = &bool_value;
+                break;
+            case VKMTL_METAL_FUNCTION_CONSTANT_I32:
+                data_type = MTLDataTypeInt;
+                value = &i32_value;
+                break;
+            case VKMTL_METAL_FUNCTION_CONSTANT_U32:
+                data_type = MTLDataTypeUInt;
+                value = &u32_value;
+                break;
+            case VKMTL_METAL_FUNCTION_CONSTANT_F32:
+                data_type = MTLDataTypeFloat;
+                value = &f32_value;
+                break;
+            default:
+                [values release];
+                return nil;
+        }
+
+        [values setConstantValue:value type:data_type atIndex:constant.id];
+    }
+
+    NSError *error = nil;
+    id<MTLFunction> function = [library newFunctionWithName:name constantValues:values error:&error];
+    [values release];
+    if (function == nil && error != nil) {
+        const char *message = [[error localizedDescription] UTF8String];
+        if (message != NULL) {
+            fprintf(stderr, "vkmtl metal function specialization failed: %s\n", message);
+        }
+    }
+    return function;
+}
+
 vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_shader_module *vertex_shader,
     const char *vertex_entry,
     size_t vertex_entry_len,
+    const vkmtl_metal_function_constant *vertex_constants,
+    size_t vertex_constant_count,
     vkmtl_metal_shader_module *fragment_shader,
     const char *fragment_entry,
     size_t fragment_entry_len,
+    const vkmtl_metal_function_constant *fragment_constants,
+    size_t fragment_constant_count,
     const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
     size_t color_attachment_count,
     vkmtl_metal_texture_format depth_format,
@@ -1725,6 +1865,8 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
         vertex_shader->library == nil ||
         vertex_entry == NULL ||
         vertex_entry_len == 0 ||
+        (vertex_constant_count != 0 && vertex_constants == NULL) ||
+        (fragment_constant_count != 0 && fragment_constants == NULL) ||
         sample_count == 0 ||
         color_attachments == NULL ||
         color_attachment_count == 0 ||
@@ -1744,7 +1886,12 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
         }
 
-        id<MTLFunction> vertex_function = [vertex_shader->library newFunctionWithName:vertex_name];
+        id<MTLFunction> vertex_function = vkmtl_new_function_with_constants(
+            vertex_shader->library,
+            vertex_name,
+            vertex_constants,
+            vertex_constant_count
+        );
         [vertex_name release];
         if (vertex_function == nil) {
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
@@ -1766,7 +1913,12 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
                 return VKMTL_METAL_STATUS_INVALID_PIPELINE;
             }
 
-            fragment_function = [fragment_shader->library newFunctionWithName:fragment_name];
+            fragment_function = vkmtl_new_function_with_constants(
+                fragment_shader->library,
+                fragment_name,
+                fragment_constants,
+                fragment_constant_count
+            );
             [fragment_name release];
             if (fragment_function == nil) {
                 [vertex_function release];
@@ -1957,6 +2109,8 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     vkmtl_metal_shader_module *compute_shader,
     const char *compute_entry,
     size_t compute_entry_len,
+    const vkmtl_metal_function_constant *constants,
+    size_t constant_count,
     vkmtl_metal_compute_pipeline_state **out_pipeline
 ) {
     if (out_pipeline == NULL) {
@@ -1969,7 +2123,8 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
         compute_shader == NULL ||
         compute_shader->library == nil ||
         compute_entry == NULL ||
-        compute_entry_len == 0) {
+        compute_entry_len == 0 ||
+        (constant_count != 0 && constants == NULL)) {
         return VKMTL_METAL_STATUS_INVALID_PIPELINE;
     }
 
@@ -1982,7 +2137,12 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
         }
 
-        id<MTLFunction> compute_function = [compute_shader->library newFunctionWithName:compute_name];
+        id<MTLFunction> compute_function = vkmtl_new_function_with_constants(
+            compute_shader->library,
+            compute_name,
+            constants,
+            constant_count
+        );
         [compute_name release];
         if (compute_function == nil) {
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
@@ -2034,6 +2194,299 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_set_label(
         label_len,
         VKMTL_METAL_STATUS_INVALID_PIPELINE
     );
+}
+
+static BOOL vkmtl_query_range_is_valid(
+    const vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count
+) {
+    if (query_set == NULL || query_count == 0) {
+        return NO;
+    }
+    const NSUInteger first = (NSUInteger)first_query;
+    const NSUInteger count = (NSUInteger)query_count;
+    return first <= query_set->count && count <= query_set->count - first;
+}
+
+static BOOL vkmtl_timestamp_query_is_valid(
+    const vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    return query_set != NULL &&
+        query_set->query_type == VKMTL_METAL_QUERY_TYPE_TIMESTAMP &&
+        query_set->counter_sample_buffer != nil &&
+        (NSUInteger)query_index < query_set->count;
+}
+
+static void vkmtl_query_set_record_writer(
+    vkmtl_metal_query_set *query_set,
+    NSUInteger query_index,
+    id<MTLCommandBuffer> command_buffer
+) {
+    if (query_set == NULL || query_set->writer_command_buffers == NULL ||
+        query_index >= query_set->count || command_buffer == nil) {
+        return;
+    }
+    [query_set->writer_command_buffers[query_index] release];
+    query_set->writer_command_buffers[query_index] = [command_buffer retain];
+}
+
+static void vkmtl_query_set_release_writers(vkmtl_metal_query_set *query_set) {
+    if (query_set == NULL || query_set->writer_command_buffers == NULL) {
+        return;
+    }
+    for (NSUInteger i = 0; i < query_set->count; i += 1) {
+        [query_set->writer_command_buffers[i] release];
+        query_set->writer_command_buffers[i] = nil;
+    }
+}
+
+static vkmtl_metal_status vkmtl_query_set_require_ready(
+    const vkmtl_metal_query_set *query_set,
+    NSUInteger first_query,
+    NSUInteger query_count
+) {
+    if (query_set == NULL || query_set->writer_command_buffers == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+    for (NSUInteger i = first_query; i < first_query + query_count; i += 1) {
+        id<MTLCommandBuffer> writer = query_set->writer_command_buffers[i];
+        if (writer == nil) {
+            continue;
+        }
+        switch ([writer status]) {
+            case MTLCommandBufferStatusCompleted:
+                break;
+            case MTLCommandBufferStatusError:
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            default:
+                return VKMTL_METAL_STATUS_QUERY_NOT_READY;
+        }
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_query_type query_type,
+    unsigned int count,
+    vkmtl_metal_query_set **out_query_set
+) {
+    if (out_query_set == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+    *out_query_set = NULL;
+
+    if (owner == NULL || owner->device == nil || count == 0 ||
+        (NSUInteger)count > NSUIntegerMax / sizeof(uint64_t)) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    @autoreleasepool {
+        const NSUInteger byte_count = (NSUInteger)count * sizeof(uint64_t);
+        id<MTLBuffer> result_buffer = nil;
+        id<MTLCounterSampleBuffer> counter_sample_buffer = nil;
+        id<MTLBuffer> counter_resolve_buffer = nil;
+        id<MTLCommandBuffer> *writer_command_buffers =
+            calloc(count, sizeof(id<MTLCommandBuffer>));
+        if (writer_command_buffers == NULL) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        switch (query_type) {
+            case VKMTL_METAL_QUERY_TYPE_OCCLUSION:
+                result_buffer = [owner->device
+                    newBufferWithLength:byte_count
+                              options:MTLResourceStorageModeShared];
+                if (result_buffer == nil) {
+                    free(writer_command_buffers);
+                    return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                }
+                memset([result_buffer contents], 0, byte_count);
+                break;
+
+            case VKMTL_METAL_QUERY_TYPE_TIMESTAMP: {
+                vkmtl_metal_device_capabilities capabilities;
+                memset(&capabilities, 0, sizeof(capabilities));
+                vkmtl_copy_timestamp_capabilities(owner->device, &capabilities);
+                if (capabilities.timestamp_queries == 0) {
+                    free(writer_command_buffers);
+                    return VKMTL_METAL_STATUS_UNSUPPORTED;
+                }
+
+                if (@available(macOS 11.0, *)) {
+                    id<MTLCounterSet> counter_set = vkmtl_timestamp_counter_set(owner->device);
+                    if (counter_set == nil) {
+                        free(writer_command_buffers);
+                        return VKMTL_METAL_STATUS_UNSUPPORTED;
+                    }
+                    MTLCounterSampleBufferDescriptor *descriptor =
+                        [[MTLCounterSampleBufferDescriptor alloc] init];
+                    if (descriptor == nil) {
+                        free(writer_command_buffers);
+                        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                    }
+                    descriptor.counterSet = counter_set;
+                    descriptor.storageMode = MTLStorageModeShared;
+                    descriptor.sampleCount = count;
+                    NSError *error = nil;
+                    counter_sample_buffer =
+                        [owner->device newCounterSampleBufferWithDescriptor:descriptor error:&error];
+                    [descriptor release];
+                    if (counter_sample_buffer == nil) {
+                        free(writer_command_buffers);
+                        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                    }
+                    counter_resolve_buffer = [owner->device
+                        newBufferWithLength:byte_count
+                                  options:MTLResourceStorageModePrivate];
+                    if (counter_resolve_buffer == nil) {
+                        [counter_sample_buffer release];
+                        free(writer_command_buffers);
+                        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                    }
+                } else {
+                    free(writer_command_buffers);
+                    return VKMTL_METAL_STATUS_UNSUPPORTED;
+                }
+                break;
+            }
+
+            default:
+                free(writer_command_buffers);
+                return VKMTL_METAL_STATUS_INVALID_QUERY;
+        }
+
+        vkmtl_metal_query_set *query_set = calloc(1, sizeof(vkmtl_metal_query_set));
+        if (query_set == NULL) {
+            [counter_resolve_buffer release];
+            [counter_sample_buffer release];
+            [result_buffer release];
+            free(writer_command_buffers);
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        query_set->query_type = query_type;
+        query_set->count = count;
+        query_set->result_buffer = result_buffer;
+        query_set->counter_sample_buffer = counter_sample_buffer;
+        query_set->counter_resolve_buffer = counter_resolve_buffer;
+        query_set->writer_command_buffers = writer_command_buffers;
+        *out_query_set = query_set;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+void vkmtl_metal_query_set_destroy(vkmtl_metal_query_set *query_set) {
+    if (query_set == NULL) {
+        return;
+    }
+
+    @autoreleasepool {
+        vkmtl_query_set_release_writers(query_set);
+        free(query_set->writer_command_buffers);
+        [query_set->counter_resolve_buffer release];
+        [query_set->counter_sample_buffer release];
+        [query_set->result_buffer release];
+        free(query_set);
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_set_label(
+    vkmtl_metal_query_set *query_set,
+    const char *label,
+    size_t label_len
+) {
+    if (query_set == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    @autoreleasepool {
+        NSString *string = label == NULL ? nil : vkmtl_new_string_from_bytes(label, label_len);
+        if (label != NULL && string == nil) {
+            return VKMTL_METAL_STATUS_INVALID_QUERY;
+        }
+        query_set->result_buffer.label = string;
+        query_set->counter_resolve_buffer.label = string;
+        [string release];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_reset(vkmtl_metal_query_set *query_set) {
+    if (query_set == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    vkmtl_query_set_release_writers(query_set);
+    if (query_set->query_type == VKMTL_METAL_QUERY_TYPE_OCCLUSION) {
+        if (query_set->result_buffer == nil || [query_set->result_buffer contents] == NULL) {
+            return VKMTL_METAL_STATUS_INVALID_QUERY;
+        }
+        memset(
+            [query_set->result_buffer contents],
+            0,
+            query_set->count * sizeof(uint64_t)
+        );
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_query_set_read_values(
+    vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count,
+    uint64_t *destination
+) {
+    if (!vkmtl_query_range_is_valid(query_set, first_query, query_count) ||
+        destination == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    @autoreleasepool {
+        const NSUInteger first = first_query;
+        const NSUInteger count = query_count;
+        const NSUInteger byte_count = count * sizeof(uint64_t);
+        const vkmtl_metal_status ready =
+            vkmtl_query_set_require_ready(query_set, first, count);
+        if (ready != VKMTL_METAL_STATUS_OK) {
+            return ready;
+        }
+        if (query_set->query_type == VKMTL_METAL_QUERY_TYPE_OCCLUSION) {
+            if (query_set->result_buffer == nil || [query_set->result_buffer contents] == NULL) {
+                return VKMTL_METAL_STATUS_INVALID_QUERY;
+            }
+            const uint64_t *values = (const uint64_t *)[query_set->result_buffer contents];
+            memcpy(destination, values + first, byte_count);
+            return VKMTL_METAL_STATUS_OK;
+        }
+
+        if (query_set->query_type == VKMTL_METAL_QUERY_TYPE_TIMESTAMP) {
+            if (@available(macOS 10.15, *)) {
+                if (query_set->counter_sample_buffer == nil) {
+                    return VKMTL_METAL_STATUS_INVALID_QUERY;
+                }
+                NSData *resolved = [query_set->counter_sample_buffer
+                    resolveCounterRange:NSMakeRange(first, count)];
+                if (resolved == nil || [resolved length] < byte_count) {
+                    return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                }
+                const MTLCounterResultTimestamp *timestamps =
+                    (const MTLCounterResultTimestamp *)[resolved bytes];
+                for (NSUInteger i = 0; i < count; i += 1) {
+                    if (timestamps[i].timestamp == MTLCounterErrorValue) {
+                        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                    }
+                    destination[i] = timestamps[i].timestamp;
+                }
+                return VKMTL_METAL_STATUS_OK;
+            }
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
 }
 
 vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
@@ -2649,6 +3102,7 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     unsigned int use_depth,
     vkmtl_metal_texture_view *depth_texture_view,
     float clear_depth,
+    vkmtl_metal_query_set *occlusion_query_set,
     vkmtl_metal_render_command_encoder **out_encoder
 ) {
     if (out_encoder == NULL) {
@@ -2662,7 +3116,11 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
         command_buffer->command_buffer == nil ||
         color_attachments == NULL ||
         color_attachment_count == 0 ||
-        color_attachment_count > 4) {
+        color_attachment_count > 4 ||
+        (occlusion_query_set != NULL &&
+            (occlusion_query_set->query_type != VKMTL_METAL_QUERY_TYPE_OCCLUSION ||
+             occlusion_query_set->result_buffer == nil ||
+             occlusion_query_set->count == 0))) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
@@ -2733,9 +3191,34 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
             }
         }
 
+        id<MTLBuffer> visibility_scratch_buffer = nil;
+        unsigned char *visibility_slots = NULL;
+        if (occlusion_query_set != NULL) {
+            const NSUInteger visibility_byte_count =
+                occlusion_query_set->count * sizeof(uint64_t);
+            visibility_scratch_buffer = [owner->device
+                newBufferWithLength:visibility_byte_count
+                          options:MTLResourceStorageModeShared];
+            if (visibility_scratch_buffer == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            memset([visibility_scratch_buffer contents], 0, visibility_byte_count);
+            visibility_slots = calloc(occlusion_query_set->count, sizeof(unsigned char));
+            if (visibility_slots == NULL) {
+                [visibility_scratch_buffer release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            descriptor.visibilityResultBuffer = visibility_scratch_buffer;
+            if (@available(macOS 26.0, *)) {
+                descriptor.visibilityResultType = MTLVisibilityResultTypeReset;
+            }
+        }
+
         id<MTLRenderCommandEncoder> encoder =
             [command_buffer->command_buffer renderCommandEncoderWithDescriptor:descriptor];
         if (encoder == nil) {
+            free(visibility_slots);
+            [visibility_scratch_buffer release];
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
@@ -2745,10 +3228,20 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
         vkmtl_metal_render_command_encoder *render_encoder =
             calloc(1, sizeof(vkmtl_metal_render_command_encoder));
         if (render_encoder == NULL) {
+            [encoder endEncoding];
+            free(visibility_slots);
+            [visibility_scratch_buffer release];
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
         render_encoder->encoder = [encoder retain];
+        render_encoder->command_buffer = [command_buffer->command_buffer retain];
+        render_encoder->visibility_scratch_buffer = visibility_scratch_buffer;
+        render_encoder->visibility_result_buffer =
+            occlusion_query_set != NULL ? [occlusion_query_set->result_buffer retain] : nil;
+        render_encoder->visibility_slots = visibility_slots;
+        render_encoder->visibility_slot_count =
+            occlusion_query_set != NULL ? occlusion_query_set->count : 0;
         *out_encoder = render_encoder;
         return VKMTL_METAL_STATUS_OK;
     }
@@ -2760,6 +3253,10 @@ void vkmtl_metal_render_command_encoder_destroy(vkmtl_metal_render_command_encod
     }
 
     @autoreleasepool {
+        [encoder->visibility_result_buffer release];
+        [encoder->visibility_scratch_buffer release];
+        [encoder->command_buffer release];
+        free(encoder->visibility_slots);
         [encoder->index_buffer release];
         [encoder->encoder release];
         free(encoder);
@@ -3102,6 +3599,79 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_begin_occlusion_query(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended != 0 ||
+        query_set == NULL ||
+        query_set->query_type != VKMTL_METAL_QUERY_TYPE_OCCLUSION ||
+        query_set->result_buffer == nil ||
+        query_set->result_buffer != encoder->visibility_result_buffer ||
+        encoder->visibility_scratch_buffer == nil ||
+        encoder->visibility_slots == NULL ||
+        (NSUInteger)query_index >= encoder->visibility_slot_count ||
+        encoder->visibility_active != 0) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder
+            setVisibilityResultMode:MTLVisibilityResultModeBoolean
+                              offset:(NSUInteger)query_index * sizeof(uint64_t)];
+        encoder->visibility_slots[query_index] = 1;
+        encoder->active_visibility_index = query_index;
+        encoder->visibility_active = 1;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_end_occlusion_query(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set
+) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended != 0 ||
+        query_set == NULL ||
+        query_set->query_type != VKMTL_METAL_QUERY_TYPE_OCCLUSION ||
+        query_set->result_buffer != encoder->visibility_result_buffer ||
+        encoder->visibility_active == 0) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setVisibilityResultMode:MTLVisibilityResultModeDisabled offset:0];
+        vkmtl_query_set_record_writer(
+            query_set,
+            encoder->active_visibility_index,
+            encoder->command_buffer
+        );
+        encoder->visibility_active = 0;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_write_timestamp(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended != 0 ||
+        !vkmtl_timestamp_query_is_valid(query_set, query_index)) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    if (@available(macOS 10.15, *)) {
+        [encoder->encoder
+            sampleCountersInBuffer:query_set->counter_sample_buffer
+                    atSampleIndex:query_index
+                       withBarrier:YES];
+        vkmtl_query_set_record_writer(query_set, query_index, encoder->command_buffer);
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     vkmtl_metal_render_command_encoder *encoder,
     unsigned int primitive_type,
@@ -3231,12 +3801,56 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives_in
 vkmtl_metal_status vkmtl_metal_render_command_encoder_end_encoding(
     vkmtl_metal_render_command_encoder *encoder
 ) {
-    if (encoder == NULL || encoder->encoder == nil) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended != 0 ||
+        encoder->visibility_active != 0) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
     @autoreleasepool {
         [encoder->encoder endEncoding];
+        encoder->ended = 1;
+
+        if (encoder->visibility_slots == NULL ||
+            encoder->visibility_scratch_buffer == nil ||
+            encoder->visibility_result_buffer == nil) {
+            return VKMTL_METAL_STATUS_OK;
+        }
+
+        NSUInteger first_used = encoder->visibility_slot_count;
+        for (NSUInteger i = 0; i < encoder->visibility_slot_count; i += 1) {
+            if (encoder->visibility_slots[i] != 0) {
+                first_used = i;
+                break;
+            }
+        }
+        if (first_used == encoder->visibility_slot_count) {
+            return VKMTL_METAL_STATUS_OK;
+        }
+
+        id<MTLBlitCommandEncoder> blit = [encoder->command_buffer blitCommandEncoder];
+        if (blit == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        NSUInteger range_start = first_used;
+        NSUInteger i = first_used;
+        while (i < encoder->visibility_slot_count) {
+            while (i < encoder->visibility_slot_count && encoder->visibility_slots[i] != 0) {
+                i += 1;
+            }
+            const NSUInteger byte_offset = range_start * sizeof(uint64_t);
+            const NSUInteger byte_count = (i - range_start) * sizeof(uint64_t);
+            [blit copyFromBuffer:encoder->visibility_scratch_buffer
+                    sourceOffset:byte_offset
+                        toBuffer:encoder->visibility_result_buffer
+               destinationOffset:byte_offset
+                            size:byte_count];
+            while (i < encoder->visibility_slot_count && encoder->visibility_slots[i] == 0) {
+                i += 1;
+            }
+            range_start = i;
+        }
+        [blit endEncoding];
         return VKMTL_METAL_STATUS_OK;
     }
 }
@@ -3267,6 +3881,7 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_create(
         }
 
         compute_encoder->encoder = [encoder retain];
+        compute_encoder->command_buffer = [command_buffer->command_buffer retain];
         *out_encoder = compute_encoder;
         return VKMTL_METAL_STATUS_OK;
     }
@@ -3278,6 +3893,7 @@ void vkmtl_metal_compute_command_encoder_destroy(vkmtl_metal_compute_command_enc
     }
 
     @autoreleasepool {
+        [encoder->command_buffer release];
         [encoder->encoder release];
         free(encoder);
     }
@@ -3483,6 +4099,27 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups_ind
     }
 }
 
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_write_timestamp(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    if (encoder == NULL || encoder->encoder == nil ||
+        !vkmtl_timestamp_query_is_valid(query_set, query_index)) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    if (@available(macOS 10.15, *)) {
+        [encoder->encoder
+            sampleCountersInBuffer:query_set->counter_sample_buffer
+                    atSampleIndex:query_index
+                       withBarrier:YES];
+        vkmtl_query_set_record_writer(query_set, query_index, encoder->command_buffer);
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_end_encoding(
     vkmtl_metal_compute_command_encoder *encoder
 ) {
@@ -3522,6 +4159,7 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_create(
         }
 
         blit_encoder->encoder = [encoder retain];
+        blit_encoder->command_buffer = [command_buffer->command_buffer retain];
         *out_encoder = blit_encoder;
         return VKMTL_METAL_STATUS_OK;
     }
@@ -3533,6 +4171,7 @@ void vkmtl_metal_blit_command_encoder_destroy(vkmtl_metal_blit_command_encoder *
     }
 
     @autoreleasepool {
+        [encoder->command_buffer release];
         [encoder->encoder release];
         free(encoder);
     }
@@ -3624,6 +4263,87 @@ vkmtl_metal_status vkmtl_metal_blit_command_encoder_copy_buffer_to_buffer(
            destinationOffset:destination_offset
                         size:size];
         return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_write_timestamp(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int query_index
+) {
+    if (encoder == NULL || encoder->encoder == nil ||
+        !vkmtl_timestamp_query_is_valid(query_set, query_index)) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    if (@available(macOS 10.15, *)) {
+        [encoder->encoder
+            sampleCountersInBuffer:query_set->counter_sample_buffer
+                    atSampleIndex:query_index
+                       withBarrier:YES];
+        vkmtl_query_set_record_writer(query_set, query_index, encoder->command_buffer);
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_blit_command_encoder_resolve_query_set(
+    vkmtl_metal_blit_command_encoder *encoder,
+    vkmtl_metal_query_set *query_set,
+    unsigned int first_query,
+    unsigned int query_count,
+    vkmtl_metal_buffer *destination,
+    size_t destination_offset
+) {
+    if (encoder == NULL || encoder->encoder == nil ||
+        !vkmtl_query_range_is_valid(query_set, first_query, query_count) ||
+        destination == NULL || destination->buffer == nil) {
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
+    }
+
+    const NSUInteger byte_count = (NSUInteger)query_count * sizeof(uint64_t);
+    if (destination_offset > destination->length ||
+        byte_count > destination->length - destination_offset) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+
+    @autoreleasepool {
+        if (query_set->query_type == VKMTL_METAL_QUERY_TYPE_OCCLUSION) {
+            if (query_set->result_buffer == nil) {
+                return VKMTL_METAL_STATUS_INVALID_QUERY;
+            }
+            [encoder->encoder
+                  copyFromBuffer:query_set->result_buffer
+                    sourceOffset:(NSUInteger)first_query * sizeof(uint64_t)
+                        toBuffer:destination->buffer
+               destinationOffset:destination_offset
+                            size:byte_count];
+            return VKMTL_METAL_STATUS_OK;
+        }
+
+        if (query_set->query_type == VKMTL_METAL_QUERY_TYPE_TIMESTAMP) {
+            if (@available(macOS 10.15, *)) {
+                if (query_set->counter_sample_buffer == nil ||
+                    query_set->counter_resolve_buffer == nil) {
+                    return VKMTL_METAL_STATUS_INVALID_QUERY;
+                }
+                [encoder->encoder
+                    resolveCounters:query_set->counter_sample_buffer
+                            inRange:NSMakeRange(first_query, query_count)
+                  destinationBuffer:query_set->counter_resolve_buffer
+                  destinationOffset:0];
+                [encoder->encoder
+                      copyFromBuffer:query_set->counter_resolve_buffer
+                        sourceOffset:0
+                            toBuffer:destination->buffer
+                   destinationOffset:destination_offset
+                                size:byte_count];
+                return VKMTL_METAL_STATUS_OK;
+            }
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+
+        return VKMTL_METAL_STATUS_INVALID_QUERY;
     }
 }
 
