@@ -36,9 +36,8 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-49 are complete. Period 50 scalable
-  binding tables, indirect commands, and pipeline persistence are the next
-  mainline priority.
+  semantic-support ledger. Periods 46-50 are complete. Period 51 advanced
+  rasterization and geometry is the next mainline priority.
 
 ## Native Semantic Coverage Inventory
 
@@ -2716,6 +2715,45 @@ obvious render and binding blockers.
 - [x] Update inventories, routing, compatibility docs, and backend matrices.
 - [x] Run complete API/backend validation and physical Metal probes.
 - [x] Publish an exact-commit closeout with unsupported/deferred semantics.
+
+## Period 50 Phase 1 Checklist
+
+- [x] Split all 13 routed rows into executable targets, precise unsupported
+  outcomes, or dependency-correct later-period routes.
+- [x] Allocate resource-table pipeline compatibility and indirect command-list
+  APIs without changing the guarded root, `Device`, or `WindowContext` sets.
+- [x] Record the one-handle allowlist addition and all `v0.2.0` compatibility
+  effects before implementation.
+
+## Period 50 Phase 2 Checklist
+
+- [x] Allocate, update, and bind native Metal argument buffers.
+- [x] Query/enable Vulkan descriptor indexing and allocate/update/bind indexed
+  descriptor sets.
+- [x] Make table layouts part of compatible render/compute pipeline layouts and
+  keep feature gates truthful.
+
+## Period 50 Phase 3 Checklist
+
+- [x] Add CPU-authored inherited render/compute indirect command lists.
+- [x] Lower them to Metal ICB execution and exact Vulkan command expansion.
+- [x] Keep GPU-authored/device-generated commands explicitly unsupported under
+  the current baseline.
+
+## Period 50 Phase 4 Checklist
+
+- [x] Consume/update `VkPipelineCache` during render and compute pipeline
+  creation.
+- [x] Consume/populate/serialize `MTLBinaryArchive` during render and compute
+  pipeline creation.
+- [x] Validate identity, backend, read-only, missing/stale, and file failure
+  behavior.
+
+## Period 50 Phase 5 Checklist
+
+- [x] Update inventories, routing, compatibility docs, examples, and matrices.
+- [x] Run complete API/backend validation and truthful physical evidence probes.
+- [x] Publish an exact-commit closeout with unsupported/rerouted semantics.
 
 ## First Backend-Independent Triangle Checklist
 

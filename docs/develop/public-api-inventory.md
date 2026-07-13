@@ -172,7 +172,7 @@ aliases and with types used by other domains.
 | `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
 | `api/presentation.zig` | 21 | 4 | surfaces, present modes, timed drawable presentation, frame pacing, surface collections |
 | `api/diagnostics.zig` | 80 | 16 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets |
-| `api/command.zig` | 18 | 2 | command lifecycle callbacks, encoders, labels, queue capability and selection planning |
+| `api/command.zig` | 23 | 3 | command lifecycle callbacks, reusable indirect command lists, encoders, labels, queue capability and selection planning |
 | `api/shader.zig` | 33 | 2 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
 | `api/compute.zig` | 8 | 0 | compute pipeline and dispatch descriptors, atomics, threadgroup memory |
@@ -187,7 +187,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 512 declarations and 87 callable
+Across the 13 top-level facades, this is 517 declarations and 88 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -335,7 +335,7 @@ public lowering-mode enum; backend selection stays internal to query planning.
 
 ## Runtime Handle Representation
 
-All 35 guarded exported runtime handles now expose one implementation-storage
+All 36 guarded exported runtime handles now expose one implementation-storage
 field named `_state` and no other field. Value-owned resources, pipelines, binding
 objects, synchronization objects, command buffers, encoders, queues, and
 similar wrappers use inline opaque byte storage. `WindowContext` owns a
@@ -347,7 +347,7 @@ backend `Impl` union, `ResourceTracker`, debug state, or a private state record.
 Construction, queries, mutation, and destruction go through documented public
 methods. Direct struct literals and reads or writes of `_state` are unsupported
 even though Zig can spell the field name. `zig build run-api-guard` locks the
-35-name handle set and this single-field representation alongside the root and
+36-name handle set and this single-field representation alongside the root and
 owner-method allowlists.
 
 ## Runtime Owner Inventory
@@ -358,8 +358,8 @@ The current major runtime owner counts are:
 | --- | ---: | --- |
 | `Device` | 34 | creation, compilation, common queries, and queue access |
 | `WindowContext` | 10 | lifecycle, identity, native-view, and owner access only |
-| `RenderCommandEncoder` | 28 | natural render command owner |
-| `ComputeCommandEncoder` | 20 | natural compute command owner |
+| `RenderCommandEncoder` | 29 | natural render command owner |
+| `ComputeCommandEncoder` | 21 | natural compute command owner |
 | `BlitCommandEncoder` | 21 | natural transfer command owner |
 | `CommandBuffer` | 18 | lifecycle and encoder creation |
 | `Texture` | 19 | resource lifetime and texture operations |
@@ -368,6 +368,7 @@ The current major runtime owner counts are:
 | `Buffer` | 15 | mapping, read, write, GPU address, and lifetime |
 | `ShaderBindingTable` | 13 | capability-gated RT owner |
 | `ResourceTable` | 13 | advanced binding owner |
+| `IndirectCommandBuffer` | 11 | reusable CPU-authored draw/dispatch command-list owner |
 
 ### Device: 34 Retained Methods
 
@@ -660,6 +661,38 @@ feature inventory to 91 fields. `BufferError` and `TextureError` gain
 These enum, feature, method, lifetime, and error-set additions target `v0.2.0`.
 Existing resource descriptors retain `.automatic` storage defaults.
 
+## Period 50 v0.2.0 Binding, Indirect Command, And Driver Cache Update
+
+Period 50 leaves the guarded root 68, `Device` 34, and `WindowContext` 10
+baselines unchanged. The runtime-handle allowlist grows from 35 to 36 with the
+canonical `command.IndirectCommandBuffer`; the handle has one opaque `_state`
+field and 11 public methods.
+
+The `command` facade gains `IndirectCommandKind`,
+`IndirectCommandBufferDescriptor`, `IndirectCommandRange`,
+`IndirectCommandBuffer`, and `makeIndirectCommandBuffer`, bringing that facade
+to 23 declarations and three operations. Render and compute encoders each gain
+`executeIndirectCommands(...)`, for 29 and 21 methods respectively. No new
+`Device` factory or flat root alias is admitted.
+
+`RenderPipelineDescriptor` and `ComputePipelineDescriptor` each gain defaulted
+`resource_table_layouts` and `driver_cache` fields. The empty/null defaults
+preserve ordinary pipeline literals. Resource-table layouts occupy pipeline
+layout slots after ordinary bind-group layouts; runtime binding requires an
+exact layout fingerprint match. `ResourceTablePipelineLayoutMismatch` records
+violations before backend work.
+
+`diagnostics.DeviceFeatures` gains `indirect_command_buffers`, bringing the
+feature inventory to 92 fields. `DeviceLimits` gains
+`max_indirect_command_count`. `CommandEncodingError` gains
+`UnsupportedIndirectCommandBuffer`, `InvalidIndirectCommandKind`,
+`InvalidIndirectCommandRange`, and `MissingIndirectCommand`.
+
+These descriptor, feature, limit, handle, method, and error-set additions
+target `v0.2.0`. CPU-authored command slots inherit active pipeline/resource
+state. GPU-authored mutation, parallel child encoders, dynamic shader linking,
+and runtime function stitching are not part of this allocation.
+
 ## Compatibility Impact
 
 This is an intentional pre-tag breaking migration:
@@ -690,7 +723,7 @@ and methods; there is intentionally no raw-layout compatibility layer.
 ```sh
 zig build run-api-guard
 # API guard passed: root=68 (facades=13 core=27 aliases=28),
-# Device methods=34, WindowContext methods=10, runtime handles=35
+# Device methods=34, WindowContext methods=10, runtime handles=36
 
 awk '
   /^pub const Device = struct \{/ { active=1; next }

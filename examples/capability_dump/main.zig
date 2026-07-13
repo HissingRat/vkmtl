@@ -146,6 +146,7 @@ fn dumpReport(report: vkmtl.diagnostics.DeviceCapabilityReport) void {
     std.debug.print("  buffer/texture copy offset alignment: {}\n", .{report.limits.buffer_texture_copy_offset_alignment});
     std.debug.print("  buffer/texture copy row-pitch alignment: {}\n", .{report.limits.buffer_texture_copy_row_pitch_alignment});
     std.debug.print("  max bindless descriptors/range: {}\n", .{report.limits.max_bindless_descriptors_per_range});
+    std.debug.print("  max indirect commands/list: {}\n", .{report.limits.max_indirect_command_count});
     dumpRayTracingDiagnostics(report.ray_tracing);
 }
 
@@ -174,6 +175,7 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  buffer GPU address: {}\n", .{features.buffer_gpu_address});
     std.debug.print("  descriptor indexing: {}\n", .{features.descriptor_indexing});
     std.debug.print("  argument buffers: {}\n", .{features.argument_buffers});
+    std.debug.print("  indirect command buffers: {}\n", .{features.indirect_command_buffers});
     std.debug.print("  sparse buffers: {}\n", .{features.sparse_buffers});
     std.debug.print("  sparse textures: {}\n", .{features.sparse_textures});
     std.debug.print("  memory budget: {}\n", .{features.memory_budget});

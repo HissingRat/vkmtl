@@ -154,6 +154,7 @@ const expected_runtime_handle_names = [_][]const u8{
     "BindGroupLayout",
     "AdvancedBindGroupLayout",
     "ResourceTable",
+    "IndirectCommandBuffer",
     "BindGroup",
     "ExternalMemory",
     "ExternalBuffer",
@@ -182,7 +183,7 @@ comptime {
     if (expected_root_names.len != 68) @compileError("API guard root allowlist must contain 68 names");
     if (expected_device_methods.len != 34) @compileError("API guard Device allowlist must contain 34 names");
     if (expected_window_context_methods.len != 10) @compileError("API guard WindowContext allowlist must contain 10 names");
-    if (expected_runtime_handle_names.len != 35) @compileError("API guard runtime handle allowlist must contain 35 names");
+    if (expected_runtime_handle_names.len != 36) @compileError("API guard runtime handle allowlist must contain 36 names");
 }
 
 const ParseError = error{
@@ -300,7 +301,7 @@ pub fn main(_: std.process.Init) !void {
     if (!root_ok or !device_ok or !window_context_ok or !runtime_handles_ok) return error.ApiGuardFailed;
 
     std.debug.print(
-        "API guard passed: root=68 (facades=13 core=27 aliases=28), Device methods=34, WindowContext methods=10, runtime handles=35\n",
+        "API guard passed: root=68 (facades=13 core=27 aliases=28), Device methods=34, WindowContext methods=10, runtime handles=36\n",
         .{},
     );
 }

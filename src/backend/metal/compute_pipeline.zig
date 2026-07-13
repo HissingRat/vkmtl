@@ -5,6 +5,7 @@ const metal = @import("metal_bridge");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalShaderModule = @import("shader_module.zig");
 const specialization = @import("specialization.zig");
+const cache_identity = @import("../pipeline_cache_identity.zig");
 
 const MetalComputePipelineState = @This();
 
@@ -39,6 +40,10 @@ pub fn init(
         descriptor.compute.entry_point.len,
         if (constants.len == 0) null else constants.ptr,
         constants.len,
+        if (descriptor.driver_cache) |cache| cache.path.ptr else null,
+        if (descriptor.driver_cache) |cache| cache.path.len else 0,
+        if (descriptor.driver_cache) |cache| cache_identity.hash(cache.identity) else 0,
+        if (descriptor.driver_cache) |cache| @intFromBool(cache.read_only) else 0,
         &handle,
     ));
 

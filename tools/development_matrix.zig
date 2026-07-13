@@ -127,7 +127,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/bindless_textures",
         .run_step = "run-bindless-textures",
         .kind = .render,
-        .backend_expectation = "advanced binding feature gate, bindless layout, and ResourceTable creation",
+        .backend_expectation = "65-slot native table, compatible pipeline layout, reusable indirect draw, and persistent driver cache",
     },
     .{
         .name = "multi_window",
@@ -465,7 +465,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test",
-        .expectation = "dynamic buffer array offsets, resource tables, resource-table pressure plans, root constants, and shader specialization regressions pass",
+        .expectation = "dynamic buffer array offsets, native resource tables, pipeline-layout compatibility, reusable indirect ranges, driver-cache identity, root constants, and shader specialization regressions pass",
     },
     .{
         .name = "sync_query_regression",
@@ -1295,11 +1295,10 @@ pub const production_hardening_matrix = [_]ProductionHardeningMatrixEntry{
     },
     .{
         .feature = .native_driver_cache_lowering,
-        .public_api = "vkmtl.diagnostics.DriverPipelineCacheDescriptor",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 32+ driver parity plan",
-        .validation = "VkPipelineCache and MTLBinaryArchive consumption remains explicit backend work",
+        .public_api = "RenderPipelineDescriptor.driver_cache and ComputePipelineDescriptor.driver_cache",
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "VkPipelineCache and MTLBinaryArchive consume, populate, persist, recover stale identity, and honor read-only mode",
     },
     .{
         .feature = .runtime_cache_manifest_planning,
@@ -2099,7 +2098,7 @@ test "production hardening backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 7);
-    try std.testing.expect(deferred_paths >= 3);
+    try std.testing.expect(deferred_paths >= 2);
 }
 
 test "advanced resource and geometry backend matrix is complete" {

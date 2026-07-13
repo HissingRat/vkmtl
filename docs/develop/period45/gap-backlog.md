@@ -6,8 +6,9 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Periods 46-49 refined broad query, common-workload, synchronization, and memory
-rows, so the current ledger contains 107 units and exactly-once routes 52 incomplete
+Periods 46-50 refined broad query, common-workload, synchronization, memory,
+binding, indirect-command, and artifact rows, so the current ledger contains
+109 units and exactly-once routes 42 incomplete
 IDs.
 
 The periods below are implementation slices, not promises to add all source
@@ -92,16 +93,24 @@ closed, so no planning-only voxel-world pressure claim is made.
 
 ## Period 50: Binding Tables, Indirect Commands, And Pipeline Persistence
 
+Status: complete.
+
 Priority: scalable submission and artifact reuse.
 
-- Argument encoders/tables, descriptor indexing, and function tables.
-- Indirect command buffers and Vulkan device-generated/secondary command
-  equivalents.
-- Dynamic/linked shader functions, object/view pooling, Metal binary archive,
-  and Vulkan pipeline-cache consumption.
+- [x] Execute classic Metal argument buffers and Vulkan descriptor-indexing
+  tables through compatible render/compute pipeline layouts.
+- [x] Execute CPU-authored reusable draw/dispatch lists through Metal ICBs or
+  exact direct-command expansion, while keeping GPU mutation unsupported.
+- [x] Consume/persist Metal binary archives and Vulkan pipeline caches; close
+  parallel encoders and manifest-schema-1 dynamic linking as unsupported.
+- [x] Reroute RT function tables to Period 52 and Metal 4 argument/view-pool
+  semantics to Period 54.
 
-Acceptance: large-table and persistent-cache GPU evidence replaces current
-planning-only reports.
+Acceptance: complete. A physical Metal run sampled a 65-slot argument buffer,
+executed a native reusable ICB draw, and consumed a persistent binary archive.
+Vulkan descriptor indexing, direct-command expansion, and pipeline-cache
+consumption have forced-build/unit evidence; physical Vulkan rerun remains
+useful evidence rather than an upgraded claim.
 
 ## Period 51: Advanced Rasterization And Geometry
 
@@ -157,7 +166,8 @@ gates.
 
 ## Next Slice
 
-Period 49 is complete. Native placement heaps, memory telemetry, and Metal
-memoryless attachments are executable; sparse/residency execution and the
-nonportable policy/hint rows are precisely unsupported. 52 incomplete semantic
-units remain routed to Periods 50-54. Period 50 is next.
+Period 50 is complete. Scalable resource tables, CPU-authored reusable command
+lists, and persistent driver pipeline artifacts are executable; GPU-authored
+command mutation and manifest-schema-1 runtime linking are precisely
+unsupported. 42 incomplete semantic units remain routed to Periods 51-54.
+Period 51 is next.

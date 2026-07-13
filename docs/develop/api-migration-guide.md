@@ -5,6 +5,43 @@ Period 1 Phase 9 surface. The cutover is breaking because vkmtl has not yet made
 a tagged compatibility promise. It reorganizes names and owners without
 intentionally changing backend behavior.
 
+## Period 50 v0.2.0 Binding, Indirect Command, And Driver Cache Update
+
+Render and compute pipeline descriptors now accept
+`resource_table_layouts` and `driver_cache`. Both fields default to empty/null,
+so ordinary callers need no change. A resource table must be bound at the
+absolute pipeline-layout index after ordinary bind-group layouts and must match
+the descriptor used to create that pipeline; mismatches now return
+`ResourceTablePipelineLayoutMismatch` before backend work.
+
+Create reusable CPU-authored command lists through the canonical command
+facade:
+
+```zig
+var commands = try vkmtl.command.makeIndirectCommandBuffer(&device, .{
+    .kind = .render,
+    .max_command_count = 1,
+});
+defer commands.deinit();
+try commands.encodeDrawPrimitives(0, .{ .vertex_count = 3 });
+try encoder.executeIndirectCommands(&commands, .{ .count = 1 });
+```
+
+The list inherits the active encoder's pipeline and resources. It does not
+permit shader/GPU mutation of command slots. Metal uses a native ICB when the
+device exposes it; Vulkan and native-unavailable paths expand the immutable
+commands exactly.
+
+To persist driver artifacts, set a backend-matching
+`diagnostics.DriverPipelineCacheDescriptor` in `driver_cache`. Vulkan consumes
+and updates `VkPipelineCache`; Metal consumes, populates, and serializes
+`MTLBinaryArchive`. Identity mismatches and invalid native data fall back to an
+empty cache. `read_only = true` prevents writes.
+
+The new command handle/types/methods, feature/limit fields, pipeline fields,
+and binding/command errors target `v0.2.0`. Exhaustive switches over
+`BindingError` or `CommandEncodingError` need corresponding arms.
+
 ## Period 49 v0.2.0 Heap And Memoryless Update
 
 `Device.makeHeap(...)` now creates native placement storage when `heaps` is
@@ -566,7 +603,7 @@ the underlying core declarations were physically deleted.
 ## Runtime Handle Layout Migration
 
 Runtime objects are no longer application-constructible implementation
-records. Each of the 35 guarded exported handles now has exactly one `_state`
+records. Each of the 36 guarded exported handles now has exactly one `_state`
 field containing inline opaque bytes or an opaque runtime pointer. Backend
 unions,
 `BackendRuntime`, `Impl`, `ResourceTracker`, descriptor/debug records, and

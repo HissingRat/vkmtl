@@ -19,8 +19,8 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
   `run-pixel-regression`.
 - `metal/vulkan_soak`: capability dump plus bounded `run-gpu-soak` artifact.
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
-- `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
-- `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
+- `presentation_feature_gates`: `VKMTL_PIXEL_REGRESSION=1 zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
+- `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, native resource tables, pipeline-layout compatibility, reusable indirect slots/ranges, resource-table pressure plans, root constant writes, specialization variant fingerprints, and driver-cache identity.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, runtime fences/events, native timeline/shared-event submission, physical queue selection, ownership transfer validation, lifecycle callback-once behavior, presentation fallback, and query readback/resolve validation.
 - `debug_marker_regression`: `zig build test && zig build run-profiling-plan`; includes borrowed label lifetime, UTF-8 and embedded-NUL validation, native/validation-only marker capabilities, capture gates, query-source semantics, profiling fallback, and issue-report snapshots.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, native heap requirements/placement, heap aliasing/lifetime, native/fallback memory reports, memoryless validation, and transient diagnostics.
@@ -212,7 +212,7 @@ conservative until the relevant backend period lands.
 | Object-cache lookup diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | `cache_policy` and `vkmtl.diagnostics.objectCacheDiagnostics(device)` |
 | Native object handle pooling | Deferred | Deferred | Period 32+ driver parity plan native pools |
 | Driver cache planning | Portable runtime planning | Portable runtime planning | `vkmtl.diagnostics.planDriverPipelineCache(device, descriptor)` |
-| Native driver cache lowering | Deferred | Deferred | Period 32+ driver parity plan `VkPipelineCache` / `MTLBinaryArchive` consumption |
+| Native driver cache lowering | Executable `VkPipelineCache` consume/persist | Executable `MTLBinaryArchive` consume/populate/serialize | Pipeline `driver_cache`; Vulkan unit/forced build and Metal physical smoke |
 | Runtime cache manifest planning | Portable runtime planning | Portable runtime planning | `vkmtl.diagnostics.planRuntimeCache(device, descriptor)` |
 | Runtime cache manifest I/O | Deferred | Deferred | Period 32+ driver parity plan automatic manifest read/write |
 | Runtime diagnostics snapshot | Portable runtime diagnostics | Portable runtime diagnostics | `vkmtl.diagnostics.runtimeDiagnostics(device)` |
@@ -228,8 +228,8 @@ conservative until the relevant backend period lands.
 | Partially-bound table requirements | Capability / opt-in validation | Capability / opt-in validation | `ResourceTablePressurePlan.canCreateTable()` |
 | Update-after-bind table requirements | Capability / opt-in validation | Capability / opt-in validation | `ResourceTablePressurePlan.canCreateTable()` plus runtime table update tests |
 | Pipeline artifact compatibility | Shader, entry point, reflection, format, schema, backend, and toolchain compatibility plan | Same compatibility plan for MSL / reflection artifacts | `vkmtl.diagnostics.planPipelineArtifactCache(device, descriptor)` |
-| Native pipeline cache/library persistence | Deferred | N/A | Period44 device-matrix evidence after backend lowering exists |
-| Native binary archive persistence | N/A | Deferred | Period44 device-matrix evidence after backend lowering exists |
+| Native pipeline cache persistence | Executable | N/A | Identity-gated `VkPipelineCache` consume/persist; unit/forced-build evidence |
+| Native binary archive persistence | N/A | Executable | Identity-gated `MTLBinaryArchive` consume/populate/serialize; physical Metal evidence |
 
 ## Period 27 Advanced Resource And Geometry Expectations
 
@@ -297,3 +297,14 @@ conservative until the relevant backend period lands.
 | Memoryless attachment | Typed unsupported | Probed `MTLStorageModeMemoryless` | Attachment-only, no load/store persistence; MSAA resolve is executable |
 | Residency sets/sparse commits | Typed unsupported | Typed unsupported | Planning records remain available but usable feature fields stay false |
 | Cache/optimization policy | Default behavior only | Default behavior only | Explicit write-combined and content-optimization hints are unallocated/unsupported |
+
+## Period 50 Binding, Indirect Command, And Persistence Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Scalable resource table | Native descriptor-indexing set | Native argument buffer | Feature opens only for complete layout/allocation/update/bind support |
+| Pipeline compatibility | Descriptor-set layout is part of `VkPipelineLayout` | Runtime fingerprint plus shader buffer slot | Mismatch is rejected before backend work |
+| CPU-authored reusable render commands | Exact `vkCmdDraw` expansion | Native ICB when available, exact expansion otherwise | `command.IndirectCommandBuffer`; GPU mutation excluded |
+| CPU-authored reusable compute commands | Exact `vkCmdDispatch` expansion | Native compute ICB when available, exact expansion otherwise | Fixed slots, reset, and explicit ranges |
+| Driver artifact persistence | Identity-gated `VkPipelineCache` | Identity-gated `MTLBinaryArchive` | Missing/stale data falls back empty; read-only never writes |
+| Physical evidence | Forced build/unit; physical rerun pending | 65-slot table, native ICB draw, binary archive | Device feature/limit gates remain mandatory |

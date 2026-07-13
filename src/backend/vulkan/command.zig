@@ -895,7 +895,15 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         try binding.validate();
         if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingRenderPipelineState;
-        _ = table;
+        table.transitionStorageTextures(self.cmdbuf);
+        self.gc.dev.cmdBindDescriptorSets(
+            self.cmdbuf,
+            .graphics,
+            self.pipeline_layout,
+            binding.index,
+            &.{table.set},
+            null,
+        );
     }
 
     pub fn setRootConstants(
@@ -1451,7 +1459,15 @@ pub const ComputeCommandEncoder = struct {
     ) !void {
         try binding.validate();
         if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingComputePipelineState;
-        _ = table;
+        table.transitionStorageTextures(self.cmdbuf);
+        self.gc.dev.cmdBindDescriptorSets(
+            self.cmdbuf,
+            .compute,
+            self.pipeline_layout,
+            binding.index,
+            &.{table.set},
+            null,
+        );
     }
 
     pub fn setRootConstants(

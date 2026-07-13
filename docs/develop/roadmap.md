@@ -908,10 +908,13 @@ See `docs/develop/period49/`.
 
 ## Period 50: Binding Tables, Indirect Commands, And Pipeline Persistence
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
-Goal: complete scalable resource tables, indirect/generated command paths,
-dynamic/linked functions, native object pooling, and driver artifact reuse.
+Goal: execute scalable resource tables, CPU-authored reusable commands, and
+driver artifact reuse; close or dependency-route generated commands,
+dynamic/linked functions, and native object/view pooling precisely.
+
+See `docs/develop/period50/`.
 
 ## Period 51: Advanced Rasterization And Geometry
 
@@ -986,10 +989,9 @@ See `docs/develop/period32+/target.md`.
 - Periods 42 through 44 and all nine Period 44 release-evidence gates are
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
-- Period 45 is complete as the native semantic coverage audit, Period 46 is
-  complete as its first implementation slice, and Period 47 is complete for
-  common resource/render/compute breadth. Period 48 is the active mainline
-  target; Periods 48-54 remain routed from the gap ledger and must not be reordered
+- Period 45 is complete as the native semantic coverage audit, and Periods
+  46-50 are complete implementation slices. Period 51 is the active mainline
+  target; Periods 51-54 remain routed from the gap ledger and must not be reordered
   around their stated dependencies without updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the

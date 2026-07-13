@@ -295,6 +295,7 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
     return .{
         .argument_buffers = 0,
         .argument_buffer_tier = 0,
+        .indirect_command_buffers = 0,
         .ray_tracing = 0,
         .sparse_textures = 0,
         .binary_archive = 0,
@@ -329,6 +330,7 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.debug_markers = true;
     result.sampler_anisotropy = true;
     result.argument_buffers = capabilities.argument_buffers != 0;
+    result.indirect_command_buffers = capabilities.indirect_command_buffers != 0;
     result.descriptor_indexing = false;
     result.sparse_textures = capabilities.sparse_textures != 0;
     result.tiled_textures = capabilities.sparse_textures != 0;
@@ -364,6 +366,9 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.shader_specialization = capabilities.function_constants != 0;
     result.debug_markers = true;
     result.sampler_anisotropy = true;
+    result.argument_buffers = capabilities.argument_buffers != 0;
+    result.indirect_command_buffers = true;
+    result.metal_binary_archive = capabilities.binary_archive != 0;
     result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
     result.timeline_fences = capabilities.shared_events != 0;
     result.shared_events = capabilities.shared_events != 0;
@@ -403,7 +408,13 @@ fn limitsFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabiliti
     }
     if (capabilities.max_texture_argument_table_entries != 0) {
         result.max_bindless_descriptors_per_range = capabilities.max_texture_argument_table_entries;
-        result.max_bindless_ranges_per_layout = 1;
+        result.max_bindless_ranges_per_layout = @min(
+            capabilities.max_buffer_argument_table_entries,
+            @min(
+                capabilities.max_texture_argument_table_entries,
+                capabilities.max_sampler_argument_table_entries,
+            ),
+        );
     }
     if (capabilities.binary_archive != 0) {
         result.max_driver_cache_identity_bytes = 4096;
@@ -415,6 +426,7 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     const capabilities = metal.vkmtl_metal_device_capabilities{
         .argument_buffers = 1,
         .argument_buffer_tier = 2,
+        .indirect_command_buffers = 1,
         .ray_tracing = 1,
         .sparse_textures = 1,
         .binary_archive = 1,
@@ -480,13 +492,15 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(usable.memoryless_attachments);
     try std.testing.expect(usable.scheduled_presentation);
     try std.testing.expect(usable.minimum_duration_presentation);
-    try std.testing.expect(!usable.argument_buffers);
+    try std.testing.expect(usable.argument_buffers);
+    try std.testing.expect(usable.metal_binary_archive);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);
     try std.testing.expectEqual(@as(u64, 8 * 1024 * 1024 * 1024), queried_limits.max_buffer_length);
     try std.testing.expectEqual(@as(u32, 16384), queried_limits.max_texture_dimension_2d);
     try std.testing.expectEqual(@as(u32, 32 * 1024), queried_limits.max_compute_threadgroup_memory_bytes);
     try std.testing.expectEqual(@as(u32, 128), queried_limits.max_bindless_descriptors_per_range);
+    try std.testing.expectEqual(@as(u32, 16), queried_limits.max_bindless_ranges_per_layout);
 }
 
 test "Metal format capabilities keep presentation and scaled blit truthful" {

@@ -51,9 +51,10 @@ Current cases:
 - `production_hardening`: cache planning, runtime diagnostics, capture names,
   stability planning, and Vulkan fallback diagnostics keep deterministic
   validation.
-- `resource_table_pipeline_persistence`: resource-table pressure plans and
-  pipeline artifact compatibility plans classify scale, opt-in table semantics,
-  stale cache reasons, and read-only persistence behavior deterministically.
+- `resource_table_pipeline_persistence`: native resource-table layout/update/bind
+  paths, active-pipeline compatibility, reusable indirect slots/ranges,
+  pipeline artifact compatibility, stale cache identity, and read-only native
+  persistence behavior remain deterministic.
 - `advanced_resource_geometry`: sparse/tiled resource planning and residency
   commit/churn plans remain distinct from typed-unsupported execution;
   tessellation draw planning and mesh/task dispatch planning stay

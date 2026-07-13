@@ -85,9 +85,9 @@ pub fn validateRenderPipelineDescriptor(
     allocator: std.mem.Allocator,
     descriptor: core.RenderPipelineDescriptor,
 ) !void {
-    try validateStage(allocator, descriptor.vertex, .vertex, descriptor.bind_group_layouts);
+    try validateStage(allocator, descriptor.vertex, .vertex, descriptor.bind_group_layouts, descriptor.resource_table_layouts);
     if (descriptor.fragment) |fragment| {
-        try validateStage(allocator, fragment, .fragment, descriptor.bind_group_layouts);
+        try validateStage(allocator, fragment, .fragment, descriptor.bind_group_layouts, descriptor.resource_table_layouts);
     }
 }
 
@@ -95,7 +95,7 @@ pub fn validateComputePipelineDescriptor(
     allocator: std.mem.Allocator,
     descriptor: core.ComputePipelineDescriptor,
 ) !void {
-    try validateStage(allocator, descriptor.compute, .compute, descriptor.bind_group_layouts);
+    try validateStage(allocator, descriptor.compute, .compute, descriptor.bind_group_layouts, descriptor.resource_table_layouts);
 }
 
 fn validateStage(
@@ -103,14 +103,16 @@ fn validateStage(
     stage_descriptor: core.ProgrammableStageDescriptor,
     expected_stage: core.ShaderStage,
     bind_group_layouts: []const core.BindGroupLayoutDescriptor,
+    resource_table_layouts: []const core.DescriptorIndexingLayoutDescriptor,
 ) !void {
     const source = stage_descriptor.reflection orelse return;
     switch (source) {
-        .data => |reflection| try core.validateShaderStageReflection(
+        .data => |reflection| try core.validateShaderStageReflectionWithResourceTables(
             stage_descriptor,
             expected_stage,
             reflection,
             bind_group_layouts,
+            resource_table_layouts,
         ),
         .json => |bytes| try validateJsonStageBytes(
             allocator,
@@ -118,6 +120,7 @@ fn validateStage(
             expected_stage,
             bytes,
             bind_group_layouts,
+            resource_table_layouts,
         ),
         .artifact => |artifact| try validateArtifactStage(
             allocator,
@@ -125,6 +128,7 @@ fn validateStage(
             expected_stage,
             artifact,
             bind_group_layouts,
+            resource_table_layouts,
         ),
     }
 }
@@ -135,6 +139,7 @@ fn validateArtifactStage(
     expected_stage: core.ShaderStage,
     artifact: core.ShaderReflectionArtifact,
     bind_group_layouts: []const core.BindGroupLayoutDescriptor,
+    resource_table_layouts: []const core.DescriptorIndexingLayoutDescriptor,
 ) !void {
     const bytes = artifact_loader.readFileBytes(allocator, artifact.path, max_shader_reflection_bytes) catch {
         return core.ShaderError.ShaderReflectionReadFailed;
@@ -146,7 +151,7 @@ fn validateArtifactStage(
     };
     defer parsed.deinit();
 
-    try validateJsonStage(stage_descriptor, expected_stage, parsed.value, bind_group_layouts);
+    try validateJsonStage(stage_descriptor, expected_stage, parsed.value, bind_group_layouts, resource_table_layouts);
 }
 
 fn validateJsonStageBytes(
@@ -155,13 +160,14 @@ fn validateJsonStageBytes(
     expected_stage: core.ShaderStage,
     bytes: []const u8,
     bind_group_layouts: []const core.BindGroupLayoutDescriptor,
+    resource_table_layouts: []const core.DescriptorIndexingLayoutDescriptor,
 ) !void {
     var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{}) catch {
         return core.ShaderError.InvalidShaderReflection;
     };
     defer parsed.deinit();
 
-    try validateJsonStage(stage_descriptor, expected_stage, parsed.value, bind_group_layouts);
+    try validateJsonStage(stage_descriptor, expected_stage, parsed.value, bind_group_layouts, resource_table_layouts);
 }
 
 fn validateJsonStage(
@@ -169,6 +175,7 @@ fn validateJsonStage(
     expected_stage: core.ShaderStage,
     root: std.json.Value,
     bind_group_layouts: []const core.BindGroupLayoutDescriptor,
+    resource_table_layouts: []const core.DescriptorIndexingLayoutDescriptor,
 ) !void {
     try validateSchemaVersion(root);
 
@@ -185,17 +192,18 @@ fn validateJsonStage(
     const bind_groups_value = optionalField(root, "bind_groups") orelse return;
     const bind_groups = try expectArray(bind_groups_value);
     for (bind_groups.items) |bind_group_value| {
-        try validateJsonBindGroup(bind_group_value, bind_group_layouts);
+        try validateJsonBindGroup(bind_group_value, bind_group_layouts, resource_table_layouts);
     }
 }
 
 fn validateJsonBindGroup(
     value: std.json.Value,
     bind_group_layouts: []const core.BindGroupLayoutDescriptor,
+    resource_table_layouts: []const core.DescriptorIndexingLayoutDescriptor,
 ) !void {
     const index = try expectU32(try requiredField(value, "index"));
     const layout_index: usize = @intCast(index);
-    if (layout_index >= bind_group_layouts.len) {
+    if (layout_index >= bind_group_layouts.len + resource_table_layouts.len) {
         return core.ShaderError.ShaderReflectionMissingBindGroupLayout;
     }
 
@@ -208,7 +216,14 @@ fn validateJsonBindGroup(
             .array_count = try parseOptionalArrayCount(binding_value),
             .storage_access = try parseOptionalStorageAccess(binding_value),
         };
-        try core.validateShaderReflectionBinding(bind_group_layouts[layout_index], reflected_binding);
+        if (layout_index < bind_group_layouts.len) {
+            try core.validateShaderReflectionBinding(bind_group_layouts[layout_index], reflected_binding);
+        } else {
+            try core.validateShaderReflectionResourceTableBinding(
+                resource_table_layouts[layout_index - bind_group_layouts.len],
+                reflected_binding,
+            );
+        }
     }
 }
 
@@ -784,7 +799,7 @@ test "reflection artifact validates bind group layout" {
         .stage = .compute,
         .entry_point = "cs_main",
     };
-    try validateJsonStage(stage_descriptor, .compute, parsed.value, bind_group_layouts[0..]);
+    try validateJsonStage(stage_descriptor, .compute, parsed.value, bind_group_layouts[0..], &.{});
 
     const legacy_json =
         \\{
@@ -795,7 +810,7 @@ test "reflection artifact validates bind group layout" {
     ;
     var legacy = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, legacy_json, .{});
     defer legacy.deinit();
-    try validateJsonStage(stage_descriptor, .compute, legacy.value, bind_group_layouts[0..]);
+    try validateJsonStage(stage_descriptor, .compute, legacy.value, bind_group_layouts[0..], &.{});
 
     const future_json =
         \\{
@@ -807,7 +822,7 @@ test "reflection artifact validates bind group layout" {
     ;
     var future = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, future_json, .{});
     defer future.deinit();
-    try std.testing.expectError(core.ShaderError.UnsupportedShaderReflectionSchema, validateJsonStage(stage_descriptor, .compute, future.value, bind_group_layouts[0..]));
+    try std.testing.expectError(core.ShaderError.UnsupportedShaderReflectionSchema, validateJsonStage(stage_descriptor, .compute, future.value, bind_group_layouts[0..], &.{}));
 }
 
 test "reflection derives portable array counts and storage access" {

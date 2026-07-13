@@ -11,6 +11,14 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added native Metal argument-buffer and Vulkan descriptor-indexing resource
+  tables with compatible render/compute pipeline layouts and exact runtime
+  layout validation.
+- Added CPU-authored reusable render/compute command lists with native Metal
+  ICB execution and exact Vulkan direct-command expansion.
+- Added render/compute pipeline persistence through `MTLBinaryArchive` and
+  `VkPipelineCache`, including explicit identity, read-only mode, and stale-data
+  recovery.
 - Added native Metal placement heaps and Vulkan device-memory heaps with exact
   buffer/texture size-and-alignment queries and placed resource creation.
 - Added native Metal recommended-working-set/current-allocation reporting and
@@ -51,6 +59,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- `argument_buffers`, `descriptor_indexing`, `driver_pipeline_cache`, and
+  `metal_binary_archive` now report usable execution paths instead of
+  planning-only availability.
+- GPU-authored indirect-command mutation, parallel child render encoders,
+  dynamic shader libraries, linked functions, and function stitching are
+  explicitly unsupported under the current portable command/shader contracts.
 - `DeviceFeatures.heaps` now means heap-backed buffers and textures execute;
   planning-only reservations no longer open the feature.
 - Sparse/tiled resource and explicit residency-set execution remain closed:
@@ -83,6 +97,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 50 adds defaulted resource-table-layout and driver-cache pipeline
+  fields, one command-domain runtime handle and factory, render/compute encoder
+  methods, `indirect_command_buffers`, `max_indirect_command_count`, and typed
+  command/layout errors. These additions target `v0.2.0`; ordinary pipeline
+  defaults remain unchanged.
 - Period 49 adds `.memoryless` to `ResourceStorageMode`,
   `memoryless_attachments` to `DeviceFeatures`, five specialized `Heap`
   methods, and memoryless/heap allocation errors. These additions target

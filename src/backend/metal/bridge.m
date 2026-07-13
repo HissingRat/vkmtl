@@ -53,6 +53,20 @@ struct vkmtl_metal_sampler_state {
     id<MTLSamplerState> sampler;
 };
 
+struct vkmtl_metal_resource_table {
+    id<MTLArgumentEncoder> encoder;
+    id<MTLBuffer> buffer;
+    id<MTLResource> *resources;
+    MTLResourceUsage *usages;
+    NSUInteger resource_count;
+};
+
+struct vkmtl_metal_indirect_command_buffer {
+    id<MTLIndirectCommandBuffer> buffer;
+    unsigned int kind;
+    NSUInteger max_command_count;
+};
+
 struct vkmtl_metal_shader_module {
     id<MTLLibrary> library;
 };
@@ -1430,6 +1444,32 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
             }
         }
 
+        if (@available(macOS 11.0, *)) {
+            MTLIndirectCommandBufferDescriptor *render_descriptor = [[MTLIndirectCommandBufferDescriptor alloc] init];
+            render_descriptor.commandTypes = MTLIndirectCommandTypeDraw;
+            render_descriptor.inheritPipelineState = YES;
+            render_descriptor.inheritBuffers = YES;
+            id<MTLIndirectCommandBuffer> render_probe = [device
+                newIndirectCommandBufferWithDescriptor:render_descriptor
+                                maxCommandCount:1
+                                         options:0];
+            MTLIndirectCommandBufferDescriptor *compute_descriptor = [[MTLIndirectCommandBufferDescriptor alloc] init];
+            compute_descriptor.commandTypes = MTLIndirectCommandTypeConcurrentDispatch;
+            compute_descriptor.inheritPipelineState = YES;
+            compute_descriptor.inheritBuffers = YES;
+            id<MTLIndirectCommandBuffer> compute_probe = [device
+                newIndirectCommandBufferWithDescriptor:compute_descriptor
+                                maxCommandCount:1
+                                         options:0];
+            if (render_probe != nil && compute_probe != nil) {
+                out_capabilities->indirect_command_buffers = 1u;
+            }
+            [render_probe release];
+            [compute_probe release];
+            [render_descriptor release];
+            [compute_descriptor release];
+        }
+
         out_capabilities->ray_tracing = vkmtl_device_supports_raytracing(device) ? 1u : 0u;
 
         if ([device respondsToSelector:@selector(newBinaryArchiveWithDescriptor:error:)]) {
@@ -2209,6 +2249,288 @@ vkmtl_metal_status vkmtl_metal_sampler_state_set_label(
     );
 }
 
+vkmtl_metal_status vkmtl_metal_resource_table_create(
+    vkmtl_metal_clear_screen *owner,
+    const vkmtl_metal_resource_table_range *ranges,
+    size_t range_count,
+    vkmtl_metal_resource_table **out_table
+) {
+    if (out_table == NULL) return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    *out_table = NULL;
+    if (owner == NULL || owner->device == nil || ranges == NULL || range_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+
+    @autoreleasepool {
+        NSMutableArray<MTLArgumentDescriptor *> *arguments = [[NSMutableArray alloc] initWithCapacity:range_count];
+        NSUInteger resource_count = 0;
+        for (size_t i = 0; i < range_count; ++i) {
+            const vkmtl_metal_resource_table_range range = ranges[i];
+            if (range.descriptor_count == 0) {
+                [arguments release];
+                return VKMTL_METAL_STATUS_INVALID_BUFFER;
+            }
+            MTLArgumentDescriptor *descriptor = [[MTLArgumentDescriptor alloc] init];
+            descriptor.index = range.binding;
+            descriptor.arrayLength = range.descriptor_count;
+            descriptor.access = range.writable ? MTLArgumentAccessReadWrite : MTLArgumentAccessReadOnly;
+            switch (range.resource_kind) {
+                case 0:
+                case 1:
+                    descriptor.dataType = MTLDataTypePointer;
+                    break;
+                case 2:
+                case 3:
+                    descriptor.dataType = MTLDataTypeTexture;
+                    descriptor.textureType = MTLTextureType2D;
+                    break;
+                case 4:
+                case 5:
+                    descriptor.dataType = MTLDataTypeSampler;
+                    break;
+                default:
+                    [descriptor release];
+                    [arguments release];
+                    return VKMTL_METAL_STATUS_INVALID_BUFFER;
+            }
+            [arguments addObject:descriptor];
+            [descriptor release];
+            const NSUInteger end = (NSUInteger)range.binding + (NSUInteger)range.descriptor_count;
+            if (end > resource_count) resource_count = end;
+        }
+
+        id<MTLArgumentEncoder> encoder = [owner->device newArgumentEncoderWithArguments:arguments];
+        [arguments release];
+        if (encoder == nil || encoder.encodedLength == 0) {
+            [encoder release];
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        id<MTLBuffer> buffer = [owner->device newBufferWithLength:encoder.encodedLength options:MTLResourceStorageModeShared];
+        if (buffer == nil) {
+            [encoder release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        [encoder setArgumentBuffer:buffer offset:0];
+
+        vkmtl_metal_resource_table *table = calloc(1, sizeof(*table));
+        if (table == NULL) {
+            [buffer release];
+            [encoder release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        table->resources = calloc(resource_count, sizeof(*table->resources));
+        table->usages = calloc(resource_count, sizeof(*table->usages));
+        if (table->resources == NULL || table->usages == NULL) {
+            free(table->resources);
+            free(table->usages);
+            free(table);
+            [buffer release];
+            [encoder release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        table->encoder = encoder;
+        table->buffer = buffer;
+        table->resource_count = resource_count;
+        *out_table = table;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+void vkmtl_metal_resource_table_destroy(vkmtl_metal_resource_table *table) {
+    if (table == NULL) return;
+    [table->buffer release];
+    [table->encoder release];
+    free(table->resources);
+    free(table->usages);
+    free(table);
+}
+
+vkmtl_metal_status vkmtl_metal_resource_table_set_label(
+    vkmtl_metal_resource_table *table,
+    const char *label,
+    size_t label_len
+) {
+    if (table == NULL) return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    return vkmtl_set_objc_label(table->buffer, label, label_len, VKMTL_METAL_STATUS_INVALID_BUFFER);
+}
+
+vkmtl_metal_status vkmtl_metal_resource_table_set_buffer(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    unsigned int writable
+) {
+    if (table == NULL || buffer == NULL || buffer->buffer == nil || index >= table->resource_count || offset > buffer->length) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    [table->encoder setBuffer:buffer->buffer offset:offset atIndex:index];
+    table->resources[index] = buffer->buffer;
+    table->usages[index] = MTLResourceUsageRead | (writable ? MTLResourceUsageWrite : 0);
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_resource_table_set_texture(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    vkmtl_metal_texture_view *view,
+    unsigned int writable
+) {
+    if (table == NULL || view == NULL || view->texture == nil || index >= table->resource_count) {
+        return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+    }
+    [table->encoder setTexture:view->texture atIndex:index];
+    table->resources[index] = view->texture;
+    table->usages[index] = MTLResourceUsageRead | (writable ? MTLResourceUsageWrite : 0);
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_resource_table_set_sampler(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    vkmtl_metal_sampler_state *sampler
+) {
+    if (table == NULL || sampler == NULL || sampler->sampler == nil || index >= table->resource_count) {
+        return VKMTL_METAL_STATUS_INVALID_SAMPLER;
+    }
+    [table->encoder setSamplerState:sampler->sampler atIndex:index];
+    table->resources[index] = nil;
+    table->usages[index] = 0;
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_resource_table_clear(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    unsigned int resource_kind
+) {
+    if (table == NULL || index >= table->resource_count) return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    switch (resource_kind) {
+        case 0:
+        case 1:
+            [table->encoder setBuffer:nil offset:0 atIndex:index];
+            break;
+        case 2:
+        case 3:
+            [table->encoder setTexture:nil atIndex:index];
+            break;
+        case 4:
+        case 5:
+            [table->encoder setSamplerState:nil atIndex:index];
+            break;
+        default:
+            return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    table->resources[index] = nil;
+    table->usages[index] = 0;
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_create(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int kind,
+    unsigned int max_command_count,
+    vkmtl_metal_indirect_command_buffer **out_buffer
+) {
+    if (out_buffer == NULL) return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    *out_buffer = NULL;
+    if (owner == NULL || owner->device == nil || kind > 1 || max_command_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 11.0, *)) {
+        MTLIndirectCommandBufferDescriptor *descriptor = [[MTLIndirectCommandBufferDescriptor alloc] init];
+        descriptor.commandTypes = kind == 0 ? MTLIndirectCommandTypeDraw : MTLIndirectCommandTypeConcurrentDispatch;
+        descriptor.inheritPipelineState = YES;
+        descriptor.inheritBuffers = YES;
+        id<MTLIndirectCommandBuffer> native = [owner->device
+            newIndirectCommandBufferWithDescriptor:descriptor
+                            maxCommandCount:max_command_count
+                                     options:0];
+        [descriptor release];
+        if (native == nil) return VKMTL_METAL_STATUS_UNSUPPORTED;
+        vkmtl_metal_indirect_command_buffer *buffer = calloc(1, sizeof(*buffer));
+        if (buffer == NULL) {
+            [native release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        buffer->buffer = native;
+        buffer->kind = kind;
+        buffer->max_command_count = max_command_count;
+        *out_buffer = buffer;
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_indirect_command_buffer_destroy(vkmtl_metal_indirect_command_buffer *buffer) {
+    if (buffer == NULL) return;
+    [buffer->buffer release];
+    free(buffer);
+}
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_set_label(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    const char *label,
+    size_t label_len
+) {
+    if (buffer == NULL) return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    return vkmtl_set_objc_label(buffer->buffer, label, label_len, VKMTL_METAL_STATUS_INVALID_COMMAND);
+}
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_reset(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int location,
+    unsigned int count
+) {
+    if (buffer == NULL || count == 0 || (NSUInteger)location + count > buffer->max_command_count) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    [buffer->buffer resetWithRange:NSMakeRange(location, count)];
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_encode_draw(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int command_index,
+    unsigned int primitive_type,
+    unsigned int vertex_start,
+    unsigned int vertex_count,
+    unsigned int instance_count,
+    unsigned int base_instance
+) {
+    if (buffer == NULL || buffer->kind != 0 || command_index >= buffer->max_command_count || vertex_count == 0 || instance_count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    id<MTLIndirectRenderCommand> command = [buffer->buffer indirectRenderCommandAtIndex:command_index];
+    MTLPrimitiveType native_type = primitive_type == 0 ? MTLPrimitiveTypeTriangle :
+        (primitive_type == 1 ? MTLPrimitiveTypeLine : MTLPrimitiveTypePoint);
+    [command drawPrimitives:native_type
+                vertexStart:vertex_start
+                vertexCount:vertex_count
+              instanceCount:instance_count
+               baseInstance:base_instance];
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_encode_dispatch(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int command_index,
+    unsigned int threadgroup_count_x,
+    unsigned int threadgroup_count_y,
+    unsigned int threadgroup_count_z,
+    unsigned int threads_per_threadgroup_x,
+    unsigned int threads_per_threadgroup_y,
+    unsigned int threads_per_threadgroup_z
+) {
+    if (buffer == NULL || buffer->kind != 1 || command_index >= buffer->max_command_count) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    id<MTLIndirectComputeCommand> command = [buffer->buffer indirectComputeCommandAtIndex:command_index];
+    [command concurrentDispatchThreadgroups:MTLSizeMake(threadgroup_count_x, threadgroup_count_y, threadgroup_count_z)
+                        threadsPerThreadgroup:MTLSizeMake(threads_per_threadgroup_x, threads_per_threadgroup_y, threads_per_threadgroup_z)];
+    return VKMTL_METAL_STATUS_OK;
+}
+
 vkmtl_metal_status vkmtl_metal_shader_module_create_msl(
     vkmtl_metal_clear_screen *owner,
     const char *source,
@@ -2349,6 +2671,86 @@ static id<MTLFunction> vkmtl_new_function_with_constants(
     return function;
 }
 
+typedef struct vkmtl_binary_archive_session {
+    id<MTLBinaryArchive> archive;
+    NSURL *url;
+    NSString *identity_path;
+    uint64_t identity_hash;
+    unsigned int read_only;
+} vkmtl_binary_archive_session;
+
+static vkmtl_binary_archive_session vkmtl_binary_archive_begin(
+    id<MTLDevice> device,
+    const char *path,
+    size_t path_len,
+    uint64_t identity_hash,
+    unsigned int read_only
+) {
+    vkmtl_binary_archive_session session = {0};
+    if (path == NULL || path_len == 0) return session;
+    if (@available(macOS 11.0, *)) {
+        NSString *path_string = [[NSString alloc] initWithBytes:path length:path_len encoding:NSUTF8StringEncoding];
+        if (path_string == nil) return session;
+        NSString *parent = [path_string stringByDeletingLastPathComponent];
+        if (parent.length != 0) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:parent
+                                      withIntermediateDirectories:YES
+                                                       attributes:nil
+                                                            error:nil];
+        }
+        NSString *identity_path = [path_string stringByAppendingString:@".identity"];
+        NSData *stored_identity = [NSData dataWithContentsOfFile:identity_path];
+        uint64_t stored_hash = 0;
+        BOOL identity_matches = stored_identity.length == sizeof(stored_hash);
+        if (identity_matches) memcpy(&stored_hash, stored_identity.bytes, sizeof(stored_hash));
+        identity_matches = identity_matches && stored_hash == identity_hash;
+        if (!identity_matches) {
+            [[NSFileManager defaultManager] removeItemAtPath:path_string error:nil];
+            [[NSFileManager defaultManager] removeItemAtPath:identity_path error:nil];
+        }
+
+        NSURL *url = [NSURL fileURLWithPath:path_string];
+        MTLBinaryArchiveDescriptor *descriptor = [[MTLBinaryArchiveDescriptor alloc] init];
+        if (identity_matches && [[NSFileManager defaultManager] fileExistsAtPath:path_string]) {
+            descriptor.url = url;
+        }
+        NSError *error = nil;
+        id<MTLBinaryArchive> archive = [device newBinaryArchiveWithDescriptor:descriptor error:&error];
+        if (archive == nil && descriptor.url != nil) {
+            descriptor.url = nil;
+            [[NSFileManager defaultManager] removeItemAtPath:path_string error:nil];
+            archive = [device newBinaryArchiveWithDescriptor:descriptor error:&error];
+        }
+        [descriptor release];
+        if (archive != nil) {
+            session.archive = archive;
+            session.url = [url retain];
+            session.identity_path = [identity_path copy];
+            session.identity_hash = identity_hash;
+            session.read_only = read_only;
+        }
+        [path_string release];
+    }
+    return session;
+}
+
+static void vkmtl_binary_archive_finish(vkmtl_binary_archive_session *session, BOOL pipeline_created) {
+    if (session == NULL || session->archive == nil) return;
+    if (@available(macOS 11.0, *)) {
+        if (pipeline_created && !session->read_only) {
+            NSError *error = nil;
+            if ([session->archive serializeToURL:session->url error:&error]) {
+                NSData *identity = [NSData dataWithBytes:&session->identity_hash length:sizeof(session->identity_hash)];
+                [identity writeToFile:session->identity_path options:NSDataWritingAtomic error:nil];
+            }
+        }
+        [session->identity_path release];
+        [session->url release];
+        [session->archive release];
+        session->archive = nil;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_shader_module *vertex_shader,
@@ -2382,6 +2784,10 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     size_t vertex_buffer_count,
     const vkmtl_metal_vertex_attribute *vertex_attributes,
     size_t vertex_attribute_count,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
     vkmtl_metal_render_pipeline_state **out_pipeline
 ) {
     if (out_pipeline == NULL) {
@@ -2465,6 +2871,9 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
 
         descriptor.vertexFunction = vertex_function;
         descriptor.fragmentFunction = fragment_function;
+        if (@available(macOS 10.14, *)) {
+            descriptor.supportIndirectCommandBuffers = YES;
+        }
         for (size_t i = 0; i < color_attachment_count; i += 1) {
             const vkmtl_metal_render_pipeline_color_attachment attachment = color_attachments[i];
             if (attachment.format == VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
@@ -2528,13 +2937,32 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
             [vertex_descriptor release];
         }
 
+        vkmtl_binary_archive_session archive = vkmtl_binary_archive_begin(
+            owner->device,
+            cache_path,
+            cache_path_len,
+            cache_identity_hash,
+            cache_read_only
+        );
+        if (@available(macOS 11.0, *)) {
+            if (archive.archive != nil) {
+                NSError *archive_error = nil;
+                [archive.archive addRenderPipelineFunctionsWithDescriptor:descriptor error:&archive_error];
+                descriptor.binaryArchives = @[archive.archive];
+            }
+        }
+
         NSError *error = nil;
         id<MTLRenderPipelineState> pipeline =
             [owner->device newRenderPipelineStateWithDescriptor:descriptor error:&error];
+        vkmtl_binary_archive_finish(&archive, pipeline != nil);
         [descriptor release];
         [fragment_function release];
         [vertex_function release];
         if (pipeline == nil) {
+            if (error != nil) {
+                fprintf(stderr, "vkmtl Metal render pipeline error: %s\n", error.localizedDescription.UTF8String);
+            }
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
         }
 
@@ -2641,6 +3069,10 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     size_t compute_entry_len,
     const vkmtl_metal_function_constant *constants,
     size_t constant_count,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
     vkmtl_metal_compute_pipeline_state **out_pipeline
 ) {
     if (out_pipeline == NULL) {
@@ -2678,9 +3110,33 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
         }
 
+        vkmtl_binary_archive_session archive = vkmtl_binary_archive_begin(
+            owner->device,
+            cache_path,
+            cache_path_len,
+            cache_identity_hash,
+            cache_read_only
+        );
         NSError *error = nil;
-        id<MTLComputePipelineState> pipeline =
-            [owner->device newComputePipelineStateWithFunction:compute_function error:&error];
+        id<MTLComputePipelineState> pipeline = nil;
+        MTLComputePipelineDescriptor *descriptor = [[MTLComputePipelineDescriptor alloc] init];
+        descriptor.computeFunction = compute_function;
+        if (@available(macOS 10.14, *)) {
+            descriptor.supportIndirectCommandBuffers = YES;
+        }
+        if (@available(macOS 11.0, *)) {
+            if (archive.archive != nil) {
+                NSError *archive_error = nil;
+                [archive.archive addComputePipelineFunctionsWithDescriptor:descriptor error:&archive_error];
+                descriptor.binaryArchives = @[archive.archive];
+            }
+        }
+        pipeline = [owner->device newComputePipelineStateWithDescriptor:descriptor
+                                                                options:MTLPipelineOptionNone
+                                                             reflection:nil
+                                                                  error:&error];
+        [descriptor release];
+        vkmtl_binary_archive_finish(&archive, pipeline != nil);
         [compute_function release];
         if (pipeline == nil) {
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
@@ -4221,6 +4677,42 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_sampler_state
     }
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_resource_table(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    unsigned int visibility
+) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended || table == NULL || table->buffer == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if ((visibility & 1u) != 0) [encoder->encoder setVertexBuffer:table->buffer offset:0 atIndex:index];
+    if ((visibility & 2u) != 0) [encoder->encoder setFragmentBuffer:table->buffer offset:0 atIndex:index];
+
+    MTLRenderStages stages = 0;
+    if ((visibility & 1u) != 0) stages |= MTLRenderStageVertex;
+    if ((visibility & 2u) != 0) stages |= MTLRenderStageFragment;
+    for (NSUInteger i = 0; i < table->resource_count; ++i) {
+        if (table->resources[i] == nil) continue;
+        [encoder->encoder useResource:table->resources[i] usage:table->usages[i] stages:stages];
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_execute_indirect_commands(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int location,
+    unsigned int count
+) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended || buffer == NULL || buffer->kind != 0 ||
+        count == 0 || (NSUInteger)location + count > buffer->max_command_count) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    [encoder->encoder executeCommandsInBuffer:buffer->buffer withRange:NSMakeRange(location, count)];
+    return VKMTL_METAL_STATUS_OK;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_viewport(
     vkmtl_metal_render_command_encoder *encoder,
     double x,
@@ -4758,6 +5250,36 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_sampler_state(
         [encoder->encoder setSamplerState:sampler->sampler atIndex:index];
         return VKMTL_METAL_STATUS_OK;
     }
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_resource_table(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_resource_table *table,
+    unsigned int index
+) {
+    if (encoder == NULL || encoder->encoder == nil || table == NULL || table->buffer == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    [encoder->encoder setBuffer:table->buffer offset:0 atIndex:index];
+    for (NSUInteger i = 0; i < table->resource_count; ++i) {
+        if (table->resources[i] == nil) continue;
+        [encoder->encoder useResource:table->resources[i] usage:table->usages[i]];
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_execute_indirect_commands(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int location,
+    unsigned int count
+) {
+    if (encoder == NULL || encoder->encoder == nil || buffer == NULL || buffer->kind != 1 ||
+        count == 0 || (NSUInteger)location + count > buffer->max_command_count) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    [encoder->encoder executeCommandsInBuffer:buffer->buffer withRange:NSMakeRange(location, count)];
+    return VKMTL_METAL_STATUS_OK;
 }
 
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups(

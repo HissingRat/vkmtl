@@ -46,7 +46,7 @@ after their deterministic check.
 | Transfer readback | `zig build run-transfer-readback` | Auto-exit | Exact copies pass and print `transfer readback ok`. |
 | Compute readback | `zig build run-compute-readback` | Auto-exit | Storage buffer/texture bytes match and print `compute readback ok`. |
 | Capability dump | `zig build run-capability-dump` | Auto-exit | Console report starts with backend/adapter and includes features, limits, formats, and diagnostics. |
-| Bindless textures | `zig build run-bindless-textures` | Auto-exit probe | Prints `bindless texture table ok: ...` or `bindless textures unsupported: ...`. |
+| Bindless textures | `zig build run-bindless-textures` | Windowed; set `VKMTL_PIXEL_REGRESSION=1` for one frame | Samples a 65-slot native table through a reusable indirect draw and reports persistent cache use, or prints a typed unsupported message. |
 | Multi-window | `zig build run-multi-window` | Two-window probe | Prints both surface records, then availability or the expected feature-gate line. |
 | External texture | `zig build run-external-texture` | Auto-exit probe | Prints `external texture wrapper ok: ...` or an explicit unsupported line. |
 | Streaming texture | `zig build run-streaming-texture` | Auto-exit probe | Prints residency success or `streaming texture unsupported: ...`. |
@@ -279,15 +279,19 @@ VKMTL_BACKEND=metal zig build run-capability-dump
 
 ## Bindless Textures
 
-`examples/bindless_textures` exercises the advanced binding path by creating an
-`AdvancedBindGroupLayout` and a `ResourceTable`. Until the selected backend
-advertises descriptor indexing or argument-buffer support, the example exits
-with a clear unsupported-feature message.
+`examples/bindless_textures` exercises the complete advanced binding path. It
+creates a 64-texture-plus-sampler `ResourceTable`, declares the compatible
+pipeline layout, executes a CPU-authored reusable draw list, and supplies a
+persistent driver cache. Metal lowers this to an argument buffer, native ICB,
+and binary archive. Vulkan uses descriptor indexing, exact direct-command
+expansion, and a pipeline cache. Unsupported devices exit with a clear typed
+message.
 
 Run it with:
 
 ```sh
 zig build run-bindless-textures
+VKMTL_BACKEND=metal VKMTL_PIXEL_REGRESSION=1 zig build run-bindless-textures
 ```
 
 ## Compute Gallery

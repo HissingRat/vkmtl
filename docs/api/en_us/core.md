@@ -523,7 +523,21 @@ queries.
 binding validation, update-after-bind validation, and render/compute command
 binding through `setResourceTable(...)`. Ordinary `BindGroup` remains the
 portable path; resource tables are the advanced descriptor-indexing /
-argument-buffer path.
+argument-buffer path. Render/compute pipelines declare compatible
+`resource_table_layouts`; these slots follow ordinary `bind_group_layouts`, and
+`setResourceTable(...)` rejects a mismatched slot/layout before native work.
+Metal lowers the table to a real argument buffer and Vulkan to an enabled,
+allocated, updated, and bound descriptor-indexing set. Vulkan supports
+replacement updates after bind for ranges that opt in; clearing a Vulkan slot
+must happen before its first command binding because the current baseline does
+not require null descriptors.
+
+CPU-authored reusable draw/dispatch lists live under `vkmtl.command`. Create an
+`IndirectCommandBuffer`, encode fixed slots, then call the render or compute
+encoder's `executeIndirectCommands(...)`. Slots inherit the active pipeline and
+resources. Metal uses a native indirect command buffer when supported; Vulkan
+expands the immutable range into exact direct commands. Shader/GPU mutation of
+slots is not supported by this contract.
 
 `vkmtl.binding.ResourceTablePressureDescriptor` and
 `vkmtl.binding.planResourceTablePressure(device, descriptor)` summarize large table pressure before
@@ -899,8 +913,11 @@ Identity includes backend, device, driver, shader hash, and schema version so
 future disk cache invalidation can be explicit.
 `vkmtl.diagnostics.planDriverPipelineCache(device, descriptor)` validates against native feature reports
 and returns `DriverPipelineCachePlan`, including whether the path already exists
-and whether shutdown should store a new blob. Pipeline creation does not consume
-native driver cache objects yet.
+and whether shutdown should store a new blob. Supplying that descriptor as a
+render/compute pipeline's `driver_cache` makes creation consume and update a
+native Vulkan pipeline cache or Metal binary archive. Identity mismatch,
+missing, or invalid native data falls back to an empty cache; read-only mode
+never writes.
 
 Pipeline artifact compatibility is represented by
 `PipelineArtifactManifestDescriptor` and `PipelineArtifactCachePlanDescriptor`.
@@ -908,8 +925,8 @@ Pipeline artifact compatibility is represented by
 missing, stale schema, backend mismatch, shader hash mismatch, entry point
 mismatch, reflection mismatch, format mismatch, or toolchain mismatch. This is
 the portable invalidation contract for generated SPIR-V, MSL, and reflection
-artifacts; native `VkPipelineCache`, pipeline-library, and `MTLBinaryArchive`
-consumption remains backend work.
+artifacts. Native pipeline-library breadth remains separate from the now
+executable `VkPipelineCache` / `MTLBinaryArchive` persistence path.
 
 ## Stability Diagnostics
 

@@ -49,6 +49,7 @@ pipeline_statistics_queries	QRY-04
 render_pipelines	REN-01
 compute_pipelines	CMP-01
 compute_dispatch_indirect	CMP-02
+indirect_command_buffers	REN-04,CMP-02
 bind_groups	BND-01
 descriptor_indexing	BND-03
 argument_buffers	BND-03

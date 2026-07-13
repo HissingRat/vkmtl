@@ -438,7 +438,18 @@ backend-aware 的 `AdvancedBindGroupLayout`，并提供 descriptor count 和 ran
 Resource table 支持 `update(...)`、`clear(...)`、partially-bound 校验、
 update-after-bind 校验，并可以通过 render / compute encoder 的 `setResourceTable(...)`
 绑定到命令流。普通 `BindGroup` 仍然是 portable 路径；resource table 是 descriptor
-indexing / argument buffer 的高级路径。
+indexing / argument buffer 的高级路径。Render / compute pipeline 通过
+`resource_table_layouts` 声明兼容 layout；这些 slot 位于普通 `bind_group_layouts` 之后，
+`setResourceTable(...)` 会在 native work 前拒绝不匹配的 slot/layout。Metal 会下沉到真实
+argument buffer，Vulkan 会下沉到已启用、分配、更新并绑定的 descriptor-indexing set。Vulkan 对
+opt-in range 支持 bind 后替换已有 resource；由于当前 baseline 不要求 null descriptor，清除 Vulkan
+slot 必须发生在第一次 command binding 之前。
+
+CPU-authored 的可复用 draw/dispatch list 位于 `vkmtl.command`。创建
+`IndirectCommandBuffer` 并写入固定 slot 后，通过 render 或 compute encoder 的
+`executeIndirectCommands(...)` 执行。Slot 会继承当前 pipeline 和 resource。Metal 在支持时
+使用 native indirect command buffer；Vulkan 会把 immutable range 精确展开为 direct
+command。此 contract 不支持 shader/GPU 修改 slot。
 
 `vkmtl.binding.ResourceTablePressureDescriptor` 和
 `vkmtl.binding.planResourceTablePressure(device, descriptor)` 用来在分配前总结大型 resource table 的压力。
@@ -745,15 +756,17 @@ Driver-level cache identity 由 `DriverCacheIdentityDescriptor` 和
 backend、device、driver、shader hash 和 schema version，方便后续显式做 disk cache invalidation。
 `vkmtl.diagnostics.planDriverPipelineCache(device, descriptor)` 会按 native feature report 验证并返回
 `DriverPipelineCachePlan`，其中包括 path 是否已经存在，以及 shutdown 时是否应该写入新 blob。
-Pipeline creation 目前还不会消费 native driver cache object。
+把该 descriptor 传给 render / compute pipeline 的 `driver_cache` 后，pipeline creation 会消费并
+更新 native Vulkan pipeline cache 或 Metal binary archive。Identity 不匹配、文件缺失或 native
+数据无效时会退回空 cache；read-only 模式绝不写入。
 
 Pipeline artifact compatibility 由 `PipelineArtifactManifestDescriptor` 和
 `PipelineArtifactCachePlanDescriptor` 表示。
 `vkmtl.diagnostics.planPipelineArtifactCache(device, descriptor)`
 会把 cache entry 分类为 compatible、missing、stale schema、backend mismatch、shader hash
 mismatch、entry point mismatch、reflection mismatch、format mismatch 或 toolchain mismatch。
-这是生成的 SPIR-V、MSL 和 reflection artifact 的 portable invalidation contract；native
-`VkPipelineCache`、pipeline library 和 `MTLBinaryArchive` 消费仍是 backend work。
+这是生成的 SPIR-V、MSL 和 reflection artifact 的 portable invalidation contract。Native
+pipeline-library breadth 仍是独立工作；`VkPipelineCache` / `MTLBinaryArchive` 持久化已经可执行。
 
 ## Stability Diagnostics
 

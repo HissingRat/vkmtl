@@ -83,6 +83,8 @@ vkmtl documentation is organized by audience and purpose.
   lifecycle, and presentation timing
 - `develop/period49/`: native heaps, memory telemetry, hardware memoryless
   attachments, and sparse/residency support boundaries
+- `develop/period50/`: scalable resource tables, reusable indirect commands,
+  driver pipeline artifacts, and explicit dynamic-linking boundaries
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

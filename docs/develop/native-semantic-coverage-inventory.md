@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 49 complete, 2026-07-13.
+Status: Period 50 complete, 2026-07-13.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -22,8 +22,10 @@ rows into 101 units. Period 47 Phase 1 split six advanced remainders from its
 portable targets, producing 107 stable Metal semantic units and retaining the
 complete 78-protocol map. Period 48 closes six synchronization, queue,
 lifecycle, hazard, and presentation rows. Period 49 closes eight memory,
-residency, cache, and optimization rows, leaving 52 incomplete units routed
-exactly once.
+residency, cache, and optimization rows. Period 50 splits CPU-authored reusable
+commands from GPU-authored mutation, producing 109 Metal semantic units; it
+closes scalable tables, reusable command lists, linked-function decisions, and
+driver artifacts, leaving 42 incomplete units routed exactly once.
 It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
 
@@ -119,15 +121,15 @@ develops a different lowering or support state.
 | REN-01 | Render pipelines, indexed/direct draw, viewport, scissor, cull, depth, stencil, blend | `render` | `native-exact` | `native-exact` | Representative `gpu-pixels`; not every state combination is physically observed. |
 | REN-02 | MRT, offscreen targets, MSAA color resolve | `render` | `native-exact` | `native-exact` | `unit` and representative `gpu-pixels`. |
 | REN-03 | Base vertex/base instance and instance step rate | `render` | `native-exact` | `native-exact` | `unit`; Vulkan divisor support is capability-gated. |
-| REN-04 | Indirect and explicit multi-draw behavior | `render` | `composed-exact` | `composed-exact` | `unit`; implementations may expand a multi-draw into repeated native draws. |
+| REN-04 | Indirect/explicit multi-draw and CPU-authored reusable draw lists | `render`, `command` | `composed-exact` | `composed-exact` | `gpu-smoke` on Metal for native ICB execution; Vulkan and native-unavailable paths may expand immutable commands into repeated native draws. GPU-authored mutation is excluded. |
 | REN-05 | Wireframe/line fill and depth bias | `render` | `native-exact` | `native-exact` | `unit`; native capability gates apply. |
 | REN-06 | Conservative rasterization | `render` | `incomplete` | `incomplete` | Public capability exists, but complete lowering/evidence is absent. |
 | REN-07 | Depth/stencil resolve and texture-view format reinterpretation | `render`, `resource` | `incomplete` | `incomplete` | Compatible linear/sRGB texture views and component swizzles are native-exact in Period 47; depth/stencil resolve remains typed unsupported. |
 | BND-01 | Ordinary render/compute bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative render/compute `gpu-pixels`. |
 | BND-02 | Root/small constants | `binding` | `native-exact` | `native-exact` | `unit`; Metal bytes and Vulkan push-constant lowering are backend-specific. |
-| BND-03 | Bindless tables, descriptor indexing, and argument buffers | `binding` | `incomplete` | `incomplete` | Runtime/table contracts exist, but usable features remain conservatively closed and large-table GPU evidence is missing. |
+| BND-03 | Bindless tables, descriptor indexing, and argument buffers | `binding` | `native-exact` | `native-exact` | Metal `gpu-smoke` covers a 65-slot argument buffer; Vulkan descriptor-indexing feature enablement, set allocation/update/binding, and compatible pipeline layouts have unit/forced-build evidence. |
 | CMP-01 | Compute pipeline, direct dispatch, and ceil-composed logical-thread dispatch | `compute` | `native-exact` | `native-exact` | `gpu-pixels` through deterministic compute readback; shaders own out-of-logical-grid bounds checks after ceil composition. |
-| CMP-02 | Indirect compute dispatch | `compute` | `native-exact` | `native-exact` | `unit`; focused physical-device evidence is not recorded. |
+| CMP-02 | Indirect compute dispatch and CPU-authored reusable dispatch lists | `compute`, `command` | `composed-exact` | `composed-exact` | `unit`; ordinary buffer-indirect dispatch is native, reusable slots use Metal ICB when available and exact direct dispatch expansion otherwise. GPU-authored mutation is excluded. |
 | CMP-03 | 32-bit integer storage-buffer/threadgroup atomics and threadgroup memory within queried limits | `compute` | `native-exact` | `native-exact` | `gpu-pixels` on Metal proves deterministic atomic/shared-memory output; Vulkan has unit/compile evidence and core semantic inspection. Storage-texture and wider atomic families are not promised. |
 | XFR-01 | Buffer/texture copies across current color mip/layer/slice ranges | `transfer` | `composed-exact` | `native-exact` | `gpu-pixels`; Metal may loop over slices. |
 | XFR-02 | Unaligned buffer fill | `transfer` | `native-exact` | `composed-exact` | `unit`; Vulkan uses a staging-copy fallback. |
@@ -152,7 +154,8 @@ develops a different lowering or support state.
 | MEM-03 | Hardware memoryless attachment guarantee | `resource`, `render` | `native-exact` | `unsupported` | Metal native creation probe plus physical memoryless MSAA resolve. Vulkan lazily allocated memory cannot promise no physical backing; `transient` remains a separate hint. |
 | MEM-04 | Native memory budget and pressure telemetry | `diagnostics` | `native-exact` | `native-exact` | Metal `gpu-smoke` reports recommended working set/current allocation; Vulkan uses queried `VK_EXT_memory_budget` device-local heaps and otherwise reports fallback. |
 | MEM-05 | Native sparse/tiled resources, residency sets, and page binding | `resource`, `native` | `unsupported` | `unsupported` | Plans and churn maps remain deterministic, but current descriptors do not identify native resources. Usable sparse/residency features stay closed. |
-| PRD-01 | Runtime object reuse and persistent driver pipeline artifacts | `diagnostics` | `incomplete` | `incomplete` | Diagnostics/plans exist; native handle pools, `MTLBinaryArchive`, and `VkPipelineCache` consumption remain deferred. |
+| PRD-01 | Persistent driver render/compute pipeline artifacts | `diagnostics`, pipeline descriptors | `native-exact` | `native-exact` | Metal `gpu-smoke` consumes/populates/serializes `MTLBinaryArchive`; Vulkan consumes/persists `VkPipelineCache` with deterministic identity and stale-data recovery. |
+| PRD-02 | Runtime native object and resource-view pooling | `missing-contract` | `incomplete` | `incomplete` | No lifetime-safe portable pool owner exists; Metal 4 resource/view pools remain routed to Period 54. |
 
 ### Advanced Geometry, Ray Tracing, Interop, And Diagnostics
 
@@ -173,9 +176,10 @@ develops a different lowering or support state.
 
 ## Metal Source-Coverage Ledger
 
-Period 45 established the source ledger; Periods 46-49 refined it to 107 units
-by splitting exact query subsets and Period 47's portable targets from their
-advanced remainders. Missing vkmtl concepts remain explicit `missing-contract` entries;
+Period 45 established the source ledger; Periods 46-50 refined it to 109 units
+by splitting exact query subsets, Period 47's portable targets from their
+advanced remainders, and CPU-authored reusable commands from GPU-authored
+mutation. Missing vkmtl concepts remain explicit `missing-contract` entries;
 their presence in the ledger does not admit public API or claim execution.
 
 | Source family | Current inventory state | Required action |
@@ -183,8 +187,8 @@ their presence in the ledger does not admit public API or claim execution.
 | Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus native synchronization, physical queue, lifecycle, and timed Metal presentation work completed in Period 48. |
 | Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited | Period 49 executes native placement heaps and closes residency/sparse execution as unsupported under the current handle-free mapping contract. |
-| Argument buffers/tables and indirect command buffers | Audited/incomplete | Period 50 owns scalable binding and generated commands. |
-| Function constants, dynamic libraries, linked functions, function pointers | Audited/incomplete | Period 46 completed numeric-ID function constants; Period 50 owns linking breadth. |
+| Argument buffers/tables and indirect command buffers | Audited | Period 50 executes classic argument-buffer/descriptor-indexing tables and CPU-authored reusable command lists. GPU mutation is explicitly unsupported; Metal 4 argument tables stay in Period 54. |
+| Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; RT function tables remain Period 52. |
 | Tessellation, object/mesh shaders, layered rendering, amplification | Audited/incomplete | Period 51 owns executable advanced geometry. |
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited/missing-contract | Period 51 decides exact composition or unsupported. |
 | Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 completed native timestamp/Boolean visibility subsets; Period 54 owns calibrated and device-specific counter breadth. |
@@ -219,7 +223,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-49 are complete. The updated exactly-once gap
-routing establishes Periods 50-54; Period 50 is next.
+The source audit and Periods 46-50 are complete. The updated exactly-once gap
+routing establishes Periods 51-54; Period 51 is next.
 `period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

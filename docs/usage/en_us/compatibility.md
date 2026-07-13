@@ -134,12 +134,19 @@ toward Metal argument buffers. Both are represented by
 `vkmtl.binding.DescriptorIndexingLayoutDescriptor`, `AdvancedBindGroupLayout`,
 and `ResourceTable`. Resource tables can be updated, cleared, and bound through
 render/compute encoders when the selected backend advertises the required
-feature.
+feature. Pipelines declare matching `resource_table_layouts`; Metal uses native
+argument buffers and Vulkan uses enabled descriptor-indexing sets. Binding the
+wrong layout/index is a typed error before backend work.
 
 Large table pressure is planned through
 `vkmtl.binding.planResourceTablePressure(device, descriptor)`. The plan makes partially-bound and
 update-after-bind requirements explicit before allocation, while native GPU
 stress evidence remains part of the backend/device validation matrix.
+
+CPU-authored reusable draw and dispatch lists are created through
+`vkmtl.command.makeIndirectCommandBuffer(...)`. They inherit active encoder
+state and execute through native Metal ICBs when available or exact direct
+command expansion on Vulkan. GPU-authored command mutation remains unsupported.
 
 Root constants lower to Vulkan push constants and Metal `set*Bytes` calls after
 a pipeline declares a compatible `root_constant_layout`.
@@ -191,5 +198,6 @@ identity descriptors. They are separate from Period 8 object-cache diagnostics.
 Shader / pipeline artifact compatibility is planned with
 `vkmtl.diagnostics.planPipelineArtifactCache(device, descriptor)`, which invalidates cached artifacts when
 shader hashes, entry points, reflection, formats, backend, schema, or toolchain
-identity changes. Native `VkPipelineCache`, pipeline-library, and
-`MTLBinaryArchive` persistence remains backend work.
+identity changes. Render/compute pipeline `driver_cache` descriptors now consume
+and persist native `VkPipelineCache` / `MTLBinaryArchive` data; native pipeline
+libraries remain separate backend work.

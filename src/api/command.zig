@@ -13,6 +13,10 @@ pub const DebugLabelDescriptor = core.DebugLabelDescriptor;
 pub const DebugSignpostDescriptor = core.DebugSignpostDescriptor;
 pub const DebugGroupStack = core.DebugGroupStack;
 pub const CommandEncodingError = core.CommandEncodingError;
+pub const IndirectCommandKind = core.IndirectCommandKind;
+pub const IndirectCommandBufferDescriptor = core.IndirectCommandBufferDescriptor;
+pub const IndirectCommandRange = core.IndirectCommandRange;
+pub const IndirectCommandBuffer = runtime.IndirectCommandBuffer;
 pub const CommandBuffer = runtime.CommandBuffer;
 pub const BlitCommandEncoder = runtime.BlitCommandEncoder;
 pub const RenderCommandEncoder = runtime.RenderCommandEncoder;
@@ -20,3 +24,4 @@ pub const ComputeCommandEncoder = runtime.ComputeCommandEncoder;
 
 pub const queueCapabilities = runtime.queueCapabilities;
 pub const planQueue = runtime.planQueue;
+pub const makeIndirectCommandBuffer = runtime.makeIndirectCommandBuffer;

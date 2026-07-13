@@ -6,6 +6,7 @@ const MetalClearScreen = @import("clear_screen.zig");
 const MetalShaderModule = @import("shader_module.zig");
 const specialization = @import("specialization.zig");
 const slots = @import("slots.zig");
+const cache_identity = @import("../pipeline_cache_identity.zig");
 
 const MetalRenderPipelineState = @This();
 
@@ -89,6 +90,10 @@ pub fn init(
         vertex_buffers.len,
         if (vertex_attributes.len == 0) null else vertex_attributes.ptr,
         vertex_attributes.len,
+        if (descriptor.driver_cache) |cache| cache.path.ptr else null,
+        if (descriptor.driver_cache) |cache| cache.path.len else 0,
+        if (descriptor.driver_cache) |cache| cache_identity.hash(cache.identity) else 0,
+        if (descriptor.driver_cache) |cache| @intFromBool(cache.read_only) else 0,
         &handle,
     ));
 

@@ -14,6 +14,8 @@ typedef struct vkmtl_metal_buffer vkmtl_metal_buffer;
 typedef struct vkmtl_metal_texture vkmtl_metal_texture;
 typedef struct vkmtl_metal_texture_view vkmtl_metal_texture_view;
 typedef struct vkmtl_metal_sampler_state vkmtl_metal_sampler_state;
+typedef struct vkmtl_metal_resource_table vkmtl_metal_resource_table;
+typedef struct vkmtl_metal_indirect_command_buffer vkmtl_metal_indirect_command_buffer;
 typedef struct vkmtl_metal_shader_module vkmtl_metal_shader_module;
 typedef struct vkmtl_metal_render_pipeline_state vkmtl_metal_render_pipeline_state;
 typedef struct vkmtl_metal_compute_pipeline_state vkmtl_metal_compute_pipeline_state;
@@ -273,6 +275,14 @@ typedef struct vkmtl_metal_render_pass_color_attachment {
     unsigned int store_action;
 } vkmtl_metal_render_pass_color_attachment;
 
+typedef struct vkmtl_metal_resource_table_range {
+    unsigned int binding;
+    unsigned int resource_kind;
+    unsigned int descriptor_count;
+    unsigned int visibility;
+    unsigned int writable;
+} vkmtl_metal_resource_table_range;
+
 typedef struct vkmtl_metal_native_handles {
     void *device;
     void *command_queue;
@@ -283,6 +293,7 @@ typedef struct vkmtl_metal_native_handles {
 typedef struct vkmtl_metal_device_capabilities {
     unsigned int argument_buffers;
     unsigned int argument_buffer_tier;
+    unsigned int indirect_command_buffers;
     unsigned int ray_tracing;
     unsigned int sparse_textures;
     unsigned int binary_archive;
@@ -315,6 +326,43 @@ typedef struct vkmtl_metal_device_capabilities {
     uint64_t recommended_working_set_size;
     uint64_t current_allocated_size;
 } vkmtl_metal_device_capabilities;
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_create(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int kind,
+    unsigned int max_command_count,
+    vkmtl_metal_indirect_command_buffer **out_buffer
+);
+void vkmtl_metal_indirect_command_buffer_destroy(vkmtl_metal_indirect_command_buffer *buffer);
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_set_label(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_reset(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int location,
+    unsigned int count
+);
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_encode_draw(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int command_index,
+    unsigned int primitive_type,
+    unsigned int vertex_start,
+    unsigned int vertex_count,
+    unsigned int instance_count,
+    unsigned int base_instance
+);
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_encode_dispatch(
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int command_index,
+    unsigned int threadgroup_count_x,
+    unsigned int threadgroup_count_y,
+    unsigned int threadgroup_count_z,
+    unsigned int threads_per_threadgroup_x,
+    unsigned int threads_per_threadgroup_y,
+    unsigned int threads_per_threadgroup_z
+);
 
 typedef struct vkmtl_metal_acceleration_structure_build_sizes {
     size_t result_size;
@@ -542,6 +590,42 @@ vkmtl_metal_status vkmtl_metal_sampler_state_set_label(
     size_t label_len
 );
 
+vkmtl_metal_status vkmtl_metal_resource_table_create(
+    vkmtl_metal_clear_screen *owner,
+    const vkmtl_metal_resource_table_range *ranges,
+    size_t range_count,
+    vkmtl_metal_resource_table **out_table
+);
+void vkmtl_metal_resource_table_destroy(vkmtl_metal_resource_table *table);
+vkmtl_metal_status vkmtl_metal_resource_table_set_label(
+    vkmtl_metal_resource_table *table,
+    const char *label,
+    size_t label_len
+);
+vkmtl_metal_status vkmtl_metal_resource_table_set_buffer(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    vkmtl_metal_buffer *buffer,
+    size_t offset,
+    unsigned int writable
+);
+vkmtl_metal_status vkmtl_metal_resource_table_set_texture(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    vkmtl_metal_texture_view *view,
+    unsigned int writable
+);
+vkmtl_metal_status vkmtl_metal_resource_table_set_sampler(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    vkmtl_metal_sampler_state *sampler
+);
+vkmtl_metal_status vkmtl_metal_resource_table_clear(
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    unsigned int resource_kind
+);
+
 vkmtl_metal_status vkmtl_metal_shader_module_create_msl(
     vkmtl_metal_clear_screen *owner,
     const char *source,
@@ -588,6 +672,10 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     size_t vertex_buffer_count,
     const vkmtl_metal_vertex_attribute *vertex_attributes,
     size_t vertex_attribute_count,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
     vkmtl_metal_render_pipeline_state **out_pipeline
 );
 void vkmtl_metal_render_pipeline_state_destroy(vkmtl_metal_render_pipeline_state *pipeline);
@@ -604,6 +692,10 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     size_t compute_entry_len,
     const vkmtl_metal_function_constant *constants,
     size_t constant_count,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
     vkmtl_metal_compute_pipeline_state **out_pipeline
 );
 void vkmtl_metal_compute_pipeline_state_destroy(vkmtl_metal_compute_pipeline_state *pipeline);
@@ -873,6 +965,18 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_fragment_sampler_state
     vkmtl_metal_sampler_state *sampler,
     unsigned int index
 );
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_resource_table(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    unsigned int visibility
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_execute_indirect_commands(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int location,
+    unsigned int count
+);
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_viewport(
     vkmtl_metal_render_command_encoder *encoder,
     double x,
@@ -1003,6 +1107,17 @@ vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_sampler_state(
     vkmtl_metal_compute_command_encoder *encoder,
     vkmtl_metal_sampler_state *sampler,
     unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_resource_table(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_resource_table *table,
+    unsigned int index
+);
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_execute_indirect_commands(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_indirect_command_buffer *buffer,
+    unsigned int location,
+    unsigned int count
 );
 vkmtl_metal_status vkmtl_metal_compute_command_encoder_dispatch_threadgroups(
     vkmtl_metal_compute_command_encoder *encoder,

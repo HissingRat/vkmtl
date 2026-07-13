@@ -8,6 +8,7 @@ const MetalBindGroup = @import("bind_group.zig").MetalBindGroup;
 const MetalBuffer = @import("buffer.zig");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
+const MetalIndirectCommandBuffer = @import("indirect_command.zig");
 const MetalQuerySet = @import("query_set.zig");
 const MetalRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("render_pipeline.zig");
@@ -572,8 +573,12 @@ pub const ComputeCommandEncoder = struct {
         binding: core.ResourceTableBinding,
     ) !void {
         try binding.validate();
-        _ = self;
-        _ = table;
+        const handle = table.handle orelse return CommandBuffer.Error.MetalUnsupported;
+        try check(metal.vkmtl_metal_compute_command_encoder_set_resource_table(
+            self.handle,
+            handle,
+            binding.index,
+        ));
     }
 
     pub fn setRootConstants(
@@ -619,6 +624,21 @@ pub const ComputeCommandEncoder = struct {
             descriptor.threads_per_threadgroup_y,
             descriptor.threads_per_threadgroup_z,
         ));
+    }
+
+    pub fn executeIndirectCommands(
+        self: *ComputeCommandEncoder,
+        buffer: *const MetalIndirectCommandBuffer,
+        range: core.IndirectCommandRange,
+    ) !bool {
+        const handle = buffer.handle orelse return false;
+        try check(metal.vkmtl_metal_compute_command_encoder_execute_indirect_commands(
+            self.handle,
+            handle,
+            range.location,
+            range.count,
+        ));
+        return true;
     }
 
     pub fn writeTimestamp(self: *ComputeCommandEncoder, query_set: *MetalQuerySet, query_index: u32) !void {
@@ -814,8 +834,13 @@ pub const RenderCommandEncoder = struct {
         binding: core.ResourceTableBinding,
     ) !void {
         try binding.validate();
-        _ = self;
-        _ = table;
+        const handle = table.handle orelse return CommandBuffer.Error.MetalUnsupported;
+        try check(metal.vkmtl_metal_render_command_encoder_set_resource_table(
+            self.handle,
+            handle,
+            binding.index,
+            visibilityBits(table.visibility()),
+        ));
     }
 
     pub fn setRootConstants(
@@ -884,6 +909,21 @@ pub const RenderCommandEncoder = struct {
             descriptor.instance_count,
             descriptor.base_instance,
         ));
+    }
+
+    pub fn executeIndirectCommands(
+        self: *RenderCommandEncoder,
+        buffer: *const MetalIndirectCommandBuffer,
+        range: core.IndirectCommandRange,
+    ) !bool {
+        const handle = buffer.handle orelse return false;
+        try check(metal.vkmtl_metal_render_command_encoder_execute_indirect_commands(
+            self.handle,
+            handle,
+            range.location,
+            range.count,
+        ));
+        return true;
     }
 
     pub fn drawIndexedPrimitives(
@@ -1089,6 +1129,12 @@ fn primitiveType(primitive_type: core.PrimitiveTopology) c_uint {
         .line => 1,
         .point => 2,
     };
+}
+
+fn visibilityBits(visibility: core.ShaderVisibility) u32 {
+    return @as(u32, @intFromBool(visibility.vertex)) |
+        (@as(u32, @intFromBool(visibility.fragment)) << 1) |
+        (@as(u32, @intFromBool(visibility.compute)) << 2);
 }
 
 fn makeRenderPassColorAttachments(

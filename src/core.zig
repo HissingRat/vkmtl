@@ -118,6 +118,7 @@ pub const DeviceFeatures = struct {
     render_pipelines: bool = true,
     compute_pipelines: bool = true,
     compute_dispatch_indirect: bool = false,
+    indirect_command_buffers: bool = false,
     bind_groups: bool = true,
     descriptor_indexing: bool = false,
     argument_buffers: bool = false,
@@ -200,6 +201,7 @@ pub const DeviceLimits = struct {
     max_acceleration_structure_instances: u32 = 0,
     max_shader_binding_table_records: u32 = 0,
     max_driver_cache_identity_bytes: u32 = 0,
+    max_indirect_command_count: u32 = 4096,
     sparse_buffer_page_size: u64 = 0,
     sparse_texture_page_width: u32 = 0,
     sparse_texture_page_height: u32 = 0,
@@ -2321,6 +2323,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.ResourceTableUpdateAfterBindUnsupported,
         error.InvalidResourceTableResource,
         error.ResourceTableVisibilityMismatch,
+        error.ResourceTablePipelineLayoutMismatch,
         error.EmptySmallConstantVisibility,
         error.EmptySmallConstantData,
         error.SmallConstantDataTooLarge,
@@ -2640,6 +2643,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .draw_base_instance = true,
         .indirect_draw = true,
         .compute_dispatch_indirect = true,
+        .indirect_command_buffers = true,
         .explicit_resource_barriers = true,
         .fences = true,
         .events = true,
@@ -4884,6 +4888,7 @@ pub const RenderPipelineDescriptor = struct {
     fragment: ?ProgrammableStageDescriptor = null,
     vertex_descriptor: VertexDescriptor = .{},
     bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
+    resource_table_layouts: []const DescriptorIndexingLayoutDescriptor = &.{},
     primitive_topology: PrimitiveTopology = .triangle,
     front_facing_winding: Winding = .counter_clockwise,
     cull_mode: CullMode = .none,
@@ -4894,17 +4899,19 @@ pub const RenderPipelineDescriptor = struct {
     color_attachments: []const RenderPipelineColorAttachmentDescriptor = &.{},
     depth_stencil: ?DepthStencilDescriptor = null,
     root_constant_layout: ?RootConstantLayoutDescriptor = null,
+    driver_cache: ?DriverPipelineCacheDescriptor = null,
     cache_policy: ObjectCachePolicy = .{},
 
-    pub fn validate(self: RenderPipelineDescriptor) (ShaderError || PipelineError || BindingError)!void {
+    pub fn validate(self: RenderPipelineDescriptor) (ShaderError || PipelineError || BindingError || AdvancedFeatureError)!void {
         try self.vertex.validate(.vertex);
         if (self.fragment) |fragment| try fragment.validate(.fragment);
         try self.vertex_descriptor.validate();
         for (self.bind_group_layouts) |layout| {
             try layout.validate();
         }
-        try validateProgrammableStageReflection(self.vertex, .vertex, self.bind_group_layouts);
-        if (self.fragment) |fragment| try validateProgrammableStageReflection(fragment, .fragment, self.bind_group_layouts);
+        for (self.resource_table_layouts) |layout| try layout.validateShape();
+        try validateProgrammableStageReflection(self.vertex, .vertex, self.bind_group_layouts, self.resource_table_layouts);
+        if (self.fragment) |fragment| try validateProgrammableStageReflection(fragment, .fragment, self.bind_group_layouts, self.resource_table_layouts);
         if (self.color_attachments.len == 0) return PipelineError.MissingColorAttachment;
         if (self.color_attachments.len > default_max_color_attachments) return PipelineError.UnsupportedMultipleRenderTargets;
         try self.depth_bias.validate();
@@ -4926,7 +4933,7 @@ pub const RenderPipelineCacheKeyDescriptor = struct {
         self: RenderPipelineCacheKeyDescriptor,
         features: DeviceFeatures,
         limits: DeviceLimits,
-    ) (ShaderError || PipelineError || BindingError || ObjectCacheError || SmallConstantError || RootConstantError)!void {
+    ) (ShaderError || PipelineError || BindingError || AdvancedFeatureError || ObjectCacheError || SmallConstantError || RootConstantError)!void {
         try self.pipeline.validate();
         try self.vertex_shader.validate();
         if (self.vertex_shader.stage != .vertex) return ObjectCacheError.InvalidObjectCacheKey;
@@ -4948,15 +4955,18 @@ pub const ComputePipelineDescriptor = struct {
     label: ?[]const u8 = null,
     compute: ProgrammableStageDescriptor,
     bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
+    resource_table_layouts: []const DescriptorIndexingLayoutDescriptor = &.{},
     root_constant_layout: ?RootConstantLayoutDescriptor = null,
+    driver_cache: ?DriverPipelineCacheDescriptor = null,
     cache_policy: ObjectCachePolicy = .{},
 
-    pub fn validate(self: ComputePipelineDescriptor) (ShaderError || BindingError)!void {
+    pub fn validate(self: ComputePipelineDescriptor) (ShaderError || BindingError || AdvancedFeatureError)!void {
         try self.compute.validate(.compute);
         for (self.bind_group_layouts) |layout| {
             try layout.validate();
         }
-        try validateProgrammableStageReflection(self.compute, .compute, self.bind_group_layouts);
+        for (self.resource_table_layouts) |layout| try layout.validateShape();
+        try validateProgrammableStageReflection(self.compute, .compute, self.bind_group_layouts, self.resource_table_layouts);
     }
 };
 
@@ -5043,10 +5053,17 @@ pub fn validateProgrammableStageReflection(
     stage_descriptor: ProgrammableStageDescriptor,
     expected_stage: ShaderStage,
     bind_group_layouts: []const BindGroupLayoutDescriptor,
+    resource_table_layouts: []const DescriptorIndexingLayoutDescriptor,
 ) ShaderError!void {
     const source = stage_descriptor.reflection orelse return;
     switch (source) {
-        .data => |reflection| try validateShaderStageReflection(stage_descriptor, expected_stage, reflection, bind_group_layouts),
+        .data => |reflection| try validateShaderStageReflectionWithResourceTables(
+            stage_descriptor,
+            expected_stage,
+            reflection,
+            bind_group_layouts,
+            resource_table_layouts,
+        ),
         .json => {},
         .artifact => {},
     }
@@ -5058,6 +5075,22 @@ pub fn validateShaderStageReflection(
     reflection: ShaderStageReflection,
     bind_group_layouts: []const BindGroupLayoutDescriptor,
 ) ShaderError!void {
+    return validateShaderStageReflectionWithResourceTables(
+        stage_descriptor,
+        expected_stage,
+        reflection,
+        bind_group_layouts,
+        &.{},
+    );
+}
+
+pub fn validateShaderStageReflectionWithResourceTables(
+    stage_descriptor: ProgrammableStageDescriptor,
+    expected_stage: ShaderStage,
+    reflection: ShaderStageReflection,
+    bind_group_layouts: []const BindGroupLayoutDescriptor,
+    resource_table_layouts: []const DescriptorIndexingLayoutDescriptor,
+) ShaderError!void {
     try validateShaderStageReflectionShape(reflection);
     if (reflection.stage != expected_stage or reflection.stage != stage_descriptor.stage) {
         return ShaderError.ShaderReflectionStageMismatch;
@@ -5068,13 +5101,37 @@ pub fn validateShaderStageReflection(
 
     for (reflection.bind_groups) |bind_group| {
         const layout_index: usize = @intCast(bind_group.index);
-        if (layout_index >= bind_group_layouts.len) {
+        if (layout_index < bind_group_layouts.len) {
+            for (bind_group.bindings) |binding| {
+                try validateShaderReflectionBinding(bind_group_layouts[layout_index], binding);
+            }
+            continue;
+        }
+        const table_index = layout_index - bind_group_layouts.len;
+        if (table_index >= resource_table_layouts.len) {
             return ShaderError.ShaderReflectionMissingBindGroupLayout;
         }
         for (bind_group.bindings) |binding| {
-            try validateShaderReflectionBinding(bind_group_layouts[layout_index], binding);
+            try validateShaderReflectionResourceTableBinding(resource_table_layouts[table_index], binding);
         }
     }
+}
+
+pub fn validateShaderReflectionResourceTableBinding(
+    layout: DescriptorIndexingLayoutDescriptor,
+    reflection: ShaderReflectionBinding,
+) ShaderError!void {
+    if (reflection.visibility.isEmpty() or reflection.array_count == 0) {
+        return ShaderError.InvalidShaderReflection;
+    }
+    for (layout.ranges) |range| {
+        if (range.binding != reflection.binding) continue;
+        if (range.resource != reflection.resource) return ShaderError.ShaderReflectionBindingKindMismatch;
+        if (range.descriptor_count != reflection.array_count) return ShaderError.ShaderReflectionBindingArrayCountMismatch;
+        if (!visibilityContains(range.visibility, reflection.visibility)) return ShaderError.ShaderReflectionVisibilityMismatch;
+        return;
+    }
+    return ShaderError.ShaderReflectionMissingBinding;
 }
 
 pub fn validateShaderReflectionBinding(
@@ -5354,6 +5411,37 @@ pub const DrawPrimitivesDescriptor = struct {
     pub fn validate(self: DrawPrimitivesDescriptor) CommandEncodingError!void {
         if (self.vertex_count == 0) return CommandEncodingError.InvalidVertexCount;
         if (self.instance_count == 0) return CommandEncodingError.InvalidInstanceCount;
+    }
+};
+
+pub const IndirectCommandKind = enum {
+    render,
+    compute,
+};
+
+pub const IndirectCommandBufferDescriptor = struct {
+    label: ?[]const u8 = null,
+    kind: IndirectCommandKind,
+    max_command_count: u32,
+
+    pub fn validate(self: IndirectCommandBufferDescriptor, features: DeviceFeatures, limits: DeviceLimits) CommandEncodingError!void {
+        if (!features.indirect_command_buffers) return CommandEncodingError.UnsupportedIndirectCommandBuffer;
+        if (self.max_command_count == 0 or
+            (limits.max_indirect_command_count != 0 and self.max_command_count > limits.max_indirect_command_count))
+        {
+            return CommandEncodingError.InvalidIndirectCommandRange;
+        }
+    }
+};
+
+pub const IndirectCommandRange = struct {
+    location: u32 = 0,
+    count: u32,
+
+    pub fn validate(self: IndirectCommandRange, max_command_count: u32) CommandEncodingError!void {
+        if (self.count == 0) return CommandEncodingError.InvalidIndirectCommandRange;
+        const end = std.math.add(u32, self.location, self.count) catch return CommandEncodingError.InvalidIndirectCommandRange;
+        if (end > max_command_count) return CommandEncodingError.InvalidIndirectCommandRange;
     }
 };
 
@@ -6329,6 +6417,7 @@ pub const CommandEncodingError = error{
     UnsupportedBaseInstance,
     UnsupportedMultipleRenderTargets,
     UnsupportedIndirectDraw,
+    UnsupportedIndirectCommandBuffer,
     UnsupportedMultiDraw,
     UnsupportedCommandBufferPooling,
     UnsupportedCommandBufferReset,
@@ -6362,6 +6451,9 @@ pub const CommandEncodingError = error{
     InvalidPresentationTiming,
     InvalidDispatchIndirectOffset,
     InvalidIndirectBufferUsage,
+    InvalidIndirectCommandKind,
+    InvalidIndirectCommandRange,
+    MissingIndirectCommand,
     InvalidAtomicStorageResource,
     MissingAtomicOperation,
     InvalidThreadgroupMemorySize,
@@ -8694,12 +8786,18 @@ pub const DescriptorIndexingLayoutDescriptor = struct {
             .descriptor_indexing => if (!features.descriptor_indexing) return AdvancedFeatureError.UnsupportedDescriptorIndexing,
             .argument_buffer => if (!features.argument_buffers) return AdvancedFeatureError.UnsupportedArgumentBuffers,
         }
-        if (self.ranges.len == 0) return AdvancedFeatureError.MissingDescriptorIndexingRange;
+        try self.validateShape();
         if (limits.max_bindless_ranges_per_layout != 0 and self.ranges.len > limits.max_bindless_ranges_per_layout) {
             return AdvancedFeatureError.DescriptorIndexingRangeCountExceeded;
         }
+        for (self.ranges) |range| try range.validate(limits);
+    }
+
+    pub fn validateShape(self: DescriptorIndexingLayoutDescriptor) AdvancedFeatureError!void {
+        if (self.ranges.len == 0) return AdvancedFeatureError.MissingDescriptorIndexingRange;
         for (self.ranges, 0..) |range, i| {
-            try range.validate(limits);
+            if (range.visibility.isEmpty()) return AdvancedFeatureError.EmptyDescriptorIndexingVisibility;
+            if (range.descriptor_count == 0) return AdvancedFeatureError.InvalidDescriptorIndexingCount;
             for (self.ranges[i + 1 ..]) |other| {
                 if (range.binding == other.binding) return AdvancedFeatureError.DuplicateDescriptorIndexingBinding;
             }
@@ -9168,6 +9266,7 @@ pub const BindingError = error{
     ResourceTableUpdateAfterBindUnsupported,
     InvalidResourceTableResource,
     ResourceTableVisibilityMismatch,
+    ResourceTablePipelineLayoutMismatch,
 };
 
 fn isAlignedU32(value: u32, alignment: u32) bool {
@@ -15412,6 +15511,30 @@ test "bind group layout descriptor validates resource bindings" {
     try cache_key.validate();
     try std.testing.expect(cache_key.asLayoutDescriptor().containsBinding(0));
     try std.testing.expectError(BindingError.MissingBindGroupLayoutEntry, (BindGroupLayoutCacheKeyDescriptor{}).validate());
+}
+
+test "indirect command descriptors validate capability capacity and ranges" {
+    const descriptor = IndirectCommandBufferDescriptor{
+        .kind = .render,
+        .max_command_count = 4,
+    };
+    try std.testing.expectError(
+        CommandEncodingError.UnsupportedIndirectCommandBuffer,
+        descriptor.validate(.{}, .{ .max_indirect_command_count = 4 }),
+    );
+    try descriptor.validate(.{ .indirect_command_buffers = true }, .{ .max_indirect_command_count = 4 });
+    try std.testing.expectError(
+        CommandEncodingError.InvalidIndirectCommandRange,
+        (IndirectCommandBufferDescriptor{ .kind = .compute, .max_command_count = 5 }).validate(
+            .{ .indirect_command_buffers = true },
+            .{ .max_indirect_command_count = 4 },
+        ),
+    );
+    try (IndirectCommandRange{ .location = 1, .count = 3 }).validate(4);
+    try std.testing.expectError(
+        CommandEncodingError.InvalidIndirectCommandRange,
+        (IndirectCommandRange{ .location = 2, .count = 3 }).validate(4),
+    );
 }
 
 test "bind group descriptor validates entries against layout" {

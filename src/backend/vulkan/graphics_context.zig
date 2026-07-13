@@ -473,7 +473,8 @@ fn queryNativeFeatures(
     result.sparse_textures = native.sparse_binding == .true and
         (native.sparse_residency_image_2d == .true or native.sparse_residency_image_3d == .true);
     result.tiled_textures = result.sparse_textures;
-    result.descriptor_indexing = extensions.descriptor_indexing;
+    result.descriptor_indexing = descriptorIndexingFeatures(instance, pdev) != null;
+    result.indirect_command_buffers = false;
     result.vertex_instance_step_rate = vertexAttributeDivisorFeatureSupported(instance, pdev, extensions);
     result.external_memory = extensions.external_memory;
     result.external_semaphores = extensions.external_semaphore;
@@ -525,7 +526,8 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.sparse_buffers = false;
     result.sparse_textures = false;
     result.tiled_textures = false;
-    result.descriptor_indexing = false;
+    result.descriptor_indexing = native_features.descriptor_indexing;
+    result.indirect_command_buffers = true;
     result.external_memory = false;
     result.external_semaphores = false;
     result.external_textures = false;
@@ -533,7 +535,7 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.task_shaders = false;
     result.acceleration_structures = false;
     result.ray_tracing = false;
-    result.driver_pipeline_cache = false;
+    result.driver_pipeline_cache = native_features.driver_pipeline_cache;
     result.buffer_gpu_address = native_features.buffer_gpu_address;
     result.compute_atomics = native_features.compute_atomics;
     result.compute_threadgroup_memory = native_features.compute_threadgroup_memory;
@@ -559,7 +561,6 @@ fn queryLimits(
     queried_features: core.DeviceFeatures,
     ray_tracing: core.RayTracingCapabilityDiagnostics,
 ) core.DeviceLimits {
-    _ = queried_features;
     var result = core.defaultDeviceLimits(.vulkan);
     var maintenance4 = vk.PhysicalDeviceMaintenance4Properties{
         .max_buffer_size = 0,
@@ -576,6 +577,7 @@ fn queryLimits(
     result.max_texture_dimension_3d = props.limits.max_image_dimension_3d;
     result.max_texture_array_layers = props.limits.max_image_array_layers;
     result.max_vertex_buffer_slots = @min(props.limits.max_vertex_input_bindings, core.default_max_vertex_buffer_slots);
+    result.max_bind_group_slots = @min(props.limits.max_bound_descriptor_sets, core.default_max_bind_group_slots);
     result.max_color_attachments = @max(1, props.limits.max_fragment_output_attachments);
     result.max_sampler_anisotropy = props.limits.max_sampler_anisotropy;
     result.min_uniform_buffer_offset_alignment = props.limits.min_uniform_buffer_offset_alignment;
@@ -594,7 +596,45 @@ fn queryLimits(
     result.max_ray_tracing_recursion_depth = ray_tracing.max_recursion_depth;
     result.shader_binding_table_alignment = ray_tracing.shader_group_handle_alignment;
     result.max_driver_cache_identity_bytes = 4096;
+    result.max_indirect_command_count = 65_535;
+    if (queried_features.descriptor_indexing) {
+        result.max_bindless_descriptors_per_range = @min(
+            props.limits.max_descriptor_set_sampled_images,
+            @min(
+                props.limits.max_descriptor_set_storage_images,
+                @min(
+                    props.limits.max_descriptor_set_uniform_buffers,
+                    @min(props.limits.max_descriptor_set_storage_buffers, props.limits.max_descriptor_set_samplers),
+                ),
+            ),
+        );
+        result.max_bindless_ranges_per_layout = @max(1, props.limits.max_bound_descriptor_sets);
+    }
     return result;
+}
+
+fn descriptorIndexingFeatures(instance: Instance, pdev: vk.PhysicalDevice) ?vk.PhysicalDeviceDescriptorIndexingFeatures {
+    var descriptor_features = vk.PhysicalDeviceDescriptorIndexingFeatures{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &descriptor_features,
+        .features = .{},
+    };
+    if (!getPhysicalDeviceFeatures2(instance, pdev, &features2)) return null;
+    if (descriptor_features.runtime_descriptor_array != .true or
+        descriptor_features.descriptor_binding_partially_bound != .true or
+        descriptor_features.descriptor_binding_update_unused_while_pending != .true or
+        descriptor_features.shader_uniform_buffer_array_non_uniform_indexing != .true or
+        descriptor_features.shader_sampled_image_array_non_uniform_indexing != .true or
+        descriptor_features.shader_storage_buffer_array_non_uniform_indexing != .true or
+        descriptor_features.shader_storage_image_array_non_uniform_indexing != .true or
+        descriptor_features.descriptor_binding_uniform_buffer_update_after_bind != .true or
+        descriptor_features.descriptor_binding_sampled_image_update_after_bind != .true or
+        descriptor_features.descriptor_binding_storage_buffer_update_after_bind != .true or
+        descriptor_features.descriptor_binding_storage_image_update_after_bind != .true)
+    {
+        return null;
+    }
+    return descriptor_features;
 }
 
 const VulkanExtensionSupport = struct {
@@ -960,6 +1000,8 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     const enable_ray_tracing = ray_tracing_diagnostics.supported;
     const enable_buffer_device_address = bufferDeviceAddressSupported(instance, candidate.pdev);
     const enable_host_query_reset = candidate.host_query_reset;
+    const descriptor_indexing_features = descriptorIndexingFeatures(instance, candidate.pdev);
+    const enable_descriptor_indexing = descriptor_indexing_features != null;
 
     var extension_names: std.ArrayList([*:0]const u8) = .empty;
     defer extension_names.deinit(allocator);
@@ -976,6 +1018,9 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         if (vertexAttributeDivisorExtensionName(extensions)) |extension_name| {
             try extension_names.append(allocator, extension_name);
         }
+    }
+    if (enable_descriptor_indexing and candidate.props.api_version < vk.API_VERSION_1_2.toU32() and extensions.descriptor_indexing) {
+        try extension_names.append(allocator, vk.extensions.ext_descriptor_indexing.name);
     }
 
     const priority = [_]f32{1};
@@ -1004,10 +1049,15 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     var timeline_semaphore_features = vk.PhysicalDeviceTimelineSemaphoreFeatures{
         .timeline_semaphore = if (candidate.timeline_semaphore) .true else .false,
     };
+    var enabled_descriptor_indexing_features = descriptor_indexing_features orelse vk.PhysicalDeviceDescriptorIndexingFeatures{};
     var device_p_next: ?*anyopaque = null;
     if (enable_host_query_reset) {
         host_query_reset_features.p_next = device_p_next;
         device_p_next = &host_query_reset_features;
+    }
+    if (enable_descriptor_indexing) {
+        enabled_descriptor_indexing_features.p_next = device_p_next;
+        device_p_next = &enabled_descriptor_indexing_features;
     }
     if (candidate.timeline_semaphore) {
         timeline_semaphore_features.p_next = device_p_next;
@@ -1329,7 +1379,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .memory_pressure = true,
     };
     const usable = queryUsableFeatures(native, true);
-    try std.testing.expect(!usable.descriptor_indexing);
+    try std.testing.expect(usable.descriptor_indexing);
     try std.testing.expect(usable.wireframe_fill_mode);
     try std.testing.expect(usable.independent_blend);
     try std.testing.expect(usable.vertex_instance_step_rate);
@@ -1338,7 +1388,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(!usable.tessellation);
     try std.testing.expect(!usable.mesh_shaders);
     try std.testing.expect(!usable.ray_tracing);
-    try std.testing.expect(!usable.driver_pipeline_cache);
+    try std.testing.expect(usable.driver_pipeline_cache);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(usable.compute_atomics);

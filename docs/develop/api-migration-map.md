@@ -197,7 +197,7 @@ tests and backend work. Internal presence is not public reachability.
 
 ## Runtime Handle Representation Decision
 
-All 35 guarded exported runtime handles are methods-only wrappers with exactly
+All 36 guarded exported runtime handles are methods-only wrappers with exactly
 one field named `_state`. Value-owned handles store their implementation as inline opaque
 bytes. Heap-owned or borrowed views use `*anyopaque`; specifically,
 `WindowContext` owns the runtime allocation and `Device`, `Surface`, and
@@ -208,7 +208,7 @@ without exposing their state record.
 No public handle field may name or structurally expose `BackendRuntime`, an
 `Impl` union, `ResourceTracker`, a debug record, or any other private state.
 Direct field mutation and struct-literal construction are unsupported; callers
-use factories and public methods. The API guard treats the 35-name runtime
+use factories and public methods. The API guard treats the 36-name runtime
 handle list, the single `_state` field, and its opaque-storage form as an exact
 allowlist.
 

@@ -7,6 +7,7 @@ const ShaderReflection = @import("../shader/reflection.zig");
 const MetalAccelerationStructure = @import("../backend/metal/acceleration_structure.zig");
 const MetalBuffer = @import("../backend/metal/buffer.zig");
 const MetalHeap = @import("../backend/metal/heap.zig");
+const MetalIndirectCommandBuffer = @import("../backend/metal/indirect_command.zig");
 const MetalAdvancedBindGroupBackend = @import("../backend/metal/advanced_binding.zig");
 const MetalBindGroupBackend = @import("../backend/metal/bind_group.zig");
 const MetalCommand = @import("../backend/metal/command.zig");
@@ -55,6 +56,7 @@ pub const ResourceKind = enum {
     bind_group,
     advanced_bind_group_layout,
     resource_table,
+    indirect_command_buffer,
     external_memory,
     external_buffer,
     external_semaphore,
@@ -91,6 +93,7 @@ pub const ResourceTracker = struct {
     bind_groups: usize = 0,
     advanced_bind_group_layouts: usize = 0,
     resource_tables: usize = 0,
+    indirect_command_buffers: usize = 0,
     external_memories: usize = 0,
     external_buffers: usize = 0,
     external_semaphores: usize = 0,
@@ -158,6 +161,7 @@ pub const ResourceTracker = struct {
             self.bind_groups +
             self.advanced_bind_group_layouts +
             self.resource_tables +
+            self.indirect_command_buffers +
             self.external_memories +
             self.external_buffers +
             self.external_semaphores +
@@ -252,6 +256,7 @@ pub const ResourceTracker = struct {
             self.bind_groups != 0 or
             self.advanced_bind_group_layouts != 0 or
             self.resource_tables != 0 or
+            self.indirect_command_buffers != 0 or
             self.external_memories != 0 or
             self.external_buffers != 0 or
             self.external_semaphores != 0 or
@@ -269,7 +274,7 @@ pub const ResourceTracker = struct {
     pub fn assertNoLeaks(self: ResourceTracker) void {
         if (builtin.mode == .Debug and self.hasLeaks()) {
             std.debug.panic(
-                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}, shader_binding_tables={}, metal_ray_tracing_execution_mappings={}",
+                "vkmtl leaked resources before WindowContext.deinit: buffers={}, textures={}, texture_views={}, sampler_states={}, shader_modules={}, render_pipeline_states={}, compute_pipeline_states={}, bind_group_layouts={}, bind_groups={}, advanced_bind_group_layouts={}, resource_tables={}, indirect_command_buffers={}, external_memories={}, external_buffers={}, external_semaphores={}, external_events={}, fences={}, events={}, query_sets={}, heaps={}, acceleration_structures={}, ray_tracing_pipeline_states={}, shader_binding_tables={}, metal_ray_tracing_execution_mappings={}",
                 .{
                     self.buffers,
                     self.textures,
@@ -282,6 +287,7 @@ pub const ResourceTracker = struct {
                     self.bind_groups,
                     self.advanced_bind_group_layouts,
                     self.resource_tables,
+                    self.indirect_command_buffers,
                     self.external_memories,
                     self.external_buffers,
                     self.external_semaphores,
@@ -318,6 +324,7 @@ pub const ResourceTracker = struct {
             .bind_group => &self.bind_groups,
             .advanced_bind_group_layout => &self.advanced_bind_group_layouts,
             .resource_table => &self.resource_tables,
+            .indirect_command_buffer => &self.indirect_command_buffers,
             .external_memory => &self.external_memories,
             .external_buffer => &self.external_buffers,
             .external_semaphore => &self.external_semaphores,
@@ -538,6 +545,8 @@ fn hashRenderPipelineDescriptor(hash: *u64, descriptor: core.RenderPipelineDescr
     hashVertexDescriptor(hash, descriptor.vertex_descriptor);
     hashU64(hash, descriptor.bind_group_layouts.len);
     for (descriptor.bind_group_layouts) |layout| hashBindGroupLayoutDescriptor(hash, layout);
+    hashU64(hash, descriptor.resource_table_layouts.len);
+    for (descriptor.resource_table_layouts) |layout| hashDescriptorIndexingLayoutDescriptor(hash, layout);
     hashU64(hash, @intFromEnum(descriptor.primitive_topology));
     hashU64(hash, @intFromEnum(descriptor.front_facing_winding));
     hashU64(hash, @intFromEnum(descriptor.cull_mode));
@@ -574,13 +583,63 @@ fn hashRenderPipelineDescriptor(hash: *u64, descriptor: core.RenderPipelineDescr
         hashBool(hash, false);
     }
     hashRootConstantLayout(hash, descriptor.root_constant_layout);
+    hashDriverPipelineCacheDescriptor(hash, descriptor.driver_cache);
 }
 
 fn hashComputePipelineDescriptor(hash: *u64, descriptor: core.ComputePipelineDescriptor) void {
     hashProgrammableStage(hash, descriptor.compute);
     hashU64(hash, descriptor.bind_group_layouts.len);
     for (descriptor.bind_group_layouts) |layout| hashBindGroupLayoutDescriptor(hash, layout);
+    hashU64(hash, descriptor.resource_table_layouts.len);
+    for (descriptor.resource_table_layouts) |layout| hashDescriptorIndexingLayoutDescriptor(hash, layout);
     hashRootConstantLayout(hash, descriptor.root_constant_layout);
+    hashDriverPipelineCacheDescriptor(hash, descriptor.driver_cache);
+}
+
+fn hashDriverPipelineCacheDescriptor(hash: *u64, descriptor: ?core.DriverPipelineCacheDescriptor) void {
+    const cache = descriptor orelse {
+        hashBool(hash, false);
+        return;
+    };
+    hashBool(hash, true);
+    hashBytes(hash, cache.path);
+    hashU64(hash, @intFromEnum(cache.kind));
+    hashU64(hash, @intFromEnum(cache.identity.backend));
+    hashBytes(hash, cache.identity.device_id);
+    hashBytes(hash, cache.identity.driver_id);
+    hashBytes(hash, cache.identity.shader_hash);
+    hashBytes(hash, cache.identity.schema_version);
+    hashBool(hash, cache.read_only);
+}
+
+fn hashDescriptorIndexingLayoutDescriptor(hash: *u64, descriptor: core.DescriptorIndexingLayoutDescriptor) void {
+    hashU64(hash, @intFromEnum(descriptor.model));
+    hashU64(hash, descriptor.ranges.len);
+    for (descriptor.ranges) |range| {
+        hashU64(hash, range.binding);
+        hashU64(hash, @intFromEnum(range.resource));
+        hashBool(hash, range.visibility.vertex);
+        hashBool(hash, range.visibility.fragment);
+        hashBool(hash, range.visibility.compute);
+        hashU64(hash, range.descriptor_count);
+        hashBool(hash, range.partially_bound);
+        hashBool(hash, range.update_after_bind);
+    }
+}
+
+fn resourceTableLayoutFingerprint(descriptor: core.DescriptorIndexingLayoutDescriptor) u64 {
+    var hash: u64 = 0xcbf29ce484222325;
+    hashDescriptorIndexingLayoutDescriptor(&hash, descriptor);
+    return hash;
+}
+
+fn copyResourceTableLayoutFingerprints(
+    allocator: std.mem.Allocator,
+    layouts: []const core.DescriptorIndexingLayoutDescriptor,
+) ![]u64 {
+    const hashes = try allocator.alloc(u64, layouts.len);
+    for (layouts, hashes) |layout, *hash| hash.* = resourceTableLayoutFingerprint(layout);
+    return hashes;
 }
 
 fn hashRootConstantLayout(hash: *u64, layout: ?core.RootConstantLayoutDescriptor) void {
@@ -3381,6 +3440,8 @@ pub const RenderPipelineState = struct {
         label_value: ?[]const u8 = null,
         native_labels_enabled: bool = false,
         root_constant_ranges: []core.RootConstantRange = &.{},
+        resource_table_layout_base: u32 = 0,
+        resource_table_layout_hashes: []u64 = &.{},
         alive: bool = true,
         impl: Impl,
     };
@@ -3403,7 +3464,10 @@ pub const RenderPipelineState = struct {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        if (state_value.allocator) |allocator| allocator.free(state_value.root_constant_ranges);
+        if (state_value.allocator) |allocator| {
+            allocator.free(state_value.root_constant_ranges);
+            allocator.free(state_value.resource_table_layout_hashes);
+        }
         state_value.tracker.release(.render_pipeline_state);
     }
 
@@ -3418,6 +3482,14 @@ pub const RenderPipelineState = struct {
     pub fn rootConstantLayout(self: RenderPipelineState) ?core.RootConstantLayoutDescriptor {
         if (self.state().root_constant_ranges.len == 0) return null;
         return .{ .ranges = self.state().root_constant_ranges };
+    }
+
+    fn resourceTableLayoutBase(self: RenderPipelineState) u32 {
+        return self.state().resource_table_layout_base;
+    }
+
+    fn resourceTableLayoutHashes(self: RenderPipelineState) []const u64 {
+        return self.state().resource_table_layout_hashes;
     }
 
     pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
@@ -3447,6 +3519,8 @@ pub const ComputePipelineState = struct {
         label_value: ?[]const u8 = null,
         native_labels_enabled: bool = false,
         root_constant_ranges: []core.RootConstantRange = &.{},
+        resource_table_layout_base: u32 = 0,
+        resource_table_layout_hashes: []u64 = &.{},
         alive: bool = true,
         impl: Impl,
     };
@@ -3469,7 +3543,10 @@ pub const ComputePipelineState = struct {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
         }
-        if (state_value.allocator) |allocator| allocator.free(state_value.root_constant_ranges);
+        if (state_value.allocator) |allocator| {
+            allocator.free(state_value.root_constant_ranges);
+            allocator.free(state_value.resource_table_layout_hashes);
+        }
         state_value.tracker.release(.compute_pipeline_state);
     }
 
@@ -3484,6 +3561,14 @@ pub const ComputePipelineState = struct {
     pub fn rootConstantLayout(self: ComputePipelineState) ?core.RootConstantLayoutDescriptor {
         if (self.state().root_constant_ranges.len == 0) return null;
         return .{ .ranges = self.state().root_constant_ranges };
+    }
+
+    fn resourceTableLayoutBase(self: ComputePipelineState) u32 {
+        return self.state().resource_table_layout_base;
+    }
+
+    fn resourceTableLayoutHashes(self: ComputePipelineState) []const u64 {
+        return self.state().resource_table_layout_hashes;
     }
 
     pub fn setLabel(self: *ComputePipelineState, label_value: ?[]const u8) void {
@@ -3592,7 +3677,7 @@ pub const AdvancedBindGroupLayout = struct {
         state_value.alive = false;
         if (state_value.impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
-            .metal => {},
+            .metal => |*metal| metal.deinit(),
         };
         state_value.allocator.free(state_value.ranges);
         state_value.tracker.release(.advanced_bind_group_layout);
@@ -3834,6 +3919,13 @@ pub const ResourceTable = struct {
         return self.visibility().compute;
     }
 
+    fn layoutFingerprint(self: ResourceTable) u64 {
+        return resourceTableLayoutFingerprint(.{
+            .model = self.state().model_value,
+            .ranges = self.state().ranges,
+        });
+    }
+
     pub fn update(self: *ResourceTable, descriptor: ResourceTableUpdateDescriptor) !void {
         assertObjectAlive(self.state().alive, "resource_table");
         const resolved = try self.resolveSlot(descriptor.slot);
@@ -3844,6 +3936,13 @@ pub const ResourceTable = struct {
             return core.BindingError.BindingResourceKindMismatch;
         }
         try validateResourceTableResource(descriptor.resource, self.state().backend);
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.update(descriptor.slot, vulkanResourceForResourceTable(descriptor.resource)),
+            .metal => |*metal| if (metal.handle != null) try metal.update(
+                descriptor.slot,
+                metalResourceForResourceTable(descriptor.resource),
+            ),
+        };
         self.state().slots[resolved.index] = descriptor.resource;
     }
 
@@ -3853,6 +3952,13 @@ pub const ResourceTable = struct {
         if (self.state().bound_count != 0 and (!self.state().allow_update_after_bind or !resolved.range.update_after_bind)) {
             return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
         }
+        if (self.state().bound_count != 0 and self.state().backend == .vulkan) {
+            return core.BindingError.ResourceTableUpdateAfterBindUnsupported;
+        }
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.clear(slot),
+            .metal => |*metal| try metal.clear(slot),
+        };
         self.state().slots[resolved.index] = null;
     }
 
@@ -3900,6 +4006,173 @@ pub const ResourceTable = struct {
         return core.BindingError.InvalidResourceTableSlot;
     }
 };
+
+const IndirectEncodedCommand = union(core.IndirectCommandKind) {
+    render: core.DrawPrimitivesDescriptor,
+    compute: core.DispatchThreadgroupsDescriptor,
+};
+
+pub const IndirectCommandBuffer = struct {
+    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+
+    const Impl = union(core.Backend) {
+        vulkan: void,
+        metal: MetalIndirectCommandBuffer,
+    };
+
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        allocator: std.mem.Allocator,
+        label_value: ?[]const u8 = null,
+        kind_value: core.IndirectCommandKind,
+        limits_value: core.DeviceLimits,
+        commands: []?IndirectEncodedCommand,
+        alive: bool = true,
+        impl: Impl,
+    };
+
+    fn init(state_value: State) IndirectCommandBuffer {
+        var result: IndirectCommandBuffer = undefined;
+        result.state().* = state_value;
+        return result;
+    }
+
+    fn state(self: *const IndirectCommandBuffer) *State {
+        return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
+    pub fn deinit(self: *IndirectCommandBuffer) void {
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "indirect_command_buffer");
+        state_value.alive = false;
+        switch (state_value.impl) {
+            .vulkan => {},
+            .metal => |*metal_buffer| metal_buffer.deinit(),
+        }
+        state_value.allocator.free(state_value.commands);
+        state_value.tracker.release(.indirect_command_buffer);
+    }
+
+    pub fn selectedBackend(self: IndirectCommandBuffer) core.Backend {
+        return self.state().backend;
+    }
+
+    pub fn label(self: IndirectCommandBuffer) ?[]const u8 {
+        return self.state().label_value;
+    }
+
+    pub fn setLabel(self: *IndirectCommandBuffer, label_value: ?[]const u8) void {
+        assertObjectAlive(self.state().alive, "indirect_command_buffer");
+        self.state().label_value = label_value;
+        switch (self.state().impl) {
+            .vulkan => {},
+            .metal => |*metal_buffer| metal_buffer.setLabel(label_value),
+        }
+    }
+
+    pub fn kind(self: IndirectCommandBuffer) core.IndirectCommandKind {
+        return self.state().kind_value;
+    }
+
+    pub fn maxCommandCount(self: IndirectCommandBuffer) u32 {
+        return @intCast(self.state().commands.len);
+    }
+
+    pub fn encodedCommandCount(self: IndirectCommandBuffer) u32 {
+        var count: u32 = 0;
+        for (self.state().commands) |command| if (command != null) {
+            count += 1;
+        };
+        return count;
+    }
+
+    pub fn isCommandEncoded(self: IndirectCommandBuffer, command_index: u32) core.CommandEncodingError!bool {
+        if (command_index >= self.state().commands.len) return core.CommandEncodingError.InvalidIndirectCommandRange;
+        return self.state().commands[command_index] != null;
+    }
+
+    pub fn reset(self: *IndirectCommandBuffer, range: core.IndirectCommandRange) !void {
+        assertObjectAlive(self.state().alive, "indirect_command_buffer");
+        try range.validate(self.maxCommandCount());
+        switch (self.state().impl) {
+            .vulkan => {},
+            .metal => |*metal_buffer| try metal_buffer.reset(range),
+        }
+        @memset(self.state().commands[range.location..][0..range.count], null);
+    }
+
+    pub fn encodeDrawPrimitives(
+        self: *IndirectCommandBuffer,
+        command_index: u32,
+        descriptor: core.DrawPrimitivesDescriptor,
+    ) !void {
+        assertObjectAlive(self.state().alive, "indirect_command_buffer");
+        if (self.kind() != .render) return core.CommandEncodingError.InvalidIndirectCommandKind;
+        try self.validateCommandIndex(command_index);
+        try descriptor.validate();
+        switch (self.state().impl) {
+            .vulkan => {},
+            .metal => |*metal_buffer| try metal_buffer.encodeDraw(command_index, descriptor),
+        }
+        self.state().commands[command_index] = .{ .render = descriptor };
+    }
+
+    pub fn encodeDispatchThreadgroups(
+        self: *IndirectCommandBuffer,
+        command_index: u32,
+        descriptor: core.DispatchThreadgroupsDescriptor,
+    ) !void {
+        assertObjectAlive(self.state().alive, "indirect_command_buffer");
+        if (self.kind() != .compute) return core.CommandEncodingError.InvalidIndirectCommandKind;
+        try self.validateCommandIndex(command_index);
+        try descriptor.validateForLimits(self.state().limits_value);
+        switch (self.state().impl) {
+            .vulkan => {},
+            .metal => |*metal_buffer| try metal_buffer.encodeDispatch(command_index, descriptor),
+        }
+        self.state().commands[command_index] = .{ .compute = descriptor };
+    }
+
+    fn validateCommandIndex(self: IndirectCommandBuffer, command_index: u32) core.CommandEncodingError!void {
+        if (command_index >= self.state().commands.len) return core.CommandEncodingError.InvalidIndirectCommandRange;
+    }
+
+    fn validateExecution(self: IndirectCommandBuffer, kind_value: core.IndirectCommandKind, range: core.IndirectCommandRange) core.CommandEncodingError!void {
+        if (self.kind() != kind_value) return core.CommandEncodingError.InvalidIndirectCommandKind;
+        try range.validate(self.maxCommandCount());
+        for (self.state().commands[range.location..][0..range.count]) |command| {
+            if (command == null) return core.CommandEncodingError.MissingIndirectCommand;
+        }
+    }
+};
+
+pub fn makeIndirectCommandBuffer(
+    device: *Device,
+    descriptor: core.IndirectCommandBufferDescriptor,
+) !IndirectCommandBuffer {
+    try descriptor.validate(device.features(), device.limits());
+    const commands = try device.state().allocator.alloc(?IndirectEncodedCommand, descriptor.max_command_count);
+    errdefer device.state().allocator.free(commands);
+    @memset(commands, null);
+    const impl: IndirectCommandBuffer.Impl = switch (device.state().impl) {
+        .vulkan => .{ .vulkan = {} },
+        .metal => |*metal| .{ .metal = try MetalIndirectCommandBuffer.init(metal, descriptor) },
+    };
+    device.state().tracker.retain(.indirect_command_buffer);
+    var result = IndirectCommandBuffer.init(.{
+        .backend = device.selectedBackend(),
+        .tracker = device.state().tracker,
+        .allocator = device.state().allocator,
+        .label_value = descriptor.label,
+        .kind_value = descriptor.kind,
+        .limits_value = device.limits(),
+        .commands = commands,
+        .impl = impl,
+    });
+    result.setLabel(descriptor.label);
+    return result;
+}
 
 pub const BindGroup = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
@@ -5436,6 +5709,20 @@ fn textureSubresourceRangeIsFull(
         resolved.array_layer_count == layer_count;
 }
 
+fn validateResourceTablePipelineBinding(
+    table: ResourceTable,
+    binding: core.ResourceTableBinding,
+    layout_base: u32,
+    layout_hashes: []const u64,
+) core.BindingError!void {
+    if (binding.index < layout_base) return core.BindingError.ResourceTablePipelineLayoutMismatch;
+    const local_index = binding.index - layout_base;
+    if (local_index >= layout_hashes.len) return core.BindingError.ResourceTablePipelineLayoutMismatch;
+    if (layout_hashes[local_index] != table.layoutFingerprint()) {
+        return core.BindingError.ResourceTablePipelineLayoutMismatch;
+    }
+}
+
 pub const ComputeCommandEncoder = struct {
     _state: [@sizeOf(PrivateState)]u8 align(@alignOf(PrivateState)),
 
@@ -5452,6 +5739,9 @@ pub const ComputeCommandEncoder = struct {
         debug: core.ComputeCommandEncoderDebugState = .{},
         debug_groups: core.DebugGroupStack = .{},
         active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
+        active_resource_table_layout_base: u32 = 0,
+        active_resource_table_layout_count: u32 = 0,
+        active_resource_table_layout_hashes: [core.default_max_bind_group_slots]u64 = @splat(0),
         impl: ?Impl = null,
     };
 
@@ -5474,6 +5764,12 @@ pub const ComputeCommandEncoder = struct {
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
         try self.privateState().debug.setComputePipelineState();
         self.privateState().active_root_constant_layout = pipeline.rootConstantLayout();
+        self.privateState().active_resource_table_layout_base = pipeline.resourceTableLayoutBase();
+        self.privateState().active_resource_table_layout_count = @intCast(pipeline.resourceTableLayoutHashes().len);
+        @memcpy(
+            self.privateState().active_resource_table_layout_hashes[0..pipeline.resourceTableLayoutHashes().len],
+            pipeline.resourceTableLayoutHashes(),
+        );
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setComputePipelineState(&pipeline.state().impl.vulkan),
             .metal => |*metal| try metal.setComputePipelineState(&pipeline.state().impl.metal),
@@ -5507,6 +5803,12 @@ pub const ComputeCommandEncoder = struct {
         try binding.validate();
         if (!table.supportsComputeEncoding()) return core.BindingError.ResourceTableVisibilityMismatch;
         try table.validateReadyForBinding();
+        try validateResourceTablePipelineBinding(
+            table.*,
+            binding,
+            self.privateState().active_resource_table_layout_base,
+            self.privateState().active_resource_table_layout_hashes[0..self.privateState().active_resource_table_layout_count],
+        );
         try self.privateState().debug.setResourceTable(binding);
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setResourceTable(&table.state().impl.?.vulkan, binding),
@@ -5581,6 +5883,36 @@ pub const ComputeCommandEncoder = struct {
             .vulkan => |*vulkan| try vulkan.dispatchThreadgroupsIndirect(&indirect_buffer.state().impl.vulkan, descriptor),
             .metal => |*metal| try metal.dispatchThreadgroupsIndirect(&indirect_buffer.state().impl.metal, descriptor),
         };
+    }
+
+    pub fn executeIndirectCommands(
+        self: *ComputeCommandEncoder,
+        buffer: *IndirectCommandBuffer,
+        range: core.IndirectCommandRange,
+    ) !void {
+        assertObjectAlive(self.privateState().alive, "compute_command_encoder");
+        assertObjectAlive(buffer.state().alive, "indirect_command_buffer");
+        try expectSameBackend(self.privateState().backend, buffer.selectedBackend());
+        try buffer.validateExecution(.compute, range);
+        const commands = buffer.state().commands[range.location..][0..range.count];
+        for (commands) |command| try self.privateState().debug.dispatchThreadgroups(command.?.compute);
+
+        var native_executed = false;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => {},
+            .metal => |*metal| switch (buffer.state().impl) {
+                .metal => |*metal_buffer| native_executed = try metal.executeIndirectCommands(metal_buffer, range),
+                .vulkan => unreachable,
+            },
+        };
+        if (native_executed) return;
+        for (commands) |command| {
+            const descriptor = command.?.compute;
+            if (self.privateState().impl) |*impl| switch (impl.*) {
+                .vulkan => |*vulkan| try vulkan.dispatchThreadgroups(descriptor),
+                .metal => |*metal| try metal.dispatchThreadgroups(descriptor),
+            };
+        }
     }
 
     pub fn bufferBarrier(
@@ -5734,6 +6066,9 @@ pub const RenderCommandEncoder = struct {
         debug: core.RenderCommandEncoderDebugState = .{},
         debug_groups: core.DebugGroupStack = .{},
         active_root_constant_layout: ?core.RootConstantLayoutDescriptor = null,
+        active_resource_table_layout_base: u32 = 0,
+        active_resource_table_layout_count: u32 = 0,
+        active_resource_table_layout_hashes: [core.default_max_bind_group_slots]u64 = @splat(0),
         occlusion_query_set: ?*QuerySet = null,
         impl: ?Impl = null,
     };
@@ -5757,6 +6092,12 @@ pub const RenderCommandEncoder = struct {
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
         try self.privateState().debug.setRenderPipelineState();
         self.privateState().active_root_constant_layout = pipeline.rootConstantLayout();
+        self.privateState().active_resource_table_layout_base = pipeline.resourceTableLayoutBase();
+        self.privateState().active_resource_table_layout_count = @intCast(pipeline.resourceTableLayoutHashes().len);
+        @memcpy(
+            self.privateState().active_resource_table_layout_hashes[0..pipeline.resourceTableLayoutHashes().len],
+            pipeline.resourceTableLayoutHashes(),
+        );
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setRenderPipelineState(&pipeline.state().impl.vulkan),
             .metal => |*metal| try metal.setRenderPipelineState(&pipeline.state().impl.metal),
@@ -5820,6 +6161,12 @@ pub const RenderCommandEncoder = struct {
         try binding.validate();
         if (!table.supportsRenderEncoding()) return core.BindingError.ResourceTableVisibilityMismatch;
         try table.validateReadyForBinding();
+        try validateResourceTablePipelineBinding(
+            table.*,
+            binding,
+            self.privateState().active_resource_table_layout_base,
+            self.privateState().active_resource_table_layout_hashes[0..self.privateState().active_resource_table_layout_count],
+        );
         try self.privateState().debug.setResourceTable(binding);
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.setResourceTable(&table.state().impl.?.vulkan, binding),
@@ -5975,6 +6322,36 @@ pub const RenderCommandEncoder = struct {
             .vulkan => |*vulkan| try vulkan.drawPrimitives(descriptor),
             .metal => |*metal| try metal.drawPrimitives(descriptor),
         };
+    }
+
+    pub fn executeIndirectCommands(
+        self: *RenderCommandEncoder,
+        buffer: *IndirectCommandBuffer,
+        range: core.IndirectCommandRange,
+    ) !void {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        assertObjectAlive(buffer.state().alive, "indirect_command_buffer");
+        try expectSameBackend(self.privateState().backend, buffer.selectedBackend());
+        try buffer.validateExecution(.render, range);
+        const commands = buffer.state().commands[range.location..][0..range.count];
+        for (commands) |command| try self.privateState().debug.drawPrimitives(command.?.render);
+
+        var native_executed = false;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => {},
+            .metal => |*metal| switch (buffer.state().impl) {
+                .metal => |*metal_buffer| native_executed = try metal.executeIndirectCommands(metal_buffer, range),
+                .vulkan => unreachable,
+            },
+        };
+        if (native_executed) return;
+        for (commands) |command| {
+            const descriptor = command.?.render;
+            if (self.privateState().impl) |*impl| switch (impl.*) {
+                .vulkan => |*vulkan| try vulkan.drawPrimitives(descriptor),
+                .metal => |*metal| try metal.drawPrimitives(descriptor),
+            };
+        }
     }
 
     pub fn drawIndexedPrimitives(
@@ -7245,6 +7622,11 @@ pub const Device = struct {
 
     pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
         try descriptor.validate();
+        if (descriptor.bind_group_layouts.len + descriptor.resource_table_layouts.len > self.limits().max_bind_group_slots) {
+            return core.CommandEncodingError.InvalidBindGroupIndex;
+        }
+        for (descriptor.resource_table_layouts) |layout| try layout.validate(self.features(), self.limits());
+        if (descriptor.driver_cache) |cache| try cache.validate(self.features(), self.limits());
         try validateRuntimeRenderPipelineShape(descriptor, self.features());
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.vertex, self.features());
@@ -7252,6 +7634,11 @@ pub const Device = struct {
         try ShaderReflection.validateRenderPipelineDescriptor(self.state().allocator, descriptor);
         const root_constant_ranges = try copyRootConstantRanges(self.state().allocator, descriptor.root_constant_layout);
         errdefer self.state().allocator.free(root_constant_ranges);
+        const resource_table_layout_hashes = try copyResourceTableLayoutFingerprints(
+            self.state().allocator,
+            descriptor.resource_table_layouts,
+        );
+        errdefer self.state().allocator.free(resource_table_layout_hashes);
         var fingerprint = objectFingerprintStart(.render_pipeline, self.state().backend);
         hashRenderPipelineDescriptor(&fingerprint, descriptor);
         const lookup = self.state().tracker.beginObjectCacheLookup(.render_pipeline, fingerprint, descriptor.cache_policy);
@@ -7270,6 +7657,8 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .root_constant_ranges = root_constant_ranges,
+            .resource_table_layout_base = @intCast(descriptor.bind_group_layouts.len),
+            .resource_table_layout_hashes = resource_table_layout_hashes,
             .impl = impl,
         });
         pipeline.setLabel(descriptor.label);
@@ -7278,11 +7667,21 @@ pub const Device = struct {
 
     pub fn makeComputePipelineState(self: *Device, descriptor: core.ComputePipelineDescriptor) !ComputePipelineState {
         try descriptor.validate();
+        if (descriptor.bind_group_layouts.len + descriptor.resource_table_layouts.len > self.limits().max_bind_group_slots) {
+            return core.CommandEncodingError.InvalidBindGroupIndex;
+        }
+        for (descriptor.resource_table_layouts) |layout| try layout.validate(self.features(), self.limits());
+        if (descriptor.driver_cache) |cache| try cache.validate(self.features(), self.limits());
         try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, self.features(), self.limits());
         try validateRuntimeSpecialization(descriptor.compute, self.features());
         try ShaderReflection.validateComputePipelineDescriptor(self.state().allocator, descriptor);
         const root_constant_ranges = try copyRootConstantRanges(self.state().allocator, descriptor.root_constant_layout);
         errdefer self.state().allocator.free(root_constant_ranges);
+        const resource_table_layout_hashes = try copyResourceTableLayoutFingerprints(
+            self.state().allocator,
+            descriptor.resource_table_layouts,
+        );
+        errdefer self.state().allocator.free(resource_table_layout_hashes);
         var fingerprint = objectFingerprintStart(.compute_pipeline, self.state().backend);
         hashComputePipelineDescriptor(&fingerprint, descriptor);
         const lookup = self.state().tracker.beginObjectCacheLookup(.compute_pipeline, fingerprint, descriptor.cache_policy);
@@ -7301,6 +7700,8 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .native_labels_enabled = true,
             .root_constant_ranges = root_constant_ranges,
+            .resource_table_layout_base = @intCast(descriptor.bind_group_layouts.len),
+            .resource_table_layout_hashes = resource_table_layout_hashes,
             .impl = impl,
         });
         pipeline.setLabel(descriptor.label);
@@ -7352,8 +7753,8 @@ pub const Device = struct {
         const ranges = try self.state().allocator.dupe(core.DescriptorIndexingRange, descriptor.ranges);
         errdefer self.state().allocator.free(ranges);
         const impl: ?AdvancedBindGroupLayout.Impl = switch (self.state().impl) {
-            .vulkan => |*vulkan| .{ .vulkan = try VulkanAdvancedBindGroupBackend.init(vulkan.gc, descriptor) },
-            .metal => .{ .metal = try MetalAdvancedBindGroupBackend.init(descriptor) },
+            .vulkan => |*vulkan| .{ .vulkan = try VulkanAdvancedBindGroupBackend.init(vulkan.gc, self.state().allocator, descriptor) },
+            .metal => |*metal| .{ .metal = try MetalAdvancedBindGroupBackend.init(metal, self.state().allocator, descriptor) },
         };
 
         self.state().tracker.retain(.advanced_bind_group_layout);
@@ -7386,8 +7787,8 @@ pub const Device = struct {
         @memset(slots, null);
 
         const impl: ?ResourceTable.Impl = switch (descriptor.layout.state().impl.?) {
-            .vulkan => |vulkan| .{ .vulkan = VulkanAdvancedBindGroupBackend.ResourceTable.init(vulkan) },
-            .metal => |metal| .{ .metal = MetalAdvancedBindGroupBackend.ResourceTable.init(metal) },
+            .vulkan => |*vulkan| .{ .vulkan = try VulkanAdvancedBindGroupBackend.ResourceTable.init(vulkan) },
+            .metal => |*metal| .{ .metal = try MetalAdvancedBindGroupBackend.ResourceTable.init(metal) },
         };
 
         self.state().tracker.retain(.resource_table);
@@ -8383,6 +8784,25 @@ fn vulkanResourceForBindGroupResource(resource: BindGroupResource) VulkanBindGro
     };
 }
 
+fn vulkanResourceForResourceTable(resource: BindGroupResource) VulkanAdvancedBindGroupBackend.ResourceTable.Resource {
+    return switch (resource) {
+        .uniform_buffer => |binding| .{ .uniform_buffer = .{
+            .buffer = &binding.buffer.state().impl.vulkan,
+            .offset = binding.offset,
+            .size = binding.size,
+        } },
+        .storage_buffer => |binding| .{ .storage_buffer = .{
+            .buffer = &binding.buffer.state().impl.vulkan,
+            .offset = binding.offset,
+            .size = binding.size,
+        } },
+        .storage_texture => |view| .{ .storage_texture = &view.state().impl.vulkan },
+        .sampled_texture => |view| .{ .sampled_texture = &view.state().impl.vulkan },
+        .sampler => |sampler| .{ .sampler = &sampler.state().impl.vulkan },
+        .compare_sampler => |sampler| .{ .compare_sampler = &sampler.state().impl.vulkan },
+    };
+}
+
 const MetalMaterializedBindGroupEntries = struct {
     entries: []MetalBindGroupBackend.MetalBindGroup.Entry,
     resources: []MetalBindGroupBackend.MetalBindGroup.Resource = &.{},
@@ -8453,6 +8873,25 @@ fn metalResourceForBindGroupResource(resource: BindGroupResource) MetalBindGroup
     };
 }
 
+fn metalResourceForResourceTable(resource: BindGroupResource) MetalAdvancedBindGroupBackend.ResourceTable.Resource {
+    return switch (resource) {
+        .uniform_buffer => |binding| .{ .uniform_buffer = .{
+            .buffer = &binding.buffer.state().impl.metal,
+            .offset = binding.offset,
+            .size = binding.size,
+        } },
+        .storage_buffer => |binding| .{ .storage_buffer = .{
+            .buffer = &binding.buffer.state().impl.metal,
+            .offset = binding.offset,
+            .size = binding.size,
+        } },
+        .storage_texture => |view| .{ .storage_texture = &view.state().impl.metal },
+        .sampled_texture => |view| .{ .sampled_texture = &view.state().impl.metal },
+        .sampler => |sampler| .{ .sampler = &sampler.state().impl.metal },
+        .compare_sampler => |sampler| .{ .compare_sampler = &sampler.state().impl.metal },
+    };
+}
+
 fn bindGroupArrayResourceCount(entries: []const BindGroupEntry) usize {
     var count: usize = 0;
     for (entries) |entry| {
@@ -8490,6 +8929,7 @@ fn kindName(kind: ResourceKind) []const u8 {
         .bind_group => "bind_group",
         .advanced_bind_group_layout => "advanced_bind_group_layout",
         .resource_table => "resource_table",
+        .indirect_command_buffer => "indirect_command_buffer",
         .external_memory => "external_memory",
         .external_buffer => "external_buffer",
         .external_semaphore => "external_semaphore",
@@ -10140,6 +10580,12 @@ test "runtime resource table updates clear and validate slots" {
     });
     try table.validateReadyForBinding();
     try table.markBoundForCommands();
+    var vulkan_table = table;
+    vulkan_table.state().backend = .vulkan;
+    try std.testing.expectError(
+        core.BindingError.ResourceTableUpdateAfterBindUnsupported,
+        vulkan_table.clear(.{ .binding = 1 }),
+    );
     try table.clear(.{ .binding = 1 });
     try std.testing.expect(!(try table.isSlotBound(.{ .binding = 1 })));
     try std.testing.expectEqual(@as(usize, 1), tracker.resource_tables);
@@ -10190,6 +10636,48 @@ test "runtime resource table rejects update after bind without range support" {
     try std.testing.expectError(core.BindingError.ResourceTableUpdateAfterBindUnsupported, table.clear(.{
         .binding = 0,
     }));
+}
+
+test "runtime indirect command buffers validate slots kinds ranges and reset" {
+    var tracker = ResourceTracker{};
+    var backend_runtime = BackendRuntime{ .vulkan = undefined };
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.features.indirect_command_buffers = true;
+    report.limits.max_indirect_command_count = 4;
+
+    var device_state = testRuntimeState(
+        std.testing.allocator,
+        &tracker,
+        .vulkan,
+        &backend_runtime,
+        "test indirect adapter",
+        report,
+    );
+    var device = Device{ ._state = &device_state };
+    var buffer = try makeIndirectCommandBuffer(&device, .{
+        .label = "draw list",
+        .kind = .render,
+        .max_command_count = 4,
+    });
+    defer buffer.deinit();
+
+    try buffer.encodeDrawPrimitives(1, .{ .vertex_count = 3 });
+    try buffer.encodeDrawPrimitives(2, .{ .vertex_count = 6 });
+    try std.testing.expectEqual(@as(u32, 2), buffer.encodedCommandCount());
+    try std.testing.expect(try buffer.isCommandEncoded(1));
+    try buffer.validateExecution(.render, .{ .location = 1, .count = 2 });
+    try std.testing.expectError(
+        core.CommandEncodingError.MissingIndirectCommand,
+        buffer.validateExecution(.render, .{ .location = 0, .count = 2 }),
+    );
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidIndirectCommandKind,
+        buffer.encodeDispatchThreadgroups(0, .{}),
+    );
+    try buffer.reset(.{ .location = 1, .count = 1 });
+    try std.testing.expect(!(try buffer.isCommandEncoded(1)));
+    try std.testing.expectEqual(@as(u32, 1), buffer.encodedCommandCount());
+    try std.testing.expectEqual(@as(usize, 1), tracker.indirect_command_buffers);
 }
 
 test "runtime external texture wrapper validates and tracks lifetime" {
@@ -11758,6 +12246,9 @@ test "runtime command encoders bind resource tables with validation" {
         .backend = .metal,
         .command_buffer = &command_buffer,
     });
+    render_encoder.privateState().active_resource_table_layout_base = 1;
+    render_encoder.privateState().active_resource_table_layout_count = 1;
+    render_encoder.privateState().active_resource_table_layout_hashes[0] = table.layoutFingerprint();
     try render_encoder.setResourceTable(&table, .{ .index = 1 });
     try std.testing.expectEqual(@as(u64, 2), render_encoder.privateState().debug.resource_table_mask);
     try std.testing.expectEqual(@as(u64, 1), table.state().bound_count);
@@ -11768,6 +12259,8 @@ test "runtime command encoders bind resource tables with validation" {
         .command_buffer = &command_buffer,
     });
     try std.testing.expectError(core.BindingError.ResourceTableVisibilityMismatch, compute_encoder.setResourceTable(&table, .{ .index = 0 }));
+
+    try std.testing.expectError(core.BindingError.ResourceTablePipelineLayoutMismatch, render_encoder.setResourceTable(&table, .{ .index = 0 }));
 
     var vulkan_table = table;
     vulkan_table.state().backend = .vulkan;

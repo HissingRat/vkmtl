@@ -70,6 +70,7 @@ buffer_gpu_address memoryless_attachments
 
 ```text
 bind_groups descriptor_indexing argument_buffers static_samplers
+indirect_command_buffers
 ```
 
 ### Render 与 Advanced Geometry
@@ -152,6 +153,7 @@ Feature 为 true 时，descriptor 仍必须满足对应 limit。
 | Compute | `max_compute_threadgroups_per_grid_x`, `max_compute_threadgroups_per_grid_y`, `max_compute_threadgroups_per_grid_z`, `max_compute_threads_per_threadgroup_x`, `max_compute_threads_per_threadgroup_y`, `max_compute_threads_per_threadgroup_z`, `max_compute_total_threads_per_threadgroup`, `max_compute_threadgroup_memory_bytes`, `dispatch_indirect_alignment` |
 | Transfer | `buffer_texture_copy_offset_alignment`, `buffer_texture_copy_row_pitch_alignment` |
 | Binding | `max_bindless_descriptors_per_range`, `max_bindless_ranges_per_layout` |
+| Reusable command | `max_indirect_command_count` |
 | Advanced geometry | `max_tessellation_control_points`, `max_mesh_threads_per_threadgroup`, `max_task_threads_per_threadgroup` |
 | Ray tracing | `max_ray_tracing_recursion_depth`, `shader_binding_table_alignment`, `max_acceleration_structure_instances`, `max_shader_binding_table_records` |
 | Driver artifact | `max_driver_cache_identity_bytes` |

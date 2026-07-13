@@ -8,6 +8,83 @@ struct vkmtl_metal_query_set {
     int unused;
 };
 
+struct vkmtl_metal_resource_table {
+    int unused;
+};
+
+struct vkmtl_metal_indirect_command_buffer { int unused; };
+
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_create(vkmtl_metal_clear_screen *owner, unsigned int kind, unsigned int max_command_count, vkmtl_metal_indirect_command_buffer **out_buffer) {
+    (void)owner; (void)kind; (void)max_command_count; if (out_buffer != NULL) *out_buffer = NULL; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+void vkmtl_metal_indirect_command_buffer_destroy(vkmtl_metal_indirect_command_buffer *buffer) { (void)buffer; }
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_set_label(vkmtl_metal_indirect_command_buffer *buffer, const char *label, size_t label_len) {
+    (void)buffer; (void)label; (void)label_len; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_reset(vkmtl_metal_indirect_command_buffer *buffer, unsigned int location, unsigned int count) {
+    (void)buffer; (void)location; (void)count; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_encode_draw(vkmtl_metal_indirect_command_buffer *buffer, unsigned int command_index, unsigned int primitive_type, unsigned int vertex_start, unsigned int vertex_count, unsigned int instance_count, unsigned int base_instance) {
+    (void)buffer; (void)command_index; (void)primitive_type; (void)vertex_start; (void)vertex_count; (void)instance_count; (void)base_instance; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_indirect_command_buffer_encode_dispatch(vkmtl_metal_indirect_command_buffer *buffer, unsigned int command_index, unsigned int threadgroup_count_x, unsigned int threadgroup_count_y, unsigned int threadgroup_count_z, unsigned int threads_per_threadgroup_x, unsigned int threads_per_threadgroup_y, unsigned int threads_per_threadgroup_z) {
+    (void)buffer; (void)command_index; (void)threadgroup_count_x; (void)threadgroup_count_y; (void)threadgroup_count_z; (void)threads_per_threadgroup_x; (void)threads_per_threadgroup_y; (void)threads_per_threadgroup_z; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_resource_table_create(
+    vkmtl_metal_clear_screen *owner,
+    const vkmtl_metal_resource_table_range *ranges,
+    size_t range_count,
+    vkmtl_metal_resource_table **out_table
+) {
+    (void)owner;
+    (void)ranges;
+    (void)range_count;
+    if (out_table != NULL) *out_table = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_resource_table_destroy(vkmtl_metal_resource_table *table) { (void)table; }
+vkmtl_metal_status vkmtl_metal_resource_table_set_label(vkmtl_metal_resource_table *table, const char *label, size_t label_len) {
+    (void)table; (void)label; (void)label_len; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_resource_table_set_buffer(vkmtl_metal_resource_table *table, unsigned int index, vkmtl_metal_buffer *buffer, size_t offset, unsigned int writable) {
+    (void)table; (void)index; (void)buffer; (void)offset; (void)writable; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_resource_table_set_texture(vkmtl_metal_resource_table *table, unsigned int index, vkmtl_metal_texture_view *view, unsigned int writable) {
+    (void)table; (void)index; (void)view; (void)writable; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_resource_table_set_sampler(vkmtl_metal_resource_table *table, unsigned int index, vkmtl_metal_sampler_state *sampler) {
+    (void)table; (void)index; (void)sampler; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_resource_table_clear(vkmtl_metal_resource_table *table, unsigned int index, unsigned int resource_kind) {
+    (void)table; (void)index; (void)resource_kind; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_resource_table(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_resource_table *table,
+    unsigned int index,
+    unsigned int visibility
+) {
+    (void)encoder; (void)table; (void)index; (void)visibility; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_set_resource_table(
+    vkmtl_metal_compute_command_encoder *encoder,
+    vkmtl_metal_resource_table *table,
+    unsigned int index
+) {
+    (void)encoder; (void)table; (void)index; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_execute_indirect_commands(vkmtl_metal_render_command_encoder *encoder, vkmtl_metal_indirect_command_buffer *buffer, unsigned int location, unsigned int count) {
+    (void)encoder; (void)buffer; (void)location; (void)count; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+vkmtl_metal_status vkmtl_metal_compute_command_encoder_execute_indirect_commands(vkmtl_metal_compute_command_encoder *encoder, vkmtl_metal_indirect_command_buffer *buffer, unsigned int location, unsigned int count) {
+    (void)encoder; (void)buffer; (void)location; (void)count; return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe) {
     if (out_probe != NULL) {
         *out_probe = NULL;
@@ -520,6 +597,10 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     size_t vertex_buffer_count,
     const vkmtl_metal_vertex_attribute *vertex_attributes,
     size_t vertex_attribute_count,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
     vkmtl_metal_render_pipeline_state **out_pipeline
 ) {
     (void)owner;
@@ -554,6 +635,10 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     (void)vertex_buffer_count;
     (void)vertex_attributes;
     (void)vertex_attribute_count;
+    (void)cache_path;
+    (void)cache_path_len;
+    (void)cache_identity_hash;
+    (void)cache_read_only;
     if (out_pipeline != NULL) {
         *out_pipeline = NULL;
     }
@@ -571,6 +656,10 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     size_t compute_entry_len,
     const vkmtl_metal_function_constant *constants,
     size_t constant_count,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
     vkmtl_metal_compute_pipeline_state **out_pipeline
 ) {
     (void)owner;
@@ -579,6 +668,10 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     (void)compute_entry_len;
     (void)constants;
     (void)constant_count;
+    (void)cache_path;
+    (void)cache_path_len;
+    (void)cache_identity_hash;
+    (void)cache_read_only;
     if (out_pipeline != NULL) {
         *out_pipeline = NULL;
     }

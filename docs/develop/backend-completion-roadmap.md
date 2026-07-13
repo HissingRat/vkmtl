@@ -151,8 +151,7 @@ Tracked in `docs/develop/period26/`.
 - [ ] Native object handle pooling for shader modules, layouts, pipelines, and
   samplers. Deferred to Period 32+ driver parity plan.
 - [x] Driver pipeline cache / binary archive planning descriptors.
-- [ ] Vulkan `VkPipelineCache` and Metal `MTLBinaryArchive` consumption.
-  Deferred to Period 32+ driver parity plan.
+- [x] Vulkan `VkPipelineCache` and Metal `MTLBinaryArchive` consumption.
 - [x] Persistent runtime cache manifest versioning and compatibility planning.
 - [ ] Automatic runtime cache manifest read/write. Deferred to Period 30 Phase
   5.
@@ -399,17 +398,17 @@ Tracked in `docs/develop/period38/`.
 - [x] Descriptor indexing resource-table pressure planning.
 - [x] Metal argument-buffer resource-table pressure planning.
 - [x] Update-after-bind and partially-bound table semantics.
+- [x] Native Metal argument-buffer and Vulkan descriptor-indexing table
+  allocation, update, compatible-pipeline binding, and GPU execution.
 - [x] Pipeline artifact compatibility planning for shader, entry point,
   reflection, backend, format, schema, and toolchain changes.
-- [ ] Native Vulkan pipeline cache/library persistence. Deferred to Period44
-  device-matrix evidence after backend lowering exists.
-- [ ] Native Metal binary archive persistence. Deferred to Period44
-  device-matrix evidence after backend lowering exists.
+- [x] Native Vulkan pipeline-cache persistence.
+- [x] Native Metal binary-archive persistence.
 
-Expected result: large resource tables have deterministic portable pressure
-plans, and pipeline artifacts have deterministic invalidation behavior. Native
-persistence and GPU-scale pressure claims require Period44 backend/device
-evidence.
+Expected result: large resource tables have deterministic pressure plans and
+native execution, while pipeline artifacts have deterministic invalidation and
+native driver-cache persistence. Metal physical evidence is recorded; Vulkan
+physical pressure remains a useful follow-up beyond forced-build/unit evidence.
 
 ## Wave 20: Ray Tracing Completeness
 

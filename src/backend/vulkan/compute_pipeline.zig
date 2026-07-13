@@ -2,8 +2,10 @@ const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
 const VulkanBindGroupLayout = @import("bind_group.zig").VulkanBindGroupLayout;
+const VulkanAdvancedBindGroupLayout = @import("advanced_binding.zig");
 const GraphicsContext = @import("graphics_context.zig");
 const VulkanShaderModule = @import("shader_module.zig");
+const PipelineCache = @import("pipeline_cache.zig");
 
 const VulkanComputePipelineState = @This();
 
@@ -12,6 +14,7 @@ allocator: std.mem.Allocator,
 handle: vk.Pipeline,
 layout: vk.PipelineLayout,
 bind_group_layouts: []VulkanBindGroupLayout,
+resource_table_layouts: []VulkanAdvancedBindGroupLayout,
 
 pub fn init(
     gc: *const GraphicsContext,
@@ -31,8 +34,10 @@ pub fn init(
 
     const bind_group_layouts = try makeBindGroupLayouts(gc, allocator, descriptor.bind_group_layouts);
     errdefer destroyBindGroupLayouts(allocator, bind_group_layouts);
+    const resource_table_layouts = try makeResourceTableLayouts(gc, allocator, descriptor.resource_table_layouts);
+    errdefer destroyResourceTableLayouts(allocator, resource_table_layouts);
 
-    const set_layout_handles = try makeDescriptorSetLayoutHandles(allocator, bind_group_layouts);
+    const set_layout_handles = try makeDescriptorSetLayoutHandles(allocator, bind_group_layouts, resource_table_layouts);
     defer allocator.free(set_layout_handles);
     const push_constant_ranges = try makePushConstantRanges(allocator, descriptor.root_constant_layout);
     defer allocator.free(push_constant_ranges);
@@ -59,8 +64,10 @@ pub fn init(
         .base_pipeline_index = -1,
     };
 
+    var pipeline_cache = try PipelineCache.Session.init(gc, allocator, descriptor.driver_cache);
+    defer pipeline_cache.deinit();
     var pipeline: vk.Pipeline = undefined;
-    _ = try gc.dev.createComputePipelines(.null_handle, &.{pipeline_info}, null, (&pipeline)[0..1]);
+    _ = try gc.dev.createComputePipelines(pipeline_cache.handle, &.{pipeline_info}, null, (&pipeline)[0..1]);
 
     return .{
         .gc = gc,
@@ -68,6 +75,7 @@ pub fn init(
         .handle = pipeline,
         .layout = layout,
         .bind_group_layouts = bind_group_layouts,
+        .resource_table_layouts = resource_table_layouts,
     };
 }
 
@@ -75,6 +83,7 @@ pub fn deinit(self: *VulkanComputePipelineState) void {
     self.gc.dev.destroyPipeline(self.handle, null);
     self.gc.dev.destroyPipelineLayout(self.layout, null);
     destroyBindGroupLayouts(self.allocator, self.bind_group_layouts);
+    destroyResourceTableLayouts(self.allocator, self.resource_table_layouts);
 }
 
 pub fn setLabel(self: *VulkanComputePipelineState, label_value: ?[]const u8) void {
@@ -107,12 +116,35 @@ fn makeBindGroupLayouts(
 fn makeDescriptorSetLayoutHandles(
     allocator: std.mem.Allocator,
     layouts: []const VulkanBindGroupLayout,
+    resource_table_layouts: []const VulkanAdvancedBindGroupLayout,
 ) ![]vk.DescriptorSetLayout {
-    const handles = try allocator.alloc(vk.DescriptorSetLayout, layouts.len);
+    const handles = try allocator.alloc(vk.DescriptorSetLayout, layouts.len + resource_table_layouts.len);
     for (layouts, handles) |layout, *handle| {
         handle.* = layout.handle;
     }
+    for (resource_table_layouts, handles[layouts.len..]) |layout, *handle| handle.* = layout.handle;
     return handles;
+}
+
+fn makeResourceTableLayouts(
+    gc: *const GraphicsContext,
+    allocator: std.mem.Allocator,
+    descriptors: []const core.DescriptorIndexingLayoutDescriptor,
+) ![]VulkanAdvancedBindGroupLayout {
+    const layouts = try allocator.alloc(VulkanAdvancedBindGroupLayout, descriptors.len);
+    errdefer allocator.free(layouts);
+    var initialized: usize = 0;
+    errdefer for (layouts[0..initialized]) |*layout| layout.deinit();
+    for (descriptors, layouts) |descriptor, *layout| {
+        layout.* = try VulkanAdvancedBindGroupLayout.init(gc, allocator, descriptor);
+        initialized += 1;
+    }
+    return layouts;
+}
+
+fn destroyResourceTableLayouts(allocator: std.mem.Allocator, layouts: []VulkanAdvancedBindGroupLayout) void {
+    for (layouts) |*layout| layout.deinit();
+    allocator.free(layouts);
 }
 
 fn makePushConstantRanges(

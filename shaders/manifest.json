@@ -36,6 +36,12 @@
       "source": "../examples/offscreen_texture/shaders/offscreen_texture.slang",
       "vertex_entry": "screen_vs",
       "fragment_entry": "screen_fs"
+    },
+    {
+      "name": "bindless_textures",
+      "source": "../examples/bindless_textures/shaders/bindless_textures.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
     }
   ],
   "compute_shaders": [
