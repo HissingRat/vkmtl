@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const MetalAccelerationStructure = @import("acceleration_structure.zig");
 const MetalBuffer = @import("buffer.zig");
+const MetalHeap = @import("heap.zig");
 const MetalCommand = @import("command.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
 const MetalQuerySet = @import("query_set.zig");
@@ -102,6 +103,20 @@ pub fn nativeFeatures(self: *const MetalClearScreen) core.DeviceFeatures {
     return nativeFeaturesFromMetalCapabilities(self.queryCapabilities());
 }
 
+pub const MemoryBudget = struct {
+    budget_bytes: u64,
+    used_bytes: u64,
+};
+
+pub fn memoryBudget(self: *const MetalClearScreen) ?MemoryBudget {
+    const capabilities = self.queryCapabilities();
+    if (capabilities.memory_budget == 0 or capabilities.recommended_working_set_size == 0) return null;
+    return .{
+        .budget_bytes = capabilities.recommended_working_set_size,
+        .used_bytes = capabilities.current_allocated_size,
+    };
+}
+
 pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFormat) core.FormatCapabilities {
     _ = self;
     var capabilities = core.defaultFormatCapabilities(format);
@@ -160,6 +175,10 @@ pub fn clear(self: *MetalClearScreen, color: core.ClearColorLike) !void {
 
 pub fn makeBuffer(self: *MetalClearScreen, descriptor: core.BufferDescriptor) !MetalBuffer {
     return try MetalBuffer.init(self, descriptor);
+}
+
+pub fn makeHeap(self: *MetalClearScreen, descriptor: core.HeapDescriptor) !MetalHeap {
+    return try MetalHeap.init(self, descriptor);
 }
 
 pub fn makeShaderModule(
@@ -330,6 +349,10 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.queue_ownership_transfer = capabilities.shared_events != 0;
     result.scheduled_presentation = capabilities.scheduled_presentation != 0;
     result.minimum_duration_presentation = capabilities.minimum_duration_presentation != 0;
+    result.heaps = capabilities.heaps != 0;
+    result.memory_budget = capabilities.memory_budget != 0;
+    result.memory_pressure = capabilities.memory_budget != 0;
+    result.memoryless_attachments = capabilities.memoryless_attachments != 0;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -348,6 +371,10 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.queue_ownership_transfer = capabilities.shared_events != 0;
     result.scheduled_presentation = capabilities.scheduled_presentation != 0;
     result.minimum_duration_presentation = capabilities.minimum_duration_presentation != 0;
+    result.heaps = capabilities.heaps != 0;
+    result.memory_budget = capabilities.memory_budget != 0;
+    result.memory_pressure = capabilities.memory_budget != 0;
+    result.memoryless_attachments = capabilities.memoryless_attachments != 0;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -414,6 +441,11 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .shared_events = 1,
         .scheduled_presentation = 1,
         .minimum_duration_presentation = 1,
+        .heaps = 1,
+        .memory_budget = 1,
+        .memoryless_attachments = 1,
+        .recommended_working_set_size = 16 * 1024 * 1024 * 1024,
+        .current_allocated_size = 1024 * 1024,
     };
 
     const native = nativeFeaturesFromMetalCapabilities(capabilities);
@@ -431,6 +463,9 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.compute_threadgroup_memory);
     try std.testing.expect(native.timeline_fences);
     try std.testing.expect(native.shared_events);
+    try std.testing.expect(native.heaps);
+    try std.testing.expect(native.memory_budget);
+    try std.testing.expect(native.memoryless_attachments);
     try std.testing.expect(native.scheduled_presentation);
     try std.testing.expect(native.minimum_duration_presentation);
     try std.testing.expect(usable.occlusion_queries);
@@ -440,6 +475,9 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(usable.compute_threadgroup_memory);
     try std.testing.expect(usable.timeline_fences);
     try std.testing.expect(usable.shared_events);
+    try std.testing.expect(usable.heaps);
+    try std.testing.expect(usable.memory_budget);
+    try std.testing.expect(usable.memoryless_attachments);
     try std.testing.expect(usable.scheduled_presentation);
     try std.testing.expect(usable.minimum_duration_presentation);
     try std.testing.expect(!usable.argument_buffers);

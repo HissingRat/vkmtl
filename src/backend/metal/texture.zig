@@ -51,6 +51,38 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.TextureDescriptor) !Metal
     };
 }
 
+pub fn initFromHeap(
+    heap: *metal.vkmtl_metal_heap,
+    descriptor: core.TextureDescriptor,
+    allocation: core.HeapAllocationInfo,
+) !MetalTexture {
+    try descriptor.validate();
+    var handle: ?*metal.vkmtl_metal_texture = null;
+    try check(metal.vkmtl_metal_heap_texture_create(
+        heap,
+        textureDimension(descriptor.dimension),
+        textureFormat(descriptor.format),
+        descriptor.width,
+        descriptor.height,
+        descriptor.depth_or_array_layers,
+        descriptor.mip_level_count,
+        descriptor.sample_count,
+        usageFlags(descriptor.usage, descriptor.format),
+        allocation.offset,
+        &handle,
+    ));
+    const raw_handle = handle orelse return Error.InvalidTexture;
+    return .{
+        .handle = raw_handle,
+        .descriptor = descriptor,
+        .width_value = metal.vkmtl_metal_texture_width(raw_handle),
+        .height_value = metal.vkmtl_metal_texture_height(raw_handle),
+        .depth_or_array_layers_value = metal.vkmtl_metal_texture_depth_or_array_layers(raw_handle),
+        .mip_level_count_value = metal.vkmtl_metal_texture_mip_level_count(raw_handle),
+        .sample_count_value = descriptor.sample_count,
+    };
+}
+
 pub fn deinit(self: *MetalTexture) void {
     metal.vkmtl_metal_texture_destroy(self.handle);
 }
@@ -92,7 +124,7 @@ pub fn replaceRegion(
     region: core.Region3D,
     descriptor: core.TextureReplaceRegionDescriptor,
 ) !void {
-    if (self.descriptor.storage_mode == .private) return Error.InvalidTexture;
+    if (!self.descriptor.storage_mode.cpuVisible()) return Error.InvalidTexture;
     const resolved = try descriptor.resolveForTexture(self.descriptor, region);
 
     try check(metal.vkmtl_metal_texture_replace_region(
@@ -112,7 +144,7 @@ pub fn replaceRegion(
     ));
 }
 
-fn textureDimension(dimension: core.TextureDimension) metal.vkmtl_metal_texture_dimension {
+pub fn textureDimension(dimension: core.TextureDimension) metal.vkmtl_metal_texture_dimension {
     return switch (dimension) {
         .one_d => metal.VKMTL_METAL_TEXTURE_DIMENSION_1D,
         .two_d => metal.VKMTL_METAL_TEXTURE_DIMENSION_2D,
@@ -146,7 +178,7 @@ pub fn textureFormat(format: core.TextureFormat) metal.vkmtl_metal_texture_forma
     };
 }
 
-fn usageFlags(usage: core.TextureUsage, format: core.TextureFormat) c_uint {
+pub fn usageFlags(usage: core.TextureUsage, format: core.TextureFormat) c_uint {
     var flags: c_uint = 0;
 
     if (usage.copy_source) flags |= metal.VKMTL_METAL_TEXTURE_USAGE_COPY_SOURCE;
@@ -167,6 +199,7 @@ fn storageMode(mode: core.ResourceStorageMode) metal.vkmtl_metal_storage_mode {
         .shared => metal.VKMTL_METAL_STORAGE_MODE_SHARED,
         .managed => metal.VKMTL_METAL_STORAGE_MODE_MANAGED,
         .private => metal.VKMTL_METAL_STORAGE_MODE_PRIVATE,
+        .memoryless => metal.VKMTL_METAL_STORAGE_MODE_MEMORYLESS,
     };
 }
 

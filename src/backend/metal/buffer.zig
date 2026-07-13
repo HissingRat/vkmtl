@@ -44,6 +44,30 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.BufferDescriptor) !MetalB
     };
 }
 
+pub fn initFromHeap(
+    heap: *metal.vkmtl_metal_heap,
+    descriptor: core.BufferDescriptor,
+    allocation: core.HeapAllocationInfo,
+) !MetalBuffer {
+    const buffer_len = try descriptor.resolvedLength();
+    const bytes = descriptor.bytes;
+    var handle: ?*metal.vkmtl_metal_buffer = null;
+    try check(metal.vkmtl_metal_heap_buffer_create(
+        heap,
+        buffer_len,
+        if (bytes) |data| data.ptr else null,
+        if (bytes) |data| data.len else 0,
+        allocation.offset,
+        &handle,
+    ));
+    const raw_handle = handle orelse return Error.InvalidBuffer;
+    return .{
+        .handle = raw_handle,
+        .length_value = metal.vkmtl_metal_buffer_length(raw_handle),
+        .storage_mode = descriptor.storage_mode,
+    };
+}
+
 pub fn deinit(self: *MetalBuffer) void {
     metal.vkmtl_metal_buffer_destroy(self.handle);
 }
@@ -128,6 +152,7 @@ fn storageMode(mode: core.ResourceStorageMode) metal.vkmtl_metal_storage_mode {
         .shared => metal.VKMTL_METAL_STORAGE_MODE_SHARED,
         .managed => metal.VKMTL_METAL_STORAGE_MODE_MANAGED,
         .private => metal.VKMTL_METAL_STORAGE_MODE_PRIVATE,
+        .memoryless => metal.VKMTL_METAL_STORAGE_MODE_MEMORYLESS,
     };
 }
 

@@ -207,6 +207,107 @@ vkmtl_metal_status vkmtl_metal_buffer_read_bytes(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_heap_create(
+    vkmtl_metal_clear_screen *owner,
+    uint64_t size,
+    unsigned int storage_mode,
+    vkmtl_metal_heap **out_heap
+) {
+    (void)owner;
+    (void)size;
+    (void)storage_mode;
+    if (out_heap != NULL) *out_heap = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_heap_destroy(vkmtl_metal_heap *heap) {
+    (void)heap;
+}
+
+vkmtl_metal_status vkmtl_metal_heap_buffer_size_and_align(
+    const vkmtl_metal_heap *heap,
+    size_t length,
+    uint64_t *out_size,
+    uint64_t *out_alignment
+) {
+    (void)heap;
+    (void)length;
+    if (out_size != NULL) *out_size = 0;
+    if (out_alignment != NULL) *out_alignment = 0;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_heap_texture_size_and_align(
+    const vkmtl_metal_heap *heap,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    uint64_t *out_size,
+    uint64_t *out_alignment
+) {
+    (void)heap;
+    (void)dimension;
+    (void)format;
+    (void)width;
+    (void)height;
+    (void)depth_or_array_layers;
+    (void)mip_level_count;
+    (void)sample_count;
+    (void)usage_flags;
+    if (out_size != NULL) *out_size = 0;
+    if (out_alignment != NULL) *out_alignment = 0;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_heap_buffer_create(
+    vkmtl_metal_heap *heap,
+    size_t length,
+    const void *bytes,
+    size_t bytes_len,
+    uint64_t offset,
+    vkmtl_metal_buffer **out_buffer
+) {
+    (void)heap;
+    (void)length;
+    (void)bytes;
+    (void)bytes_len;
+    (void)offset;
+    if (out_buffer != NULL) *out_buffer = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_heap_texture_create(
+    vkmtl_metal_heap *heap,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    uint64_t offset,
+    vkmtl_metal_texture **out_texture
+) {
+    (void)heap;
+    (void)dimension;
+    (void)format;
+    (void)width;
+    (void)height;
+    (void)depth_or_array_layers;
+    (void)mip_level_count;
+    (void)sample_count;
+    (void)usage_flags;
+    (void)offset;
+    if (out_texture != NULL) *out_texture = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_texture_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_texture_dimension dimension,

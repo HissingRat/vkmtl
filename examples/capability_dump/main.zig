@@ -31,6 +31,7 @@ pub fn main() !void {
     var device = context.device();
     dumpAdapter(device.adapterInfo());
     dumpReport(device.capabilityReport());
+    try dumpMemoryBudget(device);
     try probeBufferGpuAddress(&device);
     try dumpDiagnostics(device);
     dumpFormatCaps(&device, .rgba8_unorm);
@@ -42,6 +43,17 @@ pub fn main() !void {
     dumpFormatCaps(&device, .depth16_unorm);
     dumpFormatCaps(&device, .stencil8);
     dumpFormatCaps(&device, .depth32_float_stencil8);
+}
+
+fn dumpMemoryBudget(device: vkmtl.Device) !void {
+    const report = try vkmtl.diagnostics.memoryBudgetReport(device, .{});
+    std.debug.print("memory budget report: source={s}, budget={?}, used={}, available={?}, pressure={s}\n", .{
+        @tagName(report.source),
+        report.budget_bytes,
+        report.used_bytes,
+        report.available_bytes,
+        @tagName(report.pressure),
+    });
 }
 
 fn probeBufferGpuAddress(device: *vkmtl.Device) !void {
@@ -166,6 +178,8 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  sparse textures: {}\n", .{features.sparse_textures});
     std.debug.print("  memory budget: {}\n", .{features.memory_budget});
     std.debug.print("  memory pressure: {}\n", .{features.memory_pressure});
+    std.debug.print("  heaps: {}\n", .{features.heaps});
+    std.debug.print("  memoryless attachments: {}\n", .{features.memoryless_attachments});
     std.debug.print("  external textures: {}\n", .{features.external_textures});
     std.debug.print("  tessellation: {}\n", .{features.tessellation});
     std.debug.print("  mesh shaders: {}\n", .{features.mesh_shaders});

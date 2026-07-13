@@ -89,3 +89,4 @@ buffer_gpu_address	RES-07
 command_buffer_lifecycle_callbacks	DEV-02
 scheduled_presentation	DEV-02
 minimum_duration_presentation	DEV-02
+memoryless_attachments	MEM-03

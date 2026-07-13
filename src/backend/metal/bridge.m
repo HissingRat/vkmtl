@@ -79,6 +79,13 @@ struct vkmtl_metal_shared_event {
     id<MTLSharedEvent> event;
 };
 
+struct vkmtl_metal_heap {
+    id<MTLDevice> device;
+    id<MTLHeap> heap;
+    id<MTLCommandQueue> queue;
+    MTLStorageMode storage_mode;
+};
+
 struct vkmtl_metal_acceleration_structure {
     id<MTLAccelerationStructure> acceleration_structure;
     MTLAccelerationStructureDescriptor *descriptor;
@@ -816,6 +823,8 @@ static MTLResourceOptions vkmtl_storage_options(vkmtl_metal_storage_mode storage
             return MTLResourceStorageModeManaged;
         case VKMTL_METAL_STORAGE_MODE_PRIVATE:
             return MTLResourceStorageModePrivate;
+        case VKMTL_METAL_STORAGE_MODE_MEMORYLESS:
+            return MTLResourceStorageModeMemoryless;
         case VKMTL_METAL_STORAGE_MODE_AUTOMATIC:
         case VKMTL_METAL_STORAGE_MODE_SHARED:
         default:
@@ -831,6 +840,20 @@ static MTLStorageMode vkmtl_texture_storage_mode(vkmtl_metal_storage_mode storag
         case VKMTL_METAL_STORAGE_MODE_MANAGED:
             return MTLStorageModeManaged;
         case VKMTL_METAL_STORAGE_MODE_PRIVATE:
+            return MTLStorageModePrivate;
+        case VKMTL_METAL_STORAGE_MODE_MEMORYLESS:
+            return MTLStorageModeMemoryless;
+        default:
+            return MTLStorageModePrivate;
+    }
+}
+
+static MTLStorageMode vkmtl_heap_storage_mode(unsigned int storage_mode) {
+    switch (storage_mode) {
+        case 2:
+            return MTLStorageModeShared;
+        case 0:
+        case 1:
         default:
             return MTLStorageModePrivate;
     }
@@ -1206,6 +1229,34 @@ static MTLTextureUsage vkmtl_texture_usage(unsigned int usage_flags) {
     return usage;
 }
 
+static MTLTextureDescriptor *vkmtl_new_texture_descriptor(
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    MTLStorageMode storage_mode
+) {
+    MTLTextureDescriptor *descriptor = [[MTLTextureDescriptor alloc] init];
+    if (descriptor == nil) {
+        return nil;
+    }
+    descriptor.textureType = vkmtl_texture_type(dimension, depth_or_array_layers, sample_count);
+    descriptor.pixelFormat = vkmtl_texture_pixel_format(format);
+    descriptor.width = width;
+    descriptor.height = height;
+    descriptor.depth = dimension == VKMTL_METAL_TEXTURE_DIMENSION_3D ? depth_or_array_layers : 1;
+    descriptor.arrayLength = dimension == VKMTL_METAL_TEXTURE_DIMENSION_3D ? 1 : depth_or_array_layers;
+    descriptor.mipmapLevelCount = mip_level_count;
+    descriptor.sampleCount = sample_count;
+    descriptor.storageMode = storage_mode;
+    descriptor.usage = vkmtl_texture_usage(usage_flags);
+    return descriptor;
+}
+
 static MTLLoadAction vkmtl_load_action(unsigned int action) {
     switch (action) {
         case 1:
@@ -1304,6 +1355,48 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
         }
         if (@available(macOS 10.15.4, *)) {
             out_capabilities->minimum_duration_presentation = 1u;
+        }
+        if (@available(macOS 10.15, *)) {
+            if ([device respondsToSelector:@selector(newHeapWithDescriptor:)]) {
+                MTLSizeAndAlign heap_probe_requirements =
+                    [device heapBufferSizeAndAlignWithLength:4 options:MTLResourceStorageModePrivate];
+                MTLHeapDescriptor *heap_probe_descriptor = [[MTLHeapDescriptor alloc] init];
+                heap_probe_descriptor.type = MTLHeapTypePlacement;
+                heap_probe_descriptor.storageMode = MTLStorageModePrivate;
+                heap_probe_descriptor.size = heap_probe_requirements.size;
+                id<MTLHeap> heap_probe = [device newHeapWithDescriptor:heap_probe_descriptor];
+                id<MTLBuffer> heap_buffer_probe =
+                    [heap_probe newBufferWithLength:4 options:MTLResourceStorageModePrivate offset:0];
+                if (heap_probe != nil && heap_buffer_probe != nil) {
+                    out_capabilities->heaps = 1u;
+                }
+                [heap_buffer_probe release];
+                [heap_probe release];
+                [heap_probe_descriptor release];
+            }
+        }
+        if ([device respondsToSelector:@selector(recommendedMaxWorkingSetSize)] &&
+            [device respondsToSelector:@selector(currentAllocatedSize)]) {
+            out_capabilities->recommended_working_set_size =
+                (uint64_t)device.recommendedMaxWorkingSetSize;
+            out_capabilities->current_allocated_size =
+                (uint64_t)device.currentAllocatedSize;
+            out_capabilities->memory_budget =
+                out_capabilities->recommended_working_set_size != 0 ? 1u : 0u;
+        }
+        if (@available(macOS 11.0, *)) {
+            MTLTextureDescriptor *memoryless_probe =
+                [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                    width:1
+                                                                   height:1
+                                                                mipmapped:NO];
+            memoryless_probe.storageMode = MTLStorageModeMemoryless;
+            memoryless_probe.usage = MTLTextureUsageRenderTarget;
+            id<MTLTexture> probe_texture = [device newTextureWithDescriptor:memoryless_probe];
+            if (probe_texture != nil) {
+                out_capabilities->memoryless_attachments = 1u;
+                [probe_texture release];
+            }
         }
 
         // Metal exposes texture limits by GPU family rather than individual
@@ -1545,6 +1638,198 @@ vkmtl_metal_status vkmtl_metal_buffer_read_bytes(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_heap_create(
+    vkmtl_metal_clear_screen *owner,
+    uint64_t size,
+    unsigned int storage_mode,
+    vkmtl_metal_heap **out_heap
+) {
+    if (owner == NULL || owner->device == nil || size == 0 || out_heap == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    *out_heap = NULL;
+    if (@available(macOS 10.15, *)) {
+        @autoreleasepool {
+            MTLHeapDescriptor *descriptor = [[MTLHeapDescriptor alloc] init];
+            if (descriptor == nil) return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            descriptor.size = (NSUInteger)size;
+            descriptor.storageMode = vkmtl_heap_storage_mode(storage_mode);
+            descriptor.type = MTLHeapTypePlacement;
+            id<MTLHeap> native_heap = [owner->device newHeapWithDescriptor:descriptor];
+            [descriptor release];
+            if (native_heap == nil) return VKMTL_METAL_STATUS_UNSUPPORTED;
+
+            vkmtl_metal_heap *heap = calloc(1, sizeof(vkmtl_metal_heap));
+            if (heap == NULL) {
+                [native_heap release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            heap->device = [owner->device retain];
+            heap->heap = native_heap;
+            heap->queue = [owner->queue retain];
+            heap->storage_mode = vkmtl_heap_storage_mode(storage_mode);
+            *out_heap = heap;
+            return VKMTL_METAL_STATUS_OK;
+        }
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_heap_destroy(vkmtl_metal_heap *heap) {
+    if (heap == NULL) return;
+    @autoreleasepool {
+        [heap->queue release];
+        [heap->heap release];
+        [heap->device release];
+        free(heap);
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_heap_buffer_size_and_align(
+    const vkmtl_metal_heap *heap,
+    size_t length,
+    uint64_t *out_size,
+    uint64_t *out_alignment
+) {
+    if (heap == NULL || heap->device == nil || length == 0 ||
+        out_size == NULL || out_alignment == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    MTLResourceOptions options = heap->storage_mode == MTLStorageModeShared
+        ? MTLResourceStorageModeShared
+        : MTLResourceStorageModePrivate;
+    MTLSizeAndAlign requirements = [heap->device heapBufferSizeAndAlignWithLength:length options:options];
+    if (requirements.size == 0 || requirements.align == 0) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+    *out_size = (uint64_t)requirements.size;
+    *out_alignment = (uint64_t)requirements.align;
+    return VKMTL_METAL_STATUS_OK;
+}
+
+vkmtl_metal_status vkmtl_metal_heap_texture_size_and_align(
+    const vkmtl_metal_heap *heap,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    uint64_t *out_size,
+    uint64_t *out_alignment
+) {
+    if (heap == NULL || heap->device == nil || format == VKMTL_METAL_TEXTURE_FORMAT_INVALID ||
+        out_size == NULL || out_alignment == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+    }
+    @autoreleasepool {
+        MTLTextureDescriptor *descriptor = vkmtl_new_texture_descriptor(
+            dimension, format, width, height, depth_or_array_layers,
+            mip_level_count, sample_count, usage_flags, heap->storage_mode
+        );
+        if (descriptor == nil) return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        MTLSizeAndAlign requirements = [heap->device heapTextureSizeAndAlignWithDescriptor:descriptor];
+        [descriptor release];
+        if (requirements.size == 0 || requirements.align == 0) {
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        *out_size = (uint64_t)requirements.size;
+        *out_alignment = (uint64_t)requirements.align;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_heap_buffer_create(
+    vkmtl_metal_heap *heap,
+    size_t length,
+    const void *bytes,
+    size_t bytes_len,
+    uint64_t offset,
+    vkmtl_metal_buffer **out_buffer
+) {
+    if (heap == NULL || heap->heap == nil || length == 0 || bytes_len > length || out_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    *out_buffer = NULL;
+    if (bytes_len != 0 && (bytes == NULL || heap->storage_mode != MTLStorageModeShared)) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    if (@available(macOS 10.15, *)) {
+        @autoreleasepool {
+            MTLResourceOptions options = heap->storage_mode == MTLStorageModeShared
+                ? MTLResourceStorageModeShared
+                : MTLResourceStorageModePrivate;
+            id<MTLBuffer> native_buffer = [heap->heap newBufferWithLength:length options:options offset:(NSUInteger)offset];
+            if (native_buffer == nil) return VKMTL_METAL_STATUS_INVALID_BUFFER;
+            if (bytes_len != 0) memcpy([native_buffer contents], bytes, bytes_len);
+
+            vkmtl_metal_buffer *buffer = calloc(1, sizeof(vkmtl_metal_buffer));
+            if (buffer == NULL) {
+                [native_buffer release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            buffer->buffer = native_buffer;
+            buffer->queue = [heap->queue retain];
+            buffer->length = length;
+            buffer->storage_mode = heap->storage_mode == MTLStorageModeShared
+                ? VKMTL_METAL_STORAGE_MODE_SHARED
+                : VKMTL_METAL_STORAGE_MODE_PRIVATE;
+            *out_buffer = buffer;
+            return VKMTL_METAL_STATUS_OK;
+        }
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_heap_texture_create(
+    vkmtl_metal_heap *heap,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    uint64_t offset,
+    vkmtl_metal_texture **out_texture
+) {
+    if (heap == NULL || heap->heap == nil || out_texture == NULL ||
+        format == VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
+        return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+    }
+    *out_texture = NULL;
+    if (@available(macOS 10.15, *)) {
+        @autoreleasepool {
+            MTLTextureDescriptor *descriptor = vkmtl_new_texture_descriptor(
+                dimension, format, width, height, depth_or_array_layers,
+                mip_level_count, sample_count, usage_flags, heap->storage_mode
+            );
+            if (descriptor == nil) return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            id<MTLTexture> native_texture = [heap->heap newTextureWithDescriptor:descriptor offset:(NSUInteger)offset];
+            [descriptor release];
+            if (native_texture == nil) return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+
+            vkmtl_metal_texture *texture = calloc(1, sizeof(vkmtl_metal_texture));
+            if (texture == NULL) {
+                [native_texture release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            texture->texture = native_texture;
+            texture->width = width;
+            texture->height = height;
+            texture->depth_or_array_layers = depth_or_array_layers;
+            texture->mip_level_count = mip_level_count;
+            texture->sample_count = sample_count;
+            *out_texture = texture;
+            return VKMTL_METAL_STATUS_OK;
+        }
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_texture_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_texture_dimension dimension,
@@ -1585,21 +1870,24 @@ vkmtl_metal_status vkmtl_metal_texture_create(
     }
 
     @autoreleasepool {
-        MTLTextureDescriptor *descriptor = [[MTLTextureDescriptor alloc] init];
+        MTLStorageMode resolved_storage_mode = vkmtl_texture_storage_mode(storage_mode);
+        if (sample_count > 1 && storage_mode != VKMTL_METAL_STORAGE_MODE_MEMORYLESS) {
+            resolved_storage_mode = MTLStorageModePrivate;
+        }
+        MTLTextureDescriptor *descriptor = vkmtl_new_texture_descriptor(
+            dimension,
+            format,
+            width,
+            height,
+            depth_or_array_layers,
+            mip_level_count,
+            sample_count,
+            usage_flags,
+            resolved_storage_mode
+        );
         if (descriptor == nil) {
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
-
-        descriptor.textureType = vkmtl_texture_type(dimension, depth_or_array_layers, sample_count);
-        descriptor.pixelFormat = vkmtl_texture_pixel_format(format);
-        descriptor.width = width;
-        descriptor.height = height;
-        descriptor.depth = dimension == VKMTL_METAL_TEXTURE_DIMENSION_3D ? depth_or_array_layers : 1;
-        descriptor.arrayLength = dimension == VKMTL_METAL_TEXTURE_DIMENSION_3D ? 1 : depth_or_array_layers;
-        descriptor.mipmapLevelCount = mip_level_count;
-        descriptor.sampleCount = sample_count;
-        descriptor.storageMode = sample_count > 1 ? MTLStorageModePrivate : vkmtl_texture_storage_mode(storage_mode);
-        descriptor.usage = vkmtl_texture_usage(usage_flags);
 
         id<MTLTexture> metal_texture = [owner->device newTextureWithDescriptor:descriptor];
         [descriptor release];

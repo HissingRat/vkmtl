@@ -70,7 +70,7 @@ cube_textures multisample_textures samplers sampler_compare
 sampler_anisotropy sampler_border_color heaps
 sparse_buffers sparse_textures tiled_textures memory_budget memory_pressure
 storage_buffers storage_textures
-buffer_gpu_address
+buffer_gpu_address memoryless_attachments
 ```
 
 ### Binding
@@ -205,6 +205,7 @@ zig build run-capability-dump -Dvulkan
 
 The Period 44 parity report records 9/9 hosted/Metal/Vulkan release-evidence
 gates. That result validates the documented smoke, pixel, and bounded-soak
-matrix; it does not turn planning-only native heap, sparse-page, physical
-multi-queue, or other deferred backend work into executable features. The
+matrix; it does not turn planning-only sparse-page or other deferred backend
+work into executable features. Native heaps, physical queues, and Metal
+memoryless attachments now have separate executable evidence. The
 capability report remains authoritative for each process and device.

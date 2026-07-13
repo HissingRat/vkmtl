@@ -6,6 +6,7 @@ const ShaderCompiler = @import("../shader/compiler.zig");
 const ShaderReflection = @import("../shader/reflection.zig");
 const MetalAccelerationStructure = @import("../backend/metal/acceleration_structure.zig");
 const MetalBuffer = @import("../backend/metal/buffer.zig");
+const MetalHeap = @import("../backend/metal/heap.zig");
 const MetalAdvancedBindGroupBackend = @import("../backend/metal/advanced_binding.zig");
 const MetalBindGroupBackend = @import("../backend/metal/bind_group.zig");
 const MetalCommand = @import("../backend/metal/command.zig");
@@ -23,6 +24,7 @@ const VulkanBindGroupBackend = @import("../backend/vulkan/bind_group.zig");
 const VulkanAdvancedBindGroupBackend = @import("../backend/vulkan/advanced_binding.zig");
 const VulkanAccelerationStructure = @import("../backend/vulkan/acceleration_structure.zig");
 const VulkanBuffer = @import("../backend/vulkan/buffer.zig");
+const VulkanHeap = @import("../backend/vulkan/heap.zig");
 const VulkanCommand = @import("../backend/vulkan/command.zig");
 const VulkanComputePipelineState = @import("../backend/vulkan/compute_pipeline.zig");
 const VulkanClearScreen = @import("../backend/vulkan/clear_screen.zig");
@@ -686,6 +688,7 @@ pub const Buffer = struct {
         storage_mode_value: core.ResourceStorageMode = .automatic,
         usage_state: core.ResourceUsageState = .{},
         owner_queue_value: core.QueueKind = .graphics,
+        heap_owner: ?*Heap.State = null,
         alive: bool = true,
         impl: Impl,
     };
@@ -707,6 +710,10 @@ pub const Buffer = struct {
         switch (state_value.impl) {
             .vulkan => |*vulkan| vulkan.deinit(),
             .metal => |*metal| metal.deinit(),
+        }
+        if (state_value.heap_owner) |heap| {
+            std.debug.assert(heap.live_resource_count != 0);
+            heap.live_resource_count -= 1;
         }
         state_value.tracker.release(.buffer);
     }
@@ -922,6 +929,7 @@ pub const Texture = struct {
         usage_state: core.ResourceUsageState = .{},
         subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
         owner_queue_value: core.QueueKind = .graphics,
+        heap_owner: ?*Heap.State = null,
         alive: bool = true,
         impl: Impl,
     };
@@ -947,6 +955,10 @@ pub const Texture = struct {
         if (state_value.subresource_usage_tracker) |subresource_tracker| {
             subresource_tracker.release();
             state_value.subresource_usage_tracker = null;
+        }
+        if (state_value.heap_owner) |heap| {
+            std.debug.assert(heap.live_resource_count != 0);
+            heap.live_resource_count -= 1;
         }
         state_value.tracker.release(.texture);
     }
@@ -1087,6 +1099,7 @@ pub const Texture = struct {
             .format_value = resolved.format,
             .dimension_value = resolved.dimension,
             .usage_value = self.state().usage_value,
+            .storage_mode_value = self.state().storage_mode_value,
             .sample_count_value = self.state().sample_count_value,
             .subresource_usage_tracker = self.state().subresource_usage_tracker,
             .width_value = mipDimension(self.width(), resolved.base_mip_level),
@@ -1599,6 +1612,7 @@ pub const TextureView = struct {
         format_value: core.TextureFormat,
         dimension_value: core.TextureViewDimension = .automatic,
         usage_value: core.TextureUsage,
+        storage_mode_value: core.ResourceStorageMode = .automatic,
         sample_count_value: u32,
         width_value: u32,
         height_value: u32,
@@ -1660,6 +1674,10 @@ pub const TextureView = struct {
 
     pub fn format(self: TextureView) core.TextureFormat {
         return self.state().format_value;
+    }
+
+    pub fn storageMode(self: TextureView) core.ResourceStorageMode {
+        return self.state().storage_mode_value;
     }
 
     pub fn dimension(self: TextureView) core.TextureViewDimension {
@@ -2006,31 +2024,46 @@ pub const Event = struct {
 };
 
 pub const Heap = struct {
-    _state: [@sizeOf(State)]u8 align(@alignOf(State)),
+    _state: *anyopaque,
+
+    const Impl = union(core.Backend) {
+        vulkan: VulkanHeap,
+        metal: MetalHeap,
+    };
 
     const State = struct {
+        allocator: std.mem.Allocator,
         backend: core.Backend,
         tracker: *ResourceTracker,
         label_value: ?[]const u8 = null,
         descriptor_value: core.HeapDescriptor,
+        features_value: core.DeviceFeatures,
+        limits_value: core.DeviceLimits,
         reserved_bytes: u64 = 0,
+        live_resource_count: usize = 0,
         alive: bool = true,
+        impl: ?Impl = null,
     };
 
-    fn init(state_value: State) Heap {
-        var result: Heap = undefined;
-        result.state().* = state_value;
-        return result;
+    fn init(state_value: *State) Heap {
+        return .{ ._state = state_value };
     }
 
     fn state(self: *const Heap) *State {
-        return @ptrCast(@alignCast(@constCast(&self._state)));
+        return @ptrCast(@alignCast(self._state));
     }
 
     pub fn deinit(self: *Heap) void {
-        assertObjectAlive(self.state().alive, "heap");
-        self.state().alive = false;
-        self.state().tracker.release(.heap);
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "heap");
+        std.debug.assert(state_value.live_resource_count == 0);
+        state_value.alive = false;
+        if (state_value.impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => |*metal| metal.deinit(),
+        };
+        state_value.tracker.release(.heap);
+        state_value.allocator.destroy(state_value);
     }
 
     pub fn selectedBackend(self: Heap) core.Backend {
@@ -2080,11 +2113,155 @@ pub const Heap = struct {
         };
     }
 
+    pub fn bufferAllocationRequirements(
+        self: Heap,
+        buffer_descriptor: core.BufferDescriptor,
+    ) !core.HeapAllocationDescriptor {
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "heap");
+        _ = try buffer_descriptor.validateForDevice(state_value.features_value, state_value.limits_value);
+        try validateHeapBufferCompatibility(state_value.descriptor_value, buffer_descriptor);
+        const impl = state_value.impl orelse return core.HeapError.UnsupportedHeaps;
+        return switch (impl) {
+            .vulkan => |vulkan| try vulkan.bufferAllocationRequirements(buffer_descriptor),
+            .metal => |metal| try metal.bufferAllocationRequirements(buffer_descriptor),
+        };
+    }
+
+    pub fn textureAllocationRequirements(
+        self: Heap,
+        texture_descriptor: core.TextureDescriptor,
+    ) !core.HeapAllocationDescriptor {
+        const state_value = self.state();
+        assertObjectAlive(state_value.alive, "heap");
+        try texture_descriptor.validateForLimits(state_value.limits_value);
+        try validateHeapTextureCompatibility(state_value.descriptor_value, texture_descriptor);
+        const impl = state_value.impl orelse return core.HeapError.UnsupportedHeaps;
+        const capabilities = switch (impl) {
+            .vulkan => |vulkan| vulkan.gc.formatCapabilities(texture_descriptor.format),
+            .metal => |metal| metal.formatCapabilities(texture_descriptor.format),
+        };
+        if (!capabilities.supportsTextureDescriptor(texture_descriptor)) {
+            return core.TextureError.UnsupportedTextureUsage;
+        }
+        return switch (impl) {
+            .vulkan => |vulkan| try vulkan.textureAllocationRequirements(texture_descriptor),
+            .metal => |metal| try metal.textureAllocationRequirements(texture_descriptor),
+        };
+    }
+
+    pub fn makeBufferAt(
+        self: *Heap,
+        buffer_descriptor: core.BufferDescriptor,
+        allocation: core.HeapAllocationInfo,
+    ) !Buffer {
+        const requirements = try self.bufferAllocationRequirements(buffer_descriptor);
+        try self.validateAllocation(allocation, requirements);
+        const state_value = self.state();
+        const length = try buffer_descriptor.validateForDevice(state_value.features_value, state_value.limits_value);
+        const heap_impl = state_value.impl orelse return core.HeapError.UnsupportedHeaps;
+        const impl = switch (heap_impl) {
+            .vulkan => |*vulkan| Buffer.Impl{ .vulkan = try vulkan.makeBuffer(buffer_descriptor, allocation) },
+            .metal => |*metal| Buffer.Impl{ .metal = try metal.makeBuffer(buffer_descriptor, allocation) },
+        };
+        state_value.live_resource_count += 1;
+        state_value.tracker.retain(.buffer);
+        var buffer = Buffer.init(.{
+            .backend = state_value.backend,
+            .tracker = state_value.tracker,
+            .label_value = buffer_descriptor.label,
+            .native_labels_enabled = true,
+            .length_value = length,
+            .usage_value = buffer_descriptor.usage,
+            .storage_mode_value = buffer_descriptor.storage_mode,
+            .heap_owner = state_value,
+            .impl = impl,
+        });
+        buffer.setLabel(buffer_descriptor.label);
+        return buffer;
+    }
+
+    pub fn makeTextureAt(
+        self: *Heap,
+        texture_descriptor: core.TextureDescriptor,
+        allocation: core.HeapAllocationInfo,
+    ) !Texture {
+        const requirements = try self.textureAllocationRequirements(texture_descriptor);
+        try self.validateAllocation(allocation, requirements);
+        const state_value = self.state();
+        const subresource_usage_tracker = try SharedTextureUsageTracker.init(state_value.allocator, texture_descriptor);
+        errdefer subresource_usage_tracker.release();
+        const heap_impl = state_value.impl orelse return core.HeapError.UnsupportedHeaps;
+        const impl = switch (heap_impl) {
+            .vulkan => |*vulkan| Texture.Impl{ .vulkan = try vulkan.makeTexture(texture_descriptor, allocation) },
+            .metal => |*metal| Texture.Impl{ .metal = try metal.makeTexture(texture_descriptor, allocation) },
+        };
+        state_value.live_resource_count += 1;
+        state_value.tracker.retain(.texture);
+        var texture = Texture.init(.{
+            .backend = state_value.backend,
+            .tracker = state_value.tracker,
+            .label_value = texture_descriptor.label,
+            .native_labels_enabled = true,
+            .dimension_value = texture_descriptor.dimension,
+            .format_value = texture_descriptor.format,
+            .usage_value = texture_descriptor.usage,
+            .storage_mode_value = texture_descriptor.storage_mode,
+            .sample_count_value = texture_descriptor.sample_count,
+            .subresource_usage_tracker = subresource_usage_tracker,
+            .heap_owner = state_value,
+            .impl = impl,
+        });
+        texture.setLabel(texture_descriptor.label);
+        return texture;
+    }
+
+    pub fn liveResourceCount(self: Heap) usize {
+        assertObjectAlive(self.state().alive, "heap");
+        return self.state().live_resource_count;
+    }
+
+    fn validateAllocation(
+        self: Heap,
+        allocation: core.HeapAllocationInfo,
+        requirements: core.HeapAllocationDescriptor,
+    ) core.HeapError!void {
+        try allocation.validateWithin(self.state().descriptor_value);
+        const end = try allocation.end();
+        if (end > self.state().reserved_bytes) return core.HeapError.HeapAllocationNotReserved;
+        if (allocation.size < requirements.size or allocation.offset % requirements.alignment != 0) {
+            return core.HeapError.HeapAllocationTooSmall;
+        }
+    }
+
     pub fn aliasingPlan(self: Heap, aliasing_descriptor: core.HeapAliasingDescriptor) core.HeapError!core.HeapAliasingPlan {
         assertObjectAlive(self.state().alive, "heap");
         return try aliasing_descriptor.plan(self.state().descriptor_value);
     }
 };
+
+fn validateHeapBufferCompatibility(
+    heap: core.HeapDescriptor,
+    descriptor: core.BufferDescriptor,
+) core.HeapError!void {
+    switch (heap.storage_mode) {
+        .automatic, .device_local => if (descriptor.storage_mode != .private) {
+            return core.HeapError.HeapResourceIncompatible;
+        },
+        .cpu_visible => if (descriptor.storage_mode != .automatic and descriptor.storage_mode != .shared) {
+            return core.HeapError.HeapResourceIncompatible;
+        },
+    }
+}
+
+fn validateHeapTextureCompatibility(
+    heap: core.HeapDescriptor,
+    descriptor: core.TextureDescriptor,
+) core.HeapError!void {
+    if (heap.storage_mode == .cpu_visible or descriptor.storage_mode != .private) {
+        return core.HeapError.HeapResourceIncompatible;
+    }
+}
 
 const BackendPrivateAccelerationStructureHandle = struct {
     backend: core.Backend,
@@ -3820,11 +3997,19 @@ pub const RenderPassColorAttachmentDescriptor = struct {
                 if (!texture_view.usage().render_attachment or !core.isColorFormat(texture_view.format())) {
                     return RuntimeError.InvalidRenderPassAttachment;
                 }
+                if (texture_view.storageMode() == .memoryless and
+                    (self.load_action == .load or self.store_action == .store))
+                {
+                    return RuntimeError.UnsupportedRenderPassAttachmentAction;
+                }
                 if (self.resolve_target) |resolve_target| {
                     assertAlive(resolve_target.state().alive, .texture_view);
                     try expectSameBackend(backend, resolve_target.selectedBackend());
                     if (!resolve_target.usage().render_attachment or !core.isColorFormat(resolve_target.format())) {
                         return RuntimeError.InvalidRenderPassAttachment;
+                    }
+                    if (resolve_target.storageMode() == .memoryless) {
+                        return RuntimeError.UnsupportedRenderPassAttachmentAction;
                     }
                     (core.TextureResolveDescriptor{ .aspect = .color }).validate(
                         textureViewTextureDescriptor(texture_view),
@@ -3881,6 +4066,11 @@ pub const RenderPassDepthAttachmentDescriptor = struct {
                 if (!texture_view.usage().render_attachment or !core.isDepthFormat(texture_view.format())) {
                     return RuntimeError.InvalidRenderPassAttachment;
                 }
+                if (texture_view.storageMode() == .memoryless and
+                    (self.load_action == .load or self.store_action == .store))
+                {
+                    return RuntimeError.UnsupportedRenderPassAttachmentAction;
+                }
             },
         }
     }
@@ -3926,6 +4116,11 @@ pub const RenderPassStencilAttachmentDescriptor = struct {
                 try expectSameBackend(backend, texture_view.selectedBackend());
                 if (!texture_view.usage().render_attachment or !core.isStencilFormat(texture_view.format())) {
                     return RuntimeError.InvalidRenderPassAttachment;
+                }
+                if (texture_view.storageMode() == .memoryless and
+                    (self.load_action == .load or self.store_action == .store))
+                {
+                    return RuntimeError.UnsupportedRenderPassAttachmentAction;
                 }
             },
         }
@@ -4033,6 +4228,7 @@ fn textureViewTextureDescriptor(view: *const TextureView) core.TextureDescriptor
         .mip_level_count = view.mipLevelCount(),
         .sample_count = view.sampleCount(),
         .usage = view.usage(),
+        .storage_mode = view.storageMode(),
     };
 }
 
@@ -6855,19 +7051,61 @@ pub const Device = struct {
 
     pub fn makeHeap(self: *Device, descriptor: core.HeapDescriptor) !Heap {
         try descriptor.validate(self.features());
-        self.state().tracker.retain(.heap);
-        return Heap.init(.{
+        const native_source = self.state().capability_report.source == .vulkan_query or
+            self.state().capability_report.source == .metal_query;
+        var impl: ?Heap.Impl = if (native_source) switch (self.state().impl) {
+            .vulkan => |*vulkan| Heap.Impl{ .vulkan = try vulkan.makeHeap(descriptor) },
+            .metal => |*metal| Heap.Impl{ .metal = try metal.makeHeap(descriptor) },
+        } else null;
+        errdefer if (impl) |*native| switch (native.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => |*metal| metal.deinit(),
+        };
+        const state_value = try self.state().allocator.create(Heap.State);
+        errdefer self.state().allocator.destroy(state_value);
+        state_value.* = .{
+            .allocator = self.state().allocator,
             .backend = self.state().backend,
             .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
-        });
+            .features_value = self.features(),
+            .limits_value = self.limits(),
+            .impl = impl,
+        };
+        self.state().tracker.retain(.heap);
+        return Heap.init(state_value);
     }
 
     fn memoryBudgetReport(self: Device, descriptor: core.MemoryBudgetDescriptor) core.MemoryBudgetError!core.MemoryBudgetReport {
         var resolved = descriptor;
-        resolved.native_budget_available = resolved.native_budget_available or self.nativeFeatures().memory_budget;
+        resolved.native_budget_available = false;
+        const native_source = self.state().capability_report.source == .vulkan_query or
+            self.state().capability_report.source == .metal_query;
+        if (native_source and self.features().memory_budget) {
+            switch (self.state().impl) {
+                .vulkan => |*vulkan| if (vulkan.gc.memoryBudget()) |budget| {
+                    applyNativeMemoryBudget(&resolved, budget.budget_bytes, budget.used_bytes);
+                },
+                .metal => |*metal| if (metal.memoryBudget()) |budget| {
+                    applyNativeMemoryBudget(&resolved, budget.budget_bytes, budget.used_bytes);
+                },
+            }
+        }
         return try resolved.report();
+    }
+
+    fn applyNativeMemoryBudget(
+        descriptor: *core.MemoryBudgetDescriptor,
+        budget_bytes: u64,
+        used_bytes: u64,
+    ) void {
+        descriptor.budget_bytes = budget_bytes;
+        descriptor.explicit_usage_bytes = used_bytes;
+        descriptor.heap_reserved_bytes = 0;
+        descriptor.transient_peak_bytes = 0;
+        descriptor.sparse_resident_bytes = 0;
+        descriptor.native_budget_available = true;
     }
 
     fn transientAllocationDiagnostics(
@@ -7215,6 +7453,9 @@ pub const Device = struct {
 
     pub fn makeTexture(self: *Device, descriptor: core.TextureDescriptor) !Texture {
         try descriptor.validateForLimits(self.limits());
+        if (descriptor.storage_mode == .memoryless and !self.features().memoryless_attachments) {
+            return core.TextureError.UnsupportedMemorylessStorage;
+        }
         if (!self.getFormatCaps(descriptor.format).supportsTextureDescriptor(descriptor)) {
             return core.TextureError.UnsupportedTextureUsage;
         }
@@ -11025,6 +11266,16 @@ test "runtime heaps track aligned reservations and diagnostics" {
     });
     try std.testing.expectEqual(@as(u64, 256), second.offset);
     try std.testing.expectEqual(@as(u64, 384), heap.reservedBytes());
+    try heap.validateAllocation(first, .{ .size = 128, .alignment = 64 });
+    try std.testing.expectError(core.HeapError.HeapAllocationTooSmall, heap.validateAllocation(first, .{
+        .size = 129,
+        .alignment = 64,
+    }));
+    try std.testing.expectError(core.HeapError.HeapAllocationNotReserved, heap.validateAllocation(.{
+        .offset = 512,
+        .size = 64,
+        .alignment = 64,
+    }, .{ .size = 64, .alignment = 64 }));
     try std.testing.expectError(core.HeapError.HeapOutOfMemory, heap.reserve(.{
         .size = 4096,
     }));
@@ -11049,6 +11300,7 @@ test "runtime heaps track aligned reservations and diagnostics" {
         .transient_peak_bytes = 1024,
         .warning_threshold_percent = 25,
         .critical_threshold_percent = 80,
+        .native_budget_available = true,
     });
     try std.testing.expectEqual(core.MemoryBudgetSource.fallback, budget.source);
     try std.testing.expectEqual(core.MemoryPressureStatus.warning, budget.pressure);
@@ -11074,6 +11326,40 @@ test "runtime heaps track aligned reservations and diagnostics" {
     try std.testing.expectEqual(@as(usize, 1), diagnostics.aliasable_pairs);
     try std.testing.expectEqual(@as(u64, 1024), diagnostics.peak_live_units);
     try std.testing.expectEqual(@as(u64, 512), diagnostics.aliasing_savings_units);
+}
+
+test "heap resource storage compatibility stays explicit" {
+    try validateHeapBufferCompatibility(.{
+        .size = 4096,
+        .storage_mode = .cpu_visible,
+    }, .{
+        .length = 64,
+        .storage_mode = .shared,
+    });
+    try std.testing.expectError(core.HeapError.HeapResourceIncompatible, validateHeapBufferCompatibility(.{
+        .size = 4096,
+        .storage_mode = .device_local,
+    }, .{
+        .length = 64,
+        .storage_mode = .shared,
+    }));
+    try validateHeapTextureCompatibility(.{
+        .size = 4096,
+        .storage_mode = .device_local,
+    }, .{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .usage = .{ .render_attachment = true },
+        .storage_mode = .private,
+    });
+    try std.testing.expectError(core.HeapError.HeapResourceIncompatible, validateHeapTextureCompatibility(.{
+        .size = 4096,
+        .storage_mode = .cpu_visible,
+    }, .{
+        .format = .rgba8_unorm,
+        .width = 8,
+        .storage_mode = .shared,
+    }));
 }
 
 test "runtime bind group materialization validates resources against layout" {
@@ -12085,6 +12371,20 @@ test "runtime render pass descriptor validates msaa resolve targets" {
     try (RenderPassDescriptor{
         .color_attachments = color_attachments[0..],
     }).validateRuntime(.vulkan);
+
+    msaa_view.state().storage_mode_value = .memoryless;
+    try std.testing.expectError(RuntimeError.UnsupportedRenderPassAttachmentAction, (RenderPassDescriptor{
+        .color_attachments = color_attachments[0..],
+    }).validateRuntime(.vulkan));
+    const memoryless_resolve = [_]RenderPassColorAttachmentDescriptor{.{
+        .target = .{ .texture_view = &msaa_view },
+        .resolve_target = &resolve_view,
+        .store_action = .dont_care,
+    }};
+    try (RenderPassDescriptor{
+        .color_attachments = memoryless_resolve[0..],
+    }).validateRuntime(.vulkan);
+    msaa_view.state().storage_mode_value = .automatic;
 
     const missing_resolve = [_]RenderPassColorAttachmentDescriptor{.{
         .target = .{ .texture_view = &msaa_view },

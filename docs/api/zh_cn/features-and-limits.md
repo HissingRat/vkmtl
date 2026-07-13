@@ -63,7 +63,7 @@ cube_textures multisample_textures samplers sampler_compare
 sampler_anisotropy sampler_border_color heaps
 sparse_buffers sparse_textures tiled_textures memory_budget memory_pressure
 storage_buffers storage_textures
-buffer_gpu_address
+buffer_gpu_address memoryless_attachments
 ```
 
 ### Binding
@@ -191,5 +191,6 @@ zig build run-capability-dump -Dvulkan
 ```
 
 Period44 parity report 的 9/9 表示 hosted/Metal/Vulkan smoke、pixel、bounded-soak gate 已取得
-证据；它不会把 planning-only native heap、sparse-page、physical multi-queue 或其他 deferred
-backend work 自动变成 executable feature。每个 process/device 仍以 capability report 为准。
+证据；它不会把 planning-only sparse-page 或其他 deferred backend work 自动变成 executable feature。
+Native heap、physical queue 和 Metal memoryless attachment 现在有独立 executable evidence。每个
+process/device 仍以 capability report 为准。

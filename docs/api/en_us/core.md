@@ -161,28 +161,40 @@ lowered by both backends only for the portable unnormalized-coordinate subset:
 equal min/mag filters, no mipmapping, clamp-to-edge, zero LOD, no comparison,
 unit anisotropy, and no border color.
 
-`HeapDescriptor` defines explicit heap planning. `Device.makeHeap(...)` is
-feature-gated by `DeviceFeatures.heaps` and returns a runtime `Heap` that tracks
-aligned reservations through `reserve(...)`. `HeapAliasingDescriptor` and
-`Heap.aliasingPlan(...)` validate whether two placed allocations overlap in
-memory while their lifetimes do not overlap, which is the portable contract for
-future heap-backed resource aliasing. Default resource creation still owns
-memory internally; native Vulkan `VkDeviceMemory` suballocation and Metal
-`MTLHeap`-backed buffer/texture creation are future backend work.
+`HeapDescriptor` defines native placement storage. `Device.makeHeap(...)` is
+feature-gated by `DeviceFeatures.heaps`. Query exact backend requirements with
+`bufferAllocationRequirements(...)` or `textureAllocationRequirements(...)`,
+pass the result through `reserve(...)`, then create the placed resource with
+`makeBufferAt(...)` or `makeTextureAt(...)`. Metal uses placement `MTLHeap`
+resources; Vulkan binds buffers/images into one compatible `VkDeviceMemory`
+allocation. Heap resources must be destroyed before the heap, and
+`liveResourceCount()` reports outstanding children. `HeapAliasingDescriptor`
+still validates disjoint-lifetime overlap; applications own the lifetime proof
+before reusing an offset.
 
 Memory diagnostics use `vkmtl.diagnostics.MemoryBudgetDescriptor` and
 `vkmtl.diagnostics.memoryBudgetReport(device, descriptor)`. The report distinguishes native and fallback
 sources, totals explicit usage, heap reservations, transient peak bytes, and
 sparse residency bytes, and classifies pressure as unknown, nominal, warning,
-critical, or over-budget. Until backends provide native budget queries, reports
-remain fallback diagnostics.
+critical, or over-budget. Metal uses recommended working-set/current-allocation
+values. Vulkan uses `VK_EXT_memory_budget` when present. Otherwise the same
+descriptor produces a clearly labeled fallback report.
+
+`ResourceStorageMode.memoryless` requests hardware tile-memory attachment
+storage. It is non-CPU-visible, render-attachment-only, and cannot load or store
+persistent contents. Metal exposes it only after a native creation probe;
+memoryless MSAA attachments may resolve into persistent textures. Vulkan keeps
+the lane typed unsupported because lazily allocated memory cannot guarantee no
+physical backing. The separate render-pass `transient` option remains only a
+lifetime/performance hint.
 
 Sparse and tiled resource shapes are represented by
 `vkmtl.resource.SparseBufferMappingDescriptor`, `SparseTextureMappingDescriptor`, and
 `SparseMappingCommitDescriptor`. They validate page size, region alignment, and
 residency intent behind `DeviceFeatures.sparse_buffers`,
 `DeviceFeatures.sparse_textures`, and `DeviceFeatures.tiled_textures`. Native
-residency management is future backend work. Period 27 adds
+residency execution is intentionally unsupported by the current shape because
+mapping descriptors do not identify actual resource handles. Period 27 adds
 `vkmtl.native.SparseBufferLowering`, `vkmtl.native.SparseTextureLowering`,
 `vkmtl.native.planSparseBufferLowering(device, descriptor)`, and
 `vkmtl.native.planSparseTextureLowering(device, descriptor)` so advanced applications can inspect
@@ -192,7 +204,8 @@ runtime sparse object creation is enabled. `SparseMappingCommitPlan` and
 bytes, and texture pages for residency update batches.
 `SparseResidencyChurnDescriptor`, `SparseResidencyMap.runChurn(...)`, and
 `vkmtl.resource.planSparseResidencyChurn(device, descriptor)` provide deterministic repeated
-commit/evict pressure diagnostics before native page binding is available.
+commit/evict pressure diagnostics while native page binding remains
+unavailable. Native sparse feature queries do not open usable features.
 
 External interop shapes under `vkmtl.interop` are represented by `ExternalHandleDescriptor`,
 `ExternalMemoryDescriptor`, `ExternalBufferDescriptor`,

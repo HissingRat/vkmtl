@@ -21,6 +21,7 @@ typedef struct vkmtl_metal_acceleration_structure vkmtl_metal_acceleration_struc
 typedef struct vkmtl_metal_ray_tracing_pipeline_state vkmtl_metal_ray_tracing_pipeline_state;
 typedef struct vkmtl_metal_query_set vkmtl_metal_query_set;
 typedef struct vkmtl_metal_shared_event vkmtl_metal_shared_event;
+typedef struct vkmtl_metal_heap vkmtl_metal_heap;
 typedef struct vkmtl_metal_command_buffer vkmtl_metal_command_buffer;
 typedef struct vkmtl_metal_render_command_encoder vkmtl_metal_render_command_encoder;
 typedef struct vkmtl_metal_blit_command_encoder vkmtl_metal_blit_command_encoder;
@@ -56,6 +57,7 @@ typedef enum vkmtl_metal_storage_mode {
     VKMTL_METAL_STORAGE_MODE_SHARED = 1,
     VKMTL_METAL_STORAGE_MODE_MANAGED = 2,
     VKMTL_METAL_STORAGE_MODE_PRIVATE = 3,
+    VKMTL_METAL_STORAGE_MODE_MEMORYLESS = 4,
 } vkmtl_metal_storage_mode;
 
 typedef enum vkmtl_metal_texture_dimension {
@@ -307,6 +309,11 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int shared_events;
     unsigned int scheduled_presentation;
     unsigned int minimum_duration_presentation;
+    unsigned int heaps;
+    unsigned int memory_budget;
+    unsigned int memoryless_attachments;
+    uint64_t recommended_working_set_size;
+    uint64_t current_allocated_size;
 } vkmtl_metal_device_capabilities;
 
 typedef struct vkmtl_metal_acceleration_structure_build_sizes {
@@ -401,6 +408,54 @@ vkmtl_metal_status vkmtl_metal_buffer_read_bytes(
     size_t offset,
     void *destination,
     size_t destination_len
+);
+
+vkmtl_metal_status vkmtl_metal_heap_create(
+    vkmtl_metal_clear_screen *owner,
+    uint64_t size,
+    unsigned int storage_mode,
+    vkmtl_metal_heap **out_heap
+);
+void vkmtl_metal_heap_destroy(vkmtl_metal_heap *heap);
+vkmtl_metal_status vkmtl_metal_heap_buffer_size_and_align(
+    const vkmtl_metal_heap *heap,
+    size_t length,
+    uint64_t *out_size,
+    uint64_t *out_alignment
+);
+vkmtl_metal_status vkmtl_metal_heap_texture_size_and_align(
+    const vkmtl_metal_heap *heap,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    uint64_t *out_size,
+    uint64_t *out_alignment
+);
+vkmtl_metal_status vkmtl_metal_heap_buffer_create(
+    vkmtl_metal_heap *heap,
+    size_t length,
+    const void *bytes,
+    size_t bytes_len,
+    uint64_t offset,
+    vkmtl_metal_buffer **out_buffer
+);
+vkmtl_metal_status vkmtl_metal_heap_texture_create(
+    vkmtl_metal_heap *heap,
+    vkmtl_metal_texture_dimension dimension,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int mip_level_count,
+    unsigned int sample_count,
+    unsigned int usage_flags,
+    uint64_t offset,
+    vkmtl_metal_texture **out_texture
 );
 
 vkmtl_metal_status vkmtl_metal_texture_create(

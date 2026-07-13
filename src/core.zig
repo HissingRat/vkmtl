@@ -158,6 +158,7 @@ pub const DeviceFeatures = struct {
     command_buffer_lifecycle_callbacks: bool = false,
     scheduled_presentation: bool = false,
     minimum_duration_presentation: bool = false,
+    memoryless_attachments: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -2149,6 +2150,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedSamplerAnisotropy,
         error.UnsupportedSamplerBorderColor,
         error.UnsupportedHeaps,
+        error.UnsupportedMemorylessStorage,
         error.UnsupportedSmallConstants,
         error.UnsupportedRootConstants,
         error.UnsupportedShaderSpecialization,
@@ -2354,6 +2356,10 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidLodRange,
         error.InvalidMaxAnisotropy,
         error.InvalidHeapSize,
+        error.InvalidMemorylessTexture,
+        error.HeapAllocationTooSmall,
+        error.HeapAllocationNotReserved,
+        error.HeapResourceIncompatible,
         error.EmptyShaderLibraryName,
         error.EmptyShaderLibraryEntryName,
         error.EmptyShaderIncludePath,
@@ -6438,6 +6444,17 @@ pub const TextureDescriptor = struct {
         if (self.mip_level_count == 0) return TextureError.InvalidMipLevelCount;
         if (self.mip_level_count > self.maxMipLevelCount()) return TextureError.InvalidMipLevelCount;
         try validateSampleCount(self.sample_count);
+        if (self.storage_mode == .memoryless) {
+            if (!self.usage.render_attachment or
+                self.usage.shader_read or
+                self.usage.shader_write or
+                self.usage.copy_source or
+                self.usage.copy_destination or
+                self.mip_level_count != 1)
+            {
+                return TextureError.InvalidMemorylessTexture;
+            }
+        }
         if (self.sample_count != 1) {
             if (self.dimension != .two_d) return TextureError.UnsupportedSampleCount;
             if (self.mip_level_count != 1) return TextureError.UnsupportedSampleCount;
@@ -8275,6 +8292,8 @@ pub const TextureError = error{
     UnsupportedMipmapGeneration,
     TextureExtentExceedsDeviceLimit,
     TextureNotCpuVisible,
+    UnsupportedMemorylessStorage,
+    InvalidMemorylessTexture,
 };
 
 pub const SamplerMinMagFilter = enum {
@@ -8492,6 +8511,9 @@ pub const HeapError = error{
     InvalidHeapLifetime,
     UnsupportedHeaps,
     HeapOutOfMemory,
+    HeapAllocationTooSmall,
+    HeapAllocationNotReserved,
+    HeapResourceIncompatible,
 };
 
 fn heapAllocationOverlapBytes(a: HeapAllocationInfo, b: HeapAllocationInfo) u64 {
@@ -9877,9 +9899,13 @@ pub const ResourceStorageMode = enum {
     shared,
     managed,
     private,
+    memoryless,
 
     pub fn cpuVisible(self: ResourceStorageMode) bool {
-        return self != .private;
+        return switch (self) {
+            .automatic, .shared, .managed => true,
+            .private, .memoryless => false,
+        };
     }
 };
 
@@ -9891,6 +9917,7 @@ pub const BufferDescriptor = struct {
     storage_mode: ResourceStorageMode = .automatic,
 
     pub fn resolvedLength(self: BufferDescriptor) BufferError!usize {
+        if (self.storage_mode == .memoryless) return BufferError.UnsupportedMemorylessStorage;
         const length = if (self.length != 0) self.length else if (self.bytes) |bytes| bytes.len else 0;
         if (length == 0) return BufferError.InvalidBufferLength;
         if (self.bytes) |bytes| {
@@ -9982,6 +10009,7 @@ pub const BufferError = error{
     UnsupportedBufferGpuAddress,
     BufferMissingGpuAddressUsage,
     BufferGpuAddressUnavailable,
+    UnsupportedMemorylessStorage,
 };
 
 pub const SurfaceError = error{
@@ -13411,6 +13439,28 @@ test "texture descriptor validates dimension shape and sample count" {
         .usage = .{ .render_attachment = true },
         .storage_mode = .private,
     }).validate());
+}
+
+test "memoryless storage is attachment-only and never CPU visible" {
+    try (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .sample_count = 4,
+        .usage = .{ .render_attachment = true },
+        .storage_mode = .memoryless,
+    }).validate();
+    try std.testing.expect(!(ResourceStorageMode.memoryless.cpuVisible()));
+    try std.testing.expectError(TextureError.InvalidMemorylessTexture, (TextureDescriptor{
+        .format = .rgba8_unorm,
+        .width = 64,
+        .usage = .{ .render_attachment = true, .shader_read = true },
+        .storage_mode = .memoryless,
+    }).validate());
+    try std.testing.expectError(BufferError.UnsupportedMemorylessStorage, (BufferDescriptor{
+        .length = 64,
+        .storage_mode = .memoryless,
+    }).resolvedLength());
 }
 
 test "texture descriptor validates and resolves mip ranges" {

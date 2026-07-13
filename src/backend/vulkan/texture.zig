@@ -9,6 +9,7 @@ const VulkanTexture = @This();
 gc: *const GraphicsContext,
 handle: vk.Image,
 memory: vk.DeviceMemory,
+owns_memory: bool = true,
 descriptor: core.TextureDescriptor,
 layout: vk.ImageLayout,
 width_value: u32,
@@ -21,30 +22,7 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.TextureDescriptor) !Vul
     if (!gc.supportsSampleCount(descriptor.format, descriptor.sample_count)) {
         return core.TextureError.UnsupportedSampleCount;
     }
-    const queue_families = gc.workQueueFamilies();
-
-    const handle = try gc.dev.createImage(&.{
-        .flags = if (core.textureFormatSupportsViewReinterpretation(descriptor.format))
-            .{ .mutable_format_bit = true }
-        else
-            .{},
-        .image_type = imageType(descriptor.dimension),
-        .format = imageFormat(descriptor.format),
-        .extent = .{
-            .width = descriptor.width,
-            .height = imageHeight(descriptor),
-            .depth = imageDepth(descriptor),
-        },
-        .mip_levels = descriptor.mip_level_count,
-        .array_layers = imageArrayLayers(descriptor),
-        .samples = sampleCountFlags(descriptor.sample_count),
-        .tiling = .optimal,
-        .usage = usageFlags(descriptor.format, descriptor.usage),
-        .sharing_mode = if (queue_families.count > 1) .concurrent else .exclusive,
-        .queue_family_index_count = queue_families.count,
-        .p_queue_family_indices = &queue_families.values,
-        .initial_layout = .undefined,
-    }, null);
+    const handle = try createHandle(gc, descriptor);
     errdefer gc.dev.destroyImage(handle, null);
 
     const mem_reqs = gc.dev.getImageMemoryRequirements(handle);
@@ -66,9 +44,58 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.TextureDescriptor) !Vul
     };
 }
 
+pub fn allocationRequirements(
+    gc: *const GraphicsContext,
+    descriptor: core.TextureDescriptor,
+) !core.HeapAllocationDescriptor {
+    try descriptor.validate();
+    if (!gc.supportsSampleCount(descriptor.format, descriptor.sample_count)) {
+        return core.TextureError.UnsupportedSampleCount;
+    }
+    const handle = try createHandle(gc, descriptor);
+    defer gc.dev.destroyImage(handle, null);
+    const requirements = gc.dev.getImageMemoryRequirements(handle);
+    return .{ .size = requirements.size, .alignment = requirements.alignment };
+}
+
+pub fn initFromHeap(
+    gc: *const GraphicsContext,
+    descriptor: core.TextureDescriptor,
+    heap_memory: vk.DeviceMemory,
+    heap_memory_type_index: u32,
+    allocation: core.HeapAllocationInfo,
+) !VulkanTexture {
+    try descriptor.validate();
+    if (!gc.supportsSampleCount(descriptor.format, descriptor.sample_count)) {
+        return core.TextureError.UnsupportedSampleCount;
+    }
+    const handle = try createHandle(gc, descriptor);
+    errdefer gc.dev.destroyImage(handle, null);
+    const requirements = gc.dev.getImageMemoryRequirements(handle);
+    if (requirements.memory_type_bits & (@as(u32, 1) << @intCast(heap_memory_type_index)) == 0) {
+        return core.HeapError.HeapResourceIncompatible;
+    }
+    if (allocation.size < requirements.size or allocation.offset % requirements.alignment != 0) {
+        return core.HeapError.HeapAllocationTooSmall;
+    }
+    try gc.dev.bindImageMemory(handle, heap_memory, allocation.offset);
+    return .{
+        .gc = gc,
+        .handle = handle,
+        .memory = heap_memory,
+        .owns_memory = false,
+        .descriptor = descriptor,
+        .layout = .undefined,
+        .width_value = descriptor.width,
+        .height_value = descriptor.height,
+        .depth_or_array_layers_value = descriptor.depth_or_array_layers,
+        .mip_level_count_value = descriptor.mip_level_count,
+    };
+}
+
 pub fn deinit(self: *VulkanTexture) void {
     self.gc.dev.destroyImage(self.handle, null);
-    self.gc.dev.freeMemory(self.memory, null);
+    if (self.owns_memory) self.gc.dev.freeMemory(self.memory, null);
 }
 
 pub fn width(self: VulkanTexture) u32 {
@@ -154,6 +181,32 @@ fn imageType(dimension: core.TextureDimension) vk.ImageType {
         .two_d => .@"2d",
         .three_d => .@"3d",
     };
+}
+
+fn createHandle(gc: *const GraphicsContext, descriptor: core.TextureDescriptor) !vk.Image {
+    const queue_families = gc.workQueueFamilies();
+    return try gc.dev.createImage(&.{
+        .flags = if (core.textureFormatSupportsViewReinterpretation(descriptor.format))
+            .{ .mutable_format_bit = true }
+        else
+            .{},
+        .image_type = imageType(descriptor.dimension),
+        .format = imageFormat(descriptor.format),
+        .extent = .{
+            .width = descriptor.width,
+            .height = imageHeight(descriptor),
+            .depth = imageDepth(descriptor),
+        },
+        .mip_levels = descriptor.mip_level_count,
+        .array_layers = imageArrayLayers(descriptor),
+        .samples = sampleCountFlags(descriptor.sample_count),
+        .tiling = .optimal,
+        .usage = usageFlags(descriptor.format, descriptor.usage),
+        .sharing_mode = if (queue_families.count > 1) .concurrent else .exclusive,
+        .queue_family_index_count = queue_families.count,
+        .p_queue_family_indices = &queue_families.values,
+        .initial_layout = .undefined,
+    }, null);
 }
 
 pub fn imageFormat(format: core.TextureFormat) vk.Format {

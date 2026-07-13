@@ -95,13 +95,14 @@ pub fn main(_: std.process.Init.Minimal) !void {
     });
     defer screen_index_buffer.deinit();
 
+    const memoryless = device.features().memoryless_attachments;
     var msaa_texture = try device.makeTexture(.{
         .format = .rgba8_unorm,
         .width = msaa_width,
         .height = msaa_height,
         .sample_count = msaa_sample_count,
         .usage = .{ .render_attachment = true },
-        .storage_mode = .private,
+        .storage_mode = if (memoryless) .memoryless else .private,
     });
     defer msaa_texture.deinit();
 
@@ -216,6 +217,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
             .color_attachments = &.{.{
                 .target = .{ .texture_view = &msaa_view },
                 .resolve_target = &resolved_view,
+                .store_action = .dont_care,
                 .clear_color = .{
                     .red = 0.02,
                     .green = 0.024,
@@ -257,8 +259,18 @@ pub fn main(_: std.process.Init.Minimal) !void {
         try screen_command_buffer.presentDrawable();
         try screen_command_buffer.commit();
 
+        if (pixelRegressionEnabled()) {
+            std.debug.print("msaa attachment ok (memoryless={})\n", .{memoryless});
+            break;
+        }
+
         glfw.pollEvents();
     }
+}
+
+fn pixelRegressionEnabled() bool {
+    const value = std.mem.span(getenv("VKMTL_PIXEL_REGRESSION") orelse return false);
+    return std.mem.eql(u8, value, "1");
 }
 
 fn msaaPipelineDescriptor(

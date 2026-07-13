@@ -23,7 +23,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, runtime fences/events, native timeline/shared-event submission, physical queue selection, ownership transfer validation, lifecycle callback-once behavior, presentation fallback, and query readback/resolve validation.
 - `debug_marker_regression`: `zig build test && zig build run-profiling-plan`; includes borrowed label lifetime, UTF-8 and embedded-NUL validation, native/validation-only marker capabilities, capture gates, query-source semantics, profiling fallback, and issue-report snapshots.
-- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
+- `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, native heap requirements/placement, heap aliasing/lifetime, native/fallback memory reports, memoryless validation, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation draw plans, and mesh/task dispatch plans.
@@ -139,11 +139,11 @@ conservative until the relevant backend period lands.
 | MSAA copies/readback | Typed unsupported | Typed unsupported | Color resolve is the explicit single-sample conversion |
 | Fixed sampler border colors | Native sampler state | Native sampler state | Available by default |
 | Custom sampler border colors | Deferred | Deferred | Native-extension-only; tracked in the Period 44 parity report |
-| Heap planning | Portable runtime object | Portable runtime object | Feature-gated planning/reservation |
+| Heap placement | Native `VkDeviceMemory` binding | Placement `MTLHeap` resources | Exact requirements, reserved offsets, and child-before-heap lifetime |
 | Heap aliasing planning | Portable runtime object | Portable runtime object | `HeapAliasingDescriptor` validates overlapping ranges and lifetimes |
-| Native heap-backed resources | Deferred | Deferred | Period 32+ driver parity plan native integration |
+| Native heap-backed resources | Executable | Executable | Buffer/texture resources bind into the selected native heap |
 | Transient allocation diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Reports requested units, peak live units, max alignment, aliasable pairs, and savings |
-| Memory budget/pressure report | Fallback runtime report until native query is wired | Fallback runtime report until native query is wired | `vkmtl.diagnostics.memoryBudgetReport(device, descriptor)` classifies pressure and source |
+| Memory budget/pressure report | Native with `VK_EXT_memory_budget`, fallback otherwise | Native working-set/current-allocation report | `vkmtl.diagnostics.memoryBudgetReport(device, descriptor)` classifies pressure and source |
 
 ## Period 42 Format, Copy, And Attachment Expectations
 
@@ -165,7 +165,7 @@ conservative until the relevant backend period lands.
 | Ordinary resource/dispatch limits | Native physical-device properties | Native device properties/family floors | Resource and compute validation consume queried limits |
 | Direct/logical-thread compute dispatch | Native dispatch; logical threads ceil-compose | Native dispatch; logical threads ceil-compose | Shader owns final-group bounds checks |
 | Indirect compute dispatch | Native indirect dispatch | Native indirect dispatch | Usage, offset, alignment, and threadgroup size are validated |
-| Compute bind groups/root constants | Descriptor sets/push constants | Resource slots/inline bytes | Ordinary path is executable; function tables/heaps stay deferred |
+| Compute bind groups/root constants | Descriptor sets/push constants | Resource slots/inline bytes | Ordinary path is executable; function tables stay deferred |
 | Compute buffer/texture barriers | Native pipeline barriers plus hazard state | Automatic hazard/order composition plus hazard state | Native fences/events stay Period 48 |
 | 32-bit integer atomics/threadgroup memory | Core SPIR-V semantics and queried shared-memory limit | Native atomic/groupshared semantics and queried limit | Storage-texture/64-bit atomic breadth is not promised |
 | Portable reflection | Schema-1 array/access metadata consumed with SPIR-V | Same schema-1 metadata consumed with MSL | Advanced backend-only protocols stay deferred |
@@ -239,7 +239,7 @@ conservative until the relevant backend period lands.
 | Sparse/tiled texture planning | Runtime plan from native features | Runtime plan from native features | `vkmtl.native.planSparseTextureLowering(device, descriptor)` |
 | Residency commit planning | Runtime commit/evict summary | Runtime commit/evict summary | `vkmtl.resource.planSparseMappingCommit(device, descriptor)` |
 | Residency churn planning | Runtime commit/evict cycle summary | Runtime commit/evict cycle summary | `vkmtl.resource.planSparseResidencyChurn(device, descriptor)` and `vkmtl.resource.SparseResidencyMap.runChurn(...)` |
-| Native sparse/tiled page binding | Deferred | Deferred | Period 32+ driver parity plan native integration |
+| Native sparse/tiled page binding | Typed unsupported | Typed unsupported | Current planning descriptors do not identify actual resources |
 | Tessellation draw planning | Runtime patch-list draw metadata plan | Runtime factor-buffer metadata plan | `vkmtl.render.planTessellationPatchDraw(device, descriptor)` |
 | Native tessellation pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
 | Mesh/task dispatch planning | Runtime task/mesh dispatch metadata plan | Runtime object/mesh dispatch metadata plan | `vkmtl.render.planMeshDispatch(device, descriptor)` |
@@ -280,10 +280,20 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Heap reservation | Portable runtime reservation object | Portable runtime reservation object | `Device.makeHeap(...)` and `Heap.reserve(...)` |
+| Heap reservation | Native device-memory heap plus portable reservation | Native placement heap plus portable reservation | `Device.makeHeap(...)`, exact requirements, and `Heap.reserve(...)` |
 | Heap aliasing | Portable aliasing plan | Portable aliasing plan | `Heap.aliasingPlan(...)` validates range/lifetime compatibility |
-| Memory budget report | Fallback report until native budget query is wired | Fallback report until native budget query is wired | `MemoryBudgetReport` records source and pressure |
+| Memory budget report | Native with queried extension, fallback otherwise | Native working-set/current allocation | `MemoryBudgetReport` records source and pressure |
 | Transient pressure diagnostics | Portable runtime diagnostics | Portable runtime diagnostics | Peak live units and aliasing savings are deterministic |
 | Sparse residency churn | Portable plan/map execution | Portable plan/map execution | Repeated commit/evict cycles are deterministic |
-| Native heap-backed resources | Deferred | Deferred | Requires backend lowering and Period44 device evidence |
-| Native sparse/tiled page binding | Deferred | Deferred | Requires backend lowering and Period44 device evidence |
+| Native heap-backed resources | Executable | Executable | Vulkan forced build/unit; Metal physical transfer/readback |
+| Native sparse/tiled page binding | Typed unsupported | Typed unsupported | Planning-only shapes remain closed |
+
+## Period 49 Native Memory Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Placement heaps | Compatible `VkDeviceMemory` with placed buffer/image bindings | `MTLHeapTypePlacement` buffer/texture creation | Feature opens only for the complete requirements/reserve/create/lifetime path |
+| Memory budget | `VK_EXT_memory_budget` device-local heap totals | Recommended working set and current allocated size | Native source replaces caller estimates; otherwise fallback remains explicit |
+| Memoryless attachment | Typed unsupported | Probed `MTLStorageModeMemoryless` | Attachment-only, no load/store persistence; MSAA resolve is executable |
+| Residency sets/sparse commits | Typed unsupported | Typed unsupported | Planning records remain available but usable feature fields stay false |
+| Cache/optimization policy | Default behavior only | Default behavior only | Explicit write-combined and content-optimization hints are unallocated/unsupported |

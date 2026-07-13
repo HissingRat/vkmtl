@@ -8,6 +8,8 @@ const VulkanBuffer = @This();
 gc: *const GraphicsContext,
 handle: vk.Buffer,
 memory: vk.DeviceMemory,
+memory_offset: u64 = 0,
+owns_memory: bool = true,
 length_value: usize,
 cpu_visible: bool,
 
@@ -17,15 +19,7 @@ pub const MappedRange = struct {
 
 pub fn init(gc: *const GraphicsContext, descriptor: core.BufferDescriptor) !VulkanBuffer {
     const buffer_len = try descriptor.resolvedLength();
-    const queue_families = gc.workQueueFamilies();
-
-    const handle = try gc.dev.createBuffer(&.{
-        .size = @intCast(buffer_len),
-        .usage = usageFlags(descriptor.usage),
-        .sharing_mode = if (queue_families.count > 1) .concurrent else .exclusive,
-        .queue_family_index_count = queue_families.count,
-        .p_queue_family_indices = &queue_families.values,
-    }, null);
+    const handle = try createHandle(gc, descriptor, buffer_len);
     errdefer gc.dev.destroyBuffer(handle, null);
 
     const mem_reqs = gc.dev.getBufferMemoryRequirements(handle);
@@ -54,9 +48,57 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.BufferDescriptor) !Vulk
     };
 }
 
+pub fn allocationRequirements(
+    gc: *const GraphicsContext,
+    descriptor: core.BufferDescriptor,
+) !core.HeapAllocationDescriptor {
+    const buffer_len = try descriptor.resolvedLength();
+    const handle = try createHandle(gc, descriptor, buffer_len);
+    defer gc.dev.destroyBuffer(handle, null);
+    const requirements = gc.dev.getBufferMemoryRequirements(handle);
+    return .{ .size = requirements.size, .alignment = requirements.alignment };
+}
+
+pub fn initFromHeap(
+    gc: *const GraphicsContext,
+    descriptor: core.BufferDescriptor,
+    heap_memory: vk.DeviceMemory,
+    heap_memory_type_index: u32,
+    allocation: core.HeapAllocationInfo,
+) !VulkanBuffer {
+    const buffer_len = try descriptor.resolvedLength();
+    const handle = try createHandle(gc, descriptor, buffer_len);
+    errdefer gc.dev.destroyBuffer(handle, null);
+    const requirements = gc.dev.getBufferMemoryRequirements(handle);
+    if (requirements.memory_type_bits & (@as(u32, 1) << @intCast(heap_memory_type_index)) == 0) {
+        return core.HeapError.HeapResourceIncompatible;
+    }
+    if (allocation.size < requirements.size or allocation.offset % requirements.alignment != 0) {
+        return core.HeapError.HeapAllocationTooSmall;
+    }
+    try gc.dev.bindBufferMemory(handle, heap_memory, allocation.offset);
+
+    if (descriptor.bytes) |bytes| {
+        const data = try gc.dev.mapMemory(heap_memory, allocation.offset, @intCast(bytes.len), .{});
+        defer gc.dev.unmapMemory(heap_memory);
+        const dst: [*]u8 = @ptrCast(@alignCast(data));
+        @memcpy(dst[0..bytes.len], bytes);
+    }
+
+    return .{
+        .gc = gc,
+        .handle = handle,
+        .memory = heap_memory,
+        .memory_offset = allocation.offset,
+        .owns_memory = false,
+        .length_value = buffer_len,
+        .cpu_visible = descriptor.storage_mode != .private,
+    };
+}
+
 pub fn deinit(self: *VulkanBuffer) void {
     self.gc.dev.destroyBuffer(self.handle, null);
-    self.gc.dev.freeMemory(self.memory, null);
+    if (self.owns_memory) self.gc.dev.freeMemory(self.memory, null);
 }
 
 pub fn length(self: VulkanBuffer) usize {
@@ -73,7 +115,7 @@ pub fn mapRange(self: *VulkanBuffer, descriptor: core.BufferMapDescriptor) !Mapp
 
     const data = try self.gc.dev.mapMemory(
         self.memory,
-        @intCast(descriptor.offset),
+        @intCast(self.memory_offset + descriptor.offset),
         @intCast(descriptor.length),
         .{},
     );
@@ -93,7 +135,7 @@ pub fn replaceBytes(self: *VulkanBuffer, offset: usize, bytes: []const u8) !void
         .bytes = bytes,
     }).validate(self.length_value);
 
-    const data = try self.gc.dev.mapMemory(self.memory, @intCast(offset), @intCast(bytes.len), .{});
+    const data = try self.gc.dev.mapMemory(self.memory, @intCast(self.memory_offset + offset), @intCast(bytes.len), .{});
     defer self.gc.dev.unmapMemory(self.memory);
 
     const dst: [*]u8 = @ptrCast(@alignCast(data));
@@ -107,7 +149,7 @@ pub fn readBytes(self: *VulkanBuffer, offset: usize, destination: []u8) !void {
         .destination = destination,
     }).validate(self.length_value);
 
-    const data = try self.gc.dev.mapMemory(self.memory, @intCast(offset), @intCast(destination.len), .{});
+    const data = try self.gc.dev.mapMemory(self.memory, @intCast(self.memory_offset + offset), @intCast(destination.len), .{});
     defer self.gc.dev.unmapMemory(self.memory);
 
     const src: [*]const u8 = @ptrCast(@alignCast(data));
@@ -160,6 +202,17 @@ fn usageFlags(usage: core.BufferUsage) vk.BufferUsageFlags {
     }
 
     return flags;
+}
+
+fn createHandle(gc: *const GraphicsContext, descriptor: core.BufferDescriptor, buffer_len: usize) !vk.Buffer {
+    const queue_families = gc.workQueueFamilies();
+    return try gc.dev.createBuffer(&.{
+        .size = @intCast(buffer_len),
+        .usage = usageFlags(descriptor.usage),
+        .sharing_mode = if (queue_families.count > 1) .concurrent else .exclusive,
+        .queue_family_index_count = queue_families.count,
+        .p_queue_family_indices = &queue_families.values,
+    }, null);
 }
 
 fn requiresDeviceAddress(usage: core.BufferUsage) bool {

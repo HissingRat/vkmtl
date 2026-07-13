@@ -898,10 +898,13 @@ See `docs/develop/period48/`.
 
 ## Period 49: Heaps, Residency, Sparse Resources, And Memoryless
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
-Goal: create resources from native heaps, execute physical residency/page
-updates, and separate hardware memoryless allocation from transient lifetime.
+Goal: create resources from native heaps, settle physical residency/page
+execution truthfully, and separate hardware memoryless allocation from
+transient lifetime.
+
+See `docs/develop/period49/`.
 
 ## Period 50: Binding Tables, Indirect Commands, And Pipeline Persistence
 

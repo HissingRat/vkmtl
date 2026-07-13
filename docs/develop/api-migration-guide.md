@@ -5,6 +5,32 @@ Period 1 Phase 9 surface. The cutover is breaking because vkmtl has not yet made
 a tagged compatibility promise. It reorganizes names and owners without
 intentionally changing backend behavior.
 
+## Period 49 v0.2.0 Heap And Memoryless Update
+
+`Device.makeHeap(...)` now creates native placement storage when `heaps` is
+reported. Query `heap.bufferAllocationRequirements(...)` or
+`heap.textureAllocationRequirements(...)`, reserve that exact shape, then pass
+the returned allocation to `makeBufferAt(...)` or `makeTextureAt(...)`.
+Heap-backed resources must be destroyed before the heap;
+`liveResourceCount()` exposes the current child count.
+
+`ResourceStorageMode.memoryless` requests a hardware memoryless render
+attachment. It is non-CPU-visible, must have one mip, and may not be sampled,
+stored, or copied. A memoryless pass cannot load prior contents or store its
+attachment; multisample resolve remains valid with `.store_action =
+.dont_care`. Metal exposes this lane when a native probe succeeds. Vulkan
+returns `UnsupportedMemorylessStorage` because lazily allocated memory cannot
+guarantee the same allocation behavior.
+
+Native memory-budget reports replace caller estimates with device/driver budget
+and current usage. Sparse/tiled lowering and residency maps remain planning
+only; their usable feature fields stay false until a resource-bound native
+commit contract exists.
+
+These enum, feature, method, and error-set additions target `v0.2.0`.
+Exhaustive switches over `ResourceStorageMode`, `BufferError`, `TextureError`,
+or `HeapError` need corresponding new arms.
+
 ## Period 48 v0.2.0 Synchronization And Presentation Update
 
 `timeline_fences` now means a native monotonic object with host query,

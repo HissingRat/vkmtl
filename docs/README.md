@@ -81,6 +81,8 @@ vkmtl documentation is organized by audience and purpose.
   breadth
 - `develop/period48/`: native synchronization, physical queues, command
   lifecycle, and presentation timing
+- `develop/period49/`: native heaps, memory telemetry, hardware memoryless
+  attachments, and sparse/residency support boundaries
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

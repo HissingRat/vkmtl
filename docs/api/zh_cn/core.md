@@ -132,24 +132,31 @@ sampler 和 anisotropy 已经下沉到 Vulkan/Metal sampler 创建。固定 bord
 unnormalized-coordinate 子集：min/mag filter 相同、无 mip、clamp-to-edge、LOD 为零、无 compare、
 anisotropy 为 1 且无 border color。
 
-`HeapDescriptor` 定义显式 heap planning。`Device.makeHeap(...)` 由 `DeviceFeatures.heaps`
-gate，返回的 runtime `Heap` 可以通过 `reserve(...)` 追踪 aligned reservation。
-`HeapAliasingDescriptor` 和 `Heap.aliasingPlan(...)` 会校验两个 placed allocation 是否共享
-memory range 且 lifetime 不重叠，这是后续 heap-backed resource aliasing 的 portable contract。
-默认资源创建仍由 vkmtl 内部管理 memory；native Vulkan `VkDeviceMemory` suballocation 和 Metal
-`MTLHeap` backed buffer/texture creation 是后续 backend work。
+`HeapDescriptor` 定义 native placement storage。`Device.makeHeap(...)` 由
+`DeviceFeatures.heaps` gate。先通过 `bufferAllocationRequirements(...)` 或
+`textureAllocationRequirements(...)` 查询 backend 精确 size/alignment，再 `reserve(...)`，最后用
+`makeBufferAt(...)` / `makeTextureAt(...)` 创建 placed resource。Metal 使用 placement
+`MTLHeap`，Vulkan 把 buffer/image 绑定到同一 compatible `VkDeviceMemory`。Heap resource 必须先于
+heap 销毁；`liveResourceCount()` 报告未释放 child。`HeapAliasingDescriptor` 仍用于校验
+disjoint-lifetime overlap，调用方负责在复用 offset 前证明 lifetime 不重叠。
 
 Memory diagnostics 使用 `vkmtl.diagnostics.MemoryBudgetDescriptor` 和
 `vkmtl.diagnostics.memoryBudgetReport(device, descriptor)`。
 Report 会区分 native / fallback source，汇总 explicit usage、heap reservation、transient peak bytes
 和 sparse residency bytes，并把 pressure 分类为 unknown、nominal、warning、critical 或 over-budget。
-在 backend 还没有 native budget query 之前，这条路径是 fallback diagnostics。
+Metal 使用 recommended working set/current allocation；Vulkan 在存在时使用
+`VK_EXT_memory_budget`。否则仍返回明确标记的 fallback diagnostics。
+
+`ResourceStorageMode.memoryless` 请求 hardware tile-memory attachment。它不可 CPU 访问，只能作为
+render attachment，不能 load/store persistent content。Metal 只有 native probe 成功才开放；memoryless
+MSAA attachment 可以 resolve 到 persistent texture。Vulkan 的 lazily allocated memory 不能保证完全
+无 physical backing，因此保持 typed unsupported。Render-pass `transient` 仍只是 lifetime/performance hint。
 
 Sparse/tiled resource shape 由 `vkmtl.resource.SparseBufferMappingDescriptor`、
 `SparseTextureMappingDescriptor` 和 `SparseMappingCommitDescriptor` 表示。它们会在
 `DeviceFeatures.sparse_buffers`、`DeviceFeatures.sparse_textures` 和
 `DeviceFeatures.tiled_textures` gate 后面校验 page size、region alignment 和 residency intent。
-Native residency management 仍是 future backend work。Period 27 新增
+当前 descriptor 没有标识实际 resource handle，因此 native residency execution 明确不支持。Period 27 新增
 `vkmtl.native.SparseBufferLowering`、`vkmtl.native.SparseTextureLowering`、
 `vkmtl.native.planSparseBufferLowering(device, descriptor)` 和
 `vkmtl.native.planSparseTextureLowering(device, descriptor)`，让高级应用能在 runtime sparse object creation 启用之前检查
@@ -158,7 +165,7 @@ native page size、texture page grid、page count 和 backend mapping。
 里的 commit/evict 数量、buffer bytes 和 texture pages。
 `SparseResidencyChurnDescriptor`、`SparseResidencyMap.runChurn(...)` 和
 `vkmtl.resource.planSparseResidencyChurn(device, descriptor)` 提供重复 commit/evict cycle 的确定性 pressure diagnostics，
-用于 native page binding 完成前的长期 residency/churn 规划。
+用于 native page binding 不可用时的长期 residency/churn 规划。Native sparse query 不会打开 usable feature。
 
 `vkmtl.interop` 里的 external interop shape 由 `ExternalHandleDescriptor`、`ExternalMemoryDescriptor`、
 `ExternalBufferDescriptor`、`ExternalTextureDescriptor` 和 `ExternalSemaphoreDescriptor`

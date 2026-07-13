@@ -36,9 +36,9 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Period 46 completed its first implementation slice;
-  Period 48 is complete. Period 49 native heaps, residency, sparse resources,
-  and memoryless behavior is the next mainline priority.
+  semantic-support ledger. Periods 46-49 are complete. Period 50 scalable
+  binding tables, indirect commands, and pipeline persistence are the next
+  mainline priority.
 
 ## Native Semantic Coverage Inventory
 
@@ -2683,6 +2683,38 @@ obvious render and binding blockers.
 
 - [x] Update inventories, routing, compatibility docs, and backend matrices.
 - [x] Run complete API/backend validation and physical evidence probes.
+- [x] Publish an exact-commit closeout with unsupported/deferred semantics.
+
+## Period 49 Phase 1 Checklist
+
+- [x] Split all eight routed rows into executable targets or precise unsupported
+  outcomes.
+- [x] Allocate heap methods and memoryless additions without changing guarded
+  root, common owner, or handle-name allowlists.
+- [x] Define heap-child lifetime and keep planning-only sparse features closed.
+
+## Period 49 Phase 2 Checklist
+
+- [x] Create native placement heaps and exact allocation-requirement queries.
+- [x] Create heap-backed buffers/textures at validated reserved offsets.
+- [x] Enforce heap-child lifetime and native memory ownership.
+
+## Period 49 Phase 3 Checklist
+
+- [x] Query native budget/current allocation on Metal and Vulkan where present.
+- [x] Keep native and fallback memory reports distinct.
+- [x] Gate memory-budget/pressure features on complete query execution.
+
+## Period 49 Phase 4 Checklist
+
+- [x] Add exact Metal hardware-memoryless attachment execution.
+- [x] Keep Vulkan memoryless and all sparse/residency execution precisely closed.
+- [x] Record default-only cache behavior and unsupported optimization hints.
+
+## Period 49 Phase 5 Checklist
+
+- [x] Update inventories, routing, compatibility docs, and backend matrices.
+- [x] Run complete API/backend validation and physical Metal probes.
 - [x] Publish an exact-commit closeout with unsupported/deferred semantics.
 
 ## First Backend-Independent Triangle Checklist

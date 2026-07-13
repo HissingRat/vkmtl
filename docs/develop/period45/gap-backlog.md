@@ -6,8 +6,8 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Periods 46-48 refined broad query, common-workload, and synchronization rows,
-so the current ledger contains 107 units and exactly-once routes 60 incomplete
+Periods 46-49 refined broad query, common-workload, synchronization, and memory
+rows, so the current ledger contains 107 units and exactly-once routes 52 incomplete
 IDs.
 
 The periods below are implementation slices, not promises to add all source
@@ -74,15 +74,21 @@ claim beyond queried gates.
 
 ## Period 49: Native Heaps, Residency, Sparse Resources, And Memoryless
 
+Status: complete.
+
 Priority: production memory behavior and voxel-world prerequisites.
 
-- Heap-backed resource allocation and aliasing.
-- Residency sets, sparse/tiled resources, and physical page commits.
-- Hardware memoryless/lazily allocated attachment contract separated from the
+- [x] Heap-backed resource allocation and aliasing.
+- [x] Close residency sets and sparse/tiled physical commits as unsupported
+  under the current handle-free mapping contract.
+- [x] Hardware memoryless attachment contract separated from the
   portable transient-lifetime hint.
 
-Acceptance: physical memory/residency evidence exists before enabling usable
-features or the voxel-world production pressure claim.
+Acceptance: complete. Physical Metal evidence covers placement-heap buffers and
+textures, native budget/current-allocation reporting, and memoryless MSAA
+resolve. Vulkan heap and memory-budget paths pass focused compilation/unit
+coverage and remain device-query gated. Sparse/residency usable features stay
+closed, so no planning-only voxel-world pressure claim is made.
 
 ## Period 50: Binding Tables, Indirect Commands, And Pipeline Persistence
 
@@ -151,7 +157,7 @@ gates.
 
 ## Next Slice
 
-Period 48 is complete. Its native synchronization, physical queue, lifecycle,
-hazard-ownership, and timed-presentation targets are executable or precisely
-unsupported; 60 incomplete semantic units remain routed to Periods 49-54.
-Period 49 is next.
+Period 49 is complete. Native placement heaps, memory telemetry, and Metal
+memoryless attachments are executable; sparse/residency execution and the
+nonportable policy/hint rows are precisely unsupported. 52 incomplete semantic
+units remain routed to Periods 50-54. Period 50 is next.

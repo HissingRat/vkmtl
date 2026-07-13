@@ -11,6 +11,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added native Metal placement heaps and Vulkan device-memory heaps with exact
+  buffer/texture size-and-alignment queries and placed resource creation.
+- Added native Metal recommended-working-set/current-allocation reporting and
+  Vulkan `VK_EXT_memory_budget` reporting when queried.
+- Added capability-gated hardware-memoryless render attachments on Metal,
+  including memoryless MSAA resolve usage.
 - Added native timeline synchronization: Vulkan timeline semaphores and Metal
   shared events now support host query/wait/signal and GPU submit wait/signal.
 - Added physical compute/transfer command queues, capability-gated queue-family
@@ -45,6 +51,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- `DeviceFeatures.heaps` now means heap-backed buffers and textures execute;
+  planning-only reservations no longer open the feature.
+- Sparse/tiled resource and explicit residency-set execution remain closed:
+  current mapping descriptors are planning records and do not identify native
+  resource handles.
 - `timeline_fences` and Metal `shared_events` now report only complete native
   object and submission paths; binary fence/event fallback remains runtime
   synchronization and is not reported as native.
@@ -72,6 +83,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 49 adds `.memoryless` to `ResourceStorageMode`,
+  `memoryless_attachments` to `DeviceFeatures`, five specialized `Heap`
+  methods, and memoryless/heap allocation errors. These additions target
+  `v0.2.0`; existing resource defaults are unchanged.
 - Period 48 adds nullable lifecycle fields to `CommandBufferDescriptor`,
   command/presentation types and feature fields, a descriptor-based present
   method, and synchronization/presentation errors. Defaults preserve existing

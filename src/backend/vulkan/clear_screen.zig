@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
 const VulkanBuffer = @import("buffer.zig");
+const VulkanHeap = @import("heap.zig");
 const VulkanAccelerationStructure = @import("acceleration_structure.zig");
 const VulkanCommand = @import("command.zig");
 const VulkanComputePipelineState = @import("compute_pipeline.zig");
@@ -198,6 +199,10 @@ pub fn clear(self: *VulkanClearScreen, color: core.ClearColorLike) !void {
 
 pub fn makeBuffer(self: *VulkanClearScreen, descriptor: core.BufferDescriptor) !VulkanBuffer {
     return try VulkanBuffer.init(self.gc, descriptor);
+}
+
+pub fn makeHeap(self: *VulkanClearScreen, descriptor: core.HeapDescriptor) !VulkanHeap {
+    return try VulkanHeap.init(self.gc, descriptor);
 }
 
 pub fn makeAccelerationStructure(self: *VulkanClearScreen, descriptor: core.AccelerationStructureDescriptor) core.AdvancedFeatureError!VulkanAccelerationStructure {

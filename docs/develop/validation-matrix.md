@@ -40,8 +40,9 @@ Current cases:
 - `resource_utilities`: mipmap generation, fill fallback selection, texture
   copy compatibility, backend alignment, mip/layer/3D-slice ranges,
   depth/stencil aspects, scaled blit gates, MSAA resolve/copy behavior,
-  per-subresource state transitions, sampler border colors, heap planning,
-  heap aliasing, memory-pressure reports, transient diagnostics, compute
+  per-subresource state transitions, sampler border colors, native heap
+  requirements/placement/lifetime, heap aliasing, native/fallback
+  memory-pressure reports, memoryless attachment rules, transient diagnostics, compute
   dispatch/barrier/atomic/threadgroup-memory validation, and automatic managed
   readback keep typed validation.
 - `platform_interop`: surface registries, present-mode diagnostics, external
@@ -53,8 +54,9 @@ Current cases:
 - `resource_table_pipeline_persistence`: resource-table pressure plans and
   pipeline artifact compatibility plans classify scale, opt-in table semantics,
   stale cache reasons, and read-only persistence behavior deterministically.
-- `advanced_resource_geometry`: sparse/tiled resource planning, residency
-  commit/churn plans, tessellation draw planning, and mesh/task dispatch planning stay
+- `advanced_resource_geometry`: sparse/tiled resource planning and residency
+  commit/churn plans remain distinct from typed-unsupported execution;
+  tessellation draw planning and mesh/task dispatch planning stay
   capability-gated.
 - `ray_tracing_native_parity`: ray tracing planning, Metal mapping, native
   advanced closure, and future Period 29 assignments stay explicit.

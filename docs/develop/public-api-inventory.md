@@ -637,6 +637,29 @@ native execution paths documented in the semantic inventory.
 additions target `v0.2.0`; defaults preserve the existing immediate one-shot
 command path.
 
+## Period 49 v0.2.0 Heap And Memoryless Update
+
+Period 49 leaves the guarded root 68, `Device` 34, `WindowContext` 10, and 35
+runtime-handle names unchanged. No facade declaration or operation is added, so
+the top-level facade inventory remains 512 declarations and 87 operations.
+
+The existing `resource.Heap` handle changes its private representation from
+inline opaque bytes to `*anyopaque`; neither representation is stable API. It
+gains `bufferAllocationRequirements`, `textureAllocationRequirements`,
+`makeBufferAt`, `makeTextureAt`, and `liveResourceCount`, bringing the handle to
+16 public methods. Its child-resource lifetime is now executable: buffers and
+textures created from a heap must be destroyed before the heap.
+
+`resource.ResourceStorageMode` gains `.memoryless`, and
+`diagnostics.DeviceFeatures` gains `memoryless_attachments`, bringing the
+feature inventory to 91 fields. `BufferError` and `TextureError` gain
+`UnsupportedMemorylessStorage`; `TextureError` also gains
+`InvalidMemorylessTexture`. `HeapError` gains `HeapAllocationTooSmall`,
+`HeapAllocationNotReserved`, and `HeapResourceIncompatible`.
+
+These enum, feature, method, lifetime, and error-set additions target `v0.2.0`.
+Existing resource descriptors retain `.automatic` storage defaults.
+
 ## Compatibility Impact
 
 This is an intentional pre-tag breaking migration:

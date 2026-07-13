@@ -213,6 +213,34 @@ pub fn nativeFeatures(self: GraphicsContext) core.DeviceFeatures {
     return self.native_features_value;
 }
 
+pub const MemoryBudget = struct {
+    budget_bytes: u64,
+    used_bytes: u64,
+};
+
+pub fn memoryBudget(self: *const GraphicsContext) ?MemoryBudget {
+    if (!self.features_value.memory_budget) return null;
+    var budget = std.mem.zeroes(vk.PhysicalDeviceMemoryBudgetPropertiesEXT);
+    budget.s_type = .physical_device_memory_budget_properties_ext;
+    var properties = vk.PhysicalDeviceMemoryProperties2{
+        .p_next = &budget,
+        .memory_properties = undefined,
+    };
+    if (!getPhysicalDeviceMemoryProperties2(self.instance, self.pdev, &properties)) return null;
+
+    var budget_bytes: u64 = 0;
+    var used_bytes: u64 = 0;
+    var found_device_local = false;
+    for (properties.memory_properties.memory_heaps[0..properties.memory_properties.memory_heap_count], 0..) |heap, index| {
+        if (!heap.flags.device_local_bit) continue;
+        found_device_local = true;
+        budget_bytes +|= budget.heap_budget[index];
+        used_bytes +|= budget.heap_usage[index];
+    }
+    if (!found_device_local or budget_bytes == 0) return null;
+    return .{ .budget_bytes = budget_bytes, .used_bytes = used_bytes };
+}
+
 pub fn queueForKind(self: *const GraphicsContext, kind: core.QueueKind) Queue {
     return switch (kind) {
         .graphics => self.graphics_queue,
@@ -468,6 +496,11 @@ fn queryNativeFeatures(
     // memory byte ceiling is reported separately through DeviceLimits.
     result.compute_atomics = true;
     result.compute_threadgroup_memory = true;
+    result.heaps = true;
+    result.memory_budget = extensions.memory_budget and
+        (instance.wrapper.dispatch.vkGetPhysicalDeviceMemoryProperties2 != null or
+            instance.wrapper.dispatch.vkGetPhysicalDeviceMemoryProperties2KHR != null);
+    result.memory_pressure = result.memory_budget;
     result.timeline_fences = timeline_semaphore;
     result.multi_queue = queues.compute_family != queues.graphics_family or
         queues.transfer_family != queues.graphics_family;
@@ -504,6 +537,9 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.buffer_gpu_address = native_features.buffer_gpu_address;
     result.compute_atomics = native_features.compute_atomics;
     result.compute_threadgroup_memory = native_features.compute_threadgroup_memory;
+    result.heaps = native_features.heaps;
+    result.memory_budget = native_features.memory_budget;
+    result.memory_pressure = native_features.memory_pressure;
     result.timeline_fences = native_features.timeline_fences;
     result.multi_queue = native_features.multi_queue and native_features.timeline_fences;
     result.dedicated_compute_queue = result.multi_queue and native_features.dedicated_compute_queue;
@@ -575,6 +611,7 @@ const VulkanExtensionSupport = struct {
     spirv_1_4: bool = false,
     shader_float_controls: bool = false,
     mesh_shader: bool = false,
+    memory_budget: bool = false,
 };
 
 fn queryExtensionSupport(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator) !VulkanExtensionSupport {
@@ -607,6 +644,7 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
     {
         result.mesh_shader = true;
     }
+    if (std.mem.eql(u8, extension_name, vk.extensions.ext_memory_budget.name)) result.memory_budget = true;
     return result;
 }
 
@@ -646,6 +684,22 @@ fn getPhysicalDeviceProperties2(instance: Instance, pdev: vk.PhysicalDevice, pro
         return true;
     }
     if (instance.wrapper.dispatch.vkGetPhysicalDeviceProperties2KHR) |get_properties2_khr| {
+        get_properties2_khr(pdev, properties);
+        return true;
+    }
+    return false;
+}
+
+fn getPhysicalDeviceMemoryProperties2(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
+    properties: *vk.PhysicalDeviceMemoryProperties2,
+) bool {
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceMemoryProperties2) |get_properties2| {
+        get_properties2(pdev, properties);
+        return true;
+    }
+    if (instance.wrapper.dispatch.vkGetPhysicalDeviceMemoryProperties2KHR) |get_properties2_khr| {
         get_properties2_khr(pdev, properties);
         return true;
     }
@@ -1218,6 +1272,7 @@ test "Vulkan extension support maps optional backend capabilities" {
     support = mergeExtensionSupport(support, vk.extensions.khr_acceleration_structure.name);
     support = mergeExtensionSupport(support, vk.extensions.khr_ray_tracing_pipeline.name);
     support = mergeExtensionSupport(support, vk.extensions.ext_mesh_shader.name);
+    support = mergeExtensionSupport(support, vk.extensions.ext_memory_budget.name);
 
     try std.testing.expect(support.descriptor_indexing);
     try std.testing.expect(support.vertex_attribute_divisor_khr);
@@ -1230,6 +1285,7 @@ test "Vulkan extension support maps optional backend capabilities" {
     try std.testing.expect(support.acceleration_structure);
     try std.testing.expect(support.ray_tracing_pipeline);
     try std.testing.expect(support.mesh_shader);
+    try std.testing.expect(support.memory_budget);
 }
 
 test "Vulkan ray tracing extension gate reports the first missing KHR dependency" {
@@ -1268,6 +1324,9 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .compute_atomics = true,
         .compute_threadgroup_memory = true,
         .timeline_fences = true,
+        .heaps = true,
+        .memory_budget = true,
+        .memory_pressure = true,
     };
     const usable = queryUsableFeatures(native, true);
     try std.testing.expect(!usable.descriptor_indexing);
@@ -1285,6 +1344,8 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(usable.compute_atomics);
     try std.testing.expect(usable.compute_threadgroup_memory);
     try std.testing.expect(usable.timeline_fences);
+    try std.testing.expect(usable.heaps);
+    try std.testing.expect(usable.memory_budget);
     try std.testing.expect(!queryUsableFeatures(native, false).occlusion_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);

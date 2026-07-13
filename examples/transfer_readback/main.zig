@@ -75,11 +75,21 @@ pub fn main() !void {
         null;
     defer if (shared_event) |*event| event.deinit();
 
-    var source_buffer = try device.makeBuffer(.{
+    const source_descriptor = vkmtl.resource.BufferDescriptor{
         .bytes = pixels[0..],
         .usage = .{ .copy_source = true },
-        .storage_mode = .managed,
-    });
+        .storage_mode = .shared,
+    };
+    var source_heap: ?vkmtl.resource.Heap = if (features.heaps)
+        try device.makeHeap(.{ .size = 1024 * 1024, .storage_mode = .cpu_visible })
+    else
+        null;
+    defer if (source_heap) |*heap| heap.deinit();
+    var source_buffer = if (source_heap) |*heap| blk: {
+        const requirements = try heap.bufferAllocationRequirements(source_descriptor);
+        const allocation = try heap.reserve(requirements);
+        break :blk try heap.makeBufferAt(source_descriptor, allocation);
+    } else try device.makeBuffer(source_descriptor);
     defer source_buffer.deinit();
 
     var buffer_readback = try device.makeBuffer(.{
@@ -89,7 +99,7 @@ pub fn main() !void {
     });
     defer buffer_readback.deinit();
 
-    var texture = try device.makeTexture(.{
+    const texture_descriptor = vkmtl.resource.TextureDescriptor{
         .format = .rgba8_unorm,
         .width = 2,
         .height = 2,
@@ -98,7 +108,17 @@ pub fn main() !void {
             .copy_destination = true,
         },
         .storage_mode = .private,
-    });
+    };
+    var texture_heap: ?vkmtl.resource.Heap = if (features.heaps)
+        try device.makeHeap(.{ .size = 4 * 1024 * 1024, .storage_mode = .device_local })
+    else
+        null;
+    defer if (texture_heap) |*heap| heap.deinit();
+    var texture = if (texture_heap) |*heap| blk: {
+        const requirements = try heap.textureAllocationRequirements(texture_descriptor);
+        const allocation = try heap.reserve(requirements);
+        break :blk try heap.makeTextureAt(texture_descriptor, allocation);
+    } else try device.makeTexture(texture_descriptor);
     defer texture.deinit();
 
     var texture_readback = try device.makeBuffer(.{
@@ -223,10 +243,19 @@ pub fn main() !void {
         try event.wait(.{ .timeout_ns = 1_000_000_000 });
     }
 
-    std.debug.print("transfer readback ok (queue={}, timeline={}, shared_event={})\n", .{
+    if (features.memory_budget) {
+        const memory = try vkmtl.diagnostics.memoryBudgetReport(device, .{});
+        if (memory.source != .native or memory.budget_bytes == null) {
+            return error.NativeMemoryBudgetUnavailable;
+        }
+    }
+
+    std.debug.print("transfer readback ok (queue={}, timeline={}, shared_event={}, heaps={}, memory_budget={})\n", .{
         work_queue.kind(),
         timeline_fence != null,
         shared_event != null,
+        features.heaps,
+        features.memory_budget,
     });
 }
 

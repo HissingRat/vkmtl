@@ -39,7 +39,8 @@ vkmtl can claim production memory parity.
 
 ## Remaining Ownership
 
-- Native heap-backed buffer/texture creation remains future backend work.
+- Native heap-backed buffer/texture creation was deferred here and completed in
+  Period 49.
 - Vulkan sparse binding and Metal tiled/sparse page binding remain future
   backend work.
 - Long-running GPU-backed residency and memory-pressure soak runs remain
@@ -76,8 +77,10 @@ vkmtl can claim production memory parity.
 - Done for portable planning and map execution: sparse/tiled mapping
   descriptors validate page shape, and churn plans summarize repeated
   commit/evict pressure.
-- Native Vulkan sparse binding remains future backend work.
-- Native Metal tiled/sparse page binding remains future backend work.
+- Native Vulkan sparse binding remains typed unsupported after the Period 49
+  resource-identity audit.
+- Native Metal tiled/sparse page binding remains typed unsupported after the
+  same Period 49 audit.
 
 ### Phase 5: Long-Running Residency And Churn Tests
 
