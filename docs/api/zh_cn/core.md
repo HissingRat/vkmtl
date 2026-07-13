@@ -443,7 +443,8 @@ indexing / argument buffer 的高级路径。Render / compute pipeline 通过
 `setResourceTable(...)` 会在 native work 前拒绝不匹配的 slot/layout。Metal 会下沉到真实
 argument buffer，Vulkan 会下沉到已启用、分配、更新并绑定的 descriptor-indexing set。Vulkan 对
 opt-in range 支持 bind 后替换已有 resource；由于当前 baseline 不要求 null descriptor，清除 Vulkan
-slot 必须发生在第一次 command binding 之前。
+slot 必须发生在第一次 command binding 之前。Table mutation 不能与 in-flight work 竞争；后续 command
+使用替换后的 resource 前需要重新绑定 table。
 
 CPU-authored 的可复用 draw/dispatch list 位于 `vkmtl.command`。创建
 `IndirectCommandBuffer` 并写入固定 slot 后，通过 render 或 compute encoder 的

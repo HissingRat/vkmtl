@@ -530,7 +530,8 @@ Metal lowers the table to a real argument buffer and Vulkan to an enabled,
 allocated, updated, and bound descriptor-indexing set. Vulkan supports
 replacement updates after bind for ranges that opt in; clearing a Vulkan slot
 must happen before its first command binding because the current baseline does
-not require null descriptors.
+not require null descriptors. Table mutation must not race in-flight work; a
+mutated table is rebound before later commands use its replacement resources.
 
 CPU-authored reusable draw/dispatch lists live under `vkmtl.command`. Create an
 `IndirectCommandBuffer`, encode fixed slots, then call the render or compute

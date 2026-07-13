@@ -89,6 +89,9 @@ See `phase5.md`.
   slot.
 - Resource-table resources must remain alive through every command that uses
   the table. Table updates do not transfer resource ownership.
+- Resource-table mutation must not race in-flight work, and a changed table is
+  rebound before later commands use replacement resources. Vulkan post-bind
+  clear remains closed without null-descriptor support.
 - CPU-authored indirect command lists may inherit pipeline/resource state from
   the executing encoder. They do not claim shader/GPU mutation of command
   slots.
