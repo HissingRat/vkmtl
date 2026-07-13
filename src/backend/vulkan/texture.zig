@@ -21,6 +21,7 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.TextureDescriptor) !Vul
     if (!gc.supportsSampleCount(descriptor.format, descriptor.sample_count)) {
         return core.TextureError.UnsupportedSampleCount;
     }
+    const queue_families = gc.workQueueFamilies();
 
     const handle = try gc.dev.createImage(&.{
         .flags = if (core.textureFormatSupportsViewReinterpretation(descriptor.format))
@@ -39,7 +40,9 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.TextureDescriptor) !Vul
         .samples = sampleCountFlags(descriptor.sample_count),
         .tiling = .optimal,
         .usage = usageFlags(descriptor.format, descriptor.usage),
-        .sharing_mode = .exclusive,
+        .sharing_mode = if (queue_families.count > 1) .concurrent else .exclusive,
+        .queue_family_index_count = queue_families.count,
+        .p_queue_family_indices = &queue_families.values,
         .initial_layout = .undefined,
     }, null);
     errdefer gc.dev.destroyImage(handle, null);

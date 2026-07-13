@@ -18,6 +18,8 @@ struct vkmtl_metal_probe {
 struct vkmtl_metal_clear_screen {
     id<MTLDevice> device;
     id<MTLCommandQueue> queue;
+    id<MTLCommandQueue> compute_queue;
+    id<MTLCommandQueue> transfer_queue;
     CAMetalLayer *layer;
     NSView *view;
     id<MTLTexture> depth_texture;
@@ -71,6 +73,10 @@ struct vkmtl_metal_query_set {
     id<MTLCounterSampleBuffer> counter_sample_buffer;
     id<MTLBuffer> counter_resolve_buffer;
     id<MTLCommandBuffer> *writer_command_buffers;
+};
+
+struct vkmtl_metal_shared_event {
+    id<MTLSharedEvent> event;
 };
 
 struct vkmtl_metal_acceleration_structure {
@@ -557,13 +563,20 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
         }
 
         id<MTLCommandQueue> queue = [device newCommandQueue];
-        if (queue == nil) {
+        id<MTLCommandQueue> compute_queue = [device newCommandQueue];
+        id<MTLCommandQueue> transfer_queue = [device newCommandQueue];
+        if (queue == nil || compute_queue == nil || transfer_queue == nil) {
+            [queue release];
+            [compute_queue release];
+            [transfer_queue release];
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
         CAMetalLayer *layer = [CAMetalLayer layer];
         if (layer == nil) {
             [queue release];
+            [compute_queue release];
+            [transfer_queue release];
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
@@ -580,11 +593,15 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
         vkmtl_metal_clear_screen *clear_screen = calloc(1, sizeof(vkmtl_metal_clear_screen));
         if (clear_screen == NULL) {
             [queue release];
+            [compute_queue release];
+            [transfer_queue release];
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
         clear_screen->device = [device retain];
         clear_screen->queue = queue;
+        clear_screen->compute_queue = compute_queue;
+        clear_screen->transfer_queue = transfer_queue;
         clear_screen->layer = [layer retain];
         clear_screen->view = [view retain];
         clear_screen->width = width;
@@ -594,6 +611,8 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
             [clear_screen->view release];
             [clear_screen->layer release];
             [clear_screen->queue release];
+            [clear_screen->compute_queue release];
+            [clear_screen->transfer_queue release];
             [clear_screen->device release];
             free(clear_screen);
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
@@ -625,6 +644,8 @@ void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen) {
         [clear_screen->view release];
         [clear_screen->layer release];
         [clear_screen->queue release];
+        [clear_screen->compute_queue release];
+        [clear_screen->transfer_queue release];
         [clear_screen->device release];
         free(clear_screen);
     }
@@ -1274,6 +1295,16 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
             out_capabilities->max_threadgroup_memory_length = [device maxThreadgroupMemoryLength];
         }
         out_capabilities->buffer_gpu_address = clear_screen->buffer_gpu_address;
+        if (@available(macOS 10.14, *)) {
+            out_capabilities->shared_events =
+                [device respondsToSelector:@selector(newSharedEvent)] ? 1u : 0u;
+        }
+        if (@available(macOS 10.13, *)) {
+            out_capabilities->scheduled_presentation = 1u;
+        }
+        if (@available(macOS 10.15.4, *)) {
+            out_capabilities->minimum_duration_presentation = 1u;
+        }
 
         // Metal exposes texture limits by GPU family rather than individual
         // device properties. Start with the portable family floor and raise
@@ -3044,8 +3075,106 @@ unsigned int vkmtl_metal_ray_tracing_pipeline_state_has_driver_handle(
     return pipeline != NULL && pipeline->pipeline != nil ? 1u : 0u;
 }
 
+vkmtl_metal_status vkmtl_metal_shared_event_create(
+    vkmtl_metal_clear_screen *owner,
+    uint64_t initial_value,
+    vkmtl_metal_shared_event **out_event
+) {
+    if (owner == NULL || owner->device == nil || out_event == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    *out_event = NULL;
+
+    @autoreleasepool {
+        if (@available(macOS 10.14, *)) {
+            if (![owner->device respondsToSelector:@selector(newSharedEvent)]) {
+                return VKMTL_METAL_STATUS_UNSUPPORTED;
+            }
+            id<MTLSharedEvent> native_event = [owner->device newSharedEvent];
+            if (native_event == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            native_event.signaledValue = initial_value;
+
+            vkmtl_metal_shared_event *event = calloc(1, sizeof(vkmtl_metal_shared_event));
+            if (event == NULL) {
+                [native_event release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            event->event = native_event;
+            *out_event = event;
+            return VKMTL_METAL_STATUS_OK;
+        }
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+}
+
+void vkmtl_metal_shared_event_destroy(vkmtl_metal_shared_event *event) {
+    if (event == NULL) {
+        return;
+    }
+    @autoreleasepool {
+        [event->event release];
+        free(event);
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_get_value(
+    const vkmtl_metal_shared_event *event,
+    uint64_t *out_value
+) {
+    if (event == NULL || event->event == nil || out_value == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 10.14, *)) {
+        *out_value = event->event.signaledValue;
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_signal(
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+) {
+    if (event == NULL || event->event == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 10.14, *)) {
+        if (value < event->event.signaledValue) {
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        event->event.signaledValue = value;
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_wait(
+    const vkmtl_metal_shared_event *event,
+    uint64_t value,
+    uint64_t timeout_ns
+) {
+    if (event == NULL || event->event == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 10.14, *)) {
+        const NSTimeInterval timeout_seconds = (NSTimeInterval)timeout_ns / 1000000000.0;
+        const NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + timeout_seconds;
+        while (event->event.signaledValue < value) {
+            if ([NSDate timeIntervalSinceReferenceDate] >= deadline) {
+                return VKMTL_METAL_STATUS_QUERY_NOT_READY;
+            }
+            [NSThread sleepForTimeInterval:0.0001];
+        }
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
+    unsigned int queue_kind,
     vkmtl_metal_command_buffer **out_command_buffer
 ) {
     if (out_command_buffer == NULL) {
@@ -3058,7 +3187,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_create(
     }
 
     @autoreleasepool {
-        id<MTLCommandBuffer> metal_command_buffer = [owner->queue commandBuffer];
+        id<MTLCommandQueue> selected_queue = owner->queue;
+        if (queue_kind == 1) selected_queue = owner->compute_queue;
+        if (queue_kind == 2) selected_queue = owner->transfer_queue;
+        if (selected_queue == nil || queue_kind > 2) {
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        id<MTLCommandBuffer> metal_command_buffer = [selected_queue commandBuffer];
         if (metal_command_buffer == nil) {
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
@@ -3163,17 +3298,91 @@ vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable_timed(
+    vkmtl_metal_command_buffer *command_buffer,
+    unsigned int timing_mode,
+    uint64_t value_ns
+) {
+    if (command_buffer == NULL || command_buffer->command_buffer == nil ||
+        command_buffer->drawable == nil || value_ns == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    const NSTimeInterval value_seconds = (NSTimeInterval)value_ns / 1000000000.0;
+    @autoreleasepool {
+        if (timing_mode == 1) {
+            if (@available(macOS 10.13, *)) {
+                [command_buffer->command_buffer presentDrawable:command_buffer->drawable atTime:value_seconds];
+                return VKMTL_METAL_STATUS_OK;
+            }
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        if (timing_mode == 2) {
+            if (@available(macOS 10.15.4, *)) {
+                [command_buffer->command_buffer presentDrawable:command_buffer->drawable afterMinimumDuration:value_seconds];
+                return VKMTL_METAL_STATUS_OK;
+            }
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_wait_shared_event(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+) {
+    if (command_buffer == NULL || command_buffer->command_buffer == nil ||
+        event == NULL || event->event == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 10.14, *)) {
+        [command_buffer->command_buffer encodeWaitForEvent:event->event value:value];
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_signal_shared_event(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+) {
+    if (command_buffer == NULL || command_buffer->command_buffer == nil ||
+        event == NULL || event->event == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 10.14, *)) {
+        [command_buffer->command_buffer encodeSignalEvent:event->event value:value];
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_command_buffer_commit(
-    vkmtl_metal_command_buffer *command_buffer
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_command_buffer_lifecycle_callback callback,
+    void *callback_context
 ) {
     if (command_buffer == NULL || command_buffer->command_buffer == nil) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
     @autoreleasepool {
+        if (callback != NULL) {
+            [command_buffer->command_buffer addScheduledHandler:^(id<MTLCommandBuffer> buffer) {
+                (void)buffer;
+                callback(callback_context, 1u);
+            }];
+            [command_buffer->command_buffer addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
+                callback(callback_context, buffer.status == MTLCommandBufferStatusError ? 3u : 2u);
+            }];
+        }
         [command_buffer->command_buffer commit];
         [command_buffer->command_buffer waitUntilCompleted];
-        return VKMTL_METAL_STATUS_OK;
+        return command_buffer->command_buffer.status == MTLCommandBufferStatusError
+            ? VKMTL_METAL_STATUS_COMMAND_FAILED
+            : VKMTL_METAL_STATUS_OK;
     }
 }
 

@@ -148,13 +148,13 @@ their canonical definition and must preserve exact type identity.
 | Canonical facade | Root aliases |
 | --- | --- |
 | `diagnostics` | `DeviceFeatures`, `DeviceLimits` |
-| `presentation` | `SurfaceProvider`, `SurfaceSource`, `SurfaceDescriptor`, `PresentMode`, `PresentationDescriptor` |
+| `presentation` | `SurfaceProvider`, `SurfaceSource`, `SurfaceDescriptor`, `PresentMode`, `PresentationTimingMode`, `PresentDrawableDescriptor`, `PresentationDescriptor` |
 | `resource` | `FormatCapabilities`, `TextureFormat`, `BufferUsage`, `ResourceStorageMode`, `TextureUsage`, `BufferDescriptor`, `TextureDescriptor`, `TextureViewDescriptor`, `SamplerDescriptor` |
 | `shader` | `ShaderModuleDescriptor`, `ProgrammableStageDescriptor` |
 | `render` | `VertexDescriptor`, `RenderPipelineColorAttachmentDescriptor`, `RenderPipelineDescriptor`, `RenderPassDescriptor`, `ClearColor` |
 | `compute` | `ComputePipelineDescriptor` |
 | `binding` | `BindGroupLayoutDescriptor`, `BindGroupDescriptor`, `BindGroupEntry` |
-| `command` | `CommandBufferDescriptor` |
+| `command` | `CommandBufferDescriptor`, `CommandBufferLifecycleStatus`, `CommandBufferLifecycleCallback` |
 
 ## Canonical Facade Inventory
 
@@ -170,9 +170,9 @@ aliases and with types used by other domains.
 | `api/transfer.zig` | 19 | 0 | copy, fill, upload, blit, mipmap, and resolved transfer descriptors |
 | `api/render.zig` | 65 | 6 | pipeline, pass, draw, tessellation, and mesh rendering |
 | `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
-| `api/presentation.zig` | 19 | 4 | surfaces, present modes, frame pacing, surface collections |
+| `api/presentation.zig` | 21 | 4 | surfaces, present modes, timed drawable presentation, frame pacing, surface collections |
 | `api/diagnostics.zig` | 80 | 16 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets |
-| `api/command.zig` | 16 | 2 | command lifecycle, encoders, labels, queue capability and selection planning |
+| `api/command.zig` | 18 | 2 | command lifecycle callbacks, encoders, labels, queue capability and selection planning |
 | `api/shader.zig` | 33 | 2 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
 | `api/compute.zig` | 8 | 0 | compute pipeline and dispatch descriptors, atomics, threadgroup memory |
@@ -187,7 +187,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 508 declarations and 87 callable
+Across the 13 top-level facades, this is 512 declarations and 87 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -607,6 +607,35 @@ ceil-composition and shader bounds responsibility.
 The additions belong to the existing canonical domains and
 receive no new root aliases or owner methods. Field and error-set growth targets
 `v0.2.0`; callers with exhaustive error switches must add arms.
+
+## Period 48 v0.2.0 Synchronization And Presentation Update
+
+Period 48 leaves the guarded root 68, `Device` 34, `WindowContext` 10, and 35
+opaque-handle baselines unchanged. It adds two declarations to `command` and
+two to `presentation`, bringing the top-level facade inventory to 512
+declarations and 87 facade operations.
+
+`command.CommandBufferLifecycleStatus` and
+`CommandBufferLifecycleCallback` are canonical command declarations.
+`CommandBufferDescriptor` gains nullable `lifecycle_callback` and
+`lifecycle_context` fields. `CommandBuffer` gains `lifecycleStatus()` and
+`presentDrawableWithDescriptor(...)`, bringing that handle to 15 public
+methods without changing its opaque one-field representation.
+
+`presentation.PresentationTimingMode` and `PresentDrawableDescriptor` are
+canonical presentation declarations. `diagnostics.DeviceFeatures` gains
+`command_buffer_lifecycle_callbacks`, `scheduled_presentation`, and
+`minimum_duration_presentation`, for 90 fields total. The sync/queue feature
+names retain their existing public allocation but now describe the complete
+native execution paths documented in the semantic inventory.
+
+`CommandEncodingError` gains
+`UnsupportedCommandBufferLifecycleCallbacks`,
+`UnsupportedScheduledPresentation`,
+`UnsupportedMinimumDurationPresentation`, `InvalidPresentationTiming`, and
+`SynchronizationBackendFailure`. These type, field, method, and error-set
+additions target `v0.2.0`; defaults preserve the existing immediate one-shot
+command path.
 
 ## Compatibility Impact
 

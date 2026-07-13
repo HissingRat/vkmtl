@@ -538,9 +538,11 @@ vkmtl_metal_status vkmtl_metal_query_set_read_values(
 
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
+    unsigned int queue_kind,
     vkmtl_metal_command_buffer **out_command_buffer
 ) {
     (void)owner;
+    (void)queue_kind;
     if (out_command_buffer != NULL) {
         *out_command_buffer = NULL;
     }
@@ -558,10 +560,47 @@ vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
-vkmtl_metal_status vkmtl_metal_command_buffer_commit(
-    vkmtl_metal_command_buffer *command_buffer
+vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable_timed(
+    vkmtl_metal_command_buffer *command_buffer,
+    unsigned int timing_mode,
+    uint64_t value_ns
 ) {
     (void)command_buffer;
+    (void)timing_mode;
+    (void)value_ns;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_wait_shared_event(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+) {
+    (void)command_buffer;
+    (void)event;
+    (void)value;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_signal_shared_event(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+) {
+    (void)command_buffer;
+    (void)event;
+    (void)value;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_commit(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_command_buffer_lifecycle_callback callback,
+    void *callback_context
+) {
+    (void)command_buffer;
+    (void)callback;
+    (void)callback_context;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -1598,6 +1637,50 @@ unsigned int vkmtl_metal_ray_tracing_pipeline_state_has_driver_handle(
 ) {
     (void)pipeline;
     return 0;
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_create(
+    vkmtl_metal_clear_screen *owner,
+    uint64_t initial_value,
+    vkmtl_metal_shared_event **out_event
+) {
+    (void)owner;
+    (void)initial_value;
+    if (out_event != NULL) *out_event = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+void vkmtl_metal_shared_event_destroy(vkmtl_metal_shared_event *event) {
+    (void)event;
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_get_value(
+    const vkmtl_metal_shared_event *event,
+    uint64_t *out_value
+) {
+    (void)event;
+    if (out_value != NULL) *out_value = 0;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_signal(
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+) {
+    (void)event;
+    (void)value;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_shared_event_wait(
+    const vkmtl_metal_shared_event *event,
+    uint64_t value,
+    uint64_t timeout_ns
+) {
+    (void)event;
+    (void)value;
+    (void)timeout_ns;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
 vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(

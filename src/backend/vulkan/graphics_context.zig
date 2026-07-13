@@ -46,6 +46,8 @@ props: vk.PhysicalDeviceProperties,
 mem_props: vk.PhysicalDeviceMemoryProperties,
 dev: Device,
 graphics_queue: Queue,
+compute_queue: Queue,
+transfer_queue: Queue,
 present_queue: Queue,
 features_value: core.DeviceFeatures,
 native_features_value: core.DeviceFeatures,
@@ -139,6 +141,8 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     errdefer self.dev.destroyDevice(null);
 
     self.graphics_queue = Queue.init(self.dev, candidate.queues.graphics_family);
+    self.compute_queue = Queue.init(self.dev, candidate.queues.compute_family);
+    self.transfer_queue = Queue.init(self.dev, candidate.queues.transfer_family);
     self.present_queue = Queue.init(self.dev, candidate.queues.present_family);
     self.host_query_reset = candidate.host_query_reset and self.dev.wrapper.dispatch.vkResetQueryPool != null;
     self.native_timestamp_queries = self.host_query_reset and candidate.queues.graphics_timestamp_valid_bits != 0;
@@ -149,12 +153,18 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
         allocator,
         &self.dev.wrapper.dispatch,
     );
+    const timeline_semaphore = candidate.timeline_semaphore and
+        self.dev.wrapper.dispatch.vkGetSemaphoreCounterValue != null and
+        self.dev.wrapper.dispatch.vkWaitSemaphores != null and
+        self.dev.wrapper.dispatch.vkSignalSemaphore != null;
     self.native_features_value = try queryNativeFeatures(
         self.instance,
         self.pdev,
         allocator,
         self.ray_tracing_diagnostics_value,
         candidate.queues.graphics_timestamp_valid_bits != 0,
+        timeline_semaphore,
+        candidate.queues,
     );
     self.native_features_value.debug_labels = self.debug_utils_enabled;
     self.native_features_value.debug_markers = self.debug_utils_enabled;
@@ -201,6 +211,37 @@ pub fn features(self: GraphicsContext) core.DeviceFeatures {
 
 pub fn nativeFeatures(self: GraphicsContext) core.DeviceFeatures {
     return self.native_features_value;
+}
+
+pub fn queueForKind(self: *const GraphicsContext, kind: core.QueueKind) Queue {
+    return switch (kind) {
+        .graphics => self.graphics_queue,
+        .compute => self.compute_queue,
+        .transfer => self.transfer_queue,
+    };
+}
+
+pub const QueueFamilySet = struct {
+    values: [3]u32,
+    count: u32,
+};
+
+pub fn workQueueFamilies(self: *const GraphicsContext) QueueFamilySet {
+    var result = QueueFamilySet{ .values = undefined, .count = 0 };
+    for ([_]u32{
+        self.graphics_queue.family,
+        self.compute_queue.family,
+        self.transfer_queue.family,
+    }) |family| {
+        var duplicate = false;
+        for (result.values[0..@intCast(result.count)]) |existing| {
+            if (existing == family) duplicate = true;
+        }
+        if (duplicate) continue;
+        result.values[@intCast(result.count)] = family;
+        result.count += 1;
+    }
+    return result;
 }
 
 pub fn limits(self: GraphicsContext) core.DeviceLimits {
@@ -385,6 +426,8 @@ fn queryNativeFeatures(
     allocator: Allocator,
     ray_tracing: core.RayTracingCapabilityDiagnostics,
     timestamp_query_capability: bool,
+    timeline_semaphore: bool,
+    queues: QueueAllocation,
 ) !core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.vulkan);
     const native = instance.getPhysicalDeviceFeatures(pdev);
@@ -425,6 +468,13 @@ fn queryNativeFeatures(
     // memory byte ceiling is reported separately through DeviceLimits.
     result.compute_atomics = true;
     result.compute_threadgroup_memory = true;
+    result.timeline_fences = timeline_semaphore;
+    result.multi_queue = queues.compute_family != queues.graphics_family or
+        queues.transfer_family != queues.graphics_family;
+    result.dedicated_compute_queue = queues.compute_family != queues.graphics_family;
+    result.dedicated_transfer_queue = queues.transfer_family != queues.graphics_family and
+        queues.transfer_family != queues.compute_family;
+    result.queue_ownership_transfer = result.multi_queue;
     return result;
 }
 
@@ -454,6 +504,11 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.buffer_gpu_address = native_features.buffer_gpu_address;
     result.compute_atomics = native_features.compute_atomics;
     result.compute_threadgroup_memory = native_features.compute_threadgroup_memory;
+    result.timeline_fences = native_features.timeline_fences;
+    result.multi_queue = native_features.multi_queue and native_features.timeline_fences;
+    result.dedicated_compute_queue = result.multi_queue and native_features.dedicated_compute_queue;
+    result.dedicated_transfer_queue = result.multi_queue and native_features.dedicated_transfer_queue;
+    result.queue_ownership_transfer = result.multi_queue;
 
     result.native_handles = native_features.native_handles;
     result.debug_labels = native_features.debug_labels;
@@ -892,10 +947,17 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     var host_query_reset_features = vk.PhysicalDeviceHostQueryResetFeatures{
         .host_query_reset = if (enable_host_query_reset) .true else .false,
     };
+    var timeline_semaphore_features = vk.PhysicalDeviceTimelineSemaphoreFeatures{
+        .timeline_semaphore = if (candidate.timeline_semaphore) .true else .false,
+    };
     var device_p_next: ?*anyopaque = null;
     if (enable_host_query_reset) {
         host_query_reset_features.p_next = device_p_next;
         device_p_next = &host_query_reset_features;
+    }
+    if (candidate.timeline_semaphore) {
+        timeline_semaphore_features.p_next = device_p_next;
+        device_p_next = &timeline_semaphore_features;
     }
     if (enable_vertex_divisor) {
         vertex_divisor_features.p_next = device_p_next;
@@ -910,23 +972,30 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         acceleration_structure_features.p_next = &ray_tracing_pipeline_features;
         device_p_next = &acceleration_structure_features;
     }
-    const qci = [_]vk.DeviceQueueCreateInfo{
-        .{
-            .queue_family_index = candidate.queues.graphics_family,
+    var qci: [4]vk.DeviceQueueCreateInfo = undefined;
+    var queue_count: usize = 0;
+    for ([_]u32{
+        candidate.queues.graphics_family,
+        candidate.queues.compute_family,
+        candidate.queues.transfer_family,
+        candidate.queues.present_family,
+    }) |family| {
+        var duplicate = false;
+        for (qci[0..queue_count]) |existing| {
+            if (existing.queue_family_index == family) duplicate = true;
+        }
+        if (duplicate) continue;
+        qci[queue_count] = .{
+            .queue_family_index = family,
             .queue_count = 1,
             .p_queue_priorities = &priority,
-        },
-        .{
-            .queue_family_index = candidate.queues.present_family,
-            .queue_count = 1,
-            .p_queue_priorities = &priority,
-        },
-    };
-    const queue_count: u32 = if (candidate.queues.graphics_family == candidate.queues.present_family) 1 else 2;
+        };
+        queue_count += 1;
+    }
 
     return try instance.createDevice(candidate.pdev, &.{
         .p_next = device_p_next,
-        .queue_create_info_count = queue_count,
+        .queue_create_info_count = @intCast(queue_count),
         .p_queue_create_infos = &qci,
         .enabled_extension_count = @intCast(extension_names.items.len),
         .pp_enabled_extension_names = extension_names.items.ptr,
@@ -939,10 +1008,13 @@ const DeviceCandidate = struct {
     props: vk.PhysicalDeviceProperties,
     queues: QueueAllocation,
     host_query_reset: bool,
+    timeline_semaphore: bool,
 };
 
 const QueueAllocation = struct {
     graphics_family: u32,
+    compute_family: u32,
+    transfer_family: u32,
     present_family: u32,
     graphics_timestamp_valid_bits: u32,
 };
@@ -969,6 +1041,7 @@ fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocat
             .props = instance.getPhysicalDeviceProperties(pdev),
             .queues = allocation,
             .host_query_reset = hostQueryResetSupported(instance, pdev),
+            .timeline_semaphore = timelineSemaphoreSupported(instance, pdev),
         };
     }
     return null;
@@ -981,6 +1054,8 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
     var graphics_family: ?u32 = null;
     var graphics_timestamp_valid_bits: u32 = 0;
     var present_family: ?u32 = null;
+    var compute_family: ?u32 = null;
+    var transfer_family: ?u32 = null;
 
     for (families, 0..) |properties, i| {
         const family: u32 = @intCast(i);
@@ -991,11 +1066,21 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
         if (present_family == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(pdev, family, surface)) == .true) {
             present_family = family;
         }
+        if (compute_family == null and properties.queue_flags.compute_bit and !properties.queue_flags.graphics_bit) {
+            compute_family = family;
+        }
+        if (transfer_family == null and properties.queue_flags.transfer_bit and
+            !properties.queue_flags.graphics_bit and !properties.queue_flags.compute_bit)
+        {
+            transfer_family = family;
+        }
     }
 
     if (graphics_family != null and present_family != null) {
         return .{
             .graphics_family = graphics_family.?,
+            .compute_family = compute_family orelse graphics_family.?,
+            .transfer_family = transfer_family orelse compute_family orelse graphics_family.?,
             .present_family = present_family.?,
             .graphics_timestamp_valid_bits = graphics_timestamp_valid_bits,
         };
@@ -1010,6 +1095,15 @@ fn hostQueryResetSupported(instance: Instance, pdev: vk.PhysicalDevice) bool {
         .features = .{},
     };
     return getPhysicalDeviceFeatures2(instance, pdev, &features2) and host_query_reset.host_query_reset == .true;
+}
+
+fn timelineSemaphoreSupported(instance: Instance, pdev: vk.PhysicalDevice) bool {
+    var timeline = vk.PhysicalDeviceTimelineSemaphoreFeatures{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &timeline,
+        .features = .{},
+    };
+    return getPhysicalDeviceFeatures2(instance, pdev, &features2) and timeline.timeline_semaphore == .true;
 }
 
 fn bufferDeviceAddressSupported(instance: Instance, pdev: vk.PhysicalDevice) bool {
@@ -1173,6 +1267,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .buffer_gpu_address = true,
         .compute_atomics = true,
         .compute_threadgroup_memory = true,
+        .timeline_fences = true,
     };
     const usable = queryUsableFeatures(native, true);
     try std.testing.expect(!usable.descriptor_indexing);
@@ -1189,6 +1284,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(usable.compute_atomics);
     try std.testing.expect(usable.compute_threadgroup_memory);
+    try std.testing.expect(usable.timeline_fences);
     try std.testing.expect(!queryUsableFeatures(native, false).occlusion_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);

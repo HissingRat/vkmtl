@@ -10,6 +10,7 @@ const MetalRenderPipelineState = @import("render_pipeline.zig");
 const MetalSamplerState = @import("sampler.zig");
 const MetalShaderModule = @import("shader_module.zig");
 const MetalTexture = @import("texture.zig");
+const MetalSync = @import("sync.zig");
 const metal = @import("metal_bridge");
 
 const MetalClearScreen = @This();
@@ -216,8 +217,12 @@ pub fn makeRayTracingPipelineState(
     return try MetalRayTracingPipelineState.init(self, allocator, descriptor);
 }
 
-pub fn makeCommandBuffer(self: *MetalClearScreen) !MetalCommand.CommandBuffer {
-    return try MetalCommand.CommandBuffer.init(self);
+pub fn makeCommandBuffer(self: *MetalClearScreen, queue_kind: core.QueueKind) !MetalCommand.CommandBuffer {
+    return try MetalCommand.CommandBuffer.init(self, queue_kind);
+}
+
+pub fn makeSharedEvent(self: *MetalClearScreen, initial_value: u64) !MetalSync.SharedEvent {
+    return try MetalSync.SharedEvent.init(self.handle, initial_value);
 }
 
 pub fn makeTexture(self: *MetalClearScreen, descriptor: core.TextureDescriptor) !MetalTexture {
@@ -319,6 +324,12 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.ray_tracing_callable_shaders = false;
     result.metal_binary_archive = capabilities.binary_archive != 0;
     result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
+    result.timeline_fences = capabilities.shared_events != 0;
+    result.shared_events = capabilities.shared_events != 0;
+    result.multi_queue = capabilities.shared_events != 0;
+    result.queue_ownership_transfer = capabilities.shared_events != 0;
+    result.scheduled_presentation = capabilities.scheduled_presentation != 0;
+    result.minimum_duration_presentation = capabilities.minimum_duration_presentation != 0;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -331,6 +342,12 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.debug_markers = true;
     result.sampler_anisotropy = true;
     result.buffer_gpu_address = capabilities.buffer_gpu_address != 0;
+    result.timeline_fences = capabilities.shared_events != 0;
+    result.shared_events = capabilities.shared_events != 0;
+    result.multi_queue = capabilities.shared_events != 0;
+    result.queue_ownership_transfer = capabilities.shared_events != 0;
+    result.scheduled_presentation = capabilities.scheduled_presentation != 0;
+    result.minimum_duration_presentation = capabilities.minimum_duration_presentation != 0;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -394,6 +411,9 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .max_texture_dimension_3d = 2048,
         .max_texture_array_layers = 2048,
         .buffer_gpu_address = 1,
+        .shared_events = 1,
+        .scheduled_presentation = 1,
+        .minimum_duration_presentation = 1,
     };
 
     const native = nativeFeaturesFromMetalCapabilities(capabilities);
@@ -409,11 +429,19 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.buffer_gpu_address);
     try std.testing.expect(native.compute_atomics);
     try std.testing.expect(native.compute_threadgroup_memory);
+    try std.testing.expect(native.timeline_fences);
+    try std.testing.expect(native.shared_events);
+    try std.testing.expect(native.scheduled_presentation);
+    try std.testing.expect(native.minimum_duration_presentation);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.shader_specialization);
     try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(usable.compute_atomics);
     try std.testing.expect(usable.compute_threadgroup_memory);
+    try std.testing.expect(usable.timeline_fences);
+    try std.testing.expect(usable.shared_events);
+    try std.testing.expect(usable.scheduled_presentation);
+    try std.testing.expect(usable.minimum_duration_presentation);
     try std.testing.expect(!usable.argument_buffers);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);

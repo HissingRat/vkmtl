@@ -17,12 +17,16 @@ Current cases:
 - `shader_reflection_mismatch`: reflection layout, kind, visibility, and stage
   mismatches are reported before pipeline creation; fixed array count and
   storage-access mismatches are also preserved and rejected.
-- `runtime_sync_objects`: fences, events, synchronization commit descriptors,
-  and queue waits/signals expose deterministic signal, wait, reset, timeout,
-  and unsupported-gate behavior.
-- `logical_queue_ownership`: queue planning, queue views, and ownership
-  transfers reject cross-queue use until an explicit ownership transfer is
-  recorded.
+- `runtime_sync_objects`: binary fences/events retain deterministic fallback;
+  timeline/shared-event objects additionally cover monotonic host operations,
+  native submit waits/signals, timeout, same-device, borrow, and unsupported
+  behavior.
+- `logical_queue_ownership`: queue planning, physical queue views, and
+  ownership transfers reject cross-queue use until an explicit ownership
+  transfer is recorded; resource sharing does not weaken logical ownership.
+- `command_lifecycle_and_presentation`: lifecycle callbacks report scheduled
+  then completed exactly once, and timed presentation validates nonzero timing,
+  independent capability gates, and explicit immediate fallback.
 - `query_readback`: timestamp and occlusion query sets validate bound-pass
   identity, availability, type/range, one write per reset, resolve-buffer
   usage, backend failures, and readback/resolve agreement. Physical smoke also

@@ -155,6 +155,9 @@ pub const DeviceFeatures = struct {
     compute_atomics: bool = false,
     compute_threadgroup_memory: bool = false,
     buffer_gpu_address: bool = false,
+    command_buffer_lifecycle_callbacks: bool = false,
+    scheduled_presentation: bool = false,
+    minimum_duration_presentation: bool = false,
 };
 
 pub const DeviceLimits = struct {
@@ -588,6 +591,8 @@ pub const CommandBufferDescriptor = struct {
     label: ?[]const u8 = null,
     pooled: bool = false,
     reusable: bool = false,
+    lifecycle_callback: ?CommandBufferLifecycleCallback = null,
+    lifecycle_context: ?*anyopaque = null,
 
     pub fn validate(self: CommandBufferDescriptor, features: DeviceFeatures) CommandEncodingError!void {
         if (self.pooled and !features.command_buffer_pooling) {
@@ -599,8 +604,23 @@ pub const CommandBufferDescriptor = struct {
         if (self.reusable and !self.pooled) {
             return CommandEncodingError.UnsupportedCommandBufferReset;
         }
+        if (self.lifecycle_callback != null and !features.command_buffer_lifecycle_callbacks) {
+            return CommandEncodingError.UnsupportedCommandBufferLifecycleCallbacks;
+        }
     }
 };
+
+pub const CommandBufferLifecycleStatus = enum(c_uint) {
+    encoding = 0,
+    scheduled = 1,
+    completed = 2,
+    failed = 3,
+};
+
+pub const CommandBufferLifecycleCallback = *const fn (
+    context: ?*anyopaque,
+    status: CommandBufferLifecycleStatus,
+) callconv(.c) void;
 
 pub const TransientResourceKind = enum {
     buffer,
@@ -1071,7 +1091,6 @@ pub const QueueOwnershipTransferDescriptor = struct {
     pub fn validate(self: QueueOwnershipTransferDescriptor, features: DeviceFeatures) CommandEncodingError!void {
         if (!features.queue_ownership_transfer) return CommandEncodingError.UnsupportedQueueOwnershipTransfer;
         if (self.source == self.destination) return CommandEncodingError.RedundantQueueOwnershipTransfer;
-        if (self.before == self.after) return CommandEncodingError.RedundantResourceBarrier;
     }
 };
 
@@ -2108,6 +2127,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.NoMetalDevice,
         error.FenceWaitTimeout,
         error.EventWaitTimeout,
+        error.SynchronizationBackendFailure,
         error.CaptureFailed,
         error.QueryBackendFailure,
         => .backend,
@@ -2155,6 +2175,9 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.UnsupportedShaderReflectionSchema,
         error.UnsupportedCommandBufferPooling,
         error.UnsupportedCommandBufferReset,
+        error.UnsupportedCommandBufferLifecycleCallbacks,
+        error.UnsupportedScheduledPresentation,
+        error.UnsupportedMinimumDurationPresentation,
         error.UnsupportedTextureToTextureCopy,
         error.UnsupportedFillBuffer,
         error.UnsupportedExplicitResourceBarrier,
@@ -2616,6 +2639,7 @@ pub fn defaultDeviceFeatures(backend: Backend) DeviceFeatures {
         .events = true,
         .timestamp_queries = true,
         .shader_specialization = true,
+        .command_buffer_lifecycle_callbacks = true,
     };
 
     if (backend == .metal) {
@@ -6302,6 +6326,9 @@ pub const CommandEncodingError = error{
     UnsupportedMultiDraw,
     UnsupportedCommandBufferPooling,
     UnsupportedCommandBufferReset,
+    UnsupportedCommandBufferLifecycleCallbacks,
+    UnsupportedScheduledPresentation,
+    UnsupportedMinimumDurationPresentation,
     UnsupportedTextureToTextureCopy,
     UnsupportedFillBuffer,
     UnsupportedExplicitResourceBarrier,
@@ -6325,6 +6352,8 @@ pub const CommandEncodingError = error{
     InvalidEventState,
     FenceWaitTimeout,
     EventWaitTimeout,
+    SynchronizationBackendFailure,
+    InvalidPresentationTiming,
     InvalidDispatchIndirectOffset,
     InvalidIndirectBufferUsage,
     InvalidAtomicStorageResource,
@@ -9627,6 +9656,38 @@ pub const PresentMode = enum {
     }
 };
 
+pub const PresentationTimingMode = enum {
+    immediate,
+    at_monotonic_time,
+    after_minimum_duration,
+};
+
+pub const PresentDrawableDescriptor = struct {
+    timing: PresentationTimingMode = .immediate,
+    value_ns: u64 = 0,
+    allow_immediate_fallback: bool = false,
+
+    pub fn resolve(self: PresentDrawableDescriptor, features: DeviceFeatures) CommandEncodingError!PresentDrawableDescriptor {
+        switch (self.timing) {
+            .immediate => {
+                if (self.value_ns != 0) return CommandEncodingError.InvalidPresentationTiming;
+                return self;
+            },
+            .at_monotonic_time => {
+                if (self.value_ns == 0) return CommandEncodingError.InvalidPresentationTiming;
+                if (features.scheduled_presentation) return self;
+                if (!self.allow_immediate_fallback) return CommandEncodingError.UnsupportedScheduledPresentation;
+            },
+            .after_minimum_duration => {
+                if (self.value_ns == 0) return CommandEncodingError.InvalidPresentationTiming;
+                if (features.minimum_duration_presentation) return self;
+                if (!self.allow_immediate_fallback) return CommandEncodingError.UnsupportedMinimumDurationPresentation;
+            },
+        }
+        return .{};
+    }
+};
+
 pub const SurfaceResizePolicy = enum {
     recreate,
     suspend_when_zero,
@@ -10810,6 +10871,28 @@ test "present mode support resolves backend fallbacks and vsync intent" {
     try std.testing.expect(resolution.fellBack());
     try std.testing.expect(resolution.requestsVsync());
     try std.testing.expectEqual(PresentMode.fifo, defaultPresentModeSupport(.metal).resolve(.immediate));
+}
+
+test "present drawable timing validates capabilities and explicit fallback" {
+    _ = try (PresentDrawableDescriptor{}).resolve(.{});
+    try std.testing.expectError(CommandEncodingError.InvalidPresentationTiming, (PresentDrawableDescriptor{
+        .value_ns = 1,
+    }).resolve(.{}));
+    try std.testing.expectError(CommandEncodingError.UnsupportedScheduledPresentation, (PresentDrawableDescriptor{
+        .timing = .at_monotonic_time,
+        .value_ns = 1,
+    }).resolve(.{}));
+    const scheduled = try (PresentDrawableDescriptor{
+        .timing = .at_monotonic_time,
+        .value_ns = 1,
+    }).resolve(.{ .scheduled_presentation = true });
+    try std.testing.expectEqual(PresentationTimingMode.at_monotonic_time, scheduled.timing);
+    const fallback = try (PresentDrawableDescriptor{
+        .timing = .after_minimum_duration,
+        .value_ns = 1,
+        .allow_immediate_fallback = true,
+    }).resolve(.{});
+    try std.testing.expectEqual(PresentationTimingMode.immediate, fallback.timing);
 }
 
 test "surface collection manages multiple neutral surfaces" {
@@ -13117,7 +13200,16 @@ test "command debug state validates render pass ordering" {
 }
 
 test "command buffer descriptor validates pooling and reset gates" {
+    const Callback = struct {
+        fn call(_: ?*anyopaque, _: CommandBufferLifecycleStatus) callconv(.c) void {}
+    };
     try (CommandBufferDescriptor{}).validate(.{});
+    try std.testing.expectError(CommandEncodingError.UnsupportedCommandBufferLifecycleCallbacks, (CommandBufferDescriptor{
+        .lifecycle_callback = Callback.call,
+    }).validate(.{}));
+    try (CommandBufferDescriptor{
+        .lifecycle_callback = Callback.call,
+    }).validate(.{ .command_buffer_lifecycle_callbacks = true });
     try std.testing.expectError(CommandEncodingError.UnsupportedCommandBufferPooling, (CommandBufferDescriptor{
         .pooled = true,
     }).validate(.{}));

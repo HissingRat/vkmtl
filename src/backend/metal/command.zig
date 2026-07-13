@@ -13,6 +13,7 @@ const MetalRayTracingPipelineState = @import("ray_tracing_pipeline.zig");
 const MetalRenderPipelineState = @import("render_pipeline.zig");
 const MetalTexture = @import("texture.zig");
 const MetalTextureView = @import("texture_view.zig");
+const MetalSync = @import("sync.zig");
 const slots = @import("slots.zig");
 
 pub const RenderPassColorAttachmentTarget = union(enum) {
@@ -71,9 +72,9 @@ pub const CommandBuffer = struct {
         UnexpectedMetalStatus,
     };
 
-    pub fn init(owner: *MetalClearScreen) !CommandBuffer {
+    pub fn init(owner: *MetalClearScreen, queue_kind: core.QueueKind) !CommandBuffer {
         var handle: ?*metal.vkmtl_metal_command_buffer = null;
-        try check(metal.vkmtl_metal_command_buffer_create(owner.handle, &handle));
+        try check(metal.vkmtl_metal_command_buffer_create(owner.handle, @intFromEnum(queue_kind), &handle));
 
         return .{
             .owner = owner,
@@ -168,8 +169,33 @@ pub const CommandBuffer = struct {
         try check(metal.vkmtl_metal_command_buffer_present_drawable(self.handle));
     }
 
-    pub fn commit(self: *CommandBuffer) !void {
-        try check(metal.vkmtl_metal_command_buffer_commit(self.handle));
+    pub fn presentDrawableWithDescriptor(self: *CommandBuffer, descriptor: core.PresentDrawableDescriptor) !void {
+        if (descriptor.timing == .immediate) return self.presentDrawable();
+        try check(metal.vkmtl_metal_command_buffer_present_drawable_timed(
+            self.handle,
+            @intFromEnum(descriptor.timing),
+            descriptor.value_ns,
+        ));
+    }
+
+    pub fn waitSharedEvent(self: *CommandBuffer, event: *const MetalSync.SharedEvent, value: u64) !void {
+        try check(metal.vkmtl_metal_command_buffer_wait_shared_event(self.handle, event.handle, value));
+    }
+
+    pub fn signalSharedEvent(self: *CommandBuffer, event: *const MetalSync.SharedEvent, value: u64) !void {
+        try check(metal.vkmtl_metal_command_buffer_signal_shared_event(self.handle, event.handle, value));
+    }
+
+    pub fn commit(
+        self: *CommandBuffer,
+        callback: ?core.CommandBufferLifecycleCallback,
+        callback_context: ?*anyopaque,
+    ) !void {
+        const native_callback: metal.vkmtl_metal_command_buffer_lifecycle_callback = if (callback) |value|
+            @ptrCast(value)
+        else
+            null;
+        try check(metal.vkmtl_metal_command_buffer_commit(self.handle, native_callback, callback_context));
     }
 
     pub fn encodeAccelerationStructureBuild(

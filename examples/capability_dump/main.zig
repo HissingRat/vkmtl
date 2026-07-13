@@ -149,6 +149,15 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  occlusion queries: {}\n", .{features.occlusion_queries});
     std.debug.print("  timestamp queries: {}\n", .{features.timestamp_queries});
     std.debug.print("  pipeline statistics queries: {}\n", .{features.pipeline_statistics_queries});
+    std.debug.print("  timeline fences: {}\n", .{features.timeline_fences});
+    std.debug.print("  shared events: {}\n", .{features.shared_events});
+    std.debug.print("  multi queue: {}\n", .{features.multi_queue});
+    std.debug.print("  dedicated compute queue: {}\n", .{features.dedicated_compute_queue});
+    std.debug.print("  dedicated transfer queue: {}\n", .{features.dedicated_transfer_queue});
+    std.debug.print("  queue ownership transfer: {}\n", .{features.queue_ownership_transfer});
+    std.debug.print("  command buffer lifecycle callbacks: {}\n", .{features.command_buffer_lifecycle_callbacks});
+    std.debug.print("  scheduled presentation: {}\n", .{features.scheduled_presentation});
+    std.debug.print("  minimum-duration presentation: {}\n", .{features.minimum_duration_presentation});
     std.debug.print("  native handles: {}\n", .{features.native_handles});
     std.debug.print("  buffer GPU address: {}\n", .{features.buffer_gpu_address});
     std.debug.print("  descriptor indexing: {}\n", .{features.descriptor_indexing});

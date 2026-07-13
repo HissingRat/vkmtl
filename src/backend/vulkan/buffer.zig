@@ -17,11 +17,14 @@ pub const MappedRange = struct {
 
 pub fn init(gc: *const GraphicsContext, descriptor: core.BufferDescriptor) !VulkanBuffer {
     const buffer_len = try descriptor.resolvedLength();
+    const queue_families = gc.workQueueFamilies();
 
     const handle = try gc.dev.createBuffer(&.{
         .size = @intCast(buffer_len),
         .usage = usageFlags(descriptor.usage),
-        .sharing_mode = .exclusive,
+        .sharing_mode = if (queue_families.count > 1) .concurrent else .exclusive,
+        .queue_family_index_count = queue_families.count,
+        .p_queue_family_indices = &queue_families.values,
     }, null);
     errdefer gc.dev.destroyBuffer(handle, null);
 

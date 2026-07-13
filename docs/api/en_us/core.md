@@ -243,20 +243,20 @@ Fence and event synchronization has runtime objects.
 `Device.makeFence(...)` creates a `Fence` from `FenceDescriptor`; use
 `signal(...)`, `wait(...)`, `reset(...)`, and `currentValue()` for explicit
 CPU-visible state. Binary fences are available through `DeviceFeatures.fences`;
-timeline fences remain gated by `DeviceFeatures.timeline_fences`.
+timeline fences are gated by `DeviceFeatures.timeline_fences` and map to native
+Vulkan timeline semaphores or Metal shared events.
 `Device.makeEvent(...)` creates an `Event` with `signal(...)`, `wait(...)`,
-`reset()`, and `isSignaled()`. Shared events remain gated by
-`DeviceFeatures.shared_events`.
+`reset()`, and `isSignaled()`. Shared events are native Metal shared events and
+remain gated by `DeviceFeatures.shared_events`; they do not promise external
+handle import/export.
 
 `vkmtl.sync.syncCapabilities(device)` summarizes
 fence, timeline-fence, event, shared-event, host wait/signal, queue wait/signal,
 and native support gates as `SyncCapabilities`. `SynchronizationDescriptor`
-can be passed to `CommandBuffer.commitWithSynchronization(...)` to perform
-portable runtime wait/signal work around `commit()` while validating
-fence/event lifetime, backend identity, and fence values. This is the portable
-synchronization contract; Vulkan timeline-semaphore submit lowering, Metal
-shared-event command-buffer integration, and true native queue wait/signal
-lowering remain later backend work.
+can be passed to `CommandBuffer.commitWithSynchronization(...)`. Native
+timeline/shared-event operations are encoded into the backend submission;
+binary fences and ordinary events keep their exact host-side fallback. Both
+paths validate object lifetime, device/backend identity, and monotonic values.
 
 ## Shaders And Pipelines
 
@@ -639,9 +639,14 @@ try command_buffer.commit();
 ```
 
 `Queue.makeCommandBufferWithDescriptor(...)` accepts a
-`CommandBufferDescriptor` for a borrowed label and future pooling/reuse hints.
+`CommandBufferDescriptor` for a borrowed label, optional lifecycle callback,
+and future pooling/reuse hints.
 The default `makeCommandBuffer()` path remains equivalent to an empty
 descriptor. `CommandBuffer.state()` reports the portable lifecycle state.
+`CommandBuffer.lifecycleStatus()` reports encoding, scheduled, completed, or
+failed. A configured callback receives scheduled and completed exactly once on
+the current synchronous commit path; callback thread identity and reentrant use
+are not promised.
 Command buffers are still one-shot after `commit()`; pooled or reusable command
 buffers are represented by descriptor fields and rejected by feature gates until
 native reset/pooling is implemented.
@@ -656,17 +661,26 @@ fallback state, dedicated logical queue state, and ownership-transfer support.
 `Device.queueWithDescriptor(.{})` is the explicit form of that default. A
 non-graphics descriptor falls back to the graphics queue when `multi_queue` is
 not supported and fallback is allowed. When `DeviceFeatures.multi_queue` and the
-relevant dedicated queue gate are enabled, `queueWithDescriptor(...)` returns a
-logical compute or transfer queue view. Current backends still record commands
-through the existing native command queue until dedicated native queue families
-and physical async queue scheduling are enabled.
+relevant dedicated queue gate are enabled, `queueWithDescriptor(...)` selects a
+physical compute or transfer queue. Metal creates independent command queues.
+Vulkan queries queue families and uses a dedicated family where one exists;
+otherwise the descriptor's fallback policy applies.
 
 `QueueOwnershipTransferDescriptor` is executable from blit and compute encoders
 through `bufferOwnershipTransfer(...)` and `textureOwnershipTransfer(...)`.
 Resources track their current owner queue with `ownerQueue()`. Access from the
-wrong logical queue returns `InvalidQueueOwnershipState`; Metal currently maps
-ownership transfers to validation/no-op behavior, while Vulkan queue-family
-lowering remains tied to future native dedicated queue support.
+wrong queue returns `InvalidQueueOwnershipState`. Metal composes native queue
+ordering with tracked ownership. Vulkan resources shared by selected work
+families use concurrent native sharing while vkmtl enforces exclusive logical
+ownership; raw queue-family release/acquire control is not exposed.
+
+`CommandBuffer.presentDrawableWithDescriptor(...)` adds capability-gated
+presentation timing. `.immediate` is the default. `.at_monotonic_time` and
+`.after_minimum_duration` require a nonzero nanosecond value and the matching
+device feature. Unsupported timing returns a typed error unless
+`allow_immediate_fallback` explicitly authorizes immediate presentation. Metal
+maps both timed modes natively; Vulkan currently reports the timed modes
+unsupported. `presentDrawable()` remains the immediate convenience call.
 
 Render passes can target the current drawable or an explicit texture view.
 Texture-backed color attachments can also provide a single-sample

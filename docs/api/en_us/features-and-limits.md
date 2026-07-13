@@ -125,7 +125,8 @@ usable; otherwise it remains logical. Pipeline statistics remain false.
 ### Transfer, Presentation, Interop, And Native Access
 
 ```text
-transfer_commands multi_surface
+transfer_commands multi_surface scheduled_presentation
+minimum_duration_presentation
 external_memory external_textures external_semaphores
 native_command_insertion native_handles
 ```
@@ -134,10 +135,18 @@ native_command_insertion native_handles
 
 ```text
 debug_labels debug_markers command_buffer_pooling command_buffer_reset
+command_buffer_lifecycle_callbacks
 explicit_resource_barriers fences events timeline_fences shared_events
 multi_queue dedicated_compute_queue dedicated_transfer_queue
 queue_ownership_transfer
 ```
+
+`timeline_fences` is true only for a complete native host and GPU-submit path.
+`shared_events` currently identifies native Metal shared events, not portable
+external handles. `multi_queue` means command buffers can execute on separate
+physical backend queues; dedicated flags describe distinct hardware queue
+families only where the backend can establish them. Presentation timing is
+independently gated and falls back only when the descriptor permits it.
 
 ## DeviceLimits Fields
 

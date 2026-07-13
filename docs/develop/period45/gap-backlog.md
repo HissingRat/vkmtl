@@ -6,8 +6,9 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Periods 46-47 refined broad query and common-workload rows, so the current
-ledger contains 107 units and exactly-once routes 81 incomplete IDs.
+Periods 46-48 refined broad query, common-workload, and synchronization rows,
+so the current ledger contains 107 units and exactly-once routes 60 incomplete
+IDs.
 
 The periods below are implementation slices, not promises to add all source
 concepts to the public API. Each period must apply the public API admission
@@ -53,16 +54,23 @@ capability-gated with precise typed unsupported outcomes.
 
 ## Period 48: Native Synchronization, Queues, And Presentation Timing
 
+Status: complete.
+
 Priority: cross-submit correctness.
 
-- Native Metal fences/events/shared events and Vulkan semaphore/fence mappings.
-- Physical compute/transfer queues, queue ownership, callbacks, and lifecycle
+- [x] Native Metal shared events and Vulkan timeline-semaphore mappings.
+- [x] Physical compute/transfer queues, queue ownership, callbacks, and lifecycle
   status.
-- Scheduled/minimum-duration presentation semantics where backend support
+- [x] Scheduled/minimum-duration presentation semantics where backend support
   exists.
 
-Acceptance: portable runtime emulation and native GPU synchronization are
-reported as separate capabilities and evidence lanes.
+Acceptance: complete. Portable runtime emulation and native GPU synchronization
+are reported as separate capabilities and evidence lanes. Physical Metal
+transfer/readback exercised native timeline/shared-event submission, a separate
+transfer queue, and callback-once behavior; timed presentation passed the Metal
+pixel regression. Vulkan compilation and deterministic unit coverage passed;
+physical Vulkan Period 48 evidence remains a useful follow-up, not an upgraded
+claim beyond queried gates.
 
 ## Period 49: Native Heaps, Residency, Sparse Resources, And Memoryless
 
@@ -143,6 +151,7 @@ gates.
 
 ## Next Slice
 
-Period 47 is complete. Its common resource, render, compute, reflection, and
-managed-synchronization targets are executable; the advanced remainders stay
-routed to Periods 48-54. Period 48 is next.
+Period 48 is complete. Its native synchronization, physical queue, lifecycle,
+hazard-ownership, and timed-presentation targets are executable or precisely
+unsupported; 60 incomplete semantic units remain routed to Periods 49-54.
+Period 49 is next.

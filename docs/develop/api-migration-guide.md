@@ -5,6 +5,36 @@ Period 1 Phase 9 surface. The cutover is breaking because vkmtl has not yet made
 a tagged compatibility promise. It reorganizes names and owners without
 intentionally changing backend behavior.
 
+## Period 48 v0.2.0 Synchronization And Presentation Update
+
+`timeline_fences` now means a native monotonic object with host query,
+host wait/signal, and GPU submission wait/signal. Vulkan lowers it to a
+timeline semaphore; Metal lowers it to `MTLSharedEvent`. Binary fences and
+ordinary events retain their exact runtime fallback behavior. `shared_events`
+is native on Metal and does not imply external-handle sharing.
+
+`CommandBufferDescriptor` adds nullable `lifecycle_callback` and
+`lifecycle_context` fields. Existing literals retain their behavior. When the
+callback is present, the selected device must report
+`command_buffer_lifecycle_callbacks`; scheduled and completed notifications are
+delivered exactly once during the current synchronous commit path. Callers must
+not assume callback thread identity or reentrant command-buffer use.
+
+`CommandBuffer.presentDrawableWithDescriptor(...)` accepts
+`presentation.PresentDrawableDescriptor`. Immediate presentation is the
+default. Scheduled-time and minimum-duration modes require a nonzero
+nanosecond value and their matching feature. Setting
+`allow_immediate_fallback = true` explicitly permits immediate presentation on
+an unsupported backend. `presentDrawable()` remains the unchanged immediate
+convenience path.
+
+This update adds command/presentation enum and error-set members and targets
+`v0.2.0`. Exhaustive `CommandEncodingError` switches must handle
+`UnsupportedCommandBufferLifecycleCallbacks`,
+`UnsupportedScheduledPresentation`,
+`UnsupportedMinimumDurationPresentation`, `InvalidPresentationTiming`, and
+`SynchronizationBackendFailure`.
+
 ## Period 46 v0.2.0 Query Update
 
 Existing render-pass literals continue to compile because

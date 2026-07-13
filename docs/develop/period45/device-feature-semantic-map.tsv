@@ -86,3 +86,6 @@ debug_markers	DBG-01,DBG-02
 compute_atomics	CMP-03
 compute_threadgroup_memory	CMP-03
 buffer_gpu_address	RES-07
+command_buffer_lifecycle_callbacks	DEV-02
+scheduled_presentation	DEV-02
+minimum_duration_presentation	DEV-02

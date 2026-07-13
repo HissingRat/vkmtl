@@ -889,10 +889,12 @@ See `docs/develop/period47/` and
 
 ## Period 48: Native Synchronization, Queues, And Presentation Timing
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
 Goal: lower native GPU fence/event/timeline behavior, physical queues and
 ownership, lifecycle callbacks, and capability-gated presentation timing.
+
+See `docs/develop/period48/`.
 
 ## Period 49: Heaps, Residency, Sparse Resources, And Memoryless
 

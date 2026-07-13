@@ -267,7 +267,11 @@ pub fn main(_: std.process.Init.Minimal) !void {
             .index_count = @intCast(screen_indices.len),
         });
         try screen_encoder.endEncoding();
-        try screen_command_buffer.presentDrawable();
+        try screen_command_buffer.presentDrawableWithDescriptor(.{
+            .timing = .after_minimum_duration,
+            .value_ns = 1_000_000,
+            .allow_immediate_fallback = true,
+        });
         try screen_command_buffer.commit();
 
         glfw.pollEvents();

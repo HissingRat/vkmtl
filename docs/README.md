@@ -79,6 +79,8 @@ vkmtl documentation is organized by audience and purpose.
 - `develop/period46/`: native queries, GPU counters, and Metal specialization
 - `develop/period47/`: common resource, format, render, compute, and reflection
   breadth
+- `develop/period48/`: native synchronization, physical queues, command
+  lifecycle, and presentation timing
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

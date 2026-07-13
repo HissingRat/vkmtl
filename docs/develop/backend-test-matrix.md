@@ -21,7 +21,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
 - `presentation_feature_gates`: `zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, resource tables, resource-table pressure plans, root constant writes, and specialization variant fingerprints.
-- `sync_query_regression`: covered by `zig build test`; includes explicit barriers, fences/events, synchronization commit descriptors, logical queue planning, ownership transfer validation, and query readback/resolve validation.
+- `sync_query_regression`: covered by `zig build test`; includes explicit barriers, runtime fences/events, native timeline/shared-event submission, physical queue selection, ownership transfer validation, lifecycle callback-once behavior, presentation fallback, and query readback/resolve validation.
 - `debug_marker_regression`: `zig build test && zig build run-profiling-plan`; includes borrowed label lifetime, UTF-8 and embedded-NUL validation, native/validation-only marker capabilities, capture gates, query-source semantics, profiling fallback, and issue-report snapshots.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, heap planning, heap aliasing, memory pressure reports, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
@@ -95,12 +95,12 @@ conservative until the relevant backend period lands.
 | --- | --- | --- | --- |
 | Explicit buffer/texture barriers | Native barrier commands | Validation/no-op markers | Advanced escape hatch, feature-gated |
 | Binary fences | Portable runtime object | Portable runtime object | Available by default |
-| Timeline fences | Capability-gated runtime object | Capability-gated runtime object | Portable validation and runtime state; native submit integration remains backend work |
+| Timeline fences | Native timeline semaphore when queried/enabled | Native shared event when available | Host query/wait/signal and GPU submit wait/signal; feature is closed without the complete path |
 | Events | Portable runtime object | Portable runtime object | Available by default |
-| Shared events | Capability-gated runtime object | Capability-gated runtime object | Portable validation and runtime state; native/shared-handle integration remains backend work |
-| Logical compute/transfer queues | Logical queue views with graphics fallback until native queue families are exposed | Logical queue views with graphics fallback until dedicated queue use is exposed | `QueueSelectionPlan` reports requested/resolved/fallback state |
-| Queue ownership transfers | Validated logical ownership; deferred native queue-family lowering | Validation/no-op markers | Advanced escape hatch, feature-gated |
-| Command-buffer synchronization descriptor | Portable wait-before-submit / signal-after-submit validation | Portable wait-before-submit / signal-after-submit validation | `CommandBuffer.commitWithSynchronization(...)`; native submit wait/signal remains backend work |
+| Shared events | Typed unsupported | Native shared event | Same-device cross-queue execution only; external handle sharing remains deferred |
+| Compute/transfer queues | Queried physical work queue/family with explicit graphics fallback | Independent physical command queue | `QueueSelectionPlan` reports requested/resolved/fallback state; dedicated means a distinct Vulkan hardware family, not merely a separate Metal queue object |
+| Queue ownership transfers | Concurrent native sharing plus exclusive vkmtl logical ownership | Native queue ordering plus exclusive vkmtl logical ownership | Raw queue-family control is not exposed |
+| Command-buffer synchronization descriptor | Native timeline waits/signals plus runtime binary fallback | Native shared-event waits/signals plus runtime binary fallback | `CommandBuffer.commitWithSynchronization(...)` validates device, values, borrows, and lifetime |
 | Timestamp queries | Native query pools when host reset and graphics timestamps are available; logical fallback otherwise | Native common-counter samples only when draw/dispatch/blit boundaries are all available; logical fallback otherwise | Available by default, with `resultSource()` distinguishing raw native ticks from logical order |
 | Occlusion queries | Non-precise native query pools | Pass-bound Boolean visibility scratch copied into query storage | Capability-gated zero/nonzero visibility; pass must bind the exact set |
 | Pipeline statistics queries | Typed unsupported | Typed unsupported | One-`u64` result shape cannot represent variable multi-counter results |
@@ -111,10 +111,19 @@ conservative until the relevant backend period lands.
 | --- | --- | --- | --- |
 | Sync capability report | Derived from usable features | Derived from usable features | `vkmtl.sync.syncCapabilities(device)` |
 | Queue capability report | Derived from usable features | Derived from usable features | `vkmtl.command.queueCapabilities(device)` |
-| Queue planning | Resolves requested queue to logical dedicated queue or graphics fallback | Resolves requested queue to logical dedicated queue or graphics fallback | `vkmtl.command.planQueue(device, descriptor)` returns `vkmtl.sync.QueueSelectionPlan` |
+| Queue planning | Resolves requested queue to a queried physical work queue or graphics fallback | Resolves requested queue to an independent physical command queue or graphics fallback | `vkmtl.command.planQueue(device, descriptor)` returns `vkmtl.sync.QueueSelectionPlan` |
 | Portable command synchronization | Runtime fence/event wait and signal around `commit()` | Runtime fence/event wait and signal around `commit()` | `vkmtl.sync.SynchronizationDescriptor` validates lifetimes, backend identity, and fence values |
-| Native timeline/shared-event submit | Deferred | Deferred | Must be implemented and validated before parity claims |
-| Physical async compute/transfer queues | Deferred | Deferred | Must be implemented and validated before parity claims |
+| Native timeline/shared-event submit | Timeline semaphore path executable when queried | Shared-event path executable when available | Feature reports only the complete object/host/submit path |
+| Physical compute/transfer queues | Queried family and queue handles | Independent command queue objects | Cross-queue ordering uses native monotonic synchronization; current commit remains synchronous |
+
+## Period 48 Synchronization, Lifecycle, And Timing Expectations
+
+| Feature | Vulkan | Metal | Public Status |
+| --- | --- | --- | --- |
+| Lifecycle callbacks | Composed from successful submit and queue completion | Native scheduled/completed handlers | Exactly once; callback thread identity and asynchronous return are not promised |
+| Timed drawable present | Typed unsupported; immediate fallback only when requested | Native scheduled-time and minimum-duration present | Each timing lane has an independent feature gate |
+| Hazard ownership | Explicit barriers plus tracked automatic state | Native automatic hazards plus tracked state | Default/tracked semantics only; explicit untracked ownership is unsupported |
+| Physical evidence | Unit and forced-Vulkan build | Transfer/readback plus render pixel regression | Vulkan physical rerun remains useful before broad adapter claims |
 
 ## Period 24 Resource Utility Expectations
 

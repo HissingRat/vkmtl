@@ -2,6 +2,8 @@ const core = @import("../core.zig");
 const runtime = @import("../runtime/window_context.zig");
 
 pub const CommandBufferDescriptor = core.CommandBufferDescriptor;
+pub const CommandBufferLifecycleStatus = core.CommandBufferLifecycleStatus;
+pub const CommandBufferLifecycleCallback = core.CommandBufferLifecycleCallback;
 pub const CommandBufferState = core.CommandBufferState;
 pub const RenderCommandEncoderState = core.RenderCommandEncoderState;
 pub const BlitCommandEncoderState = core.BlitCommandEncoderState;

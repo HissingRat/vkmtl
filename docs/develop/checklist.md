@@ -37,8 +37,8 @@ closed one by one as vkmtl moves from prototype to library.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
   semantic-support ledger. Period 46 completed its first implementation slice;
-  Period 47 is complete. Period 48 native synchronization, queues, and
-  presentation timing is the next mainline priority.
+  Period 48 is complete. Period 49 native heaps, residency, sparse resources,
+  and memoryless behavior is the next mainline priority.
 
 ## Native Semantic Coverage Inventory
 
@@ -2653,6 +2653,37 @@ obvious render and binding blockers.
   compatibility docs, and backend matrices.
 - [x] Run full API/backend validation and bind physical evidence to the
   closeout before marking Period 47 complete.
+
+## Period 48 Phase 1 Checklist
+
+- [x] Split all six routed rows into executable portable/native targets and
+  explicit unsupported or later-period boundaries.
+- [x] Allocate lifecycle and timed-presentation additions to canonical domains.
+- [x] Keep root, `Device`, `WindowContext`, and opaque-handle allowlists fixed.
+
+## Period 48 Phase 2 Checklist
+
+- [x] Create native timeline/shared-event objects behind truthful feature gates.
+- [x] Lower native waits/signals into submission and retain runtime fallback.
+- [x] Validate values, timeouts, same-device ownership, borrows, and lifetime.
+
+## Period 48 Phase 3 Checklist
+
+- [x] Query/create physical compute and transfer queues where available.
+- [x] Route command buffers and cross-queue dependencies to native queues.
+- [x] Preserve exact logical ownership with safe backend resource sharing.
+
+## Period 48 Phase 4 Checklist
+
+- [x] Add truthful scheduled/completed lifecycle status and callback-once rules.
+- [x] Add capability-gated timed presentation with explicit fallback.
+- [x] Keep callback threading and display-timestamp non-guarantees explicit.
+
+## Period 48 Phase 5 Checklist
+
+- [x] Update inventories, routing, compatibility docs, and backend matrices.
+- [x] Run complete API/backend validation and physical evidence probes.
+- [x] Publish an exact-commit closeout with unsupported/deferred semantics.
 
 ## First Backend-Independent Triangle Checklist
 

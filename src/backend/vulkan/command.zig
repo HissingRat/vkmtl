@@ -13,6 +13,7 @@ const VulkanTexture = @import("texture.zig");
 const VulkanTextureView = @import("texture_view.zig");
 const GraphicsContext = @import("graphics_context.zig");
 const Swapchain = @import("swapchain.zig");
+const VulkanSync = @import("sync.zig");
 
 pub const RenderPassColorAttachmentTarget = union(enum) {
     current_drawable,
@@ -59,6 +60,7 @@ pub const RenderPassDescriptor = struct {
 
 pub const CommandBuffer = struct {
     gc: *const GraphicsContext,
+    queue: GraphicsContext.Queue,
     pool: vk.CommandPool,
     swapchain: *Swapchain,
     color_render_pass: vk.RenderPass,
@@ -71,10 +73,13 @@ pub const CommandBuffer = struct {
     temporary_render_pass: vk.RenderPass = .null_handle,
     temporary_framebuffer: vk.Framebuffer = .null_handle,
     temporary_blit_buffers: std.ArrayList(VulkanBuffer) = .empty,
+    timeline_waits: std.ArrayList(VulkanSync.TimelinePoint) = .empty,
+    timeline_signals: std.ArrayList(VulkanSync.TimelinePoint) = .empty,
 
     pub fn init(
         gc: *const GraphicsContext,
         pool: vk.CommandPool,
+        queue_kind: core.QueueKind,
         swapchain: *Swapchain,
         color_render_pass: vk.RenderPass,
         depth_render_pass: vk.RenderPass,
@@ -90,6 +95,7 @@ pub const CommandBuffer = struct {
 
         return .{
             .gc = gc,
+            .queue = gc.queueForKind(queue_kind),
             .pool = pool,
             .swapchain = swapchain,
             .color_render_pass = color_render_pass,
@@ -105,6 +111,8 @@ pub const CommandBuffer = struct {
         self.destroyTemporaryRenderPassResources();
         self.destroyTemporaryBlitResources();
         self.temporary_blit_buffers.deinit(self.gc.allocator);
+        self.timeline_waits.deinit(self.gc.allocator);
+        self.timeline_signals.deinit(self.gc.allocator);
         self.gc.dev.freeCommandBuffers(self.pool, &.{self.cmdbuf});
         self.cmdbuf = .null_handle;
     }
@@ -417,18 +425,68 @@ pub const CommandBuffer = struct {
         self.present_requested = true;
     }
 
-    pub fn commit(self: *CommandBuffer) !void {
+    pub fn presentDrawableWithDescriptor(self: *CommandBuffer, descriptor: core.PresentDrawableDescriptor) !void {
+        if (descriptor.timing != .immediate) return error.UnsupportedScheduledPresentation;
+        try self.presentDrawable();
+    }
+
+    pub fn waitTimeline(self: *CommandBuffer, semaphore: *const VulkanSync.TimelineSemaphore, value: u64) !void {
+        try self.timeline_waits.append(self.gc.allocator, .{ .semaphore = semaphore, .value = value });
+    }
+
+    pub fn signalTimeline(self: *CommandBuffer, semaphore: *const VulkanSync.TimelineSemaphore, value: u64) !void {
+        try self.timeline_signals.append(self.gc.allocator, .{ .semaphore = semaphore, .value = value });
+    }
+
+    pub fn commit(
+        self: *CommandBuffer,
+        callback: ?core.CommandBufferLifecycleCallback,
+        callback_context: ?*anyopaque,
+    ) !void {
         defer self.destroyTemporaryRenderPassResources();
         defer self.destroyTemporaryBlitResources();
         if (self.present_requested) {
-            _ = try self.swapchain.present(self.cmdbuf);
+            _ = try self.swapchain.present(self.cmdbuf, self.timeline_waits.items, self.timeline_signals.items);
         } else {
-            try self.gc.dev.queueSubmit(self.gc.graphics_queue.handle, &.{.{
+            const wait_semaphores = try self.gc.allocator.alloc(vk.Semaphore, self.timeline_waits.items.len);
+            defer self.gc.allocator.free(wait_semaphores);
+            const wait_values = try self.gc.allocator.alloc(u64, self.timeline_waits.items.len);
+            defer self.gc.allocator.free(wait_values);
+            const wait_stages = try self.gc.allocator.alloc(vk.PipelineStageFlags, self.timeline_waits.items.len);
+            defer self.gc.allocator.free(wait_stages);
+            const signal_semaphores = try self.gc.allocator.alloc(vk.Semaphore, self.timeline_signals.items.len);
+            defer self.gc.allocator.free(signal_semaphores);
+            const signal_values = try self.gc.allocator.alloc(u64, self.timeline_signals.items.len);
+            defer self.gc.allocator.free(signal_values);
+            for (self.timeline_waits.items, 0..) |point, index| {
+                wait_semaphores[index] = point.semaphore.handle;
+                wait_values[index] = point.value;
+                wait_stages[index] = .{ .all_commands_bit = true };
+            }
+            for (self.timeline_signals.items, 0..) |point, index| {
+                signal_semaphores[index] = point.semaphore.handle;
+                signal_values[index] = point.value;
+            }
+            var timeline_info = vk.TimelineSemaphoreSubmitInfo{
+                .wait_semaphore_value_count = @intCast(wait_values.len),
+                .p_wait_semaphore_values = if (wait_values.len == 0) null else wait_values.ptr,
+                .signal_semaphore_value_count = @intCast(signal_values.len),
+                .p_signal_semaphore_values = if (signal_values.len == 0) null else signal_values.ptr,
+            };
+            try self.gc.dev.queueSubmit(self.queue.handle, &.{.{
+                .p_next = if (wait_values.len != 0 or signal_values.len != 0) &timeline_info else null,
+                .wait_semaphore_count = @intCast(wait_semaphores.len),
+                .p_wait_semaphores = if (wait_semaphores.len == 0) null else wait_semaphores.ptr,
+                .p_wait_dst_stage_mask = if (wait_stages.len == 0) null else wait_stages.ptr,
                 .command_buffer_count = 1,
                 .p_command_buffers = @ptrCast(&self.cmdbuf),
+                .signal_semaphore_count = @intCast(signal_semaphores.len),
+                .p_signal_semaphores = if (signal_semaphores.len == 0) null else signal_semaphores.ptr,
             }}, .null_handle);
         }
-        try self.gc.dev.queueWaitIdle(self.gc.graphics_queue.handle);
+        if (callback) |notify| notify(callback_context, .scheduled);
+        try self.gc.dev.queueWaitIdle(self.queue.handle);
+        if (callback) |notify| notify(callback_context, .completed);
     }
 
     fn renderPassSetup(self: *CommandBuffer, descriptor: RenderPassDescriptor) !RenderPassSetup {

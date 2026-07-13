@@ -11,6 +11,13 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added native timeline synchronization: Vulkan timeline semaphores and Metal
+  shared events now support host query/wait/signal and GPU submit wait/signal.
+- Added physical compute/transfer command queues, capability-gated queue-family
+  discovery, cross-queue dependencies, and portable ownership enforcement.
+- Added command-buffer scheduled/completed lifecycle callbacks and status.
+- Added capability-gated scheduled-time and minimum-duration drawable
+  presentation with explicit immediate fallback.
 - Completed portable MRT validation/lowering for every color attachment and
   native texture-backed load/store actions, including combined depth/stencil.
 - Added executable 32-bit integer storage-buffer/threadgroup atomics and
@@ -38,6 +45,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- `timeline_fences` and Metal `shared_events` now report only complete native
+  object and submission paths; binary fence/event fallback remains runtime
+  synchronization and is not reported as native.
+- Queue descriptors now select physical backend queues where supported. Vulkan
+  resources use safe concurrent family sharing while vkmtl preserves exclusive
+  logical ownership validation.
 - Buffer and texture creation now rejects descriptors that exceed the selected
   device's queried resource limits before native object creation.
 - Private textures now reject CPU `replaceRegion` uploads consistently before
@@ -59,6 +72,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 48 adds nullable lifecycle fields to `CommandBufferDescriptor`,
+  command/presentation types and feature fields, a descriptor-based present
+  method, and synchronization/presentation errors. Defaults preserve existing
+  immediate one-shot behavior; the public additions target `v0.2.0`.
 - `RuntimeError.UnsupportedRenderPassAttachmentAction` targets `v0.2.0` and
   distinguishes current-drawable action limits from invalid attachments.
 - `ShaderReflectionBinding.storage_access` defaults to the existing storage

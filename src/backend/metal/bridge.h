@@ -20,10 +20,12 @@ typedef struct vkmtl_metal_compute_pipeline_state vkmtl_metal_compute_pipeline_s
 typedef struct vkmtl_metal_acceleration_structure vkmtl_metal_acceleration_structure;
 typedef struct vkmtl_metal_ray_tracing_pipeline_state vkmtl_metal_ray_tracing_pipeline_state;
 typedef struct vkmtl_metal_query_set vkmtl_metal_query_set;
+typedef struct vkmtl_metal_shared_event vkmtl_metal_shared_event;
 typedef struct vkmtl_metal_command_buffer vkmtl_metal_command_buffer;
 typedef struct vkmtl_metal_render_command_encoder vkmtl_metal_render_command_encoder;
 typedef struct vkmtl_metal_blit_command_encoder vkmtl_metal_blit_command_encoder;
 typedef struct vkmtl_metal_compute_command_encoder vkmtl_metal_compute_command_encoder;
+typedef void (*vkmtl_metal_command_buffer_lifecycle_callback)(void *context, unsigned int status);
 
 typedef enum vkmtl_metal_status {
     VKMTL_METAL_STATUS_OK = 0,
@@ -302,6 +304,9 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int max_texture_dimension_3d;
     unsigned int max_texture_array_layers;
     unsigned int buffer_gpu_address;
+    unsigned int shared_events;
+    unsigned int scheduled_presentation;
+    unsigned int minimum_duration_presentation;
 } vkmtl_metal_device_capabilities;
 
 typedef struct vkmtl_metal_acceleration_structure_build_sizes {
@@ -636,8 +641,29 @@ unsigned int vkmtl_metal_ray_tracing_pipeline_state_has_driver_handle(
     const vkmtl_metal_ray_tracing_pipeline_state *pipeline
 );
 
+vkmtl_metal_status vkmtl_metal_shared_event_create(
+    vkmtl_metal_clear_screen *owner,
+    uint64_t initial_value,
+    vkmtl_metal_shared_event **out_event
+);
+void vkmtl_metal_shared_event_destroy(vkmtl_metal_shared_event *event);
+vkmtl_metal_status vkmtl_metal_shared_event_get_value(
+    const vkmtl_metal_shared_event *event,
+    uint64_t *out_value
+);
+vkmtl_metal_status vkmtl_metal_shared_event_signal(
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+);
+vkmtl_metal_status vkmtl_metal_shared_event_wait(
+    const vkmtl_metal_shared_event *event,
+    uint64_t value,
+    uint64_t timeout_ns
+);
+
 vkmtl_metal_status vkmtl_metal_command_buffer_create(
     vkmtl_metal_clear_screen *owner,
+    unsigned int queue_kind,
     vkmtl_metal_command_buffer **out_command_buffer
 );
 void vkmtl_metal_command_buffer_destroy(vkmtl_metal_command_buffer *command_buffer);
@@ -662,8 +688,25 @@ vkmtl_metal_status vkmtl_metal_command_buffer_insert_debug_signpost(
 vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable(
     vkmtl_metal_command_buffer *command_buffer
 );
+vkmtl_metal_status vkmtl_metal_command_buffer_present_drawable_timed(
+    vkmtl_metal_command_buffer *command_buffer,
+    unsigned int timing_mode,
+    uint64_t value_ns
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_wait_shared_event(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_signal_shared_event(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_shared_event *event,
+    uint64_t value
+);
 vkmtl_metal_status vkmtl_metal_command_buffer_commit(
-    vkmtl_metal_command_buffer *command_buffer
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_command_buffer_lifecycle_callback callback,
+    void *callback_context
 );
 vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     vkmtl_metal_command_buffer *command_buffer,

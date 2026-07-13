@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const GraphicsContext = @import("graphics_context.zig");
+const VulkanSync = @import("sync.zig");
 
 const Allocator = std.mem.Allocator;
 const Swapchain = @This();
@@ -137,20 +138,57 @@ pub fn currentImageHandle(self: Swapchain) vk.Image {
     return self.currentSwapImage().image;
 }
 
-pub fn present(self: *Swapchain, cmdbuf: vk.CommandBuffer) !PresentState {
+pub fn present(
+    self: *Swapchain,
+    cmdbuf: vk.CommandBuffer,
+    timeline_waits: []const VulkanSync.TimelinePoint,
+    timeline_signals: []const VulkanSync.TimelinePoint,
+) !PresentState {
     const current = self.currentSwapImage();
     try current.waitForFence(self.gc);
     try self.gc.dev.resetFences(&.{current.frame_fence});
 
-    const wait_stage = [_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
+    const wait_semaphores = try self.allocator.alloc(vk.Semaphore, timeline_waits.len + 1);
+    defer self.allocator.free(wait_semaphores);
+    const wait_values = try self.allocator.alloc(u64, timeline_waits.len + 1);
+    defer self.allocator.free(wait_values);
+    const wait_stages = try self.allocator.alloc(vk.PipelineStageFlags, timeline_waits.len + 1);
+    defer self.allocator.free(wait_stages);
+    wait_semaphores[0] = current.image_acquired;
+    wait_values[0] = 0;
+    wait_stages[0] = .{ .top_of_pipe_bit = true };
+    for (timeline_waits, 0..) |point, index| {
+        wait_semaphores[index + 1] = point.semaphore.handle;
+        wait_values[index + 1] = point.value;
+        wait_stages[index + 1] = .{ .all_commands_bit = true };
+    }
+
+    const signal_semaphores = try self.allocator.alloc(vk.Semaphore, timeline_signals.len + 1);
+    defer self.allocator.free(signal_semaphores);
+    const signal_values = try self.allocator.alloc(u64, timeline_signals.len + 1);
+    defer self.allocator.free(signal_values);
+    signal_semaphores[0] = current.render_finished;
+    signal_values[0] = 0;
+    for (timeline_signals, 0..) |point, index| {
+        signal_semaphores[index + 1] = point.semaphore.handle;
+        signal_values[index + 1] = point.value;
+    }
+
+    var timeline_info = vk.TimelineSemaphoreSubmitInfo{
+        .wait_semaphore_value_count = @intCast(wait_values.len),
+        .p_wait_semaphore_values = wait_values.ptr,
+        .signal_semaphore_value_count = @intCast(signal_values.len),
+        .p_signal_semaphore_values = signal_values.ptr,
+    };
     try self.gc.dev.queueSubmit(self.gc.graphics_queue.handle, &.{.{
-        .wait_semaphore_count = 1,
-        .p_wait_semaphores = @ptrCast(&current.image_acquired),
-        .p_wait_dst_stage_mask = &wait_stage,
+        .p_next = if (timeline_waits.len != 0 or timeline_signals.len != 0) &timeline_info else null,
+        .wait_semaphore_count = @intCast(wait_semaphores.len),
+        .p_wait_semaphores = wait_semaphores.ptr,
+        .p_wait_dst_stage_mask = wait_stages.ptr,
         .command_buffer_count = 1,
         .p_command_buffers = @ptrCast(&cmdbuf),
-        .signal_semaphore_count = 1,
-        .p_signal_semaphores = @ptrCast(&current.render_finished),
+        .signal_semaphore_count = @intCast(signal_semaphores.len),
+        .p_signal_semaphores = signal_semaphores.ptr,
     }}, current.frame_fence);
 
     _ = try self.gc.dev.queuePresentKHR(self.gc.present_queue.handle, &.{

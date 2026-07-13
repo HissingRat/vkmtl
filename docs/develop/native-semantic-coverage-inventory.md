@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 47 complete, 2026-07-12.
+Status: Period 48 complete, 2026-07-13.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -20,7 +20,8 @@ source-driven detail in `period45/metal-semantic-ledger.md`. Period 45 recorded
 the historical 99-unit/77-gap baseline. Period 46 split broad query/counter
 rows into 101 units. Period 47 Phase 1 split six advanced remainders from its
 portable targets, producing 107 stable Metal semantic units and retaining the
-complete 78-protocol map. Closing Period 47 leaves 66 incomplete units routed
+complete 78-protocol map. Period 48 closes six synchronization, queue,
+lifecycle, hazard, and presentation rows, leaving 60 incomplete units routed
 exactly once.
 It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
@@ -97,7 +98,7 @@ develops a different lowering or support state.
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
 | DEV-01 | Backend selection, adapter/device discovery, capability report, and ordinary execution limits | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately, while queried resource/dispatch/threadgroup limits feed validation. |
-| DEV-02 | Command queue/buffer creation, commit, completion, presentation | `command`, `presentation` | `native-exact` | `native-exact` | `gpu-soak`. |
+| DEV-02 | Command queue/buffer creation, commit, lifecycle callbacks, immediate presentation, and capability-gated timing | `command`, `presentation` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal for callback-once and minimum-duration presentation; Vulkan callbacks compose submit/queue completion and timed presentation remains feature-closed. |
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
 | RES-02 | 1D/2D/3D, array, cube, and multisample texture fundamentals | `resource` | `native-exact` | `native-exact` | `unit` plus representative `gpu-pixels`; full shape/format matrix remains unobserved. |
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |
@@ -137,10 +138,10 @@ develops a different lowering or support state.
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
 | SYN-01 | Portable resource-state hazards and required execution ordering | `sync` | `composed-exact` | `composed-exact` | `unit`; Metal combines state validation with native encoder ordering, Vulkan emits barriers/layout transitions. |
-| SYN-02 | Runtime binary fences and events | `sync` | `emulated-exact` | `emulated-exact` | `unit`; these are runtime objects, not yet native submit synchronization. |
-| SYN-03 | Timeline/shared-event native submit semantics | `sync` | `incomplete` | `incomplete` | Validation/runtime state exists; driver submit wait/signal integration is deferred. |
-| SYN-04 | Logical compute/transfer queues with graphics fallback | `command`, `sync` | `emulated-exact` | `emulated-exact` | `unit`; exact for the documented logical fallback contract. |
-| SYN-05 | Physical dedicated queues and Vulkan queue-family ownership | `command`, `sync` | `incomplete` | `incomplete` | Planning and hazard validation exist; physical execution/evidence does not. |
+| SYN-02 | Runtime binary fences and ordinary events | `sync` | `emulated-exact` | `emulated-exact` | `unit`; these remain exact runtime objects and are not reported as native submit synchronization. |
+| SYN-03 | Native monotonic host and GPU-submit synchronization | `sync` | `native-exact` | `native-exact` | `gpu-pixels` on Metal plus unit/forced-Vulkan build; Metal uses shared events and Vulkan uses timeline semaphores. Metal-only shared events and Vulkan timeline support remain capability-gated; external handles are excluded. |
+| SYN-04 | Queue selection with explicit graphics fallback | `command`, `sync` | `composed-exact` | `composed-exact` | `unit` plus Metal `gpu-pixels`; fallback is explicit and physical work queues are selected only when the usable capability opens. |
+| SYN-05 | Physical work queues, cross-queue dependencies, and exclusive portable ownership | `command`, `sync` | `composed-exact` | `composed-exact` | Metal `gpu-pixels` exercised a separate transfer queue. Vulkan queries work families, uses timeline dependencies and concurrent resource sharing, and preserves vkmtl logical ownership; physical Vulkan rerun remains useful evidence. |
 | QRY-01 | Logical timestamp sequence and CPU/marker profiling fallback | `diagnostics` | `emulated-exact` | `emulated-exact` | `unit`; explicitly not GPU time. |
 | QRY-02 | Capability-gated native GPU timestamp ticks, CPU readback, and GPU resolve | `diagnostics` | `native-exact` | `native-exact` | `unit`; Metal requires the common timestamp set plus draw/dispatch/blit sampling, Vulkan requires host reset plus graphics-queue timestamp bits. Tick-to-duration calibration remains outside this row. |
 | QRY-03 | Boolean occlusion visibility, where zero is occluded and nonzero is visible | `diagnostics`, render encoder | `composed-exact` | `native-exact` | `gpu-smoke` on Metal plus unit/inspection for both mappings; Metal uses pass scratch plus canonical copy, Vulkan uses non-precise query pools. Vulkan physical rerun remains useful evidence, not a capability prerequisite. |
@@ -171,14 +172,14 @@ develops a different lowering or support state.
 
 ## Metal Source-Coverage Ledger
 
-Period 45 established the source ledger; Periods 46-47 refined it to 107 units
+Period 45 established the source ledger; Periods 46-48 refined it to 107 units
 by splitting exact query subsets and Period 47's portable targets from their
 advanced remainders. Missing vkmtl concepts remain explicit `missing-contract` entries;
 their presence in the ledger does not admit public API or claim execution.
 
 | Source family | Current inventory state | Required action |
 | --- | --- | --- |
-| Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus Period 48 native synchronization gaps. |
+| Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus native synchronization, physical queue, lifecycle, and timed Metal presentation work completed in Period 48. |
 | Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited/incomplete | Period 49 owns native allocation and residency. |
 | Argument buffers/tables and indirect command buffers | Audited/incomplete | Period 50 owns scalable binding and generated commands. |
@@ -189,7 +190,7 @@ their presence in the ledger does not admit public API or claim execution.
 | Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited/incomplete | Period 52 owns RT breadth. |
 | Fast resource loading / Metal I/O | Audited/missing-contract | Period 53 owns I/O and transfer composition. |
 | Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited/incomplete | Period 54 owns the new command/pipeline model. |
-| External sharing, IOSurface, shared events, platform handles | Audited/incomplete | Period 53 owns real imports and synchronization. |
+| External sharing, IOSurface, shared-event handles, platform handles | Audited/incomplete | Period 53 owns real imports and external synchronization; Period 48 covers only same-device native shared events. |
 | MetalKit, MetalFX, Metal Performance Shaders | Out of current scope | These adjacent frameworks are excluded from the Metal core baseline until explicitly admitted. |
 
 The Vulkan side must also record which core version and extension set supplies
@@ -217,7 +218,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-47 are complete. The updated exactly-once gap
-routing establishes Periods 48-54; Period 48 is active.
+The source audit and Periods 46-48 are complete. The updated exactly-once gap
+routing establishes Periods 49-54; Period 49 is next.
 `period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

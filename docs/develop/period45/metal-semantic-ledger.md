@@ -1,6 +1,6 @@
 # Metal Semantic Ledger
 
-Status: Period 47 semantic-allocation update to the macOS SDK 26.2 audited
+Status: Period 48 semantic-allocation update to the macOS SDK 26.2 audited
 baseline.
 
 This ledger groups Objective-C overloads and descriptor helper classes by
@@ -39,7 +39,7 @@ or `missing-contract`; it does not admit new public API.
 | MTL-RES-015 | `MTLTexture` shared handles and IOSurface-backed textures | Share texture storage across process/API boundaries | interop | incomplete | incomplete | External memory/image extensions and platform handles | unit |
 | MTL-RES-016 | `MTLTensor`, `MTLTensorDescriptor` | Typed multidimensional tensor storage and views | missing-contract | incomplete | incomplete | Buffer/image representation or optional tensor extensions; exact contract undecided | missing |
 | MTL-RES-017 | `MTLCPUCacheMode` and explicit resource cache policy | Select write-combined/default CPU cache behavior with truthful host-memory properties | resource | incomplete | incomplete | Vulkan host memory property/type selection; exact performance contract undecided | missing |
-| MTL-RES-018 | `MTLHazardTrackingMode` | Select tracked, untracked, or default native hazard ownership | sync | incomplete | incomplete | Explicit vkmtl hazard state and Vulkan synchronization; caller responsibility contract undecided | missing |
+| MTL-RES-018 | `MTLHazardTrackingMode` | Preserve default/tracked hazard ownership and reject explicit untracked caller ownership | sync | composed-exact | composed-exact | Metal automatic hazards plus vkmtl tracked state; Vulkan barriers/layouts plus the same tracked state. Explicit untracked mode is intentionally unsupported | unit |
 
 ## Command, Submission, Synchronization, And Presentation
 
@@ -49,11 +49,11 @@ or `missing-contract`; it does not admit new public API.
 | MTL-CMD-002 | `MTLCommandBuffer`, `MTLCommandBufferDescriptor` | Encode, commit, wait, observe completion/status/error, and retain resources | command | native-exact | composed-exact | `vkBegin/EndCommandBuffer`, submit, fence completion, runtime callbacks | gpu-soak |
 | MTL-CMD-003 | `MTLCommandEncoder` | Encoder labels, debug groups, end-of-encoding lifetime, and command ownership | command | native-exact | composed-exact | Command-buffer regions, debug utils, vkmtl encoder state | gpu-smoke |
 | MTL-CMD-004 | `MTLParallelRenderCommandEncoder` | Encode one render pass from multiple child encoders | missing-contract | incomplete | incomplete | Secondary command buffers or parallel CPU recording | missing |
-| MTL-CMD-005 | `MTLDrawable` | Present immediately or at scheduled/minimum-duration times and observe presentation | presentation | incomplete | incomplete | Swapchain present plus present-timing extensions; ordinary presentation works, timing breadth does not | gpu-soak |
-| MTL-CMD-006 | `MTLFence` | Order encoder access to resources within GPU work | sync | incomplete | incomplete | Pipeline/event barriers; current vkmtl fence is a portable runtime object | unit |
-| MTL-CMD-007 | `MTLEvent`, `MTLSharedEvent` | Signal/wait monotonic values on GPU submissions and share event handles | sync | incomplete | incomplete | Timeline semaphores and external semaphore handles | unit |
-| MTL-CMD-008 | Command-buffer completion/scheduled handlers | Invoke lifecycle callbacks with truthful submission status | missing-contract | incomplete | incomplete | Fence polling/wait thread or application callback dispatch | missing |
-| MTL-CMD-009 | Multiple Metal queues and dependency ordering | Execute independent graphics/compute/transfer work with explicit dependencies | command | incomplete | incomplete | Queue-family selection, semaphores, and ownership transfers | unit |
+| MTL-CMD-005 | `MTLDrawable` | Present immediately or at scheduled/minimum-duration times with explicit unsupported fallback policy | presentation | native-exact | unsupported | Metal maps both timing modes to native drawable presentation. Vulkan ordinary present remains native, but timed modes are feature-closed until an exact extension path exists. Presentation observation/calibrated display timestamps are not promised | gpu-pixels |
+| MTL-CMD-006 | `MTLFence` | Order encoder/resource access within GPU work through the portable barrier contract | sync | composed-exact | native-exact | Metal combines tracked state with native encoder ordering; Vulkan emits pipeline barriers. A distinct public native-fence object is not required | unit |
+| MTL-CMD-007 | `MTLEvent`, `MTLSharedEvent` | Signal/wait native monotonic values on host and GPU submissions within one vkmtl device | sync | native-exact | native-exact | Metal shared events and Vulkan timeline semaphores lower host and submission operations. External event/semaphore handles remain Period 53 | gpu-pixels |
+| MTL-CMD-008 | Command-buffer completion/scheduled handlers | Invoke lifecycle callbacks exactly once with truthful submission status | command | native-exact | composed-exact | Metal scheduled/completed handlers; Vulkan reports scheduled after successful submit and completed after the synchronous queue wait. Thread identity and asynchronous return are not promised | gpu-pixels |
+| MTL-CMD-009 | Multiple Metal queues and dependency ordering | Execute graphics/compute/transfer work on selected physical queues with explicit dependencies and portable ownership | command | composed-exact | composed-exact | Independent Metal command queues; Vulkan queue-family selection with concurrent resource sharing; native timeline dependencies plus vkmtl exclusive logical ownership | gpu-pixels |
 | MTL-CMD-010 | `MTL4CommandAllocator`, `MTL4CommandQueue` | Separate reusable command allocation from queue and command-buffer ownership | missing-contract | incomplete | incomplete | `VkCommandPool`/queue composition | missing |
 | MTL-CMD-011 | `MTL4CommandBuffer`, `MTL4CommitOptions`, `MTL4CommitFeedback` | Reusable command buffers, commit options, feedback, and explicit residency | missing-contract | incomplete | incomplete | Resettable command buffers, submit structures, query feedback, residency tracking | missing |
 | MTL-CMD-012 | `MTL4CommandEncoder` barriers | Encode explicit command barriers in the Metal 4 model | sync | incomplete | incomplete | Pipeline barriers and dependency info | missing |

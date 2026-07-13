@@ -11,6 +11,7 @@ const VulkanQuerySet = @import("query_set.zig");
 const VulkanSamplerState = @import("sampler.zig");
 const VulkanShaderModule = @import("shader_module.zig");
 const VulkanTexture = @import("texture.zig");
+const VulkanSync = @import("sync.zig");
 const GraphicsContext = @import("graphics_context.zig");
 const Swapchain = @import("swapchain.zig");
 
@@ -25,6 +26,8 @@ color_framebuffers: []vk.Framebuffer,
 depth_framebuffers: []vk.Framebuffer,
 depth_resources: DepthResources,
 pool: vk.CommandPool,
+compute_pool: vk.CommandPool,
+transfer_pool: vk.CommandPool,
 cmdbufs: []vk.CommandBuffer,
 clear_color: core.ClearColorLike,
 
@@ -71,6 +74,14 @@ pub fn init(
         .queue_family_index = gc.graphics_queue.family,
     }, null);
     errdefer gc.dev.destroyCommandPool(pool, null);
+    const compute_pool = try gc.dev.createCommandPool(&.{
+        .queue_family_index = gc.compute_queue.family,
+    }, null);
+    errdefer gc.dev.destroyCommandPool(compute_pool, null);
+    const transfer_pool = try gc.dev.createCommandPool(&.{
+        .queue_family_index = gc.transfer_queue.family,
+    }, null);
+    errdefer gc.dev.destroyCommandPool(transfer_pool, null);
 
     var self = VulkanClearScreen{
         .allocator = allocator,
@@ -82,6 +93,8 @@ pub fn init(
         .depth_framebuffers = depth_framebuffers,
         .depth_resources = depth_resources,
         .pool = pool,
+        .compute_pool = compute_pool,
+        .transfer_pool = transfer_pool,
         .cmdbufs = &.{},
         .clear_color = .{},
     };
@@ -134,6 +147,8 @@ pub fn deinit(self: *VulkanClearScreen) void {
         self.cmdbufs = &.{};
     }
     self.gc.dev.destroyCommandPool(self.pool, null);
+    self.gc.dev.destroyCommandPool(self.compute_pool, null);
+    self.gc.dev.destroyCommandPool(self.transfer_pool, null);
     destroyFramebuffers(self.gc, self.allocator, self.depth_framebuffers);
     destroyFramebuffers(self.gc, self.allocator, self.color_framebuffers);
     self.depth_resources.deinit(self.gc);
@@ -178,7 +193,7 @@ pub fn clear(self: *VulkanClearScreen, color: core.ClearColorLike) !void {
     try self.recordCommandBuffers();
 
     const cmdbuf = self.cmdbufs[self.swapchain.image_index];
-    _ = try self.swapchain.present(cmdbuf);
+    _ = try self.swapchain.present(cmdbuf, &.{}, &.{});
 }
 
 pub fn makeBuffer(self: *VulkanClearScreen, descriptor: core.BufferDescriptor) !VulkanBuffer {
@@ -223,16 +238,26 @@ pub fn makeRayTracingPipelineState(self: *VulkanClearScreen, descriptor: core.Ra
     return try VulkanRayTracingPipelineState.init(self.gc, self.allocator, descriptor);
 }
 
-pub fn makeCommandBuffer(self: *VulkanClearScreen) !VulkanCommand.CommandBuffer {
+pub fn makeCommandBuffer(self: *VulkanClearScreen, queue_kind: core.QueueKind) !VulkanCommand.CommandBuffer {
+    const pool = switch (queue_kind) {
+        .graphics => self.pool,
+        .compute => self.compute_pool,
+        .transfer => self.transfer_pool,
+    };
     return try VulkanCommand.CommandBuffer.init(
         self.gc,
-        self.pool,
+        pool,
+        queue_kind,
         &self.swapchain,
         self.color_render_pass,
         self.depth_render_pass,
         self.color_framebuffers,
         self.depth_framebuffers,
     );
+}
+
+pub fn makeTimelineSemaphore(self: *VulkanClearScreen, initial_value: u64) !VulkanSync.TimelineSemaphore {
+    return try VulkanSync.TimelineSemaphore.init(self.gc, initial_value);
 }
 
 pub fn makeTexture(self: *VulkanClearScreen, descriptor: core.TextureDescriptor) !VulkanTexture {

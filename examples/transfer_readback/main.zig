@@ -13,6 +13,24 @@ const pixels = [_]u8{
     0x46, 0x95, 0xff, 0xff,
 };
 
+const LifecycleProbe = struct {
+    count: std.atomic.Value(u32) = .init(0),
+    status_mask: std.atomic.Value(u32) = .init(0),
+};
+
+fn lifecycleCallback(context: ?*anyopaque, status: vkmtl.command.CommandBufferLifecycleStatus) callconv(.c) void {
+    const probe: *LifecycleProbe = @ptrCast(@alignCast(context orelse return));
+    _ = probe.count.fetchAdd(1, .acq_rel);
+    _ = probe.status_mask.fetchOr(@as(u32, 1) << @intCast(@intFromEnum(status)), .acq_rel);
+}
+
+fn verifyLifecycle(probe: *const LifecycleProbe) !void {
+    if (probe.count.load(.acquire) != 2) return error.CommandLifecycleCallbackCountMismatch;
+    const expected = (@as(u32, 1) << @intCast(@intFromEnum(vkmtl.command.CommandBufferLifecycleStatus.scheduled))) |
+        (@as(u32, 1) << @intCast(@intFromEnum(vkmtl.command.CommandBufferLifecycleStatus.completed)));
+    if (probe.status_mask.load(.acquire) != expected) return error.CommandLifecycleStatusMismatch;
+}
+
 pub fn main() !void {
     try glfw.init();
     defer glfw.terminate();
@@ -40,6 +58,22 @@ pub fn main() !void {
 
     var device = context.device();
     var queue = context.queue();
+    const features = device.features();
+    var work_queue = try device.queueWithDescriptor(.{
+        .kind = .transfer,
+        .allow_fallback = true,
+    });
+
+    var timeline_fence: ?vkmtl.sync.Fence = if (features.timeline_fences)
+        try device.makeFence(.{ .kind = .timeline })
+    else
+        null;
+    defer if (timeline_fence) |*fence| fence.deinit();
+    var shared_event: ?vkmtl.sync.Event = if (features.shared_events)
+        try device.makeEvent(.{ .shared = true })
+    else
+        null;
+    defer if (shared_event) |*event| event.deinit();
 
     var source_buffer = try device.makeBuffer(.{
         .bytes = pixels[0..],
@@ -74,19 +108,97 @@ pub fn main() !void {
     });
     defer texture_readback.deinit();
 
-    var command_buffer = try queue.makeCommandBuffer();
-    var blit = try command_buffer.makeBlitCommandEncoder();
-    try blit.copyBufferToBuffer(&source_buffer, &buffer_readback, .{
+    if (work_queue.kind() != .graphics) {
+        var ownership_command_buffer = try queue.makeCommandBuffer();
+        var ownership = try ownership_command_buffer.makeBlitCommandEncoder();
+        try ownership.bufferOwnershipTransfer(&source_buffer, .{
+            .source = .graphics,
+            .destination = work_queue.kind(),
+            .before = .copy_source,
+            .after = .copy_source,
+        });
+        try ownership.bufferOwnershipTransfer(&buffer_readback, .{
+            .source = .graphics,
+            .destination = work_queue.kind(),
+            .before = .copy_destination,
+            .after = .copy_destination,
+        });
+        try ownership.textureOwnershipTransfer(&texture, .{
+            .source = .graphics,
+            .destination = work_queue.kind(),
+            .before = .copy_destination,
+            .after = .copy_destination,
+        });
+        try ownership.bufferOwnershipTransfer(&texture_readback, .{
+            .source = .graphics,
+            .destination = work_queue.kind(),
+            .before = .copy_destination,
+            .after = .copy_destination,
+        });
+        try ownership.endEncoding();
+        try ownership_command_buffer.commit();
+    }
+
+    var signal_fences: [1]vkmtl.sync.FenceSignalOperation = undefined;
+    var signal_fence_count: usize = 0;
+    if (timeline_fence) |*fence| {
+        signal_fences[0] = .{ .fence = fence, .descriptor = .{ .value = 1 } };
+        signal_fence_count = 1;
+    }
+    var signal_events: [1]vkmtl.sync.EventSignalOperation = undefined;
+    var signal_event_count: usize = 0;
+    if (shared_event) |*event| {
+        signal_events[0] = .{ .event = event };
+        signal_event_count = 1;
+    }
+
+    var upload_lifecycle = LifecycleProbe{};
+    var upload_command_buffer = try work_queue.makeCommandBufferWithDescriptor(.{
+        .lifecycle_callback = lifecycleCallback,
+        .lifecycle_context = &upload_lifecycle,
+    });
+    var upload = try upload_command_buffer.makeBlitCommandEncoder();
+    try upload.copyBufferToBuffer(&source_buffer, &buffer_readback, .{
         .size = pixels.len,
     });
-    try blit.copyBufferToTexture(&source_buffer, &texture, .{
+    try upload.copyBufferToTexture(&source_buffer, &texture, .{
         .destination_region = .{ .size = .{ .width = 2, .height = 2 } },
     });
-    try blit.copyTextureToBuffer(&texture, &texture_readback, .{
+    try upload.endEncoding();
+    try upload_command_buffer.commitWithSynchronization(.{
+        .signal_fences = signal_fences[0..signal_fence_count],
+        .signal_events = signal_events[0..signal_event_count],
+    });
+    try verifyLifecycle(&upload_lifecycle);
+
+    var wait_fences: [1]vkmtl.sync.FenceWaitOperation = undefined;
+    var wait_fence_count: usize = 0;
+    if (timeline_fence) |*fence| {
+        wait_fences[0] = .{ .fence = fence, .descriptor = .{ .value = 1 } };
+        wait_fence_count = 1;
+    }
+    var wait_events: [1]vkmtl.sync.EventWaitOperation = undefined;
+    var wait_event_count: usize = 0;
+    if (shared_event) |*event| {
+        wait_events[0] = .{ .event = event };
+        wait_event_count = 1;
+    }
+
+    var readback_lifecycle = LifecycleProbe{};
+    var readback_command_buffer = try work_queue.makeCommandBufferWithDescriptor(.{
+        .lifecycle_callback = lifecycleCallback,
+        .lifecycle_context = &readback_lifecycle,
+    });
+    var readback = try readback_command_buffer.makeBlitCommandEncoder();
+    try readback.copyTextureToBuffer(&texture, &texture_readback, .{
         .source_region = .{ .size = .{ .width = 2, .height = 2 } },
     });
-    try blit.endEncoding();
-    try command_buffer.commit();
+    try readback.endEncoding();
+    try readback_command_buffer.commitWithSynchronization(.{
+        .wait_fences = wait_fences[0..wait_fence_count],
+        .wait_events = wait_events[0..wait_event_count],
+    });
+    try verifyLifecycle(&readback_lifecycle);
 
     var copied_buffer: [pixels.len]u8 = undefined;
     try buffer_readback.readBytes(0, copied_buffer[0..]);
@@ -100,7 +212,22 @@ pub fn main() !void {
         return error.TextureCopyMismatch;
     }
 
-    std.debug.print("transfer readback ok\n", .{});
+    if (timeline_fence) |*fence| {
+        try fence.wait(.{ .value = 1, .timeout_ns = 1_000_000_000 });
+        try fence.signal(.{ .value = 2 });
+        try fence.wait(.{ .value = 2, .timeout_ns = 1_000_000_000 });
+    }
+    if (shared_event) |*event| {
+        event.reset();
+        try event.signal(.{});
+        try event.wait(.{ .timeout_ns = 1_000_000_000 });
+    }
+
+    std.debug.print("transfer readback ok (queue={}, timeline={}, shared_event={})\n", .{
+        work_queue.kind(),
+        timeline_fence != null,
+        shared_event != null,
+    });
 }
 
 fn backendOverrideFromEnv() ?vkmtl.Backend {

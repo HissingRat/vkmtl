@@ -18,6 +18,7 @@ const MetalSamplerState = @import("../backend/metal/sampler.zig");
 const MetalShaderModule = @import("../backend/metal/shader_module.zig");
 const MetalTexture = @import("../backend/metal/texture.zig");
 const MetalTextureView = @import("../backend/metal/texture_view.zig");
+const MetalSync = @import("../backend/metal/sync.zig");
 const VulkanBindGroupBackend = @import("../backend/vulkan/bind_group.zig");
 const VulkanAdvancedBindGroupBackend = @import("../backend/vulkan/advanced_binding.zig");
 const VulkanAccelerationStructure = @import("../backend/vulkan/acceleration_structure.zig");
@@ -32,6 +33,7 @@ const VulkanSamplerState = @import("../backend/vulkan/sampler.zig");
 const VulkanShaderModule = @import("../backend/vulkan/shader_module.zig");
 const VulkanTexture = @import("../backend/vulkan/texture.zig");
 const VulkanTextureView = @import("../backend/vulkan/texture_view.zig");
+const VulkanSync = @import("../backend/vulkan/sync.zig");
 
 const windows_c = if (builtin.os.tag == .windows) struct {
     extern "c" fn _waccess(path: [*:0]const u16, mode: c_int) c_int;
@@ -1445,6 +1447,11 @@ pub const SynchronizationDescriptor = struct {
             assertObjectAlive(operation.fence.state().alive, "fence");
             try expectSameBackend(backend, operation.fence.selectedBackend());
             try operation.descriptor.validate(operation.fence.state().descriptor_value);
+            if (operation.fence.state().descriptor_value.kind == .timeline and
+                operation.descriptor.value < operation.fence.state().current_value)
+            {
+                return core.CommandEncodingError.InvalidFenceValue;
+            }
         }
         for (self.wait_events) |operation| {
             assertObjectAlive(operation.event.state().alive, "event");
@@ -1458,20 +1465,75 @@ pub const SynchronizationDescriptor = struct {
 
     fn waitBeforeSubmit(self: SynchronizationDescriptor) !void {
         for (self.wait_fences) |operation| {
+            if (operation.fence.state().impl != null) continue;
             try operation.fence.wait(operation.descriptor);
         }
         for (self.wait_events) |operation| {
+            if (operation.event.state().impl != null) continue;
             try operation.event.wait(operation.descriptor);
         }
     }
 
     fn signalAfterSubmit(self: SynchronizationDescriptor) !void {
         for (self.signal_fences) |operation| {
-            try operation.fence.signal(operation.descriptor);
+            if (operation.fence.state().impl != null) {
+                operation.fence.state().current_value = operation.descriptor.value;
+            } else {
+                try operation.fence.signal(operation.descriptor);
+            }
         }
         for (self.signal_events) |operation| {
-            try operation.event.signal(operation.descriptor);
+            if (operation.event.state().impl != null) {
+                operation.event.state().signaled_value = operation.descriptor.signaled;
+                if (!operation.descriptor.signaled) operation.event.state().generation +|= 1;
+            } else {
+                try operation.event.signal(operation.descriptor);
+            }
         }
+    }
+
+    fn encodeNative(self: SynchronizationDescriptor, command_buffer: *CommandBuffer) !void {
+        if (command_buffer.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan_command| {
+                for (self.wait_fences) |operation| {
+                    if (operation.fence.state().impl) |*fence_impl| switch (fence_impl.*) {
+                        .vulkan => |*timeline| try vulkan_command.waitTimeline(timeline, operation.descriptor.value),
+                        .metal => return RuntimeError.BackendMismatch,
+                    };
+                }
+                for (self.signal_fences) |operation| {
+                    if (operation.fence.state().impl) |*fence_impl| switch (fence_impl.*) {
+                        .vulkan => |*timeline| try vulkan_command.signalTimeline(timeline, operation.descriptor.value),
+                        .metal => return RuntimeError.BackendMismatch,
+                    };
+                }
+            },
+            .metal => |*metal_command| {
+                for (self.wait_fences) |operation| {
+                    if (operation.fence.state().impl) |*fence_impl| switch (fence_impl.*) {
+                        .metal => |*event| try metal_command.waitSharedEvent(event, operation.descriptor.value),
+                        .vulkan => return RuntimeError.BackendMismatch,
+                    };
+                }
+                for (self.signal_fences) |operation| {
+                    if (operation.fence.state().impl) |*fence_impl| switch (fence_impl.*) {
+                        .metal => |*event| try metal_command.signalSharedEvent(event, operation.descriptor.value),
+                        .vulkan => return RuntimeError.BackendMismatch,
+                    };
+                }
+                for (self.wait_events) |operation| {
+                    if (operation.event.state().impl) |*event_impl| switch (event_impl.*) {
+                        .metal => |*event| try metal_command.waitSharedEvent(event, operation.event.state().generation),
+                    };
+                }
+                for (self.signal_events) |operation| {
+                    if (!operation.descriptor.signaled) continue;
+                    if (operation.event.state().impl) |*event_impl| switch (event_impl.*) {
+                        .metal => |*event| try metal_command.signalSharedEvent(event, operation.event.state().generation),
+                    };
+                }
+            },
+        } else return;
     }
 };
 
@@ -1736,6 +1798,11 @@ pub const SamplerState = struct {
 pub const Fence = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
+    const Impl = union(core.Backend) {
+        vulkan: VulkanSync.TimelineSemaphore,
+        metal: MetalSync.SharedEvent,
+    };
+
     const State = struct {
         backend: core.Backend,
         tracker: *ResourceTracker,
@@ -1743,6 +1810,7 @@ pub const Fence = struct {
         descriptor_value: core.FenceDescriptor,
         current_value: u64,
         alive: bool = true,
+        impl: ?Impl = null,
     };
 
     fn init(state_value: State) Fence {
@@ -1757,6 +1825,10 @@ pub const Fence = struct {
 
     pub fn deinit(self: *Fence) void {
         assertObjectAlive(self.state().alive, "fence");
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| vulkan.deinit(),
+            .metal => |*metal| metal.deinit(),
+        };
         self.state().alive = false;
         self.state().tracker.release(.fence);
     }
@@ -1795,18 +1867,39 @@ pub const Fence = struct {
     pub fn signal(self: *Fence, signal_descriptor: core.FenceSignalDescriptor) !void {
         assertObjectAlive(self.state().alive, "fence");
         try signal_descriptor.validate(self.state().descriptor_value);
+        if (self.state().descriptor_value.kind == .timeline and
+            signal_descriptor.value < self.state().current_value)
+        {
+            return core.CommandEncodingError.InvalidFenceValue;
+        }
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .vulkan => |vulkan| vulkan.signal(signal_descriptor.value) catch return core.CommandEncodingError.SynchronizationBackendFailure,
+            .metal => |*metal| metal.signal(signal_descriptor.value) catch return core.CommandEncodingError.SynchronizationBackendFailure,
+        };
         switch (self.state().descriptor_value.kind) {
             .binary => self.state().current_value = 1,
-            .timeline => {
-                if (signal_descriptor.value < self.state().current_value) return core.CommandEncodingError.InvalidFenceValue;
-                self.state().current_value = signal_descriptor.value;
-            },
+            .timeline => self.state().current_value = signal_descriptor.value,
         }
     }
 
     pub fn wait(self: *Fence, wait_descriptor: core.FenceWaitDescriptor) !void {
         assertObjectAlive(self.state().alive, "fence");
         try wait_descriptor.validate(self.state().descriptor_value);
+        if (self.state().impl) |impl| {
+            const complete = switch (impl) {
+                .vulkan => |vulkan| vulkan.wait(wait_descriptor.value, wait_descriptor.timeout_ns) catch return core.CommandEncodingError.SynchronizationBackendFailure,
+                .metal => |metal| blk: {
+                    metal.wait(wait_descriptor.value, wait_descriptor.timeout_ns) catch |err| switch (err) {
+                        error.WaitTimeout => break :blk false,
+                        else => return core.CommandEncodingError.SynchronizationBackendFailure,
+                    };
+                    break :blk true;
+                },
+            };
+            if (!complete) return core.CommandEncodingError.FenceWaitTimeout;
+            self.state().current_value = @max(self.state().current_value, wait_descriptor.value);
+            return;
+        }
         if (!self.isSignaled(wait_descriptor.value)) return core.CommandEncodingError.FenceWaitTimeout;
     }
 
@@ -1822,13 +1915,19 @@ pub const Fence = struct {
 pub const Event = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
+    const Impl = union(enum) {
+        metal: MetalSync.SharedEvent,
+    };
+
     const State = struct {
         backend: core.Backend,
         tracker: *ResourceTracker,
         label_value: ?[]const u8 = null,
         descriptor_value: core.EventDescriptor,
         signaled_value: bool = false,
+        generation: u64 = 1,
         alive: bool = true,
+        impl: ?Impl = null,
     };
 
     fn init(state_value: State) Event {
@@ -1843,6 +1942,9 @@ pub const Event = struct {
 
     pub fn deinit(self: *Event) void {
         assertObjectAlive(self.state().alive, "event");
+        if (self.state().impl) |*impl| switch (impl.*) {
+            .metal => |*metal| metal.deinit(),
+        };
         self.state().alive = false;
         self.state().tracker.release(.event);
     }
@@ -1872,18 +1974,34 @@ pub const Event = struct {
 
     pub fn signal(self: *Event, signal_descriptor: core.EventSignalDescriptor) !void {
         assertObjectAlive(self.state().alive, "event");
+        if (signal_descriptor.signaled) {
+            if (self.state().impl) |*impl| switch (impl.*) {
+                .metal => |*metal| metal.signal(self.state().generation) catch return core.CommandEncodingError.SynchronizationBackendFailure,
+            };
+        }
         self.state().signaled_value = signal_descriptor.signaled;
+        if (!signal_descriptor.signaled) self.state().generation +|= 1;
     }
 
     pub fn wait(self: *Event, wait_descriptor: core.EventWaitDescriptor) !void {
         assertObjectAlive(self.state().alive, "event");
-        _ = wait_descriptor;
+        if (self.state().impl) |impl| switch (impl) {
+            .metal => |metal| {
+                metal.wait(self.state().generation, wait_descriptor.timeout_ns) catch |err| switch (err) {
+                    error.WaitTimeout => return core.CommandEncodingError.EventWaitTimeout,
+                    else => return core.CommandEncodingError.SynchronizationBackendFailure,
+                };
+                self.state().signaled_value = true;
+                return;
+            },
+        };
         if (!self.state().signaled_value) return core.CommandEncodingError.EventWaitTimeout;
     }
 
     pub fn reset(self: *Event) void {
         assertObjectAlive(self.state().alive, "event");
         self.state().signaled_value = false;
+        self.state().generation +|= 1;
     }
 };
 
@@ -4117,6 +4235,9 @@ pub const CommandBuffer = struct {
         features_value: core.DeviceFeatures = .{},
         limits_value: core.DeviceLimits = .{},
         native_handle_view: ?core.NativeHandleView = null,
+        lifecycle_callback: ?core.CommandBufferLifecycleCallback = null,
+        lifecycle_context: ?*anyopaque = null,
+        lifecycle_status_value: std.atomic.Value(core.CommandBufferLifecycleStatus) = .init(.encoding),
         debug: core.CommandBufferDebugState = .{},
         debug_groups: core.DebugGroupStack = .{},
         borrowed_query_sets: std.ArrayList(*QuerySet) = .empty,
@@ -4132,6 +4253,22 @@ pub const CommandBuffer = struct {
 
     fn privateState(self: *const CommandBuffer) *PrivateState {
         return @ptrCast(@alignCast(@constCast(&self._state)));
+    }
+
+    const LifecycleThunkContext = struct {
+        command_buffer: *CommandBuffer,
+    };
+
+    fn lifecycleThunk(context: ?*anyopaque, status: core.CommandBufferLifecycleStatus) callconv(.c) void {
+        const thunk: *LifecycleThunkContext = @ptrCast(@alignCast(context orelse return));
+        thunk.command_buffer.notifyLifecycle(status);
+    }
+
+    fn notifyLifecycle(self: *CommandBuffer, status: core.CommandBufferLifecycleStatus) void {
+        self.privateState().lifecycle_status_value.store(status, .release);
+        if (self.privateState().lifecycle_callback) |callback| {
+            callback(self.privateState().lifecycle_context, status);
+        }
     }
 
     fn retainQuerySetForResolve(self: *CommandBuffer, query_set: *QuerySet) !void {
@@ -4269,12 +4406,17 @@ pub const CommandBuffer = struct {
     }
 
     pub fn presentDrawable(self: *CommandBuffer) !void {
+        try self.presentDrawableWithDescriptor(.{});
+    }
+
+    pub fn presentDrawableWithDescriptor(self: *CommandBuffer, descriptor: core.PresentDrawableDescriptor) !void {
         assertObjectAlive(self.privateState().alive, "command_buffer");
         if (!self.privateState().uses_current_drawable_pass) return RuntimeError.PresentRequiresCurrentDrawable;
+        const resolved = try descriptor.resolve(self.privateState().features_value);
         try self.privateState().debug.presentDrawable();
         switch (self.privateState().impl orelse return) {
-            .vulkan => |*vulkan| try vulkan.presentDrawable(),
-            .metal => |*metal| try metal.presentDrawable(),
+            .vulkan => |*vulkan| try vulkan.presentDrawableWithDescriptor(resolved),
+            .metal => |*metal| try metal.presentDrawableWithDescriptor(resolved),
         }
     }
 
@@ -4525,6 +4667,10 @@ pub const CommandBuffer = struct {
         return self.privateState().debug.status();
     }
 
+    pub fn lifecycleStatus(self: CommandBuffer) core.CommandBufferLifecycleStatus {
+        return self.privateState().lifecycle_status_value.load(.acquire);
+    }
+
     pub fn queueKind(self: CommandBuffer) core.QueueKind {
         return self.privateState().queue_kind_value;
     }
@@ -4572,18 +4718,27 @@ pub const CommandBuffer = struct {
         try self.privateState().debug_groups.requireEmpty();
         try self.privateState().debug.commit();
         const work_serial = if (self.privateState().tracker) |tracker| tracker.submitWork() else 0;
+        var lifecycle_context = LifecycleThunkContext{ .command_buffer = self };
         switch (self.privateState().impl orelse {
+            self.notifyLifecycle(.scheduled);
             self.privateState().alive = false;
             if (self.privateState().tracker) |tracker| tracker.completeWork(work_serial);
             self.releaseQuerySetResolveBorrows();
+            self.notifyLifecycle(.completed);
             return;
         }) {
             .vulkan => |*vulkan| {
-                try vulkan.commit();
+                vulkan.commit(lifecycleThunk, &lifecycle_context) catch |err| {
+                    if (self.lifecycleStatus() != .failed) self.notifyLifecycle(.failed);
+                    return err;
+                };
                 vulkan.deinit();
             },
             .metal => |*metal| {
-                try metal.commit();
+                metal.commit(lifecycleThunk, &lifecycle_context) catch |err| {
+                    if (self.lifecycleStatus() != .failed) self.notifyLifecycle(.failed);
+                    return err;
+                };
                 metal.deinit();
             },
         }
@@ -4606,6 +4761,7 @@ pub const CommandBuffer = struct {
     ) !void {
         try descriptor.validate(self.privateState().backend);
         try descriptor.waitBeforeSubmit();
+        try descriptor.encodeNative(self);
         try self.commit();
         try descriptor.signalAfterSubmit();
     }
@@ -5954,8 +6110,8 @@ pub const Queue = struct {
             self.runtime().capability_report.features,
         );
         const impl = switch (self.runtime().impl) {
-            .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer() },
-            .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer() },
+            .vulkan => |*vulkan| CommandBuffer.Impl{ .vulkan = try vulkan.makeCommandBuffer(self.state().kind) },
+            .metal => |*metal| CommandBuffer.Impl{ .metal = try metal.makeCommandBuffer(self.state().kind) },
         };
         var command_buffer = CommandBuffer.init(.{
             .backend = self.runtime().backend,
@@ -5965,6 +6121,8 @@ pub const Queue = struct {
             .queue_kind_value = self.state().kind,
             .features_value = self.runtime().capability_report.features,
             .limits_value = self.runtime().capability_report.limits,
+            .lifecycle_callback = descriptor.lifecycle_callback,
+            .lifecycle_context = descriptor.lifecycle_context,
             .debug = debug,
             .impl = impl,
         });
@@ -6615,6 +6773,12 @@ pub const Device = struct {
 
     pub fn makeFence(self: *Device, descriptor: core.FenceDescriptor) !Fence {
         try descriptor.validate(self.features());
+        const native_source = self.state().capability_report.source == .vulkan_query or
+            self.state().capability_report.source == .metal_query;
+        const impl: ?Fence.Impl = if (descriptor.kind == .timeline and native_source) switch (self.state().impl) {
+            .vulkan => |*vulkan| .{ .vulkan = try vulkan.makeTimelineSemaphore(descriptor.initial_value) },
+            .metal => |*metal| .{ .metal = try metal.makeSharedEvent(descriptor.initial_value) },
+        } else null;
         self.state().tracker.retain(.fence);
         return Fence.init(.{
             .backend = self.state().backend,
@@ -6622,17 +6786,25 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
             .current_value = descriptor.initial_value,
+            .impl = impl,
         });
     }
 
     pub fn makeEvent(self: *Device, descriptor: core.EventDescriptor) !Event {
         try descriptor.validate(self.features());
+        const native_source = self.state().capability_report.source == .vulkan_query or
+            self.state().capability_report.source == .metal_query;
+        const impl: ?Event.Impl = if (descriptor.shared and native_source) switch (self.state().impl) {
+            .vulkan => null,
+            .metal => |*metal| .{ .metal = try metal.makeSharedEvent(0) },
+        } else null;
         self.state().tracker.retain(.event);
         return Event.init(.{
             .backend = self.state().backend,
             .tracker = self.state().tracker,
             .label_value = descriptor.label,
             .descriptor_value = descriptor,
+            .impl = impl,
         });
     }
 
@@ -7624,7 +7796,14 @@ fn recordBufferOwnershipTransfer(
     assertAlive(buffer.state().alive, .buffer);
     try descriptor.validate(features);
     if (buffer.state().owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
-    _ = try buffer.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    if (descriptor.before == descriptor.after) {
+        if (buffer.state().usage_state.current) |current| {
+            if (current != descriptor.before) return core.CommandEncodingError.InvalidResourceBarrierState;
+        }
+        _ = buffer.state().usage_state.transitionTo(descriptor.after);
+    } else {
+        _ = try buffer.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+    }
     buffer.state().owner_queue_value = descriptor.destination;
 }
 
@@ -7637,11 +7816,21 @@ fn recordTextureOwnershipTransfer(
     try descriptor.validate(features);
     if (texture.state().owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
     if (texture.state().subresource_usage_tracker) |subresource_tracker| {
-        const summary = try subresource_tracker.value.applyExplicitBarrier(.{}, descriptor.before, descriptor.after);
+        const summary = if (descriptor.before == descriptor.after)
+            try subresource_tracker.value.transition(.{}, descriptor.after)
+        else
+            try subresource_tracker.value.applyExplicitBarrier(.{}, descriptor.before, descriptor.after);
         texture.state().usage_state.current = descriptor.after;
         if (summary.required_barrier_count != 0) texture.state().usage_state.barrier_count += 1;
     } else {
-        _ = try texture.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+        if (descriptor.before == descriptor.after) {
+            if (texture.state().usage_state.current) |current| {
+                if (current != descriptor.before) return core.CommandEncodingError.InvalidResourceBarrierState;
+            }
+            _ = texture.state().usage_state.transitionTo(descriptor.after);
+        } else {
+            _ = try texture.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
+        }
     }
     texture.state().owner_queue_value = descriptor.destination;
 }
@@ -10042,6 +10231,32 @@ test "runtime adapter selection validates resolved adapter info" {
         .backend = .metal,
         .name = "Other GPU",
     }, adapter));
+}
+
+const LifecycleCallbackProbe = struct {
+    statuses: [3]core.CommandBufferLifecycleStatus = undefined,
+    count: usize = 0,
+};
+
+fn recordLifecycleCallback(context: ?*anyopaque, status: core.CommandBufferLifecycleStatus) callconv(.c) void {
+    const probe: *LifecycleCallbackProbe = @ptrCast(@alignCast(context orelse return));
+    probe.statuses[probe.count] = status;
+    probe.count += 1;
+}
+
+test "command buffer lifecycle callback reports scheduled then completed once" {
+    var probe = LifecycleCallbackProbe{};
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .metal,
+        .lifecycle_callback = recordLifecycleCallback,
+        .lifecycle_context = &probe,
+        .impl = null,
+    });
+    try command_buffer.commit();
+    try std.testing.expectEqual(@as(usize, 2), probe.count);
+    try std.testing.expectEqual(core.CommandBufferLifecycleStatus.scheduled, probe.statuses[0]);
+    try std.testing.expectEqual(core.CommandBufferLifecycleStatus.completed, probe.statuses[1]);
+    try std.testing.expectEqual(core.CommandBufferLifecycleStatus.completed, command_buffer.lifecycleStatus());
 }
 
 test "window context exposes device and queue views" {
