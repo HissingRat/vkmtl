@@ -490,6 +490,7 @@ pub const BlitCommandEncoder = struct {
 
 pub const ComputeCommandEncoder = struct {
     handle: *metal.vkmtl_metal_compute_command_encoder,
+    active_pipeline_supports_indirect_commands: bool = false,
 
     const Error = CommandBuffer.Error;
 
@@ -530,6 +531,7 @@ pub const ComputeCommandEncoder = struct {
             self.handle,
             pipeline.handle,
         ));
+        self.active_pipeline_supports_indirect_commands = pipeline.supports_indirect_command_buffers;
     }
 
     pub fn setBindGroup(
@@ -631,6 +633,7 @@ pub const ComputeCommandEncoder = struct {
         buffer: *const MetalIndirectCommandBuffer,
         range: core.IndirectCommandRange,
     ) !bool {
+        if (!self.active_pipeline_supports_indirect_commands) return false;
         const handle = buffer.handle orelse return false;
         try check(metal.vkmtl_metal_compute_command_encoder_execute_indirect_commands(
             self.handle,
@@ -719,6 +722,7 @@ pub const RenderCommandEncoder = struct {
     handle: *metal.vkmtl_metal_render_command_encoder,
     uses_depth_pass: bool,
     sample_count: u32,
+    active_pipeline_supports_indirect_commands: bool = false,
 
     const Error = CommandBuffer.Error;
 
@@ -761,6 +765,7 @@ pub const RenderCommandEncoder = struct {
             self.handle,
             pipeline.handle,
         ));
+        self.active_pipeline_supports_indirect_commands = pipeline.supports_indirect_command_buffers;
         try check(metal.vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
             self.handle,
             pipeline.fill_mode,
@@ -916,6 +921,7 @@ pub const RenderCommandEncoder = struct {
         buffer: *const MetalIndirectCommandBuffer,
         range: core.IndirectCommandRange,
     ) !bool {
+        if (!self.active_pipeline_supports_indirect_commands) return false;
         const handle = buffer.handle orelse return false;
         try check(metal.vkmtl_metal_render_command_encoder_execute_indirect_commands(
             self.handle,

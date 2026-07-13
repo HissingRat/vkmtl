@@ -597,6 +597,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     size_t vertex_buffer_count,
     const vkmtl_metal_vertex_attribute *vertex_attributes,
     size_t vertex_attribute_count,
+    unsigned int support_indirect_command_buffers,
     const char *cache_path,
     size_t cache_path_len,
     uint64_t cache_identity_hash,
@@ -635,6 +636,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     (void)vertex_buffer_count;
     (void)vertex_attributes;
     (void)vertex_attribute_count;
+    (void)support_indirect_command_buffers;
     (void)cache_path;
     (void)cache_path_len;
     (void)cache_identity_hash;
@@ -656,6 +658,7 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     size_t compute_entry_len,
     const vkmtl_metal_function_constant *constants,
     size_t constant_count,
+    unsigned int support_indirect_command_buffers,
     const char *cache_path,
     size_t cache_path_len,
     uint64_t cache_identity_hash,
@@ -668,6 +671,7 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     (void)compute_entry_len;
     (void)constants;
     (void)constant_count;
+    (void)support_indirect_command_buffers;
     (void)cache_path;
     (void)cache_path_len;
     (void)cache_identity_hash;

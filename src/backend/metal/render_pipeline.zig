@@ -11,6 +11,7 @@ const cache_identity = @import("../pipeline_cache_identity.zig");
 const MetalRenderPipelineState = @This();
 
 handle: *metal.vkmtl_metal_render_pipeline_state,
+supports_indirect_command_buffers: bool,
 uses_depth: bool,
 sample_count: u32,
 fill_mode: metal.vkmtl_metal_triangle_fill_mode,
@@ -57,24 +58,83 @@ pub fn init(
     const color_attachment_slice = color_attachments[0..descriptor.color_attachments.len];
     const stencil = if (descriptor.depth_stencil) |depth| depth.stencil else core.StencilDescriptor{};
     var handle: ?*metal.vkmtl_metal_render_pipeline_state = null;
-    try check(metal.vkmtl_metal_render_pipeline_state_create(
+    var supports_indirect_command_buffers = true;
+    var status = createNativePipeline(
         owner.handle,
         vertex_module.handle,
+        if (fragment_module) |module| module.handle else null,
+        descriptor,
+        vertex_constants,
+        fragment_constants,
+        color_attachment_slice,
+        stencil,
+        vertex_buffers,
+        vertex_attributes,
+        supports_indirect_command_buffers,
+        &handle,
+    );
+    if (shouldRetryWithoutIndirectCommands(status)) {
+        supports_indirect_command_buffers = false;
+        handle = null;
+        status = createNativePipeline(
+            owner.handle,
+            vertex_module.handle,
+            if (fragment_module) |module| module.handle else null,
+            descriptor,
+            vertex_constants,
+            fragment_constants,
+            color_attachment_slice,
+            stencil,
+            vertex_buffers,
+            vertex_attributes,
+            supports_indirect_command_buffers,
+            &handle,
+        );
+    }
+    try check(status);
+
+    return .{
+        .handle = handle orelse return Error.InvalidPipeline,
+        .supports_indirect_command_buffers = supports_indirect_command_buffers,
+        .uses_depth = descriptor.depth_stencil != null,
+        .sample_count = descriptor.sample_count,
+        .fill_mode = triangleFillMode(descriptor.fill_mode),
+        .depth_bias = descriptor.depth_bias,
+    };
+}
+
+fn createNativePipeline(
+    owner: *metal.vkmtl_metal_clear_screen,
+    vertex_module: *metal.vkmtl_metal_shader_module,
+    fragment_module: ?*metal.vkmtl_metal_shader_module,
+    descriptor: core.RenderPipelineDescriptor,
+    vertex_constants: []const metal.vkmtl_metal_function_constant,
+    fragment_constants: []const metal.vkmtl_metal_function_constant,
+    color_attachments: []const metal.vkmtl_metal_render_pipeline_color_attachment,
+    stencil: core.StencilDescriptor,
+    vertex_buffers: []const metal.vkmtl_metal_vertex_buffer_layout,
+    vertex_attributes: []const metal.vkmtl_metal_vertex_attribute,
+    support_indirect_command_buffers: bool,
+    out_handle: *?*metal.vkmtl_metal_render_pipeline_state,
+) metal.vkmtl_metal_status {
+    return metal.vkmtl_metal_render_pipeline_state_create(
+        owner,
+        vertex_module,
         descriptor.vertex.entry_point.ptr,
         descriptor.vertex.entry_point.len,
         if (vertex_constants.len == 0) null else vertex_constants.ptr,
         vertex_constants.len,
-        if (fragment_module) |module| module.handle else null,
+        fragment_module,
         if (descriptor.fragment) |fragment| fragment.entry_point.ptr else null,
         if (descriptor.fragment) |fragment| fragment.entry_point.len else 0,
         if (fragment_constants.len == 0) null else fragment_constants.ptr,
         fragment_constants.len,
-        color_attachment_slice.ptr,
-        color_attachment_slice.len,
+        color_attachments.ptr,
+        color_attachments.len,
         if (descriptor.depth_stencil) |depth| textureFormat(depth.format) else metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
         if (descriptor.depth_stencil) |depth| compareFunction(depth.depth_compare_function) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
-        if (descriptor.depth_stencil) |depth| if (depth.depth_write_enabled) 1 else 0 else 0,
-        if (stencil.enabled) 1 else 0,
+        if (descriptor.depth_stencil) |depth| @intFromBool(depth.depth_write_enabled) else 0,
+        @intFromBool(stencil.enabled),
         stencilOperation(stencil.front.stencil_fail_operation),
         stencilOperation(stencil.front.depth_fail_operation),
         stencilOperation(stencil.front.depth_stencil_pass_operation),
@@ -90,20 +150,17 @@ pub fn init(
         vertex_buffers.len,
         if (vertex_attributes.len == 0) null else vertex_attributes.ptr,
         vertex_attributes.len,
+        @intFromBool(support_indirect_command_buffers),
         if (descriptor.driver_cache) |cache| cache.path.ptr else null,
         if (descriptor.driver_cache) |cache| cache.path.len else 0,
         if (descriptor.driver_cache) |cache| cache_identity.hash(cache.identity) else 0,
         if (descriptor.driver_cache) |cache| @intFromBool(cache.read_only) else 0,
-        &handle,
-    ));
+        out_handle,
+    );
+}
 
-    return .{
-        .handle = handle orelse return Error.InvalidPipeline,
-        .uses_depth = descriptor.depth_stencil != null,
-        .sample_count = descriptor.sample_count,
-        .fill_mode = triangleFillMode(descriptor.fill_mode),
-        .depth_bias = descriptor.depth_bias,
-    };
+fn shouldRetryWithoutIndirectCommands(status: metal.vkmtl_metal_status) bool {
+    return status == metal.VKMTL_METAL_STATUS_INVALID_PIPELINE;
 }
 
 pub fn deinit(self: *MetalRenderPipelineState) void {
@@ -314,4 +371,9 @@ fn check(status: metal.vkmtl_metal_status) Error!void {
         metal.VKMTL_METAL_STATUS_COMMAND_FAILED => Error.CommandFailed,
         else => Error.UnexpectedMetalStatus,
     };
+}
+
+test "invalid ICB-capable render pipeline retries without indirect commands" {
+    try std.testing.expect(shouldRetryWithoutIndirectCommands(metal.VKMTL_METAL_STATUS_INVALID_PIPELINE));
+    try std.testing.expect(!shouldRetryWithoutIndirectCommands(metal.VKMTL_METAL_STATUS_INVALID_SHADER));
 }

@@ -10,6 +10,7 @@ const cache_identity = @import("../pipeline_cache_identity.zig");
 const MetalComputePipelineState = @This();
 
 handle: *metal.vkmtl_metal_compute_pipeline_state,
+supports_indirect_command_buffers: bool,
 
 const Error = error{
     MetalUnsupported,
@@ -33,23 +34,47 @@ pub fn init(
     defer allocator.free(constants);
 
     var handle: ?*metal.vkmtl_metal_compute_pipeline_state = null;
-    try check(metal.vkmtl_metal_compute_pipeline_state_create(
-        owner.handle,
-        compute_module.handle,
+    var supports_indirect_command_buffers = true;
+    var status = createNativePipeline(owner.handle, compute_module.handle, descriptor, constants, true, &handle);
+    if (shouldRetryWithoutIndirectCommands(status)) {
+        supports_indirect_command_buffers = false;
+        handle = null;
+        status = createNativePipeline(owner.handle, compute_module.handle, descriptor, constants, false, &handle);
+    }
+    try check(status);
+
+    return .{
+        .handle = handle orelse return Error.InvalidPipeline,
+        .supports_indirect_command_buffers = supports_indirect_command_buffers,
+    };
+}
+
+fn createNativePipeline(
+    owner: *metal.vkmtl_metal_clear_screen,
+    compute_module: *metal.vkmtl_metal_shader_module,
+    descriptor: core.ComputePipelineDescriptor,
+    constants: []const metal.vkmtl_metal_function_constant,
+    support_indirect_command_buffers: bool,
+    out_handle: *?*metal.vkmtl_metal_compute_pipeline_state,
+) metal.vkmtl_metal_status {
+    return metal.vkmtl_metal_compute_pipeline_state_create(
+        owner,
+        compute_module,
         descriptor.compute.entry_point.ptr,
         descriptor.compute.entry_point.len,
         if (constants.len == 0) null else constants.ptr,
         constants.len,
+        @intFromBool(support_indirect_command_buffers),
         if (descriptor.driver_cache) |cache| cache.path.ptr else null,
         if (descriptor.driver_cache) |cache| cache.path.len else 0,
         if (descriptor.driver_cache) |cache| cache_identity.hash(cache.identity) else 0,
         if (descriptor.driver_cache) |cache| @intFromBool(cache.read_only) else 0,
-        &handle,
-    ));
+        out_handle,
+    );
+}
 
-    return .{
-        .handle = handle orelse return Error.InvalidPipeline,
-    };
+fn shouldRetryWithoutIndirectCommands(status: metal.vkmtl_metal_status) bool {
+    return status == metal.VKMTL_METAL_STATUS_INVALID_PIPELINE;
 }
 
 pub fn deinit(self: *MetalComputePipelineState) void {
@@ -73,4 +98,9 @@ fn check(status: metal.vkmtl_metal_status) Error!void {
         metal.VKMTL_METAL_STATUS_COMMAND_FAILED => Error.CommandFailed,
         else => Error.UnexpectedMetalStatus,
     };
+}
+
+test "invalid ICB-capable compute pipeline retries without indirect commands" {
+    try std.testing.expect(shouldRetryWithoutIndirectCommands(metal.VKMTL_METAL_STATUS_INVALID_PIPELINE));
+    try std.testing.expect(!shouldRetryWithoutIndirectCommands(metal.VKMTL_METAL_STATUS_INVALID_SHADER));
 }

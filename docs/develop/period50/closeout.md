@@ -18,8 +18,9 @@ Implementation evidence commit:
   reset, range execution, labels, typed kind/range validation, and tracked
   lifetime.
 - Metal executes reusable lists through native render/compute ICBs when the
-  device exposes them. Vulkan and native-unavailable Metal preserve the same
-  observable contract through exact direct draw/dispatch expansion.
+  device exposes them and the active shader pipeline is ICB-compatible. Vulkan
+  and other Metal pipelines preserve the same observable contract through exact
+  direct draw/dispatch expansion.
 - Added render/compute driver artifact persistence. Vulkan consumes and stores
   identity-gated `VkPipelineCache` blobs; Metal consumes, populates, and
   serializes identity-gated `MTLBinaryArchive` files.

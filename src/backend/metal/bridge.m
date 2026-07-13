@@ -2784,6 +2784,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     size_t vertex_buffer_count,
     const vkmtl_metal_vertex_attribute *vertex_attributes,
     size_t vertex_attribute_count,
+    unsigned int support_indirect_command_buffers,
     const char *cache_path,
     size_t cache_path_len,
     uint64_t cache_identity_hash,
@@ -2871,7 +2872,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
 
         descriptor.vertexFunction = vertex_function;
         descriptor.fragmentFunction = fragment_function;
-        if (@available(macOS 10.14, *)) {
+        if (support_indirect_command_buffers != 0 && @available(macOS 10.14, *)) {
             descriptor.supportIndirectCommandBuffers = YES;
         }
         for (size_t i = 0; i < color_attachment_count; i += 1) {
@@ -2960,7 +2961,7 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
         [fragment_function release];
         [vertex_function release];
         if (pipeline == nil) {
-            if (error != nil) {
+            if (support_indirect_command_buffers == 0 && error != nil) {
                 fprintf(stderr, "vkmtl Metal render pipeline error: %s\n", error.localizedDescription.UTF8String);
             }
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
@@ -3069,6 +3070,7 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
     size_t compute_entry_len,
     const vkmtl_metal_function_constant *constants,
     size_t constant_count,
+    unsigned int support_indirect_command_buffers,
     const char *cache_path,
     size_t cache_path_len,
     uint64_t cache_identity_hash,
@@ -3121,7 +3123,7 @@ vkmtl_metal_status vkmtl_metal_compute_pipeline_state_create(
         id<MTLComputePipelineState> pipeline = nil;
         MTLComputePipelineDescriptor *descriptor = [[MTLComputePipelineDescriptor alloc] init];
         descriptor.computeFunction = compute_function;
-        if (@available(macOS 10.14, *)) {
+        if (support_indirect_command_buffers != 0 && @available(macOS 10.14, *)) {
             descriptor.supportIndirectCommandBuffers = YES;
         }
         if (@available(macOS 11.0, *)) {
