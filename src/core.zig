@@ -339,6 +339,81 @@ pub const DeviceCapabilityReport = struct {
     ray_tracing: RayTracingCapabilityDiagnostics = .{},
 };
 
+pub const DeviceIdentityKind = enum {
+    unavailable,
+    metal_registry_id,
+    vulkan_device_uuid,
+};
+
+pub const DevicePeerGroupKind = enum {
+    unavailable,
+    metal_peer_group,
+    vulkan_device_group,
+};
+
+pub const DeviceTopologyReport = struct {
+    backend: Backend,
+    identity_kind: DeviceIdentityKind = .unavailable,
+    identity: [16]u8 = [_]u8{0} ** 16,
+    identity_size: u8 = 0,
+    peer_group_kind: DevicePeerGroupKind = .unavailable,
+    peer_group_identity: [16]u8 = [_]u8{0} ** 16,
+    peer_group_identity_size: u8 = 0,
+    peer_group_index: u32 = 0,
+    peer_index: u32 = 0,
+    peer_count: u32 = 1,
+    subset_allocation: bool = false,
+    portable_peer_execution: bool = false,
+
+    pub fn hasStableIdentity(self: DeviceTopologyReport) bool {
+        return self.identity_kind != .unavailable and
+            self.identity_size != 0 and
+            self.identity_size <= self.identity.len;
+    }
+
+    pub fn identityBytes(self: *const DeviceTopologyReport) []const u8 {
+        return self.identity[0..@min(@as(usize, self.identity_size), self.identity.len)];
+    }
+
+    pub fn hasPeerGroup(self: DeviceTopologyReport) bool {
+        return self.peer_group_kind != .unavailable and self.peer_count != 0;
+    }
+
+    pub fn hasPeers(self: DeviceTopologyReport) bool {
+        return self.hasPeerGroup() and self.peer_count > 1;
+    }
+
+    pub fn peerGroupIdentityBytes(self: *const DeviceTopologyReport) []const u8 {
+        return self.peer_group_identity[0..@min(
+            @as(usize, self.peer_group_identity_size),
+            self.peer_group_identity.len,
+        )];
+    }
+
+    pub fn supportsPortablePeerExecution(self: DeviceTopologyReport) bool {
+        return self.portable_peer_execution;
+    }
+};
+
+test "device topology report exposes bounded identity and diagnostic-only peers" {
+    var report = DeviceTopologyReport{
+        .backend = .vulkan,
+        .identity_kind = .vulkan_device_uuid,
+        .identity_size = 16,
+        .peer_group_kind = .vulkan_device_group,
+        .peer_count = 2,
+        .peer_index = 1,
+        .subset_allocation = true,
+    };
+    for (&report.identity, 0..) |*byte, index| byte.* = @intCast(index);
+
+    try std.testing.expect(report.hasStableIdentity());
+    try std.testing.expectEqual(@as(usize, 16), report.identityBytes().len);
+    try std.testing.expect(report.hasPeerGroup());
+    try std.testing.expect(report.hasPeers());
+    try std.testing.expect(!report.supportsPortablePeerExecution());
+}
+
 pub const ResourceAccess = enum {
     read,
     write,
@@ -7122,6 +7197,8 @@ pub const ExternalMemoryDescriptor = struct {
     handle: ExternalHandleDescriptor,
     size: u64,
     dedicated: bool = false,
+    usage: BufferUsage = .{ .storage = true },
+    storage_mode: ResourceStorageMode = .automatic,
     ownership: ExternalResourceOwnership = .borrowed,
 
     pub fn validate(
@@ -7131,6 +7208,7 @@ pub const ExternalMemoryDescriptor = struct {
     ) AdvancedFeatureError!void {
         if (!features.external_memory) return AdvancedFeatureError.UnsupportedExternalMemory;
         if (self.size == 0) return AdvancedFeatureError.InvalidExternalHandle;
+        if (self.storage_mode == .memoryless) return AdvancedFeatureError.InvalidExternalHandle;
         try self.handle.validateForBackend(selected_backend);
         if (selected_backend == .metal and self.handle.kind.isVulkanSpecific()) {
             return AdvancedFeatureError.ExternalHandleBackendMismatch;
@@ -7143,6 +7221,7 @@ pub const ExternalBufferDescriptor = struct {
     handle: ExternalHandleDescriptor,
     length: u64,
     usage: BufferUsage = .{ .storage = true },
+    storage_mode: ResourceStorageMode = .automatic,
     ownership: ExternalResourceOwnership = .borrowed,
 
     pub fn validate(
@@ -7152,6 +7231,7 @@ pub const ExternalBufferDescriptor = struct {
     ) AdvancedFeatureError!void {
         if (!features.external_memory) return AdvancedFeatureError.UnsupportedExternalMemory;
         if (self.length == 0) return AdvancedFeatureError.InvalidExternalHandle;
+        if (self.storage_mode == .memoryless) return AdvancedFeatureError.InvalidExternalHandle;
         try self.handle.validateForBackend(selected_backend);
     }
 };
@@ -7164,6 +7244,8 @@ pub const ExternalTextureDescriptor = struct {
     height: u32,
     depth_or_array_layers: u32 = 1,
     usage: TextureUsage = .{ .shader_read = true },
+    storage_mode: ResourceStorageMode = .automatic,
+    iosurface_plane: u32 = 0,
     ownership: ExternalResourceOwnership = .borrowed,
 
     pub fn validate(
@@ -7173,12 +7255,19 @@ pub const ExternalTextureDescriptor = struct {
     ) (AdvancedFeatureError || TextureError)!void {
         if (!features.external_textures) return AdvancedFeatureError.UnsupportedExternalTextures;
         try self.handle.validateForBackend(selected_backend);
+        if (self.handle.kind == .iosurface and
+            (self.depth_or_array_layers != 1 or
+                (self.storage_mode != .automatic and self.storage_mode != .shared)))
+        {
+            return AdvancedFeatureError.InvalidExternalTextureUsage;
+        }
         try (TextureDescriptor{
             .format = self.format,
             .width = self.width,
             .height = self.height,
             .depth_or_array_layers = self.depth_or_array_layers,
             .usage = self.usage,
+            .storage_mode = self.storage_mode,
         }).validate();
     }
 
@@ -7190,6 +7279,7 @@ pub const ExternalTextureDescriptor = struct {
             .height = self.height,
             .depth_or_array_layers = self.depth_or_array_layers,
             .usage = self.usage,
+            .storage_mode = self.storage_mode,
         };
     }
 };
@@ -13758,6 +13848,11 @@ test "external texture descriptors validate backend and feature gates" {
     try std.testing.expectEqual(ExternalResourceOwnership.borrowed, external_buffer.ownership);
     try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalMemory, external_buffer.validate(.metal, .{}));
     try external_buffer.validate(.metal, .{ .external_memory = true });
+    try std.testing.expectError(AdvancedFeatureError.InvalidExternalHandle, (ExternalBufferDescriptor{
+        .handle = .{ .kind = .metal_buffer, .value = 3 },
+        .length = 256,
+        .storage_mode = .memoryless,
+    }).validate(.metal, .{ .external_memory = true }));
     try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, external_buffer.validate(.vulkan, .{ .external_memory = true }));
 
     try (ExternalEventDescriptor{
@@ -13777,6 +13872,13 @@ test "external texture descriptors validate backend and feature gates" {
 
     try std.testing.expectError(AdvancedFeatureError.UnsupportedExternalTextures, external_texture.validate(.metal, .{}));
     try external_texture.validate(.metal, .{ .external_textures = true });
+    try std.testing.expectError(AdvancedFeatureError.InvalidExternalTextureUsage, (ExternalTextureDescriptor{
+        .handle = metal_handle,
+        .format = .rgba8_unorm,
+        .width = 64,
+        .height = 64,
+        .storage_mode = .private,
+    }).validate(.metal, .{ .external_textures = true }));
     try std.testing.expectError(AdvancedFeatureError.ExternalHandleBackendMismatch, external_texture.validate(.vulkan, .{ .external_textures = true }));
     try std.testing.expectError(AdvancedFeatureError.InvalidExternalHandle, (ExternalTextureDescriptor{
         .handle = .{ .kind = .opaque_fd, .value = 0 },

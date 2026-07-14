@@ -37,8 +37,8 @@ rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
 rg -c '^[ ]*pub fn ' src/runtime/headless_context.zig
 ```
 
-The current results are 445 in `window_context.zig` and six in
-`headless_context.zig`. The former is 17 module-level operations and 428
+The current results are 451 in `window_context.zig` and six in
+`headless_context.zig`. The former is 17 module-level operations and 434
 methods; six module-level declarations are private cross-file context-owner
 plumbing and are not reachable through `vkmtl`. Facade operations may be
 `pub const` aliases or direct `pub fn` declarations and are counted separately
@@ -181,7 +181,7 @@ aliases and with types used by other domains.
 | `api/render.zig` | 67 | 8 | pipeline, pass, draw, tessellation, and mesh rendering |
 | `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
 | `api/presentation.zig` | 21 | 4 | surfaces, present modes, timed drawable presentation, frame pacing, surface collections |
-| `api/diagnostics.zig` | 80 | 16 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets |
+| `api/diagnostics.zig` | 84 | 17 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets, device topology |
 | `api/command.zig` | 23 | 3 | command lifecycle callbacks, reusable indirect command lists, encoders, labels, queue capability and selection planning |
 | `api/shader.zig` | 39 | 4 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
@@ -197,7 +197,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 526 declarations and 92 callable
+Across the 13 top-level facades, this is 533 declarations and 94 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -787,6 +787,27 @@ Callable/function-table/ray-query planning declarations remain reachable, but
 execution factories use `features()` and keep those unsupported capability
 bits false. This prevents a planning record or native query from becoming an
 executable compatibility promise.
+
+## Period 53 v0.2.0 External Import And Topology Update
+
+Period 53 leaves the guarded root, `Device`, `WindowContext`,
+`HeadlessContext`, and runtime-handle name sets unchanged. The diagnostics
+facade gains `DeviceIdentityKind`, `DevicePeerGroupKind`,
+`DeviceTopologyReport`, and `deviceTopology(...)`, bringing it to 84
+declarations and 17 operations.
+
+`ExternalMemory` and `ExternalBuffer` each gain `hasImportedBuffer()` and
+`importedBuffer()`. `ExternalTexture` gains `hasImportedTexture()` and
+`importedTexture()`. These six additive methods bring `window_context.zig` to
+451 public functions. The descriptor additions
+`ExternalMemoryDescriptor.usage/storage_mode`,
+`ExternalBufferDescriptor.storage_mode`, and
+`ExternalTextureDescriptor.storage_mode/iosurface_plane` all have defaults.
+
+On Metal, same-device raw buffers/textures and single-plane IOSurfaces can now
+produce ordinary imported resources. Vulkan factories remain typed unsupported
+until the descriptors can preserve exact allocation/image metadata. Topology is
+diagnostic only and does not promise cross-device allocation or submission.
 
 ## Compatibility Impact
 

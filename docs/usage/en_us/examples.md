@@ -32,9 +32,9 @@ reflection. Inspectable build-time artifacts are installed under
 ## Reviewed Gallery Contract
 
 The names and commands below match the current `build.zig` run steps. “Window”
-means the process stays interactive until the window is closed; “auto-exit”
-cases still create a small GLFW surface for backend initialization but finish
-after their deterministic check.
+means the process stays interactive until the window is closed. “Auto-exit”
+cases may use either a small GLFW surface or `HeadlessContext`; their row states
+which mode applies.
 
 | Example | Command | Mode | Expected result |
 | --- | --- | --- | --- |
@@ -48,7 +48,8 @@ after their deterministic check.
 | Capability dump | `zig build run-capability-dump` | Auto-exit | Console report starts with backend/adapter and includes features, limits, formats, and diagnostics. |
 | Bindless textures | `zig build run-bindless-textures` | Windowed; set `VKMTL_PIXEL_REGRESSION=1` for one frame | Samples a 65-slot native table through a reusable indirect draw and reports persistent cache use, or prints a typed unsupported message. |
 | Multi-window | `zig build run-multi-window` | Two-window probe | Prints both surface records, then availability or the expected feature-gate line. |
-| External texture | `zig build run-external-texture` | Auto-exit probe | Prints `external texture wrapper ok: ...` or an explicit unsupported line. |
+| External texture | `zig build run-external-texture` | Auto-exit probe | Prints capability/usage planning plus a real-handle requirement or explicit unsupported line. |
+| External import | `zig build run-external-import` | Headless Metal auto-exit | Imports raw Metal buffer/texture objects and an IOSurface, verifies three GPU readbacks, and prints `external import ok: ...`. |
 | Streaming texture | `zig build run-streaming-texture` | Auto-exit probe | Prints residency success or `streaming texture unsupported: ...`. |
 | Tessellation | `zig build run-tessellation` | Window | Renders native Vulkan patches, or exits with a typed unsupported line. |
 | Mesh shader | `zig build run-mesh-shader` | Window | Renders one native Metal/Vulkan mesh grid, or exits with a typed unsupported line. |
@@ -355,6 +356,19 @@ Run it with:
 zig build run-external-texture
 ```
 
+`examples/external_import` is the executable Metal interop check. It creates a
+raw `MTLBuffer`, raw `MTLTexture`, and IOSurface outside vkmtl, imports all
+three through public `vkmtl.interop` descriptors, copies through ordinary vkmtl blit commands, and
+verifies deterministic CPU readback:
+
+```sh
+zig build run-external-import
+```
+
+The example is intentionally Metal-only because Vulkan external allocation and
+image metadata are not yet represented by the public descriptor. It also
+prints `vkmtl.diagnostics.deviceTopology(device)` identity/group diagnostics.
+
 Tracked cases include:
 
 - `vulkan_native_handles`
@@ -364,9 +378,9 @@ Tracked cases include:
 
 Portable examples should keep using public vkmtl abstractions. If an example
 needs native access, it should be named and documented as a native interop case.
-Native multi-surface presentation, external resource import, external
-wait/signal lowering, and command encoder native handle views are tracked for
-Period 28 Phase 5.
+Metal resource import is executable. Native multi-surface presentation,
+Vulkan external resource import, external wait/signal lowering, and command
+encoder native handle views remain closed under their current contracts.
 
 ## Streaming Texture
 

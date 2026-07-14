@@ -87,7 +87,7 @@ capability logic recorded here.
   remains native, and timed descriptors may request explicit immediate
   fallback.
 - External event/semaphore handle import/export and cross-process sharing;
-  Period 53 owns that contract.
+  Period 53 later closed submission unsupported under the current descriptor.
 - A Metal dedicated hardware compute/transfer queue-class guarantee. Separate
   command queue objects are executable but do not prove distinct hardware
   engines.

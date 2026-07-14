@@ -144,6 +144,15 @@ pub const examples = [_]ExampleEntry{
         .backend_expectation = "external texture capability matrix, descriptor validation, and wrapper feature gate",
     },
     .{
+        .name = "external_import",
+        .path = "examples/external_import",
+        .run_step = "run-external-import",
+        .kind = .transfer,
+        .requires_window = false,
+        .deterministic_output = "external import ok",
+        .backend_expectation = "Metal raw-buffer and IOSurface imports execute deterministic GPU readback; other backends are unavailable",
+    },
+    .{
         .name = "streaming_texture",
         .path = "examples/streaming_texture",
         .run_step = "run-streaming-texture",
@@ -365,8 +374,9 @@ pub const native_interop_gallery = [_]NativeInteropExampleCase{
     .{
         .name = "external_texture_import",
         .kind = .external_texture,
+        .status = .implemented,
         .required_feature = .external_texture_interop,
-        .validation_goal = "import an external texture handle through an explicit backend-gated path",
+        .validation_goal = "import Metal raw buffers/textures and IOSurfaces through an explicit backend-gated path",
     },
     .{
         .name = "native_command_insertion",
@@ -1178,11 +1188,10 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
     },
     .{
         .feature = .native_external_memory_import,
-        .public_api = "vkmtl.interop.planExternalMemoryImport(device, descriptor) and vkmtl.interop.planExternalBufferImport(device, descriptor)",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Backend external import hooks after Period41 contracts",
-        .validation = "native Vulkan memory and Metal buffer import contracts are planned behind capability/native feature gates",
+        .public_api = "vkmtl.interop.ExternalMemory.importedBuffer and ExternalBuffer.importedBuffer",
+        .vulkan_status = .capability_gated,
+        .metal_status = .native_lowering,
+        .validation = "Metal imports a validated same-device MTLBuffer; Vulkan rejects until exact allocation metadata exists",
     },
     .{
         .feature = .external_texture_wrapper,
@@ -1193,11 +1202,10 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
     },
     .{
         .feature = .native_external_texture_import,
-        .public_api = "vkmtl.interop.planExternalTextureImport(device, descriptor) and vkmtl.interop.planExternalTextureUsage(device, descriptor)",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Backend external import hooks after Period41 contracts",
-        .validation = "native Vulkan image and Metal texture import contracts are planned behind capability/native feature gates",
+        .public_api = "vkmtl.interop.ExternalTexture.importedTexture",
+        .vulkan_status = .capability_gated,
+        .metal_status = .native_lowering,
+        .validation = "Metal imports validated same-device MTLTexture or single-plane IOSurface resources; Vulkan rejects incomplete image metadata",
     },
     .{
         .feature = .external_sync_wrappers,
@@ -1209,10 +1217,9 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
     .{
         .feature = .native_external_sync_lowering,
         .public_api = "CommandBuffer.commitWithExternalSynchronization and vkmtl.interop.diagnoseExternalInteropImport(device, descriptor)",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Backend external sync lowering after Period41 contracts",
-        .validation = "native wait/signal contracts are planned and unsupported imports produce issue-report diagnostics",
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "external submit synchronization stays closed because wait/signal payload and import-ownership rules are absent",
     },
     .{
         .feature = .native_command_insertion_api,
@@ -1224,10 +1231,9 @@ pub const platform_interop_matrix = [_]PlatformInteropMatrixEntry{
     .{
         .feature = .native_command_handle_lowering,
         .public_api = "vkmtl.native.CommandInsertionDescriptor",
-        .vulkan_status = .deferred_native_lowering,
-        .metal_status = .deferred_native_lowering,
-        .deferred_to = "Period 32+ driver parity plan",
-        .validation = "real command-buffer and command-encoder native handle views remain feature-gated",
+        .vulkan_status = .capability_gated,
+        .metal_status = .capability_gated,
+        .validation = "context handles cannot substitute for an active command-buffer/encoder handle, so insertion remains closed",
     },
 };
 
@@ -1878,7 +1884,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 15), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 16), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {
@@ -2074,8 +2080,8 @@ test "platform interop backend matrix is complete" {
         try std.testing.expect(was_seen);
     }
     try std.testing.expect(runtime_paths >= 5);
-    try std.testing.expect(capability_gated >= 1);
-    try std.testing.expect(deferred_paths >= 5);
+    try std.testing.expect(capability_gated >= 4);
+    try std.testing.expect(deferred_paths >= 2);
 }
 
 test "production hardening backend matrix is complete" {

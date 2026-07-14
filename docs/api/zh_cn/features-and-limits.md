@@ -142,6 +142,19 @@ external_memory external_textures external_semaphores
 native_command_insertion native_handles
 ```
 
+在 Metal 上，`external_memory` 与 `external_textures` 表示同一 device 创建的原生
+`MTLBuffer` / `MTLTexture`，以及单 plane IOSurface，可以通过 external owner 变成普通
+vkmtl resource。返回 resource 前会校验 native device identity、长度或形状、format、usage、
+storage mode 和 IOSurface plane。Vulkan 的 public descriptor 还没有完整 native allocation/image
+metadata，因此这些 usable field 在 Vulkan 上保持 false。
+
+`external_semaphores` 与 `native_command_insertion` 在两个 backend 上都保持 false。Planning
+record 或 native API availability 不表示已经接上 external submit synchronization，也不表示能拿到
+active native command encoder 做插入。
+
+`vkmtl.diagnostics.deviceTopology(device)` 会独立报告 selected-device identity 和 native
+peer-group membership；它是 diagnostics query，不是 cross-device execution capability。
+
 ### Command、Synchronization 与 Diagnostics
 
 ```text

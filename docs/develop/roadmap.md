@@ -959,10 +959,16 @@ See `docs/develop/period52/`.
 
 ## Period 53: External Interop, Metal I/O, And Device Topology
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
 Goal: execute real external imports/synchronization/native insertion, map Metal
 I/O through portable transfer work, and define supported multi-device topology.
+
+Same-device Metal raw-buffer/raw-texture and single-plane IOSurface imports now
+enter ordinary vkmtl resource execution, and both backends report selected
+device identity/group membership. External synchronization, native insertion,
+Metal I/O/compression, and cross-device execution are precisely unsupported
+under the current contracts. See `docs/develop/period53/`.
 
 ## Period 54: Metal 4 Command Model, Pipeline Datasets, Tensor, And ML
 
@@ -1018,9 +1024,9 @@ See `docs/develop/period32+/target.md`.
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Periods
-  46-52 plus the additive headless runtime are complete implementation slices.
-  Period 53 is the active mainline target; Periods 53-54 remain routed from the
-  gap ledger and must not be reordered around their stated dependencies without
+  46-53 plus the additive headless runtime are complete implementation slices.
+  Period 54 is the active mainline target and remains routed from the gap
+  ledger; it must not be reordered around its stated dependencies without
   updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the

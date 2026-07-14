@@ -75,6 +75,23 @@ Runtime `Device` 是资源创建入口。`WindowContext.device()` 和
 - `makeTexture(TextureDescriptor)`
 - `makeSamplerState(SamplerDescriptor)`
 
+## External Resource Import 与 Device Topology
+
+External ownership 位于 `vkmtl.interop`。`Device.makeExternalMemory`、
+`makeExternalBuffer` 和 `makeExternalTexture` 会创建 owner；所选 backend 真正完成 import 后，
+owner 的 `importedBuffer()` / `importedTexture()` 会返回借用的普通 resource。这个 resource 不能
+单独 deinit，并且所有借用都必须在 external owner 生命周期内结束。
+
+Period 53 的可执行子集只在 Metal 上开放：同一 device 的 raw buffer、single-mip/
+single-sample 2D 或 2D-array raw texture，以及单 plane IOSurface。当前 contract 下，Vulkan
+import、external synchronization 和 native command insertion 都返回 typed unsupported error。
+
+Raw Metal handle value 必须指向符合声明 protocol 的存活 Objective-C object；property validation
+无法把任意无效 pointer 变成安全输入。
+
+使用 `vkmtl.diagnostics.deviceTopology(device)` 查询稳定 selected-device identity 和 native
+group membership。该 report 不会开启 peer allocation、device mask 或 cross-device submission。
+
 `Device` 也暴露第一版 capability 查询：
 
 - `vkmtl.enumerateAdapters(allocator, BackendSelectionOptions)`

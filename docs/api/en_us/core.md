@@ -89,6 +89,26 @@ for their current owner.
 - `makeTexture(TextureDescriptor)`
 - `makeSamplerState(SamplerDescriptor)`
 
+## External Resource Imports And Device Topology
+
+External ownership stays under `vkmtl.interop`. `Device.makeExternalMemory`,
+`makeExternalBuffer`, and `makeExternalTexture` create owners whose
+`importedBuffer()` or `importedTexture()` methods return a borrowed ordinary
+resource when the selected backend executed the import. Keep that resource
+within the external owner's lifetime and do not deinitialize it separately.
+
+The executable Period 53 subset is Metal-only: same-device raw buffers,
+single-mip/single-sample 2D or 2D-array raw textures, and single-plane
+IOSurfaces. Vulkan imports, external synchronization, and native command
+insertion return typed unsupported errors under the current contracts.
+
+A raw Metal handle value must name a live Objective-C object of the declared
+protocol. Property validation cannot make an arbitrary invalid pointer safe.
+
+Query stable selected-device identity and native group membership with
+`vkmtl.diagnostics.deviceTopology(device)`. The report intentionally does not
+enable peer allocation, device masks, or cross-device submission.
+
 `Device` also exposes the first capability-query shape:
 
 - `vkmtl.enumerateAdapters(allocator, BackendSelectionOptions)`

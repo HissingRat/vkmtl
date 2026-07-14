@@ -11,6 +11,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added executable same-device Metal `MTLBuffer` and single-mip/single-sample
+  2D/2D-array `MTLTexture` imports plus single-plane IOSurface texture imports,
+  exposed as ordinary borrowed vkmtl resources through their external owners.
+- Added backend-neutral selected-device identity and peer-group diagnostics for
+  Metal registry/peer properties and Vulkan UUID/device-group membership.
+- Added a headless deterministic external-import/readback example.
 - Added executable Vulkan/Metal acceleration-structure build-update,
   update/refit, and compact-copy commands through
   `CommandBuffer.encodeAccelerationStructureMaintenance(...)`.
@@ -76,6 +82,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- External synchronization, native command insertion, Metal I/O/compression,
+  and cross-device execution are explicitly unsupported where the current
+  contracts cannot preserve their observable native semantics.
+- Vulkan external resource imports remain typed unsupported until descriptors
+  carry complete allocation/image/handle-consumption metadata.
 - Basic RT/AS execution now reports through usable `Device.features()`;
   native-only Vulkan ray query, callable SBT, and Metal custom-intersection
   availability remains non-executable.

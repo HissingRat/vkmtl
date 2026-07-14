@@ -67,6 +67,7 @@ applied directly to the executable launched by the Zig build:
 ```sh
 MTL_DEBUG_LAYER=1 zig build run-triangle -Doptimize=Debug
 MTL_DEBUG_LAYER=1 zig build run-pixel-regression -Doptimize=Debug
+MTL_DEBUG_LAYER=1 zig build run-external-import -Doptimize=Debug
 ```
 
 `MTL_DEBUG_LAYER_ERROR_MODE=nslog` can be used when a log is preferable to the
@@ -86,6 +87,10 @@ Acceptance requires the representative example and pixel regression to finish
 without Metal API or Shader Validation errors. Preserve the complete message,
 object label, encoder/command label, and the smallest reproducing command
 sequence for failures.
+
+For Period 53 interop, `run-external-import` additionally proves that borrowed
+native owners outlive GPU copy/readback and that the IOSurface plane/format/
+storage contract survives import. It is Metal evidence only.
 
 ## Validation Evidence Order
 

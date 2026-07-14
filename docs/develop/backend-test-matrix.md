@@ -97,7 +97,7 @@ conservative until the relevant backend period lands.
 | Binary fences | Portable runtime object | Portable runtime object | Available by default |
 | Timeline fences | Native timeline semaphore when queried/enabled | Native shared event when available | Host query/wait/signal and GPU submit wait/signal; feature is closed without the complete path |
 | Events | Portable runtime object | Portable runtime object | Available by default |
-| Shared events | Typed unsupported | Native shared event | Same-device cross-queue execution only; external handle sharing remains deferred |
+| Shared events | Typed unsupported | Native shared event | Same-device cross-queue execution only; external handle synchronization is explicitly unsupported under the current value-free descriptor |
 | Compute/transfer queues | Queried physical work queue/family with explicit graphics fallback | Independent physical command queue | `QueueSelectionPlan` reports requested/resolved/fallback state; dedicated means a distinct Vulkan hardware family, not merely a separate Metal queue object |
 | Queue ownership transfers | Concurrent native sharing plus exclusive vkmtl logical ownership | Native queue ordering plus exclusive vkmtl logical ownership | Raw queue-family control is not exposed |
 | Command-buffer synchronization descriptor | Native timeline waits/signals plus runtime binary fallback | Native shared-event waits/signals plus runtime binary fallback | `CommandBuffer.commitWithSynchronization(...)` validates device, values, borrows, and lifetime |
@@ -197,13 +197,13 @@ conservative until the relevant backend period lands.
 | Native present-mode query | Deferred | Deferred | Period 32+ driver parity plan platform query |
 | External interop capability matrix | Platform handle matrix | Platform handle matrix | `vkmtl.interop.externalInteropCapabilityMatrix(device)` classifies portable, capability-gated, native-only, and unsupported lanes |
 | External memory / buffer wrappers | Portable runtime wrappers | Portable runtime wrappers | Feature-gated descriptors and lifetime tracking |
-| Native external memory import | Deferred | Deferred | Period 32+ driver parity plan native import |
+| Native external memory import | Typed unsupported | Native raw `MTLBuffer` import | `ExternalMemory.importedBuffer()` / `ExternalBuffer.importedBuffer()` borrow the imported resource |
 | External texture wrapper | Portable runtime wrapper | Portable runtime wrapper | `ExternalTexture` wrapper |
-| Native external texture import | Deferred | Deferred | Period 32+ driver parity plan native import |
+| Native external texture import | Typed unsupported | Native raw `MTLTexture` and single-plane IOSurface import | `ExternalTexture.importedTexture()` borrows the imported resource |
 | External sync wrappers | Portable runtime wrappers | Portable runtime wrappers | `ExternalSynchronizationDescriptor` validation |
-| Native external sync wait/signal | Deferred | Deferred | Period 32+ driver parity plan native lowering |
-| Native command insertion API | Capability-gated | Capability-gated | Encoder methods validate explicit callbacks |
-| Native command handle lowering | Deferred | Deferred | Period 32+ driver parity plan native handle view |
+| Native external sync wait/signal | Typed unsupported | Typed unsupported | Missing payload values and binary/timeline import rules keep submission closed |
+| Native command insertion API | Typed unsupported | Typed unsupported | Callback shape has no active command-buffer/encoder handle |
+| Native command handle lowering | Typed unsupported | Typed unsupported | Context handles are not an insertion scope |
 
 ## Period 26 Production Hardening Expectations
 

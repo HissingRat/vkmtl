@@ -147,6 +147,10 @@ pub fn adapterInfo(self: *const VulkanClearScreen) AdapterInfoResult {
     return .{ .info = self.gc.adapterInfo() };
 }
 
+pub fn deviceTopology(self: *const VulkanClearScreen) core.DeviceTopologyReport {
+    return self.gc.deviceTopology();
+}
+
 pub fn limits(self: *const VulkanClearScreen) core.DeviceLimits {
     return self.gc.limits();
 }

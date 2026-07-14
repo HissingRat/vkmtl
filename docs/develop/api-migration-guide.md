@@ -15,6 +15,35 @@ drawable, presentation method, or presentation-shaped native-handle view.
 
 Existing `WindowContext` source and behavior are unchanged.
 
+## Period 53 v0.2.0 External Import And Topology Update
+
+Existing callers need no source change. External descriptors gained defaulted
+storage/usage/plane fields, and external owners gained imported-resource
+accessors. On a capable Metal device:
+
+```zig
+var external = try device.makeExternalBuffer(.{
+    .handle = .{ .kind = .metal_buffer, .value = native_value, .backend = .metal },
+    .length = byte_length,
+    .usage = .{ .copy_source = true },
+    .storage_mode = .shared,
+});
+defer external.deinit();
+const buffer = try external.importedBuffer();
+```
+
+The returned pointer is borrowed from the external owner; do not deinitialize
+it separately. Destroy work that borrows it before `external.deinit()`.
+`ExternalResourceOwnership.borrowed` retains the native object for the wrapper
+lifetime, while `.transferred` consumes one caller reference on successful
+import.
+
+Use `vkmtl.diagnostics.deviceTopology(device)` for stable selected-device
+identity and native group membership. It is not a peer-memory/device-mask or
+cross-device submission API. Vulkan external imports, external semaphore/event
+submission, and native command insertion remain typed unsupported under the
+current descriptor/handle shapes.
+
 ## Period 52 v0.2.0 Ray Tracing Maintenance Update
 
 Existing callers need no source change. New maintenance code supplies

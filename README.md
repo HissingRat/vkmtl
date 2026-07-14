@@ -104,9 +104,9 @@ typed-unsupported paths are not executable feature claims.
 
 Examples belong under `examples/`.
 
-Example code should not use raw Vulkan or Metal calls. If an example needs a
-capability that is not exposed through vkmtl yet, add the missing abstraction
-first or keep the example scoped to existing public API.
+Ordinary example code should not use raw Vulkan or Metal calls. Explicitly
+named native/interop samples may create the external object being imported,
+but all vkmtl-side execution must use the public API.
 
 ## Run Examples
 
@@ -118,6 +118,7 @@ zig build run-offscreen-texture
 zig build run-rainbow-cube
 zig build run-transfer-readback
 zig build run-compute-readback
+zig build run-external-import
 zig build run-capability-dump
 zig build run-profiling-plan
 zig build run-validation-plan
@@ -134,8 +135,8 @@ zig build run-triangle -Dvulkan
 zig build run-compute-readback -Dvulkan
 ```
 
-The transfer and compute readback examples are genuinely headless and do not
-initialize or link GLFW.
+The transfer, compute, and Metal external-import readback examples are genuinely
+headless and do not initialize or link GLFW.
 
 See [Configuration zh_CN](docs/usage/zh_cn/configuration.md) or
 [Configuration en_US](docs/usage/en_us/configuration.md) for backend overrides,

@@ -1,3 +1,4 @@
+const std = @import("std");
 const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
@@ -41,6 +42,32 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.BufferDescriptor) !MetalB
         .handle = raw_handle,
         .length_value = metal.vkmtl_metal_buffer_length(raw_handle),
         .storage_mode = descriptor.storage_mode,
+    };
+}
+
+pub fn initExternal(
+    owner: *MetalClearScreen,
+    handle_value: usize,
+    length_value: u64,
+    requested_storage_mode: core.ResourceStorageMode,
+    ownership: core.ExternalResourceOwnership,
+) !MetalBuffer {
+    const native_length = std.math.cast(usize, length_value) orelse return Error.InvalidBuffer;
+    const native_handle: *anyopaque = @ptrFromInt(handle_value);
+    var handle: ?*metal.vkmtl_metal_buffer = null;
+    try check(metal.vkmtl_metal_buffer_import(
+        owner.handle,
+        native_handle,
+        native_length,
+        storageMode(requested_storage_mode),
+        @intFromBool(ownership == .transferred),
+        &handle,
+    ));
+    const raw_handle = handle orelse return Error.InvalidBuffer;
+    return .{
+        .handle = raw_handle,
+        .length_value = metal.vkmtl_metal_buffer_length(raw_handle),
+        .storage_mode = storageModeFromNative(metal.vkmtl_metal_buffer_storage_mode(raw_handle)),
     };
 }
 
@@ -153,6 +180,16 @@ fn storageMode(mode: core.ResourceStorageMode) metal.vkmtl_metal_storage_mode {
         .managed => metal.VKMTL_METAL_STORAGE_MODE_MANAGED,
         .private => metal.VKMTL_METAL_STORAGE_MODE_PRIVATE,
         .memoryless => metal.VKMTL_METAL_STORAGE_MODE_MEMORYLESS,
+    };
+}
+
+fn storageModeFromNative(mode: metal.vkmtl_metal_storage_mode) core.ResourceStorageMode {
+    return switch (mode) {
+        metal.VKMTL_METAL_STORAGE_MODE_SHARED => .shared,
+        metal.VKMTL_METAL_STORAGE_MODE_MANAGED => .managed,
+        metal.VKMTL_METAL_STORAGE_MODE_PRIVATE => .private,
+        metal.VKMTL_METAL_STORAGE_MODE_MEMORYLESS => .memoryless,
+        else => .automatic,
     };
 }
 

@@ -152,6 +152,21 @@ external_memory external_textures external_semaphores
 native_command_insertion native_handles
 ```
 
+On Metal, `external_memory` and `external_textures` mean that same-device raw
+`MTLBuffer`/`MTLTexture` objects and single-plane IOSurfaces can become ordinary
+vkmtl resources through their external owners. The import validates native
+device identity, length or shape, format, usage, storage mode, and IOSurface
+plane before returning a resource. These usable fields remain false on Vulkan
+until the public descriptors carry complete native allocation/image metadata.
+
+`external_semaphores` and `native_command_insertion` remain false on both
+backends. Planning records or native API availability do not imply external
+submit synchronization or an active native command-encoder insertion route.
+
+`vkmtl.diagnostics.deviceTopology(device)` reports selected-device identity and
+native peer-group membership independently from feature flags. It is a
+diagnostic query, not a cross-device execution capability.
+
 ### Command, Synchronization, And Diagnostics
 
 ```text

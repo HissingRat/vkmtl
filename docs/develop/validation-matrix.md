@@ -46,8 +46,11 @@ Current cases:
   dispatch/barrier/atomic/threadgroup-memory validation, and automatic managed
   readback keep typed validation.
 - `platform_interop`: surface registries, present-mode diagnostics, external
-  interop capability matrices, memory/buffer/texture wrappers, external sync
-  wrappers, and native insertion gates keep typed validation.
+  interop capability matrices, memory/buffer/texture wrappers, Metal raw
+  buffer/texture and IOSurface imports, device topology, external sync wrappers,
+  and native insertion gates keep typed validation. `run-external-import` adds
+  deterministic physical Metal readback without upgrading Vulkan import or
+  external synchronization claims.
 - `production_hardening`: cache planning, runtime diagnostics, capture names,
   stability planning, and Vulkan fallback diagnostics keep deterministic
   validation.

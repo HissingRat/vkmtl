@@ -38,9 +38,8 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-52 are complete. Period 53 external
-  interop, Metal I/O, and device topology is the next mainline priority after
-  the completed additive headless-runtime refactor.
+  semantic-support ledger. Periods 46-53 and the additive headless-runtime
+  refactor are complete. Period 54 is the next mainline priority.
 - The completed headless-runtime slice keeps `WindowContext` unchanged and
   adds a real no-surface `HeadlessContext`; its allocation, ownership, backend,
   and validation evidence are recorded in `docs/develop/headless-context.md`.
@@ -2854,6 +2853,43 @@ obvious render and binding blockers.
 - [x] Record physical Metal evidence and the Vulkan RT-machine rerun command.
 - [x] Update inventories, routing, API counts, compatibility docs, matrices,
   roadmap, and closeout before the final validation/commit gate.
+
+## Period 53 Phase 1 Checklist
+
+- [x] Allocate external resources under `interop` and topology under
+  `diagnostics` without growing root or common owner allowlists.
+- [x] Define borrowed/transferred import ownership and destruction order.
+- [x] Separate executable imports from native-query and planning availability.
+
+## Period 53 Phase 2 Checklist
+
+- [x] Import same-device Metal buffers/textures and single-plane IOSurface
+  textures into ordinary vkmtl resource paths.
+- [x] Validate device, size/shape, format, usage, storage mode, plane, and
+  ownership before exposing the imported resource.
+- [x] Keep Vulkan external imports typed unsupported until their complete
+  allocation/image/semaphore metadata contract exists.
+
+## Period 53 Phase 3 Checklist
+
+- [x] Query Metal registry and peer-group identity.
+- [x] Query Vulkan UUID and selected physical-device group membership.
+- [x] Document topology as diagnostics rather than cross-device execution.
+
+## Period 53 Phase 4 Checklist
+
+- [x] Close external synchronization, native insertion, Metal I/O/compression,
+  and cross-device execution with precise unsupported reasons.
+- [x] Keep every corresponding usable feature false unless native submission
+  is connected and evidenced.
+
+## Period 53 Phase 5 Checklist
+
+- [x] Add headless physical Metal import/readback/topology evidence.
+- [x] Update semantic inventory, routing, API inventory, changelog, migration,
+  examples, matrices, roadmap, and closeout.
+- [x] Run API guard, tests, default/Vulkan builds, package smoke, physical
+  Metal evidence, format/diff gates, and commit.
 
 ## First Backend-Independent Triangle Checklist
 

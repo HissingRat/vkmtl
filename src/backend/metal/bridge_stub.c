@@ -135,6 +135,73 @@ void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen) {
     (void)clear_screen;
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_topology(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_device_topology *out_topology
+) {
+    (void)clear_screen;
+    if (out_topology != NULL) {
+        *out_topology = (vkmtl_metal_device_topology){0};
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_buffer_import(
+    vkmtl_metal_clear_screen *owner,
+    void *native_buffer,
+    size_t required_length,
+    vkmtl_metal_storage_mode storage_mode,
+    unsigned int transferred,
+    vkmtl_metal_buffer **out_buffer
+) {
+    (void)owner;
+    (void)native_buffer;
+    (void)required_length;
+    (void)storage_mode;
+    (void)transferred;
+    if (out_buffer != NULL) *out_buffer = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_storage_mode vkmtl_metal_buffer_storage_mode(const vkmtl_metal_buffer *buffer) {
+    (void)buffer;
+    return VKMTL_METAL_STORAGE_MODE_AUTOMATIC;
+}
+
+vkmtl_metal_status vkmtl_metal_texture_import(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int external_kind,
+    void *external_handle,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int usage_flags,
+    vkmtl_metal_storage_mode storage_mode,
+    unsigned int iosurface_plane,
+    unsigned int transferred,
+    vkmtl_metal_texture **out_texture
+) {
+    (void)owner;
+    (void)external_kind;
+    (void)external_handle;
+    (void)format;
+    (void)width;
+    (void)height;
+    (void)depth_or_array_layers;
+    (void)usage_flags;
+    (void)storage_mode;
+    (void)iosurface_plane;
+    (void)transferred;
+    if (out_texture != NULL) *out_texture = NULL;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_storage_mode vkmtl_metal_texture_storage_mode(const vkmtl_metal_texture *texture) {
+    (void)texture;
+    return VKMTL_METAL_STORAGE_MODE_AUTOMATIC;
+}
+
 vkmtl_metal_status vkmtl_metal_clear_screen_resize(
     vkmtl_metal_clear_screen *clear_screen,
     unsigned int width,

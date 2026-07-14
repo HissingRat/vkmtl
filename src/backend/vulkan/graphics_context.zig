@@ -238,6 +238,41 @@ pub fn adapterInfo(self: *const GraphicsContext) core.AdapterInfo {
     };
 }
 
+pub fn deviceTopology(self: *const GraphicsContext) core.DeviceTopologyReport {
+    var result = core.DeviceTopologyReport{ .backend = .vulkan };
+    var identity = vk.PhysicalDeviceIDProperties{
+        .device_uuid = undefined,
+        .driver_uuid = undefined,
+        .device_luid = undefined,
+        .device_node_mask = 0,
+        .device_luid_valid = .false,
+    };
+    var properties = vk.PhysicalDeviceProperties2{
+        .p_next = &identity,
+        .properties = undefined,
+    };
+    if (getPhysicalDeviceProperties2(self.instance, self.pdev, &properties)) {
+        result.identity_kind = .vulkan_device_uuid;
+        result.identity = identity.device_uuid;
+        result.identity_size = vk.UUID_SIZE;
+    }
+
+    const groups = self.instance.enumeratePhysicalDeviceGroupsAlloc(self.allocator) catch return result;
+    defer self.allocator.free(groups);
+    for (groups, 0..) |group, group_index| {
+        for (group.physical_devices[0..group.physical_device_count], 0..) |physical_device, peer_index| {
+            if (physical_device != self.pdev) continue;
+            result.peer_group_kind = .vulkan_device_group;
+            result.peer_group_index = @intCast(group_index);
+            result.peer_index = @intCast(peer_index);
+            result.peer_count = group.physical_device_count;
+            result.subset_allocation = group.subset_allocation == .true;
+            return result;
+        }
+    }
+    return result;
+}
+
 pub fn features(self: GraphicsContext) core.DeviceFeatures {
     return self.features_value;
 }

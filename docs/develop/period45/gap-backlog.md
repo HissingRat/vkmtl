@@ -6,9 +6,10 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Periods 46-52 refined broad query, common-workload, synchronization, memory,
-binding, indirect-command, artifact, advanced-raster, and ray-tracing rows. The
-current ledger retains an exact-once route for every remaining incomplete ID.
+Periods 46-53 refined broad query, common-workload, synchronization, memory,
+binding, indirect-command, artifact, advanced-raster, ray-tracing, interop,
+I/O, and topology rows. The current ledger retains an exact-once route for
+every remaining incomplete ID.
 
 The periods below are implementation slices, not promises to add all source
 concepts to the public API. Each period must apply the public API admission
@@ -148,14 +149,20 @@ artifact/table implementation.
 
 ## Period 53: External Interop, Metal I/O, And Device Topology
 
+Status: complete.
+
 Priority: integration with larger applications.
 
-- External memory/texture/event import and native command insertion.
-- Metal I/O file/compression queues mapped to OS I/O plus Vulkan transfer work.
-- Peer-device/device-group topology where a stable portable contract exists.
+- [x] Execute same-device Metal buffer/texture and single-plane IOSurface
+  imports through ordinary vkmtl resources.
+- [x] Report Metal/Vulkan selected-device identity and native peer-group
+  membership without claiming cross-device execution.
+- [x] Close external synchronization, native insertion, Metal I/O/compression,
+  and cross-device execution precisely unsupported under the current shapes.
 
-Acceptance: ownership, process/device scope, synchronization, and failure
-behavior are exercised with real imported resources.
+Acceptance: complete. Borrowed Metal buffer, raw texture, and IOSurface owners
+survived real GPU copy/readback, device topology was queried physically, and missing
+synchronization/I/O/insertion state is documented rather than approximated.
 
 ## Period 54: Metal 4 Command Model, Pipeline Datasets, Tensor, And ML
 
@@ -176,8 +183,5 @@ gates.
 
 ## Next Slice
 
-Period 52 is complete. Ordinary RT maintenance, Metal AABB input, and
-multi-source TLAS execution are open; function tables, compact-size query,
-inline ray query, callable/complex SBT execution, motion/curves, and Metal 4 AS
-descriptors are precisely unsupported. Remaining incomplete semantic units are
-routed exactly once to Periods 53-54. Period 53 is next.
+Periods 52-53 are complete. Remaining incomplete semantic units are routed
+exactly once to Period 54, which is the next slice.

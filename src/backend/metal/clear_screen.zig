@@ -101,6 +101,27 @@ pub fn adapterInfo(self: *const MetalClearScreen, allocator: std.mem.Allocator) 
     };
 }
 
+pub fn deviceTopology(self: *const MetalClearScreen) !core.DeviceTopologyReport {
+    var native: metal.vkmtl_metal_device_topology = undefined;
+    try check(metal.vkmtl_metal_clear_screen_copy_device_topology(self.handle, &native));
+    var result = core.DeviceTopologyReport{
+        .backend = .metal,
+        .peer_index = native.peer_index,
+        .peer_count = @max(native.peer_count, 1),
+    };
+    if (native.has_registry_id != 0) {
+        result.identity_kind = .metal_registry_id;
+        result.identity_size = @sizeOf(u64);
+        @memcpy(result.identity[0..@sizeOf(u64)], std.mem.asBytes(&native.registry_id));
+    }
+    if (native.has_peer_group != 0) {
+        result.peer_group_kind = .metal_peer_group;
+        result.peer_group_identity_size = @sizeOf(u64);
+        @memcpy(result.peer_group_identity[0..@sizeOf(u64)], std.mem.asBytes(&native.peer_group_id));
+    }
+    return result;
+}
+
 pub fn limits(self: *const MetalClearScreen) core.DeviceLimits {
     return limitsFromMetalCapabilities(self.queryCapabilities());
 }
@@ -381,6 +402,8 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.task_shaders = capabilities.task_shaders != 0;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
+    result.external_memory = true;
+    result.external_textures = true;
     return result;
 }
 
@@ -421,6 +444,8 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.ray_tracing_callable_shaders = false;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
+    result.external_memory = true;
+    result.external_textures = true;
     return result;
 }
 

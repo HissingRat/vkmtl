@@ -1276,7 +1276,14 @@ fn ExternalResourceState(comptime Descriptor: type) type {
 pub const ExternalMemory = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
-    const State = ExternalResourceState(core.ExternalMemoryDescriptor);
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        descriptor_value: core.ExternalMemoryDescriptor,
+        import_plan_value: core.ExternalInteropImportPlan,
+        imported_buffer: ?Buffer = null,
+        alive: bool = true,
+    };
 
     fn init(state_value: State) ExternalMemory {
         var result: ExternalMemory = undefined;
@@ -1290,6 +1297,7 @@ pub const ExternalMemory = struct {
 
     pub fn deinit(self: *ExternalMemory) void {
         assertAlive(self.state().alive, .external_memory);
+        if (self.state().imported_buffer) |*buffer| buffer.deinit();
         self.state().alive = false;
         self.state().tracker.release(.external_memory);
     }
@@ -1317,12 +1325,32 @@ pub const ExternalMemory = struct {
         assertAlive(self.state().alive, .external_memory);
         return self.state().import_plan_value;
     }
+
+    pub fn hasImportedBuffer(self: ExternalMemory) bool {
+        assertAlive(self.state().alive, .external_memory);
+        return self.state().imported_buffer != null;
+    }
+
+    pub fn importedBuffer(self: *ExternalMemory) core.AdvancedFeatureError!*Buffer {
+        assertAlive(self.state().alive, .external_memory);
+        return if (self.state().imported_buffer) |*buffer|
+            buffer
+        else
+            core.AdvancedFeatureError.UnsupportedExternalMemory;
+    }
 };
 
 pub const ExternalBuffer = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
-    const State = ExternalResourceState(core.ExternalBufferDescriptor);
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        descriptor_value: core.ExternalBufferDescriptor,
+        import_plan_value: core.ExternalInteropImportPlan,
+        imported_buffer: ?Buffer = null,
+        alive: bool = true,
+    };
 
     fn init(state_value: State) ExternalBuffer {
         var result: ExternalBuffer = undefined;
@@ -1336,6 +1364,7 @@ pub const ExternalBuffer = struct {
 
     pub fn deinit(self: *ExternalBuffer) void {
         assertAlive(self.state().alive, .external_buffer);
+        if (self.state().imported_buffer) |*buffer| buffer.deinit();
         self.state().alive = false;
         self.state().tracker.release(.external_buffer);
     }
@@ -1367,6 +1396,19 @@ pub const ExternalBuffer = struct {
     pub fn importPlan(self: ExternalBuffer) core.ExternalInteropImportPlan {
         assertAlive(self.state().alive, .external_buffer);
         return self.state().import_plan_value;
+    }
+
+    pub fn hasImportedBuffer(self: ExternalBuffer) bool {
+        assertAlive(self.state().alive, .external_buffer);
+        return self.state().imported_buffer != null;
+    }
+
+    pub fn importedBuffer(self: *ExternalBuffer) core.AdvancedFeatureError!*Buffer {
+        assertAlive(self.state().alive, .external_buffer);
+        return if (self.state().imported_buffer) |*buffer|
+            buffer
+        else
+            core.AdvancedFeatureError.UnsupportedExternalMemory;
     }
 };
 
@@ -1674,7 +1716,14 @@ pub const SynchronizationDescriptor = struct {
 pub const ExternalTexture = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
-    const State = ExternalResourceState(core.ExternalTextureDescriptor);
+    const State = struct {
+        backend: core.Backend,
+        tracker: *ResourceTracker,
+        descriptor_value: core.ExternalTextureDescriptor,
+        import_plan_value: core.ExternalInteropImportPlan,
+        imported_texture: ?Texture = null,
+        alive: bool = true,
+    };
 
     fn init(state_value: State) ExternalTexture {
         var result: ExternalTexture = undefined;
@@ -1688,6 +1737,7 @@ pub const ExternalTexture = struct {
 
     pub fn deinit(self: *ExternalTexture) void {
         assertAlive(self.state().alive, .texture);
+        if (self.state().imported_texture) |*texture| texture.deinit();
         self.state().alive = false;
         self.state().tracker.release(.texture);
     }
@@ -1703,7 +1753,10 @@ pub const ExternalTexture = struct {
 
     pub fn textureDescriptor(self: ExternalTexture) core.TextureDescriptor {
         assertAlive(self.state().alive, .texture);
-        return self.state().descriptor_value.textureDescriptor();
+        return if (self.state().imported_texture) |texture|
+            texture.textureDescriptor()
+        else
+            self.state().descriptor_value.textureDescriptor();
     }
 
     pub fn ownership(self: ExternalTexture) core.ExternalResourceOwnership {
@@ -1714,6 +1767,19 @@ pub const ExternalTexture = struct {
     pub fn importPlan(self: ExternalTexture) core.ExternalInteropImportPlan {
         assertAlive(self.state().alive, .texture);
         return self.state().import_plan_value;
+    }
+
+    pub fn hasImportedTexture(self: ExternalTexture) bool {
+        assertAlive(self.state().alive, .texture);
+        return self.state().imported_texture != null;
+    }
+
+    pub fn importedTexture(self: *ExternalTexture) core.AdvancedFeatureError!*Texture {
+        assertAlive(self.state().alive, .texture);
+        return if (self.state().imported_texture) |*texture|
+            texture
+        else
+            core.AdvancedFeatureError.UnsupportedExternalTextures;
     }
 };
 
@@ -7117,6 +7183,13 @@ pub const Device = struct {
         return self.state().capability_report;
     }
 
+    fn deviceTopology(self: Device) core.DeviceTopologyReport {
+        return switch (self.state().impl) {
+            .vulkan => |*vulkan| vulkan.deviceTopology(),
+            .metal => |*metal| metal.deviceTopology() catch .{ .backend = .metal },
+        };
+    }
+
     fn validateDescriptorIndexingLayout(self: Device, descriptor: core.DescriptorIndexingLayoutDescriptor) core.AdvancedFeatureError!void {
         try descriptor.validate(self.features(), self.limits());
     }
@@ -8291,27 +8364,125 @@ pub const Device = struct {
         return texture;
     }
 
+    fn importExternalBufferResource(
+        self: *Device,
+        label_value: ?[]const u8,
+        handle: core.ExternalHandleDescriptor,
+        length_value: u64,
+        usage_value: core.BufferUsage,
+        requested_storage_mode: core.ResourceStorageMode,
+        ownership: core.ExternalResourceOwnership,
+    ) !?Buffer {
+        if (self.state().capability_report.source != .metal_query) return null;
+        if (self.state().backend != .metal or handle.kind != .metal_buffer) {
+            return core.AdvancedFeatureError.UnsupportedExternalMemory;
+        }
+        var metal_buffer = try switch (self.state().impl) {
+            .metal => |*metal| MetalBuffer.initExternal(
+                metal,
+                handle.value,
+                length_value,
+                requested_storage_mode,
+                ownership,
+            ),
+            .vulkan => unreachable,
+        };
+        errdefer metal_buffer.deinit();
+        self.state().tracker.retain(.buffer);
+        var buffer = Buffer.init(.{
+            .backend = .metal,
+            .tracker = self.state().tracker,
+            .label_value = label_value,
+            .native_labels_enabled = true,
+            .length_value = metal_buffer.length(),
+            .usage_value = usage_value,
+            .storage_mode_value = metal_buffer.storage_mode,
+            .impl = .{ .metal = metal_buffer },
+        });
+        buffer.setLabel(label_value);
+        return buffer;
+    }
+
+    fn importExternalTextureResource(
+        self: *Device,
+        descriptor: core.ExternalTextureDescriptor,
+    ) !?Texture {
+        if (self.state().capability_report.source != .metal_query) return null;
+        if (self.state().backend != .metal or
+            (descriptor.handle.kind != .metal_texture and descriptor.handle.kind != .iosurface))
+        {
+            return core.AdvancedFeatureError.UnsupportedExternalTextures;
+        }
+        const subresource_usage_tracker = try SharedTextureUsageTracker.init(
+            self.state().allocator,
+            descriptor.textureDescriptor(),
+        );
+        errdefer subresource_usage_tracker.release();
+        var metal_texture = try switch (self.state().impl) {
+            .metal => |*metal| MetalTexture.initExternal(metal, descriptor),
+            .vulkan => unreachable,
+        };
+        errdefer metal_texture.deinit();
+        const texture_descriptor = metal_texture.descriptor;
+        self.state().tracker.retain(.texture);
+        var texture = Texture.init(.{
+            .backend = .metal,
+            .tracker = self.state().tracker,
+            .label_value = descriptor.label,
+            .native_labels_enabled = true,
+            .dimension_value = texture_descriptor.dimension,
+            .format_value = texture_descriptor.format,
+            .usage_value = texture_descriptor.usage,
+            .storage_mode_value = texture_descriptor.storage_mode,
+            .sample_count_value = texture_descriptor.sample_count,
+            .subresource_usage_tracker = subresource_usage_tracker,
+            .impl = .{ .metal = metal_texture },
+        });
+        texture.setLabel(descriptor.label);
+        return texture;
+    }
+
     pub fn makeExternalMemory(self: *Device, descriptor: core.ExternalMemoryDescriptor) !ExternalMemory {
         try self.validateExternalMemoryDescriptor(descriptor);
         const import_plan = try self.planExternalMemoryImport(descriptor);
+        const imported_buffer = try self.importExternalBufferResource(
+            descriptor.label,
+            descriptor.handle,
+            descriptor.size,
+            descriptor.usage,
+            descriptor.storage_mode,
+            descriptor.ownership,
+        );
+        errdefer if (imported_buffer) |*buffer| buffer.deinit();
         self.state().tracker.retain(.external_memory);
         return ExternalMemory.init(.{
             .backend = self.state().backend,
             .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
+            .imported_buffer = imported_buffer,
         });
     }
 
     pub fn makeExternalBuffer(self: *Device, descriptor: core.ExternalBufferDescriptor) !ExternalBuffer {
         try self.validateExternalBufferDescriptor(descriptor);
         const import_plan = try self.planExternalBufferImport(descriptor);
+        const imported_buffer = try self.importExternalBufferResource(
+            descriptor.label,
+            descriptor.handle,
+            descriptor.length,
+            descriptor.usage,
+            descriptor.storage_mode,
+            descriptor.ownership,
+        );
+        errdefer if (imported_buffer) |*buffer| buffer.deinit();
         self.state().tracker.retain(.external_buffer);
         return ExternalBuffer.init(.{
             .backend = self.state().backend,
             .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
+            .imported_buffer = imported_buffer,
         });
     }
 
@@ -8342,12 +8513,15 @@ pub const Device = struct {
     pub fn makeExternalTexture(self: *Device, descriptor: core.ExternalTextureDescriptor) !ExternalTexture {
         try self.validateExternalTextureDescriptor(descriptor);
         const import_plan = try self.planExternalTextureImport(descriptor);
+        const imported_texture = try self.importExternalTextureResource(descriptor);
+        errdefer if (imported_texture) |*texture| texture.deinit();
         self.state().tracker.retain(.texture);
         return ExternalTexture.init(.{
             .backend = self.state().backend,
             .tracker = self.state().tracker,
             .descriptor_value = descriptor,
             .import_plan_value = import_plan,
+            .imported_texture = imported_texture,
         });
     }
 
@@ -8543,6 +8717,7 @@ pub const planExternalTextureImport = Device.planExternalTextureImport;
 pub const planExternalTextureUsage = Device.planExternalTextureUsage;
 pub const planExternalSemaphoreImport = Device.planExternalSemaphoreImport;
 pub const planExternalEventImport = Device.planExternalEventImport;
+pub const deviceTopology = Device.deviceTopology;
 pub const diagnoseExternalInteropImport = Device.diagnoseExternalInteropImport;
 pub const externalInteropCapabilityMatrix = Device.externalInteropCapabilityMatrix;
 pub const externalInteropCapabilityMatrixForPlatform = Device.externalInteropCapabilityMatrixForPlatform;
@@ -11577,8 +11752,14 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     try std.testing.expectEqual(@as(u64, 256), memory.size());
     try std.testing.expectEqual(core.ExternalResourceOwnership.transferred, memory.ownership());
     try std.testing.expectEqual(resource_lane, memory.importPlan().lane);
+    try std.testing.expect(!memory.hasImportedBuffer());
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedExternalMemory, memory.importedBuffer());
     try std.testing.expectEqual(@as(u64, 128), buffer.length());
     try std.testing.expect(buffer.usage().storage);
+    try std.testing.expect(!buffer.hasImportedBuffer());
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedExternalMemory, buffer.importedBuffer());
+    try std.testing.expect(!texture.hasImportedTexture());
+    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedExternalTextures, texture.importedTexture());
     try std.testing.expect(semaphore.isTimeline());
     try std.testing.expectEqual(core.ExternalInteropLane.capability_gated, semaphore.importPlan().lane);
     if (event) |external_event| {

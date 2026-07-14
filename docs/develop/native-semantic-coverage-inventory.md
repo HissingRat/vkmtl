@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 52 complete plus additive headless runtime, 2026-07-14.
+Status: Period 53 complete, 2026-07-14.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -28,7 +28,11 @@ closes scalable tables, reusable command lists, linked-function decisions, and
 driver artifacts. Period 51 closes eight advanced geometry/raster rows through
 executable mesh/tessellation subsets or precise unsupported decisions. Period
 52 closes ordinary RT maintenance/geometry breadth and the remaining advanced
-RT routes through executable paths or precise unsupported decisions.
+RT routes through executable paths or precise unsupported decisions. Period 53
+executes same-device Metal raw-buffer/raw-texture and single-plane IOSurface
+imports, reports selected-device topology on both backends, and closes external
+synchronization, native insertion, Metal I/O/compression, and cross-device
+execution precisely unsupported under the current contracts.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence; Vulkan has implementation and forced-build
@@ -110,6 +114,7 @@ develops a different lowering or support state.
 | DEV-01 | Backend selection, adapter/device discovery, capability report, and ordinary execution limits | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately, while queried resource/dispatch/threadgroup limits feed validation. |
 | DEV-02 | Command queue/buffer creation, commit, lifecycle callbacks, immediate presentation, and capability-gated timing | `command`, `presentation` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal for callback-once and minimum-duration presentation; Vulkan callbacks compose submit/queue completion and timed presentation remains feature-closed. |
 | DEV-03 | No-surface runtime initialization with device/queues, presentation exclusion, and texture-backed offscreen commands | root, `command`, `render` | `native-exact` | `native-exact` | Metal `gpu-pixels` covers headless compute, transfer, and offscreen clear/readback. Vulkan has focused tests and forced-build evidence; physical execution awaits a host with a Vulkan loader/device. Current-drawable commands fail before backend presentation work. |
+| DEV-04 | Selected-device stable identity and native peer-group membership diagnostics | `diagnostics` | `native-exact` | `native-exact` | Physical Metal reports registry and peer-group properties. Vulkan reports device UUID plus selected physical-device-group index/count/subset allocation; neither backend claims peer allocation or cross-device command execution. |
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
 | RES-02 | 1D/2D/3D, array, cube, and multisample texture fundamentals | `resource` | `native-exact` | `native-exact` | `unit` plus representative `gpu-pixels`; full shape/format matrix remains unobserved. |
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |
@@ -181,9 +186,10 @@ develops a different lowering or support state.
 | RT-08 | Callable shaders and complex executable SBT/function-table layouts | `ray_tracing` | `unsupported` | `unsupported` | Schema 2 has no callable artifact or record-payload contract; planning counts do not create callable regions or multiple program groups. |
 | RT-09 | Motion, curves, and row-major advanced AS geometry | `ray_tracing` | `unsupported` | `unsupported` | No admitted keyframe/control-point/instance layout and no enabled Vulkan extension set preserve the full contract. |
 | RT-10 | Metal 4 AS descriptor families | `ray_tracing` | `unsupported` | `not-applicable` | The current runtime owns classic AS descriptors and has no Metal 4 descriptor/resource-layout contract. |
-| INT-01 | External memory/texture import and external synchronization | `interop` | `incomplete` | `incomplete` | Wrappers, plans, ownership validation, and matrix exist; OS/driver import and submit hooks do not. |
+| INT-01 | External buffer/texture import into ordinary resource execution | `interop` | `native-exact` | `unsupported` | Physical Metal readback covers borrowed raw `MTLBuffer` and single-plane IOSurface imports; raw `MTLTexture` uses the same validated wrapper path. Vulkan import remains closed until descriptors carry complete allocation/image/handle-consumption metadata. |
 | INT-02 | Native handles | `native` | `native-exact` | `native-exact` | Borrowed escape hatch; lifetime and backend tagging are part of the contract. |
-| INT-03 | Native command insertion | `native` | `incomplete` | `incomplete` | Public callback/gate exists; validated native command-handle lowering remains deferred. |
+| INT-03 | Native command insertion | `native` | `unsupported` | `unsupported` | The callback has context device/queue handles but no active native command-buffer/encoder handle; the usable feature remains false. |
+| INT-04 | External semaphore/event import and submit synchronization | `interop` | `unsupported` | `unsupported` | Current wait/signal arrays lack payload values and binary/timeline import ownership rules. Planning and native handle availability do not submit external synchronization. |
 | DBG-01 | Object and encoder labels/markers | `command`, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; Vulkan requires debug utils. |
 | DBG-02 | Command-buffer marker groups | `command` | `native-exact` | `incomplete` | Vulkan currently validates scope without a native command-buffer marker. |
 | DBG-03 | Native capture | `diagnostics` | `native-exact` | `unsupported` | Metal developer-tools capture is opt-in; Vulkan capture is external-tool territory in the current contract. |
@@ -207,9 +213,9 @@ their presence in the ledger does not admit public API or claim execution.
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited | Period 51 closes these unsupported because the current pass/shader contracts cannot preserve their observable memory and ordering semantics. |
 | Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 completed native timestamp/Boolean visibility subsets; Period 54 owns calibrated and device-specific counter breadth. |
 | Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. |
-| Fast resource loading / Metal I/O | Audited/missing-contract | Period 53 owns I/O and transfer composition. |
+| Fast resource loading / Metal I/O | Audited | Period 53 closes MTLIO and compressed-stream execution unsupported: synchronous file reads/staging do not preserve async status, cancellation, priority, queue ordering, or scratch/compression semantics. |
 | Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited/incomplete | Period 54 owns the new command/pipeline model. |
-| External sharing, IOSurface, shared-event handles, platform handles | Audited/incomplete | Period 53 owns real imports and external synchronization; Period 48 covers only same-device native shared events. |
+| External sharing, IOSurface, shared-event handles, platform handles | Audited | Period 53 executes Metal raw resource and IOSurface imports. Export and external synchronization remain precisely unsupported; Period 48 covers only vkmtl-owned same-device native shared events. |
 | MetalKit, MetalFX, Metal Performance Shaders | Out of current scope | These adjacent frameworks are excluded from the Metal core baseline until explicitly admitted. |
 
 The Vulkan side must also record which core version and extension set supplies
@@ -237,7 +243,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-52 are complete. The updated exactly-once gap
-routing establishes Periods 53-54; Period 53 is next.
+The source audit and Periods 46-53 are complete. The updated exactly-once gap
+routing leaves Period 54 as the next and final routed slice.
 `period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

@@ -290,6 +290,18 @@ typedef struct vkmtl_metal_native_handles {
     void *view;
 } vkmtl_metal_native_handles;
 
+typedef struct vkmtl_metal_device_topology {
+    uint64_t registry_id;
+    uint64_t peer_group_id;
+    unsigned int peer_index;
+    unsigned int peer_count;
+    unsigned int has_registry_id;
+    unsigned int has_peer_group;
+} vkmtl_metal_device_topology;
+
+#define VKMTL_METAL_EXTERNAL_TEXTURE_NATIVE 0u
+#define VKMTL_METAL_EXTERNAL_TEXTURE_IOSURFACE 1u
+
 typedef struct vkmtl_metal_device_capabilities {
     unsigned int argument_buffers;
     unsigned int argument_buffer_tier;
@@ -416,6 +428,10 @@ vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
     const vkmtl_metal_clear_screen *clear_screen,
     vkmtl_metal_native_handles *out_handles
 );
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_topology(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_device_topology *out_topology
+);
 vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
     const vkmtl_metal_clear_screen *clear_screen,
     vkmtl_metal_device_capabilities *out_capabilities
@@ -435,8 +451,17 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
     vkmtl_metal_storage_mode storage_mode,
     vkmtl_metal_buffer **out_buffer
 );
+vkmtl_metal_status vkmtl_metal_buffer_import(
+    vkmtl_metal_clear_screen *owner,
+    void *native_buffer,
+    size_t required_length,
+    vkmtl_metal_storage_mode storage_mode,
+    unsigned int transferred,
+    vkmtl_metal_buffer **out_buffer
+);
 void vkmtl_metal_buffer_destroy(vkmtl_metal_buffer *buffer);
 size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer);
+vkmtl_metal_storage_mode vkmtl_metal_buffer_storage_mode(const vkmtl_metal_buffer *buffer);
 vkmtl_metal_status vkmtl_metal_buffer_gpu_address(
     const vkmtl_metal_buffer *buffer,
     uint64_t *out_address
@@ -529,11 +554,26 @@ vkmtl_metal_status vkmtl_metal_texture_create(
     vkmtl_metal_storage_mode storage_mode,
     vkmtl_metal_texture **out_texture
 );
+vkmtl_metal_status vkmtl_metal_texture_import(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int external_kind,
+    void *external_handle,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int usage_flags,
+    vkmtl_metal_storage_mode storage_mode,
+    unsigned int iosurface_plane,
+    unsigned int transferred,
+    vkmtl_metal_texture **out_texture
+);
 void vkmtl_metal_texture_destroy(vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_width(const vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_height(const vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_depth_or_array_layers(const vkmtl_metal_texture *texture);
 unsigned int vkmtl_metal_texture_mip_level_count(const vkmtl_metal_texture *texture);
+vkmtl_metal_storage_mode vkmtl_metal_texture_storage_mode(const vkmtl_metal_texture *texture);
 vkmtl_metal_status vkmtl_metal_texture_set_label(
     vkmtl_metal_texture *texture,
     const char *label,

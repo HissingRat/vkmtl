@@ -301,6 +301,42 @@ pub fn build(b: *std.Build) void {
     const compute_readback_step = b.step("run-compute-readback", "Run the vkmtl compute readback example");
     compute_readback_step.dependOn(&compute_readback_cmd.step);
 
+    const external_import = b.addExecutable(.{
+        .name = "vkmtl-external-import",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/external_import/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+            },
+        }),
+    });
+    switch (target.result.os.tag) {
+        .macos => {
+            external_import.root_module.addCSourceFile(.{
+                .file = b.path("examples/external_import/helper.m"),
+                .flags = &.{"-Wno-deprecated-declarations"},
+            });
+            external_import.root_module.linkFramework("Foundation", .{});
+            external_import.root_module.linkFramework("IOSurface", .{});
+            external_import.root_module.linkFramework("Metal", .{});
+        },
+        else => external_import.root_module.addCSourceFile(.{
+            .file = b.path("examples/external_import/helper_stub.c"),
+            .flags = &.{"-std=c99"},
+        }),
+    }
+    b.installArtifact(external_import);
+
+    const external_import_cmd = b.addRunArtifact(external_import);
+    external_import_cmd.step.dependOn(b.getInstallStep());
+    forwardRunArgs(b, external_import_cmd);
+
+    const external_import_step = b.step("run-external-import", "Run the Metal external buffer, texture, and IOSurface import checks");
+    external_import_step.dependOn(&external_import_cmd.step);
+
     const pixel_transfer_cmd = b.addRunArtifact(transfer_readback);
     pixel_transfer_cmd.step.dependOn(b.getInstallStep());
     configureVulkanRuntimeForRun(b, pixel_transfer_cmd, target.result.os.tag, vulkan_runtime);
@@ -1048,6 +1084,7 @@ fn addMetalBridge(b: *std.Build, module: *std.Build.Module, os_tag: std.Target.O
             });
             module.linkFramework("AppKit", .{});
             module.linkFramework("Foundation", .{});
+            module.linkFramework("IOSurface", .{});
             module.linkFramework("Metal", .{});
             module.linkFramework("QuartzCore", .{});
         },

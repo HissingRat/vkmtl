@@ -51,6 +51,45 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.TextureDescriptor) !Metal
     };
 }
 
+pub fn initExternal(
+    owner: *MetalClearScreen,
+    external: core.ExternalTextureDescriptor,
+) !MetalTexture {
+    var descriptor = external.textureDescriptor();
+    const external_kind: c_uint = switch (external.handle.kind) {
+        .metal_texture => metal.VKMTL_METAL_EXTERNAL_TEXTURE_NATIVE,
+        .iosurface => metal.VKMTL_METAL_EXTERNAL_TEXTURE_IOSURFACE,
+        else => return Error.MetalUnsupported,
+    };
+    const native_handle: *anyopaque = @ptrFromInt(external.handle.value);
+    var handle: ?*metal.vkmtl_metal_texture = null;
+    try check(metal.vkmtl_metal_texture_import(
+        owner.handle,
+        external_kind,
+        native_handle,
+        textureFormat(external.format),
+        external.width,
+        external.height,
+        external.depth_or_array_layers,
+        usageFlags(external.usage, external.format),
+        storageMode(external.storage_mode),
+        external.iosurface_plane,
+        @intFromBool(external.ownership == .transferred),
+        &handle,
+    ));
+    const raw_handle = handle orelse return Error.InvalidTexture;
+    descriptor.storage_mode = storageModeFromNative(metal.vkmtl_metal_texture_storage_mode(raw_handle));
+    return .{
+        .handle = raw_handle,
+        .descriptor = descriptor,
+        .width_value = metal.vkmtl_metal_texture_width(raw_handle),
+        .height_value = metal.vkmtl_metal_texture_height(raw_handle),
+        .depth_or_array_layers_value = metal.vkmtl_metal_texture_depth_or_array_layers(raw_handle),
+        .mip_level_count_value = metal.vkmtl_metal_texture_mip_level_count(raw_handle),
+        .sample_count_value = 1,
+    };
+}
+
 pub fn initFromHeap(
     heap: *metal.vkmtl_metal_heap,
     descriptor: core.TextureDescriptor,
@@ -200,6 +239,16 @@ fn storageMode(mode: core.ResourceStorageMode) metal.vkmtl_metal_storage_mode {
         .managed => metal.VKMTL_METAL_STORAGE_MODE_MANAGED,
         .private => metal.VKMTL_METAL_STORAGE_MODE_PRIVATE,
         .memoryless => metal.VKMTL_METAL_STORAGE_MODE_MEMORYLESS,
+    };
+}
+
+fn storageModeFromNative(mode: metal.vkmtl_metal_storage_mode) core.ResourceStorageMode {
+    return switch (mode) {
+        metal.VKMTL_METAL_STORAGE_MODE_SHARED => .shared,
+        metal.VKMTL_METAL_STORAGE_MODE_MANAGED => .managed,
+        metal.VKMTL_METAL_STORAGE_MODE_PRIVATE => .private,
+        metal.VKMTL_METAL_STORAGE_MODE_MEMORYLESS => .memoryless,
+        else => .automatic,
     };
 }
 

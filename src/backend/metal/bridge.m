@@ -3,6 +3,7 @@
 #if defined(__APPLE__)
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#import <IOSurface/IOSurface.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <math.h>
@@ -42,6 +43,7 @@ struct vkmtl_metal_texture {
     unsigned int depth_or_array_layers;
     unsigned int mip_level_count;
     unsigned int sample_count;
+    vkmtl_metal_storage_mode storage_mode;
 };
 
 struct vkmtl_metal_texture_view {
@@ -882,6 +884,28 @@ vkmtl_metal_status vkmtl_metal_clear_screen_get_native_handles(
     return VKMTL_METAL_STATUS_OK;
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_topology(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_device_topology *out_topology
+) {
+    if (clear_screen == NULL || clear_screen->device == nil || out_topology == NULL) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+    memset(out_topology, 0, sizeof(*out_topology));
+    if (@available(macOS 10.13, *)) {
+        out_topology->registry_id = clear_screen->device.registryID;
+        out_topology->has_registry_id = out_topology->registry_id != 0 ? 1u : 0u;
+    }
+    if (@available(macOS 10.15, *)) {
+        out_topology->peer_group_id = clear_screen->device.peerGroupID;
+        out_topology->peer_index = clear_screen->device.peerIndex;
+        out_topology->peer_count = clear_screen->device.peerCount;
+        out_topology->has_peer_group = out_topology->peer_count != 0 ? 1u : 0u;
+    }
+    if (out_topology->peer_count == 0) out_topology->peer_count = 1;
+    return VKMTL_METAL_STATUS_OK;
+}
+
 vkmtl_metal_status vkmtl_metal_clear_screen_begin_capture(
     vkmtl_metal_clear_screen *clear_screen
 ) {
@@ -954,6 +978,21 @@ static MTLStorageMode vkmtl_texture_storage_mode(vkmtl_metal_storage_mode storag
             return MTLStorageModeMemoryless;
         default:
             return MTLStorageModePrivate;
+    }
+}
+
+static vkmtl_metal_storage_mode vkmtl_storage_mode_from_mtl(MTLStorageMode storage_mode) {
+    switch (storage_mode) {
+        case MTLStorageModeShared:
+            return VKMTL_METAL_STORAGE_MODE_SHARED;
+        case MTLStorageModeManaged:
+            return VKMTL_METAL_STORAGE_MODE_MANAGED;
+        case MTLStorageModePrivate:
+            return VKMTL_METAL_STORAGE_MODE_PRIVATE;
+        case MTLStorageModeMemoryless:
+            return VKMTL_METAL_STORAGE_MODE_MEMORYLESS;
+        default:
+            return VKMTL_METAL_STORAGE_MODE_AUTOMATIC;
     }
 }
 
@@ -1427,6 +1466,41 @@ vkmtl_metal_status vkmtl_metal_buffer_create(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_buffer_import(
+    vkmtl_metal_clear_screen *owner,
+    void *native_buffer,
+    size_t required_length,
+    vkmtl_metal_storage_mode storage_mode,
+    unsigned int transferred,
+    vkmtl_metal_buffer **out_buffer
+) {
+    if (owner == NULL || owner->device == nil || owner->queue == nil ||
+        native_buffer == NULL || required_length == 0 || out_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
+    *out_buffer = NULL;
+
+    @autoreleasepool {
+        id<MTLBuffer> metal_buffer = (id<MTLBuffer>)native_buffer;
+        if (![metal_buffer conformsToProtocol:@protocol(MTLBuffer)] ||
+            metal_buffer.device != owner->device ||
+            metal_buffer.length < required_length ||
+            (storage_mode != VKMTL_METAL_STORAGE_MODE_AUTOMATIC &&
+             metal_buffer.storageMode != vkmtl_texture_storage_mode(storage_mode))) {
+            return VKMTL_METAL_STATUS_INVALID_BUFFER;
+        }
+        vkmtl_metal_buffer *buffer = calloc(1, sizeof(vkmtl_metal_buffer));
+        if (buffer == NULL) return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        if (transferred == 0) [metal_buffer retain];
+        buffer->buffer = metal_buffer;
+        buffer->queue = [owner->queue retain];
+        buffer->length = required_length;
+        buffer->storage_mode = vkmtl_storage_mode_from_mtl(metal_buffer.storageMode);
+        *out_buffer = buffer;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
     const vkmtl_metal_clear_screen *clear_screen,
     vkmtl_metal_device_capabilities *out_capabilities
@@ -1618,6 +1692,10 @@ size_t vkmtl_metal_buffer_length(const vkmtl_metal_buffer *buffer) {
         return 0;
     }
     return buffer->length;
+}
+
+vkmtl_metal_storage_mode vkmtl_metal_buffer_storage_mode(const vkmtl_metal_buffer *buffer) {
+    return buffer == NULL ? VKMTL_METAL_STORAGE_MODE_AUTOMATIC : buffer->storage_mode;
 }
 
 vkmtl_metal_status vkmtl_metal_buffer_gpu_address(
@@ -1979,6 +2057,7 @@ vkmtl_metal_status vkmtl_metal_heap_texture_create(
             texture->depth_or_array_layers = depth_or_array_layers;
             texture->mip_level_count = mip_level_count;
             texture->sample_count = sample_count;
+            texture->storage_mode = vkmtl_storage_mode_from_mtl(heap->storage_mode);
             *out_texture = texture;
             return VKMTL_METAL_STATUS_OK;
         }
@@ -2063,6 +2142,100 @@ vkmtl_metal_status vkmtl_metal_texture_create(
         texture->depth_or_array_layers = depth_or_array_layers;
         texture->mip_level_count = mip_level_count;
         texture->sample_count = sample_count;
+        texture->storage_mode = vkmtl_storage_mode_from_mtl(metal_texture.storageMode);
+        *out_texture = texture;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_texture_import(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int external_kind,
+    void *external_handle,
+    vkmtl_metal_texture_format format,
+    unsigned int width,
+    unsigned int height,
+    unsigned int depth_or_array_layers,
+    unsigned int usage_flags,
+    vkmtl_metal_storage_mode storage_mode,
+    unsigned int iosurface_plane,
+    unsigned int transferred,
+    vkmtl_metal_texture **out_texture
+) {
+    if (owner == NULL || owner->device == nil || external_handle == NULL ||
+        width == 0 || height == 0 || depth_or_array_layers == 0 ||
+        format == VKMTL_METAL_TEXTURE_FORMAT_INVALID || out_texture == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+    }
+    *out_texture = NULL;
+    vkmtl_metal_texture *texture = calloc(1, sizeof(vkmtl_metal_texture));
+    if (texture == NULL) return VKMTL_METAL_STATUS_COMMAND_FAILED;
+
+    @autoreleasepool {
+        id<MTLTexture> metal_texture = nil;
+        if (external_kind == VKMTL_METAL_EXTERNAL_TEXTURE_NATIVE) {
+            metal_texture = (id<MTLTexture>)external_handle;
+            const MTLTextureUsage required_usage = vkmtl_texture_usage(usage_flags);
+            if (![metal_texture conformsToProtocol:@protocol(MTLTexture)] ||
+                metal_texture.device != owner->device ||
+                metal_texture.pixelFormat != vkmtl_texture_pixel_format(format) ||
+                metal_texture.width != width || metal_texture.height != height ||
+                metal_texture.depth != 1 || metal_texture.arrayLength != depth_or_array_layers ||
+                metal_texture.mipmapLevelCount != 1 || metal_texture.sampleCount != 1 ||
+                (metal_texture.usage & required_usage) != required_usage ||
+                (storage_mode != VKMTL_METAL_STORAGE_MODE_AUTOMATIC &&
+                 metal_texture.storageMode != vkmtl_texture_storage_mode(storage_mode))) {
+                free(texture);
+                return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+            }
+            if (transferred == 0) [metal_texture retain];
+        } else if (external_kind == VKMTL_METAL_EXTERNAL_TEXTURE_IOSURFACE) {
+            IOSurfaceRef surface = (IOSurfaceRef)external_handle;
+            const size_t plane_count = IOSurfaceGetPlaneCount(surface);
+            if (depth_or_array_layers != 1 ||
+                (plane_count == 0 ? iosurface_plane != 0 : iosurface_plane >= plane_count) ||
+                (storage_mode != VKMTL_METAL_STORAGE_MODE_AUTOMATIC &&
+                 storage_mode != VKMTL_METAL_STORAGE_MODE_SHARED)) {
+                free(texture);
+                return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+            }
+            MTLTextureDescriptor *descriptor = vkmtl_new_texture_descriptor(
+                VKMTL_METAL_TEXTURE_DIMENSION_2D,
+                format,
+                width,
+                height,
+                1,
+                1,
+                1,
+                usage_flags,
+                MTLStorageModeShared
+            );
+            if (descriptor == nil) {
+                free(texture);
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            metal_texture = [owner->device newTextureWithDescriptor:descriptor
+                                                           iosurface:surface
+                                                               plane:iosurface_plane];
+            [descriptor release];
+            if (metal_texture == nil) {
+                free(texture);
+                return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+            }
+        } else {
+            free(texture);
+            return VKMTL_METAL_STATUS_INVALID_TEXTURE;
+        }
+        texture->texture = metal_texture;
+        texture->width = width;
+        texture->height = height;
+        texture->depth_or_array_layers = depth_or_array_layers;
+        texture->mip_level_count = 1;
+        texture->sample_count = 1;
+        texture->storage_mode = vkmtl_storage_mode_from_mtl(metal_texture.storageMode);
+        if (external_kind == VKMTL_METAL_EXTERNAL_TEXTURE_IOSURFACE && transferred != 0) {
+            CFRelease((IOSurfaceRef)external_handle);
+        }
         *out_texture = texture;
         return VKMTL_METAL_STATUS_OK;
     }
@@ -2105,6 +2278,10 @@ unsigned int vkmtl_metal_texture_mip_level_count(const vkmtl_metal_texture *text
         return 0;
     }
     return texture->mip_level_count;
+}
+
+vkmtl_metal_storage_mode vkmtl_metal_texture_storage_mode(const vkmtl_metal_texture *texture) {
+    return texture == NULL ? VKMTL_METAL_STORAGE_MODE_AUTOMATIC : texture->storage_mode;
 }
 
 vkmtl_metal_status vkmtl_metal_texture_set_label(

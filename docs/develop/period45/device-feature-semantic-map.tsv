@@ -60,7 +60,7 @@ memory_budget	MEM-04
 memory_pressure	MEM-04
 external_memory	INT-01
 external_textures	INT-01
-external_semaphores	INT-01
+external_semaphores	INT-04
 native_command_insertion	INT-03
 transfer_commands	XFR-01,XFR-02,XFR-03,XFR-04
 storage_buffers	RES-01,CMP-01

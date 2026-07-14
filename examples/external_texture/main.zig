@@ -72,6 +72,14 @@ pub fn main() !void {
         return;
     };
 
+    if (device.features().external_textures) {
+        std.debug.print(
+            "external texture native import requires a live native handle; run `zig build run-external-import` for the physical Metal check\n",
+            .{},
+        );
+        return;
+    }
+
     var texture = device.makeExternalTexture(external_texture_descriptor) catch |err| {
         std.debug.print("external texture unsupported: {s}\n", .{@errorName(err)});
         return;
