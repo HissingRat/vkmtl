@@ -254,8 +254,9 @@ pub fn makeAccelerationStructure(self: *VulkanClearScreen, descriptor: core.Acce
 pub fn accelerationStructureBuildSizes(
     self: *VulkanClearScreen,
     descriptor: core.AccelerationStructureDescriptor,
+    flags: core.AccelerationStructureBuildFlags,
 ) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
-    return VulkanAccelerationStructure.queryBuildSizes(self.gc, descriptor) catch {
+    return VulkanAccelerationStructure.queryBuildSizes(self.gc, descriptor, flags) catch {
         return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
     };
 }

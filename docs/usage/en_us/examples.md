@@ -414,8 +414,9 @@ native Metal intersector dispatch. It prints
 The Vulkan path now uses procedural sphere AABBs, Slang intersection SPIR-V,
 procedural hit groups, and native `vkCmdTraceRaysKHR` dispatch. On supported
 Vulkan RT hardware its success marker is
-`driver_pixels=visible_vulkan_procedural_rt_scene`. Metal procedural
-function-table parity and shared RT scene buffers are routed to Period35. Both
+`driver_pixels=visible_vulkan_procedural_rt_scene`. The Metal schema-2 path has
+no linked intersection-function artifact, so procedural function tables are
+explicitly unsupported. Both
 physical Metal and Vulkan RT output are observed; the Period 44 9/9 result does
 not imply completion of unrelated native-pressure lanes.
 
@@ -448,3 +449,17 @@ zig build run-ray-traced-scene -Dvulkan
 
 Use `-Dvulkan` when the validation result must prove the Vulkan path rather
 than the default backend selection.
+
+`examples/ray_tracing_maintenance` creates no window. Through
+`HeadlessContext` it builds an update-capable triangle BLAS, alternates 32
+update/refit submissions, performs one compact copy, then builds an AABB BLAS
+and a TLAS that references two distinct BLAS sources:
+
+```sh
+VKMTL_BACKEND=metal zig build run-ray-tracing-maintenance
+VKMTL_BACKEND=vulkan zig build run-ray-tracing-maintenance
+```
+
+The repository records physical execution of the first command on an Apple M4
+Pro. The second is the exact rerun for a Vulkan RT machine; this host does not
+promote a forced build into physical Vulkan evidence.

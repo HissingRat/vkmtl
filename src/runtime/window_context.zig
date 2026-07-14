@@ -2422,6 +2422,16 @@ const BackendPrivateAccelerationStructureBuildRecord = struct {
     driver_submitted: bool = false,
 };
 
+const BackendPrivateAccelerationStructureMaintenanceRecord = struct {
+    backend: core.Backend,
+    operation: core.AccelerationStructureMaintenanceOperation,
+    scratch_offset: u64,
+    scratch_size: u64,
+    destination_used: bool,
+    command_recorded: bool,
+    driver_submitted: bool = false,
+};
+
 pub const AccelerationStructure = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
@@ -2438,8 +2448,12 @@ pub const AccelerationStructure = struct {
         sizes_value: core.AccelerationStructureBuildSizes,
         native_handle: BackendPrivateAccelerationStructureHandle,
         last_build_record: ?BackendPrivateAccelerationStructureBuildRecord = null,
+        last_maintenance_record: ?BackendPrivateAccelerationStructureMaintenanceRecord = null,
         build_count: u64 = 0,
+        maintenance_count: u64 = 0,
         built_value: bool = false,
+        update_capable_value: bool = false,
+        compaction_capable_value: bool = false,
         alive: bool = true,
         impl: ?Impl = null,
     };
@@ -2541,6 +2555,21 @@ pub const AccelerationStructure = struct {
         return if (self.state().last_build_record) |record| record.driver_submitted else false;
     }
 
+    pub fn backendPrivateMaintenanceCount(self: AccelerationStructure) u64 {
+        assertAlive(self.state().alive, .acceleration_structure);
+        return self.state().maintenance_count;
+    }
+
+    pub fn lastMaintenanceRecordedBackendCommand(self: AccelerationStructure) bool {
+        assertAlive(self.state().alive, .acceleration_structure);
+        return if (self.state().last_maintenance_record) |record| record.command_recorded else false;
+    }
+
+    pub fn lastMaintenanceSubmittedToDriver(self: AccelerationStructure) bool {
+        assertAlive(self.state().alive, .acceleration_structure);
+        return if (self.state().last_maintenance_record) |record| record.driver_submitted else false;
+    }
+
     fn markBuilt(
         self: *AccelerationStructure,
         plan: core.AccelerationStructureBuildPlan,
@@ -2553,6 +2582,8 @@ pub const AccelerationStructure = struct {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         self.state().built_value = true;
+        self.state().update_capable_value = self.state().update_capable_value or plan.allow_update;
+        self.state().compaction_capable_value = self.state().compaction_capable_value or plan.allow_compaction;
         self.state().build_count += 1;
         const required_scratch = if (plan.mode == .update and plan.update_scratch_size != 0) plan.update_scratch_size else plan.scratch_size;
         self.state().last_build_record = .{
@@ -2564,6 +2595,30 @@ pub const AccelerationStructure = struct {
             .command_recorded = command_recorded,
             .driver_submitted = driver_submitted,
         };
+    }
+
+    fn markMaintained(
+        self: *AccelerationStructure,
+        plan: core.AccelerationStructureMaintenancePlan,
+        resources: AccelerationStructureMaintenanceResources,
+        command_recorded: bool,
+        driver_submitted: bool,
+    ) void {
+        assertAlive(self.state().alive, .acceleration_structure);
+        self.state().maintenance_count += 1;
+        self.state().last_maintenance_record = .{
+            .backend = plan.backend,
+            .operation = plan.operation,
+            .scratch_offset = resources.scratch_offset,
+            .scratch_size = plan.scratch_size,
+            .destination_used = resources.destination != null,
+            .command_recorded = command_recorded,
+            .driver_submitted = driver_submitted,
+        };
+        if (plan.operation == .compact) {
+            const destination = resources.destination orelse unreachable;
+            destination.state().built_value = true;
+        }
     }
 };
 
@@ -2709,9 +2764,77 @@ pub const AccelerationStructureBuildResources = struct {
         if (plan.requiresUpdateSource()) {
             const source = self.update_source orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
             assertAlive(source.state().alive, .acceleration_structure);
-            if (source.selectedBackend() != backend or source.state().descriptor_value.kind != plan.kind or !source.isBuilt()) {
+            if (source.selectedBackend() != backend or
+                source.state().descriptor_value.kind != plan.kind or
+                !source.isBuilt() or
+                !source.state().update_capable_value)
+            {
                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
             }
+        }
+    }
+};
+
+pub const AccelerationStructureMaintenanceResources = struct {
+    source: *AccelerationStructure,
+    destination: ?*AccelerationStructure = null,
+    scratch: ?*Buffer = null,
+    scratch_offset: u64 = 0,
+
+    pub fn validate(
+        self: AccelerationStructureMaintenanceResources,
+        backend: core.Backend,
+        plan: core.AccelerationStructureMaintenancePlan,
+    ) core.AdvancedFeatureError!void {
+        assertAlive(self.source.state().alive, .acceleration_structure);
+        if (plan.backend != backend or self.source.selectedBackend() != backend or !self.source.isBuilt()) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        const source_descriptor = self.source.descriptor();
+        if (source_descriptor.kind != plan.kind or
+            source_descriptor.primitive_count != plan.primitive_count or
+            self.source.resultSize() < plan.source_result_size)
+        {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (plan.requires_allow_update and !self.source.state().update_capable_value) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (plan.operation == .compact and !self.source.state().compaction_capable_value) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+
+        if (plan.operation == .compact) {
+            const destination = self.destination orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            assertAlive(destination.state().alive, .acceleration_structure);
+            if (destination == self.source or destination.selectedBackend() != backend) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            const destination_descriptor = destination.descriptor();
+            if (destination_descriptor.kind != plan.kind or
+                destination_descriptor.primitive_count != plan.primitive_count or
+                destination.resultSize() < plan.compacted_size_upper_bound or
+                self.scratch != null or self.scratch_offset != 0)
+            {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            return;
+        }
+
+        if (self.destination != null) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        const scratch = self.scratch orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        assertAlive(scratch.state().alive, .buffer);
+        if (scratch.selectedBackend() != backend or !scratch.state().usage_value.acceleration_structure_scratch) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        if (plan.scratch_alignment != 0 and self.scratch_offset % plan.scratch_alignment != 0) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        const scratch_end = std.math.add(u64, self.scratch_offset, plan.scratch_size) catch {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        };
+        if (scratch_end > @as(u64, @intCast(scratch.length()))) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
     }
 };
@@ -3176,7 +3299,10 @@ pub const MetalRayTracingExecutionMapping = struct {
 
     pub fn hasBackendPrivateFunctionTables(self: MetalRayTracingExecutionMapping) bool {
         assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
-        return self.state().native_tables.function_table_entries == self.functionTableEntryCount() and
+        return self.state().native_tables.driver_bound and
+            self.state().native_tables.function_table_populated and
+            (!self.requiresIntersectionFunctionTable() or self.state().native_tables.intersection_table_populated) and
+            self.state().native_tables.function_table_entries == self.functionTableEntryCount() and
             self.state().native_tables.intersection_function_count == self.intersectionFunctionCount();
     }
 
@@ -5002,6 +5128,12 @@ pub const CommandBuffer = struct {
                             .vulkan => |*vulkan_scratch| vulkan_scratch,
                             .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                         };
+                        const update_source_impl = if (resources.update_source) |source| switch (source.state().impl orelse {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }) {
+                            .vulkan => |*vulkan_source| vulkan_source,
+                            .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                        } else null;
                         const instance_source_impl = if (resources.instance_source) |source| switch (source.state().impl orelse {
                             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                         }) {
@@ -5054,6 +5186,7 @@ pub const CommandBuffer = struct {
                             vulkan_as,
                             scratch_impl,
                             resources.scratch_offset,
+                            update_source_impl,
                             instance_source_impl,
                             instance_source_impls,
                             vulkan_geometries,
@@ -5071,6 +5204,12 @@ pub const CommandBuffer = struct {
                             .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                             .metal => |*metal_scratch| metal_scratch,
                         };
+                        const update_source_impl = if (resources.update_source) |source| switch (source.state().impl orelse {
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                        }) {
+                            .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                            .metal => |*metal_source| metal_source,
+                        } else null;
                         const instance_source_impl = if (resources.instance_source) |source| switch (source.state().impl orelse {
                             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
                         }) {
@@ -5119,9 +5258,11 @@ pub const CommandBuffer = struct {
                         }
                         const metal_geometries = metal_geometry_buffer[0..resources.geometries.len];
                         try metal.encodeAccelerationStructureBuild(
+                            plan,
                             metal_as,
                             scratch_impl,
                             resources.scratch_offset,
+                            update_source_impl,
                             instance_source_impl,
                             instance_source_impls,
                             metal_geometries,
@@ -5132,6 +5273,80 @@ pub const CommandBuffer = struct {
             },
         };
         try resources.result.markBuilt(plan, resources, self.privateState().impl != null, driver_submitted);
+    }
+
+    pub fn encodeAccelerationStructureMaintenance(
+        self: *CommandBuffer,
+        plan: core.AccelerationStructureMaintenancePlan,
+        resources: AccelerationStructureMaintenanceResources,
+    ) !void {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try resources.validate(self.privateState().backend, plan);
+        if (resources.scratch) |scratch| _ = scratch.recordUsage(.acceleration_structure_scratch);
+
+        var driver_submitted = false;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                const source = switch (resources.source.state().impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => |*value| value,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                };
+                const destination = if (resources.destination) |value| switch (value.state().impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => |*native| native,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                } else null;
+                const scratch = if (resources.scratch) |value| switch (value.state().impl) {
+                    .vulkan => |*native| native,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                } else null;
+                try vulkan.encodeAccelerationStructureMaintenance(
+                    plan,
+                    source,
+                    destination,
+                    scratch,
+                    resources.scratch_offset,
+                );
+                driver_submitted = true;
+            },
+            .metal => |*metal| {
+                const source = switch (resources.source.state().impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                    .metal => |*value| value,
+                };
+                const destination = if (resources.destination) |value| switch (value.state().impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                    .metal => |*native| native,
+                } else null;
+                const scratch = if (resources.scratch) |value| switch (value.state().impl) {
+                    .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                    .metal => |*native| native,
+                } else null;
+                try metal.encodeAccelerationStructureMaintenance(
+                    plan,
+                    source,
+                    destination,
+                    scratch,
+                    resources.scratch_offset,
+                );
+                driver_submitted = true;
+            },
+        };
+        resources.source.markMaintained(
+            plan,
+            resources,
+            self.privateState().impl != null,
+            driver_submitted,
+        );
     }
 
     pub fn dispatchRays(
@@ -7188,9 +7403,11 @@ pub const Device = struct {
             self.nativeFeatures(),
         );
         if (self.state().capability_report.source == .vulkan_query or self.state().capability_report.source == .metal_query) {
+            var sizing_descriptor = descriptor.acceleration_structure;
+            sizing_descriptor.allow_update = sizing_descriptor.allow_update or descriptor.flags.allow_update;
             switch (self.state().impl) {
                 .vulkan => |*vulkan| {
-                    const sizes = try vulkan.accelerationStructureBuildSizes(descriptor.acceleration_structure);
+                    const sizes = try vulkan.accelerationStructureBuildSizes(sizing_descriptor, descriptor.flags);
                     plan.result_size = sizes.result_size;
                     plan.scratch_size = std.mem.alignForward(u64, sizes.scratch_size, descriptor.scratch_alignment);
                     plan.update_scratch_size = if (descriptor.mode == .update or
@@ -7201,7 +7418,7 @@ pub const Device = struct {
                         0;
                 },
                 .metal => |*metal| {
-                    const sizes = try metal.accelerationStructureBuildSizes(descriptor.acceleration_structure);
+                    const sizes = try metal.accelerationStructureBuildSizes(sizing_descriptor);
                     plan.result_size = sizes.result_size;
                     plan.scratch_size = std.mem.alignForward(u64, sizes.scratch_size, descriptor.scratch_alignment);
                     plan.update_scratch_size = if (descriptor.mode == .update or
@@ -7220,11 +7437,31 @@ pub const Device = struct {
         self: Device,
         descriptor: core.AccelerationStructureMaintenanceDescriptor,
     ) core.AdvancedFeatureError!core.AccelerationStructureMaintenancePlan {
-        return try core.AccelerationStructureMaintenancePlan.fromDescriptor(
+        var plan = try core.AccelerationStructureMaintenancePlan.fromDescriptor(
             self.state().backend,
             descriptor,
             self.nativeFeatures(),
         );
+        if (self.state().capability_report.source == .vulkan_query or self.state().capability_report.source == .metal_query) {
+            const sizes = switch (self.state().impl) {
+                .vulkan => |*vulkan| try vulkan.accelerationStructureBuildSizes(
+                    descriptor.acceleration_structure,
+                    .{
+                        .allow_update = descriptor.acceleration_structure.allow_update,
+                        .allow_compaction = descriptor.operation == .compact,
+                    },
+                ),
+                .metal => |*metal| try metal.accelerationStructureBuildSizes(descriptor.acceleration_structure),
+            };
+            if (descriptor.operation != .compact) {
+                plan.scratch_size = std.mem.alignForward(u64, sizes.update_scratch_size, descriptor.scratch_alignment);
+            }
+            if (descriptor.source_result_size == 0) plan.source_result_size = sizes.result_size;
+            if (descriptor.operation == .compact and descriptor.compacted_size_hint == null) {
+                plan.compacted_size_upper_bound = plan.source_result_size;
+            }
+        }
+        return plan;
     }
 
     fn planTopLevelAccelerationStructureLayout(
@@ -7293,7 +7530,7 @@ pub const Device = struct {
             self.state().backend,
             descriptor,
             metal_intersections,
-            self.nativeFeatures(),
+            self.features(),
             self.limits(),
         );
         const shader_groups = try self.state().allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.shader_groups);
@@ -7342,7 +7579,7 @@ pub const Device = struct {
         if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
         return try core.MetalRayTracingMappingPlan.fromDescriptor(
             descriptor,
-            self.nativeFeatures(),
+            self.features(),
             self.limits(),
         );
     }
@@ -7351,7 +7588,7 @@ pub const Device = struct {
         if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
         const plan = try core.MetalRayTracingMappingPlan.fromDescriptor(
             descriptor,
-            self.nativeFeatures(),
+            self.features(),
             self.limits(),
         );
         const shader_groups = try self.state().allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.pipeline.shader_groups);
@@ -7385,7 +7622,7 @@ pub const Device = struct {
     pub fn makeShaderBindingTable(self: *Device, descriptor: core.ShaderBindingTableDescriptor) core.AdvancedFeatureError!ShaderBindingTable {
         const layout = try core.ShaderBindingTableLayout.fromDescriptor(
             descriptor,
-            self.nativeFeatures(),
+            self.features(),
             self.limits(),
         );
         self.state().tracker.retain(.shader_binding_table);
@@ -10186,6 +10423,88 @@ test "runtime encodes acceleration structure build resources from native capabil
     try std.testing.expectEqual(core.ResourceUsageKind.acceleration_structure_scratch, scratch.currentUsage().?);
 }
 
+test "runtime encodes acceleration structure refit and compaction resources" {
+    var tracker = ResourceTracker{};
+    var backend_runtime: BackendRuntime = undefined;
+    var report = core.defaultDeviceCapabilityReport(.vulkan);
+    report.native_features.acceleration_structures = true;
+    report.native_features.acceleration_structure_update = true;
+    report.native_features.acceleration_structure_refit = true;
+    report.native_features.acceleration_structure_compaction = true;
+
+    var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "test acceleration maintenance adapter", report);
+    var device = Device{ ._state = &device_state };
+    const descriptor = core.AccelerationStructureDescriptor{
+        .kind = .bottom_level,
+        .primitive_count = 1,
+        .allow_update = true,
+    };
+    var source = try device.makeAccelerationStructure(descriptor);
+    defer source.deinit();
+    var destination = try device.makeAccelerationStructure(descriptor);
+    defer destination.deinit();
+
+    const build_plan = try device.planAccelerationStructureBuild(.{
+        .acceleration_structure = descriptor,
+        .flags = .{ .allow_update = true },
+    });
+    var scratch = Buffer.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .impl = undefined,
+        .length_value = @intCast(@max(build_plan.scratch_size, build_plan.update_scratch_size)),
+        .usage_value = .{ .acceleration_structure_scratch = true },
+    });
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    });
+    try command_buffer.encodeAccelerationStructureBuild(build_plan, .{
+        .result = &source,
+        .scratch = &scratch,
+    });
+
+    const refit_plan = try device.planAccelerationStructureMaintenance(.{
+        .acceleration_structure = descriptor,
+        .operation = .refit,
+    });
+    try command_buffer.encodeAccelerationStructureMaintenance(refit_plan, .{
+        .source = &source,
+        .scratch = &scratch,
+    });
+    try std.testing.expectEqual(@as(u64, 1), source.backendPrivateMaintenanceCount());
+    try std.testing.expect(!source.lastMaintenanceRecordedBackendCommand());
+    try std.testing.expect(!source.lastMaintenanceSubmittedToDriver());
+
+    const compact_plan = try device.planAccelerationStructureMaintenance(.{
+        .acceleration_structure = descriptor,
+        .operation = .compact,
+        .source_result_size = source.resultSize(),
+        .compacted_size_hint = destination.resultSize(),
+    });
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        command_buffer.encodeAccelerationStructureMaintenance(compact_plan, .{
+            .source = &source,
+            .destination = &destination,
+        }),
+    );
+    const compactable_build_plan = try device.planAccelerationStructureBuild(.{
+        .acceleration_structure = descriptor,
+        .flags = .{ .allow_update = true, .allow_compaction = true },
+    });
+    try command_buffer.encodeAccelerationStructureBuild(compactable_build_plan, .{
+        .result = &source,
+        .scratch = &scratch,
+    });
+    try command_buffer.encodeAccelerationStructureMaintenance(compact_plan, .{
+        .source = &source,
+        .destination = &destination,
+    });
+    try std.testing.expect(destination.isBuilt());
+    try std.testing.expectEqual(@as(u64, 2), source.backendPrivateMaintenanceCount());
+}
+
 test "runtime validates acceleration structure mesh build input buffers" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
@@ -10289,11 +10608,11 @@ test "runtime device plans ray tracing pipeline lowering from native capabilitie
     try std.testing.expectEqual(@as(u32, 3), lowering.functionTableEntryCount());
 }
 
-test "runtime creates ray tracing pipeline states from native capabilities" {
+test "runtime creates ray tracing pipeline states from usable capabilities" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = .{ .vulkan = undefined };
     var report = core.defaultDeviceCapabilityReport(.vulkan);
-    report.features.ray_tracing = false;
+    report.features.ray_tracing = true;
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
@@ -10310,7 +10629,7 @@ test "runtime creates ray tracing pipeline states from native capabilities" {
         .shader_groups = groups[0..],
         .max_recursion_depth = 2,
     };
-    try std.testing.expectError(core.AdvancedFeatureError.UnsupportedRayTracing, device.validateRayTracingPipelineDescriptor(descriptor));
+    try device.validateRayTracingPipelineDescriptor(descriptor);
 
     var pipeline = try device.makeRayTracingPipelineState(descriptor);
     defer pipeline.deinit();
@@ -10391,7 +10710,7 @@ test "runtime creates shader binding tables and dispatches rays" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = .{ .vulkan = undefined };
     var report = core.defaultDeviceCapabilityReport(.vulkan);
-    report.features.ray_tracing = false;
+    report.features.ray_tracing = true;
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
     report.limits.shader_binding_table_alignment = 64;
@@ -10457,7 +10776,8 @@ test "runtime device plans Metal ray tracing mapping from native capabilities" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
     var report = core.defaultDeviceCapabilityReport(.metal);
-    report.features.ray_tracing = false;
+    report.features.ray_tracing = true;
+    report.features.ray_tracing_custom_intersection = true;
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
@@ -10486,7 +10806,8 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
     var report = core.defaultDeviceCapabilityReport(.metal);
-    report.features.ray_tracing = false;
+    report.features.ray_tracing = true;
+    report.features.ray_tracing_custom_intersection = true;
     report.native_features.ray_tracing = true;
     report.limits.max_ray_tracing_recursion_depth = 2;
 
@@ -10514,7 +10835,7 @@ test "runtime creates Metal ray tracing execution mappings from native capabilit
     try std.testing.expectEqual(@as(u32, 3), mapping.functionTableEntryCount());
     try std.testing.expectEqual(@as(u32, 1), mapping.intersectionFunctionCount());
     try std.testing.expect(mapping.requiresIntersectionFunctionTable());
-    try std.testing.expect(mapping.hasBackendPrivateFunctionTables());
+    try std.testing.expect(!mapping.hasBackendPrivateFunctionTables());
     try std.testing.expectEqual(@as(u32, 1), mapping.backendPrivateAccelerationStructureSlots());
     try std.testing.expect(!mapping.backendPrivateMetalTablesBoundToDriver());
 

@@ -443,6 +443,16 @@ compaction planning. Update/refit require
 `DeviceFeatures.acceleration_structure_refit` plus an update-capable AS;
 compaction requires `DeviceFeatures.acceleration_structure_compaction` and a
 separate destination AS.
+Period 52 makes those maintenance plans executable by passing
+`AccelerationStructureMaintenanceResources` to
+`CommandBuffer.encodeAccelerationStructureMaintenance(...)`. Update/refit use
+a built, `allow_update` source plus AS scratch; compact uses a built source and
+a distinct destination without scratch. The source must have been built with
+`AccelerationStructureBuildFlags.allow_compaction`. Metal and Vulkan both submit native
+update/refit/compact-copy commands. Build/update scratch sizes are native
+queries; post-build compacted-size query remains unsupported.
+Build-input buffers and TLAS instance-source AS objects referenced by the source
+must remain alive through every update/refit submission that reuses them.
 `TopLevelAccelerationStructureInstanceDescriptor`,
 `TopLevelAccelerationStructureLayoutDescriptor`, and
 `vkmtl.ray_tracing.planTopLevelAccelerationStructureLayout(device, descriptor)` describe backend-neutral
@@ -450,10 +460,11 @@ TLAS instance metadata: transforms, masks, custom indices, SBT record offsets,
 material indices, triangle instances, procedural AABB instances, and mixed
 geometry requirements.
 `RayQueryDescriptor`, `RayQueryPlan`, and
-`vkmtl.ray_tracing.planRayQuery(device, descriptor)` describe
-Vulkan ray-query shader requirements. vkmtl currently reports Metal ray query
-as unsupported because Metal has no direct equivalent shader feature in this
-abstraction layer.
+`vkmtl.ray_tracing.planRayQuery(device, descriptor)` describes Vulkan ray-query
+shader requirements. It is currently a planning/native-availability contract,
+not executable support: Metal has no direct equivalent and ordinary Vulkan
+compute/render bindings cannot yet bind an AS, so usable `ray_query` is false
+on both backends.
 Backend pipeline lowering remains internal to runtime pipeline creation.
 `RayDispatchDescriptor`, `RayDispatchPlan`, and
 `vkmtl.ray_tracing.planRayDispatch(device, sbt, descriptor)` combine shader
@@ -479,8 +490,8 @@ Period 29 adds public runtime contracts for those advanced paths:
 `CommandBuffer.dispatchRays(...)`, and
 `vkmtl.native.metal.RayTracingExecutionMapping` /
 `vkmtl.native.metal.makeRayTracingExecutionMapping(&device, descriptor)`.
-These APIs are gated by
-native feature reports and validate ownership, resource ranges, and command
+Executable factories are gated by usable feature reports and validate
+ownership, resource ranges, and command
 intent. Supported Metal and Vulkan RT devices have both produced visible
 physical-device output; the 9/9 release evidence does not promote unrelated
 planning-only native pressure features.
@@ -502,7 +513,10 @@ vertex buffer, optional index buffer, `AccelerationStructureVertexFormat`,
 Buffers used this way must be created with
 `BufferUsage.acceleration_structure_build_input`. The same runtime shape also
 has `AccelerationStructureGeometryResources.aabbs`; AABB descriptor and buffer
-validation feed the Period34 Vulkan procedural sphere path.
+validation feed the Period34 Vulkan procedural sphere path. Period 52 adds
+native Metal AABB BLAS build and lets one TLAS reference multiple distinct BLAS
+sources. Non-default transform/mask/custom-index/SBT-offset metadata remains a
+planning contract.
 
 Period34 starts the procedural RT contract with
 `RayTracingHitGroupKind.procedural`,
@@ -512,7 +526,9 @@ Period34 starts the procedural RT contract with
 validation gates today: unsupported procedural/custom-intersection usage fails
 before command submission. Vulkan now materializes intersection shader stages,
 procedural hit groups, SBT records, and the procedural `ray_traced_scene`
-acceptance path. Metal intersection function table execution is Period35.
+acceptance path. Metal schema-2 artifacts contain no linked intersection
+function or driver-bound table, so custom intersection/function tables remain
+explicitly unsupported; a planning mapping does not claim a native table.
 
 `Device.compileRayTracingShader(...)` returns a `CompiledRayTracingShader`.
 Use `CompiledRayTracingShader.applyToPipelineDescriptor(backend, &descriptor)`

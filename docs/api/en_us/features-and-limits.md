@@ -117,6 +117,16 @@ ray_tracing ray_query ray_tracing_procedural_geometry
 ray_tracing_custom_intersection ray_tracing_callable_shaders
 ```
 
+Period 52 makes ordinary AS build/update/refit/compact-copy and basic RT
+dispatch usable when the selected device reports the complete path. Metal and
+Vulkan expose triangle/AABB/instance AS input; Metal custom intersection stays
+false, while Vulkan custom intersection follows the executable procedural RT
+path. `ray_query` and `ray_tracing_callable_shaders` remain false on both
+backends. `native_features.ray_query` may report Vulkan extension/feature
+availability, but no ordinary AS binding plus ray-query shader path exists yet.
+Post-build compacted-size discovery is not implied by
+`acceleration_structure_compaction`.
+
 ### Queries And Driver Artifacts
 
 ```text

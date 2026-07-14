@@ -201,9 +201,11 @@ pub const CommandBuffer = struct {
 
     pub fn encodeAccelerationStructureBuild(
         self: *CommandBuffer,
+        plan: core.AccelerationStructureBuildPlan,
         acceleration_structure: *MetalAccelerationStructure,
         scratch: *MetalBuffer,
         scratch_offset: u64,
+        update_source: ?*const MetalAccelerationStructure,
         instance_source: ?*const MetalAccelerationStructure,
         instance_sources: []const *const MetalAccelerationStructure,
         geometries: []const MetalAccelerationStructure.GeometryInput,
@@ -217,19 +219,51 @@ pub const CommandBuffer = struct {
             }
             switch (geometries[0]) {
                 .triangles => |triangles| try acceleration_structure.setTriangleGeometry(triangles),
-                .aabbs, .instances => return core.AdvancedFeatureError.UnsupportedAccelerationStructures,
+                .aabbs => |aabbs| try acceleration_structure.setAabbGeometry(aabbs),
+                .instances => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
             }
         }
-        const selected_instance_source = if (instance_sources.len != 0)
-            instance_sources[0]
-        else
-            instance_source;
+        var native_instance_sources: [64]?*metal.vkmtl_metal_acceleration_structure = @splat(null);
+        const native_instance_source_count: usize = if (instance_sources.len != 0) blk: {
+            for (instance_sources, 0..) |source, source_index| {
+                native_instance_sources[source_index] = source.handle;
+            }
+            break :blk instance_sources.len;
+        } else if (instance_source) |source| blk: {
+            native_instance_sources[0] = source.handle;
+            break :blk 1;
+        } else 0;
         try checkAccelerationStructureCommand(metal.vkmtl_metal_command_buffer_build_acceleration_structure(
             self.handle,
             acceleration_structure.handle,
             scratch.handle,
             native_scratch_offset,
-            if (selected_instance_source) |source| source.handle else null,
+            if (update_source) |source| source.handle else null,
+            if (native_instance_source_count == 0) null else &native_instance_sources,
+            native_instance_source_count,
+            @intFromBool(plan.allow_update),
+            @intFromBool(plan.mode == .update),
+        ));
+    }
+
+    pub fn encodeAccelerationStructureMaintenance(
+        self: *CommandBuffer,
+        plan: core.AccelerationStructureMaintenancePlan,
+        source: *MetalAccelerationStructure,
+        destination: ?*MetalAccelerationStructure,
+        scratch: ?*MetalBuffer,
+        scratch_offset: u64,
+    ) core.AdvancedFeatureError!void {
+        const native_scratch_offset = std.math.cast(usize, scratch_offset) orelse {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        };
+        try checkAccelerationStructureCommand(metal.vkmtl_metal_command_buffer_maintain_acceleration_structure(
+            self.handle,
+            source.handle,
+            if (destination) |value| value.handle else null,
+            if (scratch) |value| value.handle else null,
+            native_scratch_offset,
+            @intFromEnum(plan.operation),
         ));
     }
 

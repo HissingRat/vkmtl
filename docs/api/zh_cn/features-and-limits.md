@@ -109,6 +109,15 @@ ray_tracing ray_query ray_tracing_procedural_geometry
 ray_tracing_custom_intersection ray_tracing_callable_shaders
 ```
 
+Period 52 会在 selected device 具备完整路径时开放普通 AS build/update/refit/
+compact-copy 和基础 RT dispatch。Metal 与 Vulkan 都支持 triangle/AABB/instance AS
+input；Metal custom intersection 保持 false，Vulkan custom intersection 对应可执行的
+procedural RT 路径。两个 backend 的 `ray_query` 与
+`ray_tracing_callable_shaders` 都保持 false。Vulkan 的
+`native_features.ray_query` 可以报告 extension/feature 可用，但普通 AS binding 与
+ray-query shader 路径还不存在。`acceleration_structure_compaction` 也不表示支持
+post-build compacted-size discovery。
+
 ### Query 与 Driver Artifact
 
 ```text

@@ -38,9 +38,9 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-51 are complete. Period 52 ray-tracing
-  breadth is the next mainline priority after the completed additive
-  headless-runtime refactor.
+  semantic-support ledger. Periods 46-52 are complete. Period 53 external
+  interop, Metal I/O, and device topology is the next mainline priority after
+  the completed additive headless-runtime refactor.
 - The completed headless-runtime slice keeps `WindowContext` unchanged and
   adds a real no-surface `HeadlessContext`; its allocation, ownership, backend,
   and validation evidence are recorded in `docs/develop/headless-context.md`.
@@ -2814,6 +2814,46 @@ obvious render and binding blockers.
 - [x] Update inventories, routing, compatibility docs, examples, and matrices.
 - [x] Run complete API/backend validation and truthful physical evidence probes.
 - [x] Publish an exact-commit closeout with executable and unsupported outcomes.
+
+## Period 52 Phase 1 Checklist
+
+- [x] Audit every routed RT declaration against native execution rather than
+  planning or capability-query availability.
+- [x] Allocate maintenance resources under `ray_tracing` and command encoding
+  on `CommandBuffer` without growing root, `Device`, or `WindowContext`.
+- [x] Separate usable basic RT/AS support from native-only callable, ray-query,
+  and custom-intersection facts.
+
+## Period 52 Phase 2 Checklist
+
+- [x] Execute Vulkan and Metal build-update plus update/refit commands with
+  native allow-update flags and queried scratch sizes.
+- [x] Execute compact copy into an explicit compatible destination AS.
+- [x] Validate source, destination, scratch usage/range/alignment, backend,
+  allow-update/allow-compaction, built state, and operation-specific ownership.
+
+## Period 52 Phase 3 Checklist
+
+- [x] Execute Metal AABB BLAS input without replacing it with triangles.
+- [x] Allocate Metal BLAS/result/scratch capacity for the maximum admitted
+  ordinary triangle/AABB descriptor form.
+- [x] Execute Metal TLAS build from multiple distinct BLAS sources.
+
+## Period 52 Phase 4 Checklist
+
+- [x] Query Vulkan ray-query native availability independently from RT-pipeline
+  support while keeping executable support closed.
+- [x] Prevent planning-only Metal function tables and callable/complex SBT
+  records from reporting driver-bound execution.
+- [x] Close compact-size query, function tables, ray query, callable SBT,
+  motion/curves, and Metal 4 descriptors with exact unsupported decisions.
+
+## Period 52 Phase 5 Checklist
+
+- [x] Add a headless public maintenance/AABB/multi-instance stress example.
+- [x] Record physical Metal evidence and the Vulkan RT-machine rerun command.
+- [x] Update inventories, routing, API counts, compatibility docs, matrices,
+  roadmap, and closeout before the final validation/commit gate.
 
 ## First Backend-Independent Triangle Checklist
 

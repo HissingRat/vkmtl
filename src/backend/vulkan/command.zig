@@ -244,11 +244,11 @@ pub const CommandBuffer = struct {
         acceleration_structure: *VulkanAccelerationStructure,
         scratch: *const VulkanBuffer,
         scratch_offset: u64,
+        update_source: ?*const VulkanAccelerationStructure,
         instance_source: ?*const VulkanAccelerationStructure,
         instance_sources: []const *const VulkanAccelerationStructure,
         geometries: []const VulkanAccelerationStructure.GeometryInput,
     ) core.AdvancedFeatureError!void {
-        _ = plan;
         if (acceleration_structure.kind == .top_level) {
             if (instance_sources.len != 0) {
                 try acceleration_structure.writeTopLevelInstances(instance_sources);
@@ -281,8 +281,13 @@ pub const CommandBuffer = struct {
 
         const build_info = vk.AccelerationStructureBuildGeometryInfoKHR{
             .type = acceleration_structure.structureType(),
-            .flags = .{ .prefer_fast_trace_bit_khr = true },
-            .mode = .build_khr,
+            .flags = .{
+                .allow_update_bit_khr = plan.allow_update,
+                .allow_compaction_bit_khr = plan.allow_compaction,
+                .prefer_fast_trace_bit_khr = true,
+            },
+            .mode = if (plan.mode == .update) .update_khr else .build_khr,
+            .src_acceleration_structure = if (update_source) |source| source.handle else .null_handle,
             .dst_acceleration_structure = acceleration_structure.handle,
             .geometry_count = geometry_count,
             .p_geometries = @ptrCast(&geometry_buffer),
@@ -293,6 +298,10 @@ pub const CommandBuffer = struct {
             range_ptrs_buffer[i] = @ptrCast(&range_buffer[i]);
         }
         const range_ptrs = range_ptrs_buffer[0..geometry_count];
+        try acceleration_structure.recordBuildInputs(
+            geometry_buffer[0..geometry_count],
+            range_buffer[0..geometry_count],
+        );
 
         self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
@@ -300,7 +309,69 @@ pub const CommandBuffer = struct {
         }) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         self.gc.dev.cmdBuildAccelerationStructuresKHR(self.cmdbuf, &.{build_info}, range_ptrs);
         self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        acceleration_structure.allow_update = acceleration_structure.allow_update or plan.allow_update;
+        acceleration_structure.allow_compaction = acceleration_structure.allow_compaction or plan.allow_compaction;
         acceleration_structure.markBuilt();
+    }
+
+    pub fn encodeAccelerationStructureMaintenance(
+        self: *CommandBuffer,
+        plan: core.AccelerationStructureMaintenancePlan,
+        source: *VulkanAccelerationStructure,
+        destination: ?*VulkanAccelerationStructure,
+        scratch: ?*const VulkanBuffer,
+        scratch_offset: u64,
+    ) core.AdvancedFeatureError!void {
+        const scratch_address = if (plan.operation == .compact) null else blk: {
+            if (!source.allow_update or source.recorded_geometry_count == 0) {
+                return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            }
+            const scratch_buffer = scratch orelse return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+            break :blk try source.scratchAddress(scratch_buffer, scratch_offset);
+        };
+        if (plan.operation == .compact and (destination == null or !source.allow_compaction)) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+        self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+        }) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+
+        if (plan.operation == .compact) {
+            const compacted = destination.?;
+            self.gc.dev.cmdCopyAccelerationStructureKHR(self.cmdbuf, &.{
+                .src = source.handle,
+                .dst = compacted.handle,
+                .mode = .compact_khr,
+            });
+            compacted.markBuilt();
+        } else {
+            var range_ptrs: [32][*]const vk.AccelerationStructureBuildRangeInfoKHR = undefined;
+            for (0..source.recorded_geometry_count) |index| {
+                range_ptrs[index] = @ptrCast(&source.recorded_ranges[index]);
+            }
+            const build_info = vk.AccelerationStructureBuildGeometryInfoKHR{
+                .type = source.structureType(),
+                .flags = .{
+                    .allow_update_bit_khr = true,
+                    .prefer_fast_trace_bit_khr = true,
+                },
+                .mode = .update_khr,
+                .src_acceleration_structure = source.handle,
+                .dst_acceleration_structure = source.handle,
+                .geometry_count = source.recorded_geometry_count,
+                .p_geometries = @ptrCast(&source.recorded_geometries),
+                .scratch_data = .{ .device_address = scratch_address.? },
+            };
+            self.gc.dev.cmdBuildAccelerationStructuresKHR(
+                self.cmdbuf,
+                &.{build_info},
+                range_ptrs[0..source.recorded_geometry_count],
+            );
+            source.markBuilt();
+        }
+
+        self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
     }
 
     pub fn traceRays(

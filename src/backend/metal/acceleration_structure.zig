@@ -36,6 +36,7 @@ pub fn init(
         owner.handle,
         accelerationStructureKind(descriptor.kind),
         descriptor.primitive_count,
+        @intFromBool(descriptor.allow_update),
         &handle,
     ));
 
@@ -60,6 +61,7 @@ pub fn queryBuildSizes(
         owner.handle,
         accelerationStructureKind(descriptor.kind),
         descriptor.primitive_count,
+        @intFromBool(descriptor.allow_update),
         &sizes,
     ));
     return .{
@@ -109,6 +111,22 @@ pub fn setTriangleGeometry(
         descriptor.index_buffer_offset,
         metalIndexType(descriptor.index_type),
         descriptor.primitive_count,
+    ));
+}
+
+pub fn setAabbGeometry(
+    self: *MetalAccelerationStructure,
+    input: AabbGeometryInput,
+) core.AdvancedFeatureError!void {
+    const descriptor = input.descriptor;
+    if (descriptor.kind != .aabbs) return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    try checkAccelerationStructure(metal.vkmtl_metal_acceleration_structure_set_aabb_geometry(
+        self.handle,
+        input.buffer.handle,
+        descriptor.aabb_buffer_offset,
+        descriptor.aabb_stride,
+        descriptor.primitive_count,
+        @intFromBool(descriptor.is_opaque),
     ));
 }
 

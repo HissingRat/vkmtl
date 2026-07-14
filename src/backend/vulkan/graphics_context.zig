@@ -522,7 +522,7 @@ fn queryNativeFeatures(
     result.acceleration_structure_refit = ray_tracing.supported;
     result.acceleration_structure_compaction = ray_tracing.supported;
     result.ray_tracing = ray_tracing.supported;
-    result.ray_query = ray_tracing.supported;
+    result.ray_query = rayQueryFeatureSupported(instance, pdev, extensions);
     result.ray_tracing_procedural_geometry = ray_tracing.supported;
     result.ray_tracing_custom_intersection = ray_tracing.supported;
     result.ray_tracing_callable_shaders = ray_tracing.supported;
@@ -575,8 +575,17 @@ fn queryUsableFeatures(
     // Keep native task-shader availability separate until the pinned Slang
     // artifact path can compile the task/object stage without crashing.
     result.task_shaders = false;
-    result.acceleration_structures = false;
-    result.ray_tracing = false;
+    result.acceleration_structures = native_features.acceleration_structures;
+    result.acceleration_structure_update = native_features.acceleration_structure_update;
+    result.acceleration_structure_refit = native_features.acceleration_structure_refit;
+    result.acceleration_structure_compaction = native_features.acceleration_structure_compaction;
+    result.ray_tracing = native_features.ray_tracing;
+    // Period 52 keeps inline ray queries and callable SBT execution closed
+    // until their complete shader/binding and native record paths exist.
+    result.ray_query = false;
+    result.ray_tracing_procedural_geometry = native_features.ray_tracing_procedural_geometry;
+    result.ray_tracing_custom_intersection = native_features.ray_tracing_custom_intersection;
+    result.ray_tracing_callable_shaders = false;
     result.driver_pipeline_cache = native_features.driver_pipeline_cache;
     result.buffer_gpu_address = native_features.buffer_gpu_address;
     result.compute_atomics = native_features.compute_atomics;
@@ -724,6 +733,7 @@ const VulkanExtensionSupport = struct {
     external_semaphore: bool = false,
     acceleration_structure: bool = false,
     ray_tracing_pipeline: bool = false,
+    ray_query: bool = false,
     ray_tracing_nv: bool = false,
     deferred_host_operations: bool = false,
     buffer_device_address: bool = false,
@@ -753,6 +763,7 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_external_semaphore.name)) result.external_semaphore = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_acceleration_structure.name)) result.acceleration_structure = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_ray_tracing_pipeline.name)) result.ray_tracing_pipeline = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_ray_query.name)) result.ray_query = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.nv_ray_tracing.name)) result.ray_tracing_nv = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_deferred_host_operations.name)) result.deferred_host_operations = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_buffer_device_address.name)) result.buffer_device_address = true;
@@ -761,6 +772,16 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_mesh_shader.name)) result.mesh_shader = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_memory_budget.name)) result.memory_budget = true;
     return result;
+}
+
+fn rayQueryFeatureSupported(instance: Instance, pdev: vk.PhysicalDevice, support: VulkanExtensionSupport) bool {
+    if (!support.ray_query) return false;
+    var ray_query = vk.PhysicalDeviceRayQueryFeaturesKHR{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &ray_query,
+        .features = .{},
+    };
+    return getPhysicalDeviceFeatures2(instance, pdev, &features2) and ray_query.ray_query == .true;
 }
 
 fn rayTracingExtensionSupported(support: VulkanExtensionSupport, extension_name: [*:0]const u8) bool {
@@ -1486,6 +1507,7 @@ test "Vulkan extension support maps optional backend capabilities" {
     support = mergeExtensionSupport(support, vk.extensions.khr_external_semaphore.name);
     support = mergeExtensionSupport(support, vk.extensions.khr_acceleration_structure.name);
     support = mergeExtensionSupport(support, vk.extensions.khr_ray_tracing_pipeline.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_ray_query.name);
     support = mergeExtensionSupport(support, vk.extensions.ext_mesh_shader.name);
     support = mergeExtensionSupport(support, vk.extensions.ext_memory_budget.name);
 
@@ -1499,6 +1521,7 @@ test "Vulkan extension support maps optional backend capabilities" {
     try std.testing.expect(support.external_semaphore);
     try std.testing.expect(support.acceleration_structure);
     try std.testing.expect(support.ray_tracing_pipeline);
+    try std.testing.expect(support.ray_query);
     try std.testing.expect(support.mesh_shader);
     try std.testing.expect(support.memory_budget);
 }
@@ -1520,7 +1543,7 @@ test "Vulkan ray tracing extension gate reports the first missing KHR dependency
     try std.testing.expect(missingRayTracingExtension(support) == null);
 }
 
-test "Vulkan usable features stay conservative before backend lowering" {
+test "Vulkan usable features expose only completed ray tracing lowering" {
     const native = core.DeviceFeatures{
         .wireframe_fill_mode = true,
         .independent_blend = true,
@@ -1531,7 +1554,15 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .tessellation = true,
         .mesh_shaders = true,
         .task_shaders = true,
+        .acceleration_structures = true,
+        .acceleration_structure_update = true,
+        .acceleration_structure_refit = true,
+        .acceleration_structure_compaction = true,
         .ray_tracing = true,
+        .ray_query = true,
+        .ray_tracing_procedural_geometry = true,
+        .ray_tracing_custom_intersection = true,
+        .ray_tracing_callable_shaders = true,
         .driver_pipeline_cache = true,
         .native_handles = true,
         .debug_labels = true,
@@ -1555,7 +1586,15 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(usable.mesh_shaders);
     try std.testing.expect(!usable.task_shaders);
     try std.testing.expect(!queryUsableFeatures(native, true, false).mesh_shaders);
-    try std.testing.expect(!usable.ray_tracing);
+    try std.testing.expect(usable.acceleration_structures);
+    try std.testing.expect(usable.acceleration_structure_update);
+    try std.testing.expect(usable.acceleration_structure_refit);
+    try std.testing.expect(usable.acceleration_structure_compaction);
+    try std.testing.expect(usable.ray_tracing);
+    try std.testing.expect(usable.ray_tracing_procedural_geometry);
+    try std.testing.expect(usable.ray_tracing_custom_intersection);
+    try std.testing.expect(!usable.ray_query);
+    try std.testing.expect(!usable.ray_tracing_callable_shaders);
     try std.testing.expect(usable.driver_pipeline_cache);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.buffer_gpu_address);

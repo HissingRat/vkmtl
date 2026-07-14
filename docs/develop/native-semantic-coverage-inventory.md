@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 51 complete plus additive headless runtime, 2026-07-14.
+Status: Period 52 complete plus additive headless runtime, 2026-07-14.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -26,8 +26,9 @@ residency, cache, and optimization rows. Period 50 splits CPU-authored reusable
 commands from GPU-authored mutation, producing 109 Metal semantic units; it
 closes scalable tables, reusable command lists, linked-function decisions, and
 driver artifacts. Period 51 closes eight advanced geometry/raster rows through
-executable mesh/tessellation subsets or precise unsupported decisions, leaving
-34 incomplete units routed exactly once.
+executable mesh/tessellation subsets or precise unsupported decisions. Period
+52 closes ordinary RT maintenance/geometry breadth and the remaining advanced
+RT routes through executable paths or precise unsupported decisions.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence; Vulkan has implementation and forced-build
@@ -171,9 +172,15 @@ develops a different lowering or support state.
 | GEO-01 | Tessellation pipeline and patch draw under the source-only artifact contract | `render` | `unsupported` | `native-exact` | Vulkan compiles schema-2 SPIR-V, enables tessellation, creates patch-list pipelines, and draws patches. The pinned Slang Metal target rejects hull/domain stages. |
 | GEO-02 | Resource-free mesh pipeline and dispatch; optional task/object stage separately gated | `render` | `native-exact` | `native-exact` | Physical Metal mesh rendering plus Vulkan forced-build/unit evidence. Pinned task/object compilation crashes, so usable task support stays false on both backends. |
 | RT-01 | Basic native acceleration structure, RT pipeline, dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Visible physical Metal and Vulkan paths are recorded. Device capability gates apply. |
-| RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | Metal visible scene evidence and Vulkan procedural superset evidence exist; shared scene-layout/multi-instance breadth remains incomplete. |
-| RT-03 | Procedural geometry and custom intersection | `ray_tracing` | `incomplete` | `native-exact` | Vulkan procedural output is observed; Metal intersection-function-table lowering is deferred. |
-| RT-04 | AS update/refit/compaction, ray query, complex/callable SBT behavior | `ray_tracing` | `incomplete` | `incomplete` | Planning and validation are broader than executable native evidence. Vulkan native capability queries do not by themselves close this row. |
+| RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | Metal physical evidence includes a TLAS over two distinct BLAS sources; Vulkan supports the same source array. Non-default instance metadata is outside the executable contract. |
+| RT-03 | Triangle and AABB BLAS geometry input | `ray_tracing` | `native-exact` | `native-exact` | Physical Metal headless evidence builds both forms; Vulkan procedural scene evidence already exercises AABB input. |
+| RT-04 | Custom intersection execution | `ray_tracing` | `unsupported` | `native-exact` | Vulkan procedural pixels are observed. Metal schema-2 artifacts have no linked intersection function or driver-bound table. |
+| RT-05 | AS build-update, update/refit, and compact copy | `ray_tracing` | `native-exact` | `native-exact` | Metal physical stress covers 32 alternating maintenance operations plus compact copy. Vulkan uses native update and compact-copy commands with unit/forced-build evidence. |
+| RT-06 | Post-build compacted-size query and result ownership | `ray_tracing` | `unsupported` | `unsupported` | Build/update size queries are exact; no public asynchronous post-build compact-size result contract exists. |
+| RT-07 | Ray query from ordinary compute/render stages | `ray_tracing` | `unsupported` | `unsupported` | Metal has no identical inline-query contract. Vulkan extension/feature availability is diagnostic-only because ordinary stages cannot bind an AS through the current contract. |
+| RT-08 | Callable shaders and complex executable SBT/function-table layouts | `ray_tracing` | `unsupported` | `unsupported` | Schema 2 has no callable artifact or record-payload contract; planning counts do not create callable regions or multiple program groups. |
+| RT-09 | Motion, curves, and row-major advanced AS geometry | `ray_tracing` | `unsupported` | `unsupported` | No admitted keyframe/control-point/instance layout and no enabled Vulkan extension set preserve the full contract. |
+| RT-10 | Metal 4 AS descriptor families | `ray_tracing` | `unsupported` | `not-applicable` | The current runtime owns classic AS descriptors and has no Metal 4 descriptor/resource-layout contract. |
 | INT-01 | External memory/texture import and external synchronization | `interop` | `incomplete` | `incomplete` | Wrappers, plans, ownership validation, and matrix exist; OS/driver import and submit hooks do not. |
 | INT-02 | Native handles | `native` | `native-exact` | `native-exact` | Borrowed escape hatch; lifetime and backend tagging are part of the contract. |
 | INT-03 | Native command insertion | `native` | `incomplete` | `incomplete` | Public callback/gate exists; validated native command-handle lowering remains deferred. |
@@ -183,7 +190,7 @@ develops a different lowering or support state.
 
 ## Metal Source-Coverage Ledger
 
-Period 45 established the source ledger; Periods 46-51 refined it to 109 units
+Period 45 established the source ledger; Periods 46-52 refined it to 111 units
 by splitting exact query subsets, Period 47's portable targets from their
 advanced remainders, and CPU-authored reusable commands from GPU-authored
 mutation. Missing vkmtl concepts remain explicit `missing-contract` entries;
@@ -195,11 +202,11 @@ their presence in the ledger does not admit public API or claim execution.
 | Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited | Period 49 executes native placement heaps and closes residency/sparse execution as unsupported under the current handle-free mapping contract. |
 | Argument buffers/tables and indirect command buffers | Audited | Period 50 executes classic argument-buffer/descriptor-indexing tables and CPU-authored reusable command lists. GPU mutation is explicitly unsupported; Metal 4 argument tables stay in Period 54. |
-| Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; RT function tables remain Period 52. |
+| Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; Period 52 closes RT function tables under the same artifact boundary. |
 | Tessellation, object/mesh shaders, layered rendering, amplification | Audited | Period 51 executes Vulkan tessellation and mesh-only paths on both backends; task/object artifacts, advanced-stage bindings, and layered/amplified rendering are precisely unsupported under current contracts. |
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited | Period 51 closes these unsupported because the current pass/shader contracts cannot preserve their observable memory and ordering semantics. |
 | Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 completed native timestamp/Boolean visibility subsets; Period 54 owns calibrated and device-specific counter breadth. |
-| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited/incomplete | Period 52 owns RT breadth. |
+| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. |
 | Fast resource loading / Metal I/O | Audited/missing-contract | Period 53 owns I/O and transfer composition. |
 | Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited/incomplete | Period 54 owns the new command/pipeline model. |
 | External sharing, IOSurface, shared-event handles, platform handles | Audited/incomplete | Period 53 owns real imports and external synchronization; Period 48 covers only same-device native shared events. |
@@ -230,7 +237,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-51 are complete. The updated exactly-once gap
-routing establishes Periods 52-54; Period 52 is next.
+The source audit and Periods 46-52 are complete. The updated exactly-once gap
+routing establishes Periods 53-54; Period 53 is next.
 `period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

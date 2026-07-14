@@ -14,7 +14,12 @@ geometry: BufferAllocation,
 sizes_value: core.AccelerationStructureBuildSizes,
 device_address: vk.DeviceAddress = 0,
 primitive_count: u32,
+allow_update: bool,
+allow_compaction: bool = false,
 built_value: bool = false,
+recorded_geometry_count: u32 = 0,
+recorded_geometries: [32]vk.AccelerationStructureGeometryKHR = undefined,
+recorded_ranges: [32]vk.AccelerationStructureBuildRangeInfoKHR = undefined,
 
 pub const GeometryInput = union(core.AccelerationStructureGeometryKind) {
     triangles: TriangleGeometryInput,
@@ -60,7 +65,13 @@ pub fn init(
     gc: *const GraphicsContext,
     descriptor: core.AccelerationStructureDescriptor,
 ) core.AdvancedFeatureError!VulkanAccelerationStructure {
-    const sizes = queryBuildSizes(gc, descriptor) catch return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
+    // Geometry/build flags arrive later with command resources. Reserve the
+    // update/compaction-capable upper bound so additive build flags cannot
+    // outgrow the opaque AS storage allocated here.
+    const sizes = queryBuildSizes(gc, descriptor, .{
+        .allow_update = true,
+        .allow_compaction = true,
+    }) catch return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
     var storage = createBuffer(
         gc,
         sizes.result_size,
@@ -115,6 +126,7 @@ pub fn init(
         .sizes_value = sizes,
         .device_address = device_address,
         .primitive_count = descriptor.primitive_count,
+        .allow_update = descriptor.allow_update,
     };
 }
 
@@ -137,6 +149,19 @@ pub fn hasDriverHandle(self: VulkanAccelerationStructure) bool {
 
 pub fn markBuilt(self: *VulkanAccelerationStructure) void {
     self.built_value = true;
+}
+
+pub fn recordBuildInputs(
+    self: *VulkanAccelerationStructure,
+    geometries: []const vk.AccelerationStructureGeometryKHR,
+    ranges: []const vk.AccelerationStructureBuildRangeInfoKHR,
+) core.AdvancedFeatureError!void {
+    if (geometries.len == 0 or geometries.len != ranges.len or geometries.len > self.recorded_geometries.len) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+    @memcpy(self.recorded_geometries[0..geometries.len], geometries);
+    @memcpy(self.recorded_ranges[0..ranges.len], ranges);
+    self.recorded_geometry_count = @intCast(geometries.len);
 }
 
 pub fn geometryAddress(self: VulkanAccelerationStructure) core.AdvancedFeatureError!vk.DeviceAddress {
@@ -346,27 +371,33 @@ pub fn instanceGeometry(instance_address: vk.DeviceAddress) vk.AccelerationStruc
 pub fn queryBuildSizes(
     gc: *const GraphicsContext,
     descriptor: core.AccelerationStructureDescriptor,
+    flags: core.AccelerationStructureBuildFlags,
 ) !core.AccelerationStructureBuildSizes {
     if (descriptor.kind == .top_level) {
         var geometry = instanceGeometry(0);
-        return queryBuildSizesForGeometry(gc, descriptor, &geometry);
+        return queryBuildSizesForGeometry(gc, descriptor, flags, &geometry);
     }
 
     var triangle = triangleGeometry(0);
     var aabb = aabbGeometry(0, 24);
-    const triangle_sizes = try queryBuildSizesForGeometry(gc, descriptor, &triangle);
-    const aabb_sizes = try queryBuildSizesForGeometry(gc, descriptor, &aabb);
+    const triangle_sizes = try queryBuildSizesForGeometry(gc, descriptor, flags, &triangle);
+    const aabb_sizes = try queryBuildSizesForGeometry(gc, descriptor, flags, &aabb);
     return maxBuildSizes(triangle_sizes, aabb_sizes);
 }
 
 fn queryBuildSizesForGeometry(
     gc: *const GraphicsContext,
     descriptor: core.AccelerationStructureDescriptor,
+    flags: core.AccelerationStructureBuildFlags,
     geometry: *vk.AccelerationStructureGeometryKHR,
 ) !core.AccelerationStructureBuildSizes {
     var build_info = vk.AccelerationStructureBuildGeometryInfoKHR{
         .type = accelerationStructureType(descriptor.kind),
-        .flags = .{ .prefer_fast_trace_bit_khr = true },
+        .flags = .{
+            .allow_update_bit_khr = descriptor.allow_update or flags.allow_update,
+            .allow_compaction_bit_khr = flags.allow_compaction,
+            .prefer_fast_trace_bit_khr = true,
+        },
         .mode = .build_khr,
         .geometry_count = 1,
         .p_geometries = @ptrCast(geometry),

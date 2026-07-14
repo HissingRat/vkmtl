@@ -166,7 +166,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
 
     var metal_function_table_entries: u32 = 0;
     var metal_backend_tables = false;
-    if (device.selectedBackend() == .metal) {
+    if (device.selectedBackend() == .metal and device.features().ray_tracing_custom_intersection) {
         const intersections = [_]vkmtl.native.metal.IntersectionFunctionDescriptor{.{
             .entry_point = "intersect_triangle",
         }};

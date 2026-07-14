@@ -1,6 +1,6 @@
 # Metal Semantic Ledger
 
-Status: Period 51 semantic closeout update to the macOS SDK 26.2 audited
+Status: Period 52 semantic closeout update to the macOS SDK 26.2 audited
 baseline.
 
 This ledger groups Objective-C overloads and descriptor helper classes by
@@ -113,7 +113,7 @@ or `missing-contract`; it does not admit new public API.
 | MTL-SHD-002 | `MTLFunctionConstantValues` | Specialize vertex, fragment, and compute functions by stable numeric typed constant IDs | shader | native-exact | native-exact | Metal `setConstantValue:type:atIndex:` and specialized function creation; Vulkan specialization info uses the same IDs | gpu-pixels |
 | MTL-SHD-003 | Portable function reflection and binding protocols | Reflect buffers, textures, samplers, arrays, storage access, and vertex inputs used by portable layouts | shader | composed-exact | composed-exact | Build-time Slang source reflection emits schema-1 portable metadata consumed identically by both generated backends | unit |
 | MTL-SHD-004 | `MTLFunctionDescriptor`, linked functions | Compose visible/private functions and linked function sets | shader | unsupported | unsupported | Manifest schema 1 embeds complete stages and has no link-unit contract | inspection |
-| MTL-SHD-005 | `MTLFunctionHandle`, visible/intersection function tables | Obtain callable handles and populate GPU function tables | ray_tracing | incomplete | incomplete | SBT/callable shader records and descriptor buffers/sets | unit |
+| MTL-SHD-005 | `MTLFunctionHandle`, visible/intersection function tables | Obtain callable handles and populate GPU function tables | ray_tracing | unsupported | unsupported | Schema 2 has no linked callable/intersection artifact or record-payload binding contract; planning does not claim driver tables | inspection |
 | MTL-SHD-006 | Function stitching graph/node protocols | Build specialized functions by stitching callable graph nodes | missing-contract | unsupported | unsupported | No public stitching graph or runtime compiler contract | inspection |
 | MTL-SHD-007 | `MTLDynamicLibrary` | Load/install dynamic shader libraries and resolve functions | missing-contract | unsupported | unsupported | Manifest schema 1 has no install-name, dynamic-library, or runtime linking contract | inspection |
 | MTL-SHD-008 | Function logs and `MTLLogState` | Capture shader compilation/execution log messages and locations | diagnostics | incomplete | incomplete | Debug printf/validation tooling; no portable exact path defined | missing |
@@ -135,15 +135,16 @@ or `missing-contract`; it does not admit new public API.
 
 | ID | Metal source family | Semantic contract | Owner | Metal | Vulkan | Vulkan mapping / gates | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| MTL-RT-001 | `MTLAccelerationStructure`, descriptors | Create triangle, curve, bounding-box, motion, primitive, and instance AS descriptions | ray_tracing | incomplete | incomplete | KHR acceleration structures; current mesh/AABB subset is executable | gpu-smoke |
+| MTL-RT-001 | `MTLAccelerationStructure`, ordinary descriptors | Create triangle, bounding-box, primitive, and instance AS descriptions | ray_tracing | native-exact | native-exact | Metal triangle/AABB BLAS plus multi-source TLAS; Vulkan KHR triangle/AABB/instance geometry | gpu-soak |
 | MTL-RT-002 | `MTLAccelerationStructureCommandEncoder` build | Build BLAS/TLAS from application buffers | ray_tracing | native-exact | native-exact | KHR AS build commands | gpu-smoke |
-| MTL-RT-003 | AS refit/copy/compact/size queries | Maintain and compact acceleration structures | ray_tracing | incomplete | incomplete | KHR update/copy/query commands | unit |
-| MTL-RT-004 | `MTLIntersectionFunctionTable` | Bind custom intersection, visible functions, buffers, and acceleration structures | ray_tracing | incomplete | incomplete | RT shader groups, SBT records, descriptor bindings | unit |
-| MTL-RT-005 | Ray dispatch through compute/render pipelines | Trace and shade rays into resources or render output | ray_tracing | native-exact | native-exact | Metal intersection functions and `vkCmdTraceRaysKHR` | gpu-pixels |
-| MTL-RT-006 | Ray query from ordinary shader stages | Inline traversal and candidate intersection control | ray_tracing | unsupported | incomplete | Vulkan ray query extension; vkmtl Vulkan usable path remains closed | unit |
-| MTL-RT-007 | Callable shaders and complex function-table/SBT layouts | Invoke callable records and multiple hit/miss groups | ray_tracing | incomplete | incomplete | Callable shader groups and SBT layouts | unit |
-| MTL-RT-008 | Motion transforms and advanced AS geometry | Trace motion/curve/row-major advanced geometry | ray_tracing | incomplete | incomplete | Motion blur/curve extensions where available | missing |
-| MTL-RT-009 | Metal 4 acceleration structure descriptors | Express Metal 4 AS geometry and instance families | ray_tracing | incomplete | incomplete | KHR/extension AS descriptors | missing |
+| MTL-RT-003 | AS update/refit/copy/compact commands and build/update size queries | Maintain and compact acceleration structures with validated source/destination/scratch ownership | ray_tracing | native-exact | native-exact | Native refit/update and compact-copy commands; exact device build/update size queries | gpu-soak |
+| MTL-RT-004 | `MTLIntersectionFunctionTable` | Bind custom intersection, visible functions, buffers, and acceleration structures | ray_tracing | unsupported | unsupported | Current artifacts and bindings cannot populate a driver table; Vulkan procedural RT is a separate shader-group contract | inspection |
+| MTL-RT-005 | Ray dispatch through compute/render pipelines | Trace and shade rays into resources or render output | ray_tracing | native-exact | native-exact | Metal compute RT dispatch and `vkCmdTraceRaysKHR`; custom intersection is tracked separately | gpu-pixels |
+| MTL-RT-006 | Ray query from ordinary shader stages | Inline traversal and candidate intersection control | ray_tracing | unsupported | unsupported | Vulkan extension availability is queried natively, but ordinary AS binding and ray-query shader artifacts are not admitted | unit |
+| MTL-RT-007 | Callable shaders and complex function-table/SBT layouts | Invoke callable records and multiple hit/miss groups | ray_tracing | unsupported | unsupported | Planning counts do not create callable artifacts, record payloads, multiple program groups, or callable regions | unit |
+| MTL-RT-008 | Motion transforms and advanced AS geometry | Trace motion/curve/row-major advanced geometry | ray_tracing | unsupported | unsupported | No admitted motion-keyframe/curve/row-major resource contract or complete enabled extension mapping | inspection |
+| MTL-RT-009 | Metal 4 acceleration structure descriptors | Express Metal 4 AS geometry and instance families | ray_tracing | unsupported | not-applicable | Classic runtime allocation has no Metal 4 descriptor/resource-layout owner | inspection |
+| MTL-RT-010 | Post-build compacted-size query | Publish the exact compact destination allocation size after GPU build completion | ray_tracing | unsupported | unsupported | No asynchronous query-result owner exists; safe upper-bound destinations do not claim compact size discovery | inspection |
 | MTL-DBG-001 | Labels and command/encoder debug groups | Name objects and nest diagnostic regions | command | native-exact | native-exact | Debug utils when enabled | gpu-smoke |
 | MTL-DBG-002 | `MTLCaptureScope`, `MTLCaptureManager` | Start/end developer-tools GPU capture scopes | diagnostics | native-exact | unsupported | Vulkan capture remains external-tool-specific | gpu-smoke |
 | MTL-DBG-003 | Common timestamp counter set and sample buffers | Discover the timestamp counter, sample at draw/dispatch/blit boundaries, and report raw GPU ticks | diagnostics | native-exact | native-exact | Capability-gated Metal counter sample buffers and Vulkan timestamp query pools; duration calibration is not part of this row | unit |

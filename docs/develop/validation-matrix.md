@@ -59,11 +59,15 @@ Current cases:
   commit/churn plans remain distinct from typed-unsupported execution;
   tessellation draw planning and mesh/task dispatch planning stay
   capability-gated.
-- `ray_tracing_native_parity`: ray tracing planning, Metal mapping, native
-  advanced closure, and future Period 29 assignments stay explicit.
-- `ray_tracing_completeness`: AS maintenance, many-instance TLAS metadata, ray
-  query support, complex SBT layout, callable records, and RT stress plans stay
-  capability-gated and deterministic.
+- `ray_tracing_native_parity`: basic ray tracing, executable AS maintenance,
+  Metal AABB/multi-source TLAS input, native-only availability, and planning
+  records remain distinct.
+- `ray_tracing_completeness`: update/refit/compact resources, many-instance
+  TLAS validation, native ray-query discovery, planning-only complex/callable
+  SBT records, and RT stress plans stay capability-gated and deterministic.
+  `run-ray-tracing-maintenance` adds headless physical build/update/refit/
+  compact/AABB/multi-source evidence without implying unsupported function
+  tables or ray-query execution.
 - `period44_device_evidence`: hosted builds, physical smoke, exact/tolerant
   pixel readback, bounded soak, and release evidence gates remain distinct;
   all nine explicit release gates are observed, while physical Linux GPU and

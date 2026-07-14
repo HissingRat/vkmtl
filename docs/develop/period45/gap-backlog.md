@@ -6,10 +6,9 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Periods 46-51 refined broad query, common-workload, synchronization, memory,
-binding, indirect-command, artifact, and advanced-raster rows, so the current ledger contains
-109 units and exactly-once routes 34 incomplete
-IDs.
+Periods 46-52 refined broad query, common-workload, synchronization, memory,
+binding, indirect-command, artifact, advanced-raster, and ray-tracing rows. The
+current ledger retains an exact-once route for every remaining incomplete ID.
 
 The periods below are implementation slices, not promises to add all source
 concepts to the public API. Each period must apply the public API admission
@@ -131,15 +130,21 @@ feature flag.
 
 ## Period 52: Ray Tracing Breadth
 
+Status: complete.
+
 Priority: complete the already executable RT vertical slice.
 
-- Full AS geometry/motion families, update/refit/compaction, and size queries.
-- Metal intersection/visible function tables, Vulkan ray query, callable and
-  complex SBT layouts.
-- Metal 4 AS descriptor parity.
+- [x] Execute ordinary triangle/AABB/instance geometry plus
+  update/refit/compaction commands and exact build/update size queries.
+- [x] Close compacted-size query, function/intersection tables, Vulkan ray
+  query execution, callable/complex SBT execution, motion/curves, and Metal 4
+  AS descriptors precisely.
+- [x] Record headless physical Metal maintenance/AABB/multi-instance evidence
+  and the exact Vulkan RT-machine rerun command.
 
-Acceptance: native stress evidence covers each enabled maintenance and shader
-table path.
+Acceptance: complete. Native Metal stress covers each enabled maintenance and
+ordinary geometry path. No shader-table path is enabled without a driver-bound
+artifact/table implementation.
 
 ## Period 53: External Interop, Metal I/O, And Device Topology
 
@@ -171,7 +176,8 @@ gates.
 
 ## Next Slice
 
-Period 51 is complete. Vulkan tessellation and mesh-only execution are open;
-Metal tessellation, task/object artifacts, advanced-stage bindings, and the
-remaining advanced raster families are precisely unsupported. 34 incomplete
-semantic units remain routed to Periods 52-54. Period 52 is next.
+Period 52 is complete. Ordinary RT maintenance, Metal AABB input, and
+multi-source TLAS execution are open; function tables, compact-size query,
+inline ray query, callable/complex SBT execution, motion/curves, and Metal 4 AS
+descriptors are precisely unsupported. Remaining incomplete semantic units are
+routed exactly once to Periods 53-54. Period 53 is next.

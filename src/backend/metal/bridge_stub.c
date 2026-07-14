@@ -1711,11 +1711,13 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
     unsigned int primitive_count,
+    unsigned int allow_update,
     vkmtl_metal_acceleration_structure_build_sizes *out_sizes
 ) {
     (void)owner;
     (void)kind;
     (void)primitive_count;
+    (void)allow_update;
     if (out_sizes != NULL) {
         *out_sizes = (vkmtl_metal_acceleration_structure_build_sizes){0};
     }
@@ -1726,11 +1728,13 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
     unsigned int primitive_count,
+    unsigned int allow_update,
     vkmtl_metal_acceleration_structure **out_acceleration_structure
 ) {
     (void)owner;
     (void)kind;
     (void)primitive_count;
+    (void)allow_update;
     if (out_acceleration_structure != NULL) {
         *out_acceleration_structure = NULL;
     }
@@ -1802,6 +1806,23 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
     (void)index_buffer_offset;
     (void)index_type;
     (void)primitive_count;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_aabb_geometry(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *bounding_box_buffer,
+    size_t bounding_box_buffer_offset,
+    unsigned int bounding_box_stride,
+    unsigned int bounding_box_count,
+    unsigned int opaque
+) {
+    (void)acceleration_structure;
+    (void)bounding_box_buffer;
+    (void)bounding_box_buffer_offset;
+    (void)bounding_box_stride;
+    (void)bounding_box_count;
+    (void)opaque;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -1895,13 +1916,38 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     vkmtl_metal_acceleration_structure *acceleration_structure,
     vkmtl_metal_buffer *scratch_buffer,
     size_t scratch_offset,
-    vkmtl_metal_acceleration_structure *instance_source
+    vkmtl_metal_acceleration_structure *update_source,
+    vkmtl_metal_acceleration_structure *const *instance_sources,
+    size_t instance_source_count,
+    unsigned int allow_update,
+    unsigned int update
 ) {
     (void)command_buffer;
     (void)acceleration_structure;
     (void)scratch_buffer;
     (void)scratch_offset;
-    (void)instance_source;
+    (void)update_source;
+    (void)instance_sources;
+    (void)instance_source_count;
+    (void)allow_update;
+    (void)update;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_command_buffer_maintain_acceleration_structure(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_acceleration_structure *source,
+    vkmtl_metal_acceleration_structure *destination,
+    vkmtl_metal_buffer *scratch_buffer,
+    size_t scratch_offset,
+    unsigned int operation
+) {
+    (void)command_buffer;
+    (void)source;
+    (void)destination;
+    (void)scratch_buffer;
+    (void)scratch_offset;
+    (void)operation;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 

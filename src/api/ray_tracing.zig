@@ -24,6 +24,7 @@ pub const AccelerationStructureMaintenancePlan = core.AccelerationStructureMaint
 pub const AccelerationStructure = runtime.AccelerationStructure;
 pub const AccelerationStructureGeometryResources = runtime.AccelerationStructureGeometryResources;
 pub const AccelerationStructureBuildResources = runtime.AccelerationStructureBuildResources;
+pub const AccelerationStructureMaintenanceResources = runtime.AccelerationStructureMaintenanceResources;
 pub const RayTracingShaderGroupKind = core.RayTracingShaderGroupKind;
 pub const RayTracingHitGroupKind = core.RayTracingHitGroupKind;
 pub const RayTracingShaderGroupDescriptor = core.RayTracingShaderGroupDescriptor;

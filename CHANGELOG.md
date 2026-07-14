@@ -11,6 +11,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added executable Vulkan/Metal acceleration-structure build-update,
+  update/refit, and compact-copy commands through
+  `CommandBuffer.encodeAccelerationStructureMaintenance(...)`.
+- Added native Metal AABB BLAS input, multiple distinct BLAS sources per TLAS,
+  and a headless RT maintenance/geometry stress example.
 - Added root `HeadlessContext` with nested `Options` and borrowed `Device` and
   `Queue` views for real no-window compute, transfer, resource, ray-tracing,
   and texture-backed offscreen rendering.
@@ -71,6 +76,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Basic RT/AS execution now reports through usable `Device.features()`;
+  native-only Vulkan ray query, callable SBT, and Metal custom-intersection
+  availability remains non-executable.
+- Function/intersection tables, post-build compact-size query, inline ray-query
+  execution, callable/complex SBT execution, motion/curve geometry, and Metal 4
+  AS descriptors are explicitly unsupported under the current contracts.
 - `examples/compute_readback` and `examples/transfer_readback` now use
   `HeadlessContext` and no longer initialize or link GLFW. Transfer readback
   also validates a texture-backed offscreen clear and copy.
@@ -119,6 +130,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 52 adds one ray-tracing facade resource bundle, one `CommandBuffer`
+  method, three `AccelerationStructure` evidence methods, and defaulted plan
+  fields. These additive changes target `v0.2.0`; no root, `Device`,
+  `WindowContext`, handle-name, or manifest-schema surface changes.
 - `HeadlessContext` is an additive `v0.1.x` portable root API. All ten
   `WindowContext` methods and their behavior remain unchanged; the initial
   headless owner intentionally has no presentation-shaped native-handle view.

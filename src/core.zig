@@ -4030,6 +4030,7 @@ pub const AccelerationStructureBuildPlan = struct {
     scratch_size: u64,
     update_scratch_size: u64 = 0,
     scratch_alignment: u64,
+    allow_update: bool = false,
     allow_compaction: bool = false,
 
     pub fn fromDescriptor(
@@ -4038,7 +4039,9 @@ pub const AccelerationStructureBuildPlan = struct {
         features: DeviceFeatures,
     ) AdvancedFeatureError!AccelerationStructureBuildPlan {
         try descriptor.validate(features);
-        const sizes = estimateAccelerationStructureBuildSizes(descriptor.acceleration_structure);
+        var sizing_descriptor = descriptor.acceleration_structure;
+        sizing_descriptor.allow_update = sizing_descriptor.allow_update or descriptor.flags.allow_update;
+        const sizes = estimateAccelerationStructureBuildSizes(sizing_descriptor);
         return .{
             .backend = backend,
             .kind = descriptor.acceleration_structure.kind,
@@ -4052,6 +4055,7 @@ pub const AccelerationStructureBuildPlan = struct {
             else
                 0,
             .scratch_alignment = descriptor.scratch_alignment,
+            .allow_update = descriptor.acceleration_structure.allow_update or descriptor.flags.allow_update,
             .allow_compaction = descriptor.flags.allow_compaction,
         };
     }
@@ -4110,6 +4114,7 @@ pub const AccelerationStructureMaintenancePlan = struct {
     operation: AccelerationStructureMaintenanceOperation,
     primitive_count: u32,
     scratch_size: u64 = 0,
+    scratch_alignment: u64 = 256,
     source_result_size: u64 = 0,
     compacted_size_upper_bound: u64 = 0,
     requires_source_as: bool = true,
@@ -4133,6 +4138,7 @@ pub const AccelerationStructureMaintenancePlan = struct {
                 .update, .refit => alignForwardU64(sizes.update_scratch_size, descriptor.scratch_alignment),
                 .compact => 0,
             },
+            .scratch_alignment = descriptor.scratch_alignment,
             .source_result_size = source_size,
             .compacted_size_upper_bound = switch (descriptor.operation) {
                 .compact => descriptor.compacted_size_hint orelse source_size,
@@ -4265,6 +4271,9 @@ pub const MetalIntersectionFunctionDescriptor = struct {
 
     pub fn validate(self: MetalIntersectionFunctionDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
         if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
+        if (!features.ray_tracing_custom_intersection) {
+            return AdvancedFeatureError.UnsupportedRayTracingCustomIntersection;
+        }
         if (self.entry_point.len == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
     }
 };
@@ -14791,7 +14800,19 @@ test "acceleration structure build plans validate geometry and scratch requireme
     try std.testing.expect(isAlignedU64(plan.scratch_size, 512));
     try std.testing.expect(plan.update_scratch_size > 0);
     try std.testing.expect(plan.requiresUpdateSource());
+    try std.testing.expect(plan.allow_update);
     try std.testing.expect(plan.allow_compaction);
+
+    const flag_only_update_plan = try AccelerationStructureBuildPlan.fromDescriptor(.metal, .{
+        .acceleration_structure = .{
+            .kind = .bottom_level,
+            .primitive_count = 1,
+        },
+        .mode = .update,
+        .flags = .{ .allow_update = true },
+    }, .{ .acceleration_structures = true });
+    try std.testing.expect(flag_only_update_plan.allow_update);
+    try std.testing.expect(flag_only_update_plan.update_scratch_size > 0);
 
     try std.testing.expectError(AdvancedFeatureError.InvalidAccelerationStructureDescriptor, (AccelerationStructureBuildDescriptor{
         .acceleration_structure = .{
@@ -14831,6 +14852,7 @@ test "acceleration structure maintenance plans update refit and compaction" {
     try std.testing.expectEqual(AccelerationStructureMaintenanceOperation.update, update_plan.operation);
     try std.testing.expect(update_plan.requires_allow_update);
     try std.testing.expect(!update_plan.requires_destination_as);
+    try std.testing.expectEqual(@as(u64, 512), update_plan.scratch_alignment);
     try std.testing.expect(isAlignedU64(update_plan.scratch_size, 512));
 
     const refit_plan = try AccelerationStructureMaintenancePlan.fromDescriptor(.metal, .{
@@ -14985,7 +15007,10 @@ test "Metal ray tracing lowering counts function table entries" {
     const lowering = try MetalRayTracingLowering.fromDescriptor(.{
         .shader_groups = groups[0..],
         .max_recursion_depth = 1,
-    }, intersections[0..], .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
+    }, intersections[0..], .{
+        .ray_tracing = true,
+        .ray_tracing_custom_intersection = true,
+    }, .{ .max_ray_tracing_recursion_depth = 2 });
     try std.testing.expectEqual(@as(u32, 4), lowering.function_table_entries);
     try std.testing.expectEqual(@as(u32, 1), lowering.hit_groups);
     try std.testing.expectEqual(@as(u32, 1), lowering.intersection_function_count);
@@ -15021,7 +15046,10 @@ test "Metal ray tracing mapping plan records function table requirements" {
         },
         .intersections = intersections[0..],
         .function_table_label = "triangle-functions",
-    }, .{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 2 });
+    }, .{
+        .ray_tracing = true,
+        .ray_tracing_custom_intersection = true,
+    }, .{ .max_ray_tracing_recursion_depth = 2 });
     try std.testing.expectEqual(@as(u32, 3), plan.function_table_entries);
     try std.testing.expectEqual(@as(u32, 1), plan.intersection_function_count);
     try std.testing.expect(plan.requires_function_table);

@@ -257,24 +257,25 @@ conservative until the relevant backend period lands.
 | SBT and ray dispatch planning | Runtime SBT/dispatch plan | Runtime SBT/dispatch plan | `vkmtl.ray_tracing.planRayDispatch(device, sbt, descriptor)` |
 | Native ray dispatch commands | Backend-private dispatch records | First native Metal RT dispatch to drawable | Period 31 implements first-triangle Metal dispatch; Vulkan dispatch in Period 32, full-scene dispatch in Period33, procedural dispatch in Period34 |
 | Metal ray tracing mapping planning | Validation no-op | Runtime Metal mapping plan | `vkmtl.native.metal.planRayTracingMapping(device, descriptor)` |
-| Native Metal ray tracing execution | Validation no-op | First native Metal RT AS/build/dispatch path plus table metadata | Period 31 implements first-triangle Metal dispatch binding; mesh scene support is Period33, function-table procedural support is Period35 |
+| Native Metal ray tracing execution | Validation no-op | Native Metal RT AS/build/dispatch path; planning table metadata is not a driver table | Period 31 implements first-triangle dispatch and Period 33 mesh scene support; Period 52 closes function-table execution unsupported under schema 2 |
 | Native advanced closure inventory | Internal roadmap data | Internal roadmap data | Internalized planning inventory; not public API |
 | Native advanced backend execution | Backend-private inventory | Backend-private inventory | Period 30 Phase 5 runtime inventory; first triangles in Period 31 and Period 32, mesh scene driver execution in Period33, procedural driver execution in Period34 |
 | Parity semantics and soak loops | Runtime diagnostics plan | Runtime diagnostics plan | Period 30 Phase 6 runtime validation; GPU soak deferred to Period32+ |
 | Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make first ray traced scenes pixel-producing; Period33/34 own the full mesh/procedural scene examples |
 | Full native RT mesh scene | Mesh build-input path implemented and superseded by Period34 procedural scene for the Vulkan example | Visible Metal full mesh scene | Period33 uses user mesh buffers for `ray_traced_scene`; Vulkan mesh validation happened before the Period34 procedural replacement |
-| Procedural RT geometry and custom intersection | AABB build-input lowering, intersection SPIR-V precompile, procedural hit groups, SBT records, and procedural `ray_traced_scene` marker implemented; supported-device visual validation pending | Pixel-producing scene path uses shared scene data; driver-level procedural/intersection-function-table execution is Period39 | Period34 closes the Vulkan procedural path; Period35 adds shared scene data; Period39 owns mixed TLAS and Metal procedural parity |
+| Procedural RT geometry and custom intersection | AABB build-input lowering, intersection SPIR-V, procedural hit groups/SBT, and physical `ray_traced_scene` marker | Native AABB BLAS input; custom intersection/function table unsupported | Period 52 separates ordinary AABB geometry from custom-intersection execution |
 
 ## Period 39 Ray Tracing Completeness Expectations
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| AS maintenance | Update/refit/compaction planning from native features | Update/refit/compaction planning from native features | `vkmtl.ray_tracing.planAccelerationStructureMaintenance(device, descriptor)` |
-| Many-instance TLAS metadata | Backend-neutral instance layout plan | Backend-neutral instance layout plan | `vkmtl.ray_tracing.planTopLevelAccelerationStructureLayout(device, descriptor)` |
-| Ray query | Vulkan ray query planning | Typed unsupported | `vkmtl.ray_tracing.planRayQuery(device, descriptor)` |
-| Complex SBT and callable records | Complex SBT record/range planning | Complex SBT record/range planning | `vkmtl.ray_tracing.planComplexShaderBindingTable(device, descriptor)` |
+| AS maintenance | Native update/refit/compact-copy commands | Native update/refit/compact-copy commands | Period 52 `CommandBuffer.encodeAccelerationStructureMaintenance(...)` |
+| Compact size query | Typed unsupported | Typed unsupported | Build/update sizes are exact; no asynchronous post-build compact-size owner |
+| Many-instance TLAS metadata | Multiple distinct BLAS sources executable; non-default metadata planning | Multiple distinct BLAS sources executable; non-default metadata planning | Period 52 source arrays plus existing layout plan |
+| Ray query | Native availability query; execution typed unsupported | Typed unsupported | `planRayQuery` remains diagnostic; usable feature false |
+| Complex SBT and callable records | Planning only; execution typed unsupported | Planning only; execution typed unsupported | Schema 2 has no callable artifact/record payload/native callable region |
 | RT stress planning | Deterministic stress plan | Deterministic stress plan without ray query | `vkmtl.ray_tracing.planRayTracingStress(device, descriptor)` |
-| Native GPU stress evidence | Deferred | Deferred | Period44 device-matrix runs |
+| Native GPU stress evidence | Exact RT-machine rerun recorded | Physical 32-iteration maintenance/AABB/multi-source run | `run-ray-tracing-maintenance` |
 
 ## Period 37 Memory, Heaps, And Residency Expectations
 

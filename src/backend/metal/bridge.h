@@ -783,12 +783,14 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
     unsigned int primitive_count,
+    unsigned int allow_update,
     vkmtl_metal_acceleration_structure_build_sizes *out_sizes
 );
 vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
     unsigned int primitive_count,
+    unsigned int allow_update,
     vkmtl_metal_acceleration_structure **out_acceleration_structure
 );
 void vkmtl_metal_acceleration_structure_destroy(
@@ -821,6 +823,14 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
     size_t index_buffer_offset,
     unsigned int index_type,
     unsigned int primitive_count
+);
+vkmtl_metal_status vkmtl_metal_acceleration_structure_set_aabb_geometry(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_buffer *bounding_box_buffer,
+    size_t bounding_box_buffer_offset,
+    unsigned int bounding_box_stride,
+    unsigned int bounding_box_count,
+    unsigned int opaque
 );
 
 vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
@@ -914,7 +924,19 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     vkmtl_metal_acceleration_structure *acceleration_structure,
     vkmtl_metal_buffer *scratch_buffer,
     size_t scratch_offset,
-    vkmtl_metal_acceleration_structure *instance_source
+    vkmtl_metal_acceleration_structure *update_source,
+    vkmtl_metal_acceleration_structure *const *instance_sources,
+    size_t instance_source_count,
+    unsigned int allow_update,
+    unsigned int update
+);
+vkmtl_metal_status vkmtl_metal_command_buffer_maintain_acceleration_structure(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_acceleration_structure *source,
+    vkmtl_metal_acceleration_structure *destination,
+    vkmtl_metal_buffer *scratch_buffer,
+    size_t scratch_offset,
+    unsigned int operation
 );
 vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     vkmtl_metal_command_buffer *command_buffer,

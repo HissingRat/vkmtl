@@ -408,6 +408,17 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     // The pinned Slang toolchain currently cannot produce a stable
     // task/object artifact, so native availability is not executable support.
     result.task_shaders = false;
+    result.acceleration_structures = capabilities.ray_tracing != 0;
+    result.acceleration_structure_update = capabilities.ray_tracing != 0;
+    result.acceleration_structure_refit = capabilities.ray_tracing != 0;
+    result.acceleration_structure_compaction = capabilities.ray_tracing != 0;
+    result.ray_tracing = capabilities.ray_tracing != 0;
+    result.ray_query = false;
+    result.ray_tracing_procedural_geometry = capabilities.ray_tracing != 0;
+    // AABB build is executable, but custom intersection dispatch still needs
+    // an intersection-function-table artifact and binding contract.
+    result.ray_tracing_custom_intersection = false;
+    result.ray_tracing_callable_shaders = false;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -538,7 +549,15 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(!usable.task_shaders);
     try std.testing.expect(usable.argument_buffers);
     try std.testing.expect(usable.metal_binary_archive);
-    try std.testing.expect(!usable.ray_tracing);
+    try std.testing.expect(usable.acceleration_structures);
+    try std.testing.expect(usable.acceleration_structure_update);
+    try std.testing.expect(usable.acceleration_structure_refit);
+    try std.testing.expect(usable.acceleration_structure_compaction);
+    try std.testing.expect(usable.ray_tracing);
+    try std.testing.expect(usable.ray_tracing_procedural_geometry);
+    try std.testing.expect(!usable.ray_tracing_custom_intersection);
+    try std.testing.expect(!usable.ray_query);
+    try std.testing.expect(!usable.ray_tracing_callable_shaders);
     try std.testing.expectEqual(@as(u32, 1024), queried_limits.max_compute_total_threads_per_threadgroup);
     try std.testing.expectEqual(@as(u64, 8 * 1024 * 1024 * 1024), queried_limits.max_buffer_length);
     try std.testing.expectEqual(@as(u32, 16384), queried_limits.max_texture_dimension_2d);

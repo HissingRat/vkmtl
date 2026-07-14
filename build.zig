@@ -518,6 +518,28 @@ pub fn build(b: *std.Build) void {
     const ray_traced_scene_step = b.step("run-ray-traced-scene", "Run the vkmtl ray tracing feature-gate example");
     ray_traced_scene_step.dependOn(&ray_traced_scene_cmd.step);
 
+    const ray_tracing_maintenance = b.addExecutable(.{
+        .name = "vkmtl-ray-tracing-maintenance",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/ray_tracing_maintenance/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+            },
+        }),
+    });
+    b.installArtifact(ray_tracing_maintenance);
+
+    const ray_tracing_maintenance_cmd = b.addRunArtifact(ray_tracing_maintenance);
+    ray_tracing_maintenance_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, ray_tracing_maintenance_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, ray_tracing_maintenance_cmd);
+
+    const ray_tracing_maintenance_step = b.step("run-ray-tracing-maintenance", "Run the headless RT maintenance example");
+    ray_tracing_maintenance_step.dependOn(&ray_tracing_maintenance_cmd.step);
+
     const stability_plan = b.addExecutable(.{
         .name = "vkmtl-stability-plan",
         .root_module = b.createModule(.{

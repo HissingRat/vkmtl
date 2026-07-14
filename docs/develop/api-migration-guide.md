@@ -15,6 +15,34 @@ drawable, presentation method, or presentation-shaped native-handle view.
 
 Existing `WindowContext` source and behavior are unchanged.
 
+## Period 52 v0.2.0 Ray Tracing Maintenance Update
+
+Existing callers need no source change. New maintenance code supplies
+`vkmtl.ray_tracing.AccelerationStructureMaintenanceResources` to
+`CommandBuffer.encodeAccelerationStructureMaintenance(...)`:
+
+```zig
+try command_buffer.encodeAccelerationStructureMaintenance(refit_plan, .{
+    .source = &acceleration_structure,
+    .scratch = &scratch_buffer,
+});
+```
+
+Compaction uses a distinct `.destination` and no scratch resource. Create
+update/refit sources with `AccelerationStructureDescriptor.allow_update = true`.
+Build a compactable source with
+`AccelerationStructureBuildFlags.allow_compaction = true`.
+Keep the source's build-input buffers and TLAS instance-source AS objects alive
+through every update/refit submission that reuses them.
+`AccelerationStructureBuildPlan.allow_update` and
+`AccelerationStructureMaintenancePlan.scratch_alignment` are additive fields.
+
+Basic RT/AS execution now appears in `Device.features()` when complete on the
+selected backend. Do not infer executable ray query, callable SBT, or Metal
+custom intersection from `nativeFeatures()`: those native/planning facts remain
+closed until the shader artifact, binding, and native table/record paths are
+complete.
+
 ## Period 51 v0.2.0 Advanced Geometry Update
 
 Schema version 2 adds `tessellation_shaders` and `mesh_shaders` while schema 1

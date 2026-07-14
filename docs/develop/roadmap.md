@@ -946,10 +946,16 @@ See `docs/develop/headless-context.md`.
 
 ## Period 52: Ray Tracing Breadth
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
 Goal: close AS maintenance/geometry, function-table, ray-query, callable/SBT,
 motion, and Metal 4 RT gaps around the existing native vertical slice.
+
+Native Metal/Vulkan update/refit/compact commands, Metal AABB BLAS input, and
+Metal multi-source TLAS construction are implemented. Function tables, compact
+size queries, inline ray query, callable/complex SBT execution, motion/curves,
+and Metal 4 descriptors are precisely unsupported under the current contracts.
+See `docs/develop/period52/`.
 
 ## Period 53: External Interop, Metal I/O, And Device Topology
 
@@ -1012,8 +1018,8 @@ See `docs/develop/period32+/target.md`.
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Periods
-  46-51 plus the additive headless runtime are complete implementation slices.
-  Period 52 is the active mainline target; Periods 52-54 remain routed from the
+  46-52 plus the additive headless runtime are complete implementation slices.
+  Period 53 is the active mainline target; Periods 53-54 remain routed from the
   gap ledger and must not be reordered around their stated dependencies without
   updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on

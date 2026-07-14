@@ -37,8 +37,8 @@ rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
 rg -c '^[ ]*pub fn ' src/runtime/headless_context.zig
 ```
 
-The current results are 440 in `window_context.zig` and six in
-`headless_context.zig`. The former is 17 module-level operations and 423
+The current results are 445 in `window_context.zig` and six in
+`headless_context.zig`. The former is 17 module-level operations and 428
 methods; six module-level declarations are private cross-file context-owner
 plumbing and are not reachable through `vkmtl`. Facade operations may be
 `pub const` aliases or direct `pub fn` declarations and are counted separately
@@ -186,7 +186,7 @@ aliases and with types used by other domains.
 | `api/shader.zig` | 39 | 4 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
 | `api/compute.zig` | 8 | 0 | compute pipeline and dispatch descriptors, atomics, threadgroup memory |
-| `api/ray_tracing.zig` | 53 | 11 | acceleration structures, RT pipelines, SBTs, dispatch, queries, stress plans |
+| `api/ray_tracing.zig` | 54 | 11 | acceleration structures, RT pipelines, SBTs, dispatch, queries, stress plans |
 | `api/interop.zig` | 49 | 21 | external resource contracts, platform import planning and diagnostics |
 | `api/native.zig` | 20 | 4 | neutral native handles, insertion, sparse lowering, and backend-lowering escape hatches |
 
@@ -197,7 +197,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 525 declarations and 92 callable
+Across the 13 top-level facades, this is 526 declarations and 92 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -372,10 +372,10 @@ The current major runtime owner counts are:
 | `RenderCommandEncoder` | 31 | natural render command owner |
 | `ComputeCommandEncoder` | 21 | natural compute command owner |
 | `BlitCommandEncoder` | 21 | natural transfer command owner |
-| `CommandBuffer` | 18 | lifecycle and encoder creation |
+| `CommandBuffer` | 19 | lifecycle, encoder creation, and RT maintenance encoding |
 | `Texture` | 19 | resource lifetime and texture operations |
 | `TextureView` | 18 | view lifetime and queries |
-| `AccelerationStructure` | 14 | capability-gated RT owner |
+| `AccelerationStructure` | 17 | capability-gated RT owner and maintenance evidence |
 | `Buffer` | 15 | mapping, read, write, GPU address, and lifetime |
 | `ShaderBindingTable` | 13 | capability-gated RT owner |
 | `ResourceTable` | 13 | advanced binding owner |
@@ -760,6 +760,33 @@ This update moves the current guard to root 69, `Device` 34,
 `WindowContext` 10, `HeadlessContext` six, and 37 runtime handles. It is an
 additive `v0.1.x` change: no existing root declaration, owner method, default,
 or `WindowContext` behavior changes.
+
+## Period 52 v0.2.0 Ray Tracing Maintenance Update
+
+Period 52 leaves the guarded root, `Device`, `WindowContext`,
+`HeadlessContext`, and runtime-handle name sets unchanged.
+`ray_tracing.AccelerationStructureMaintenanceResources` is the one new facade
+declaration, bringing that facade to 54 declarations and leaving its 11
+operation aliases unchanged.
+
+`CommandBuffer` gains
+`encodeAccelerationStructureMaintenance(...)`, bringing it to 19 public
+methods. `AccelerationStructure` gains maintenance count plus recorded/submitted
+evidence queries, bringing it to 17 methods. The maintenance resource bundle
+also owns a public validation method, so the total public functions in
+`window_context.zig` become 445.
+
+`AccelerationStructureBuildPlan.allow_update` preserves the native build flag
+chosen by the AS descriptor or build flags.
+`AccelerationStructureMaintenancePlan.scratch_alignment` preserves the
+alignment used by public resource validation. Both are additive defaulted
+fields; no existing field, enum tag, error, default, ownership rule, or method
+is removed or renamed.
+
+Callable/function-table/ray-query planning declarations remain reachable, but
+execution factories use `features()` and keep those unsupported capability
+bits false. This prevents a planning record or native query from becoming an
+executable compatibility promise.
 
 ## Compatibility Impact
 
