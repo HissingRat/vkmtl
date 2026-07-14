@@ -196,6 +196,9 @@ pub const DeviceLimits = struct {
     max_tessellation_control_points: u32 = 0,
     max_mesh_threads_per_threadgroup: u32 = 0,
     max_task_threads_per_threadgroup: u32 = 0,
+    max_mesh_threadgroups_per_grid_x: u32 = 0,
+    max_mesh_threadgroups_per_grid_y: u32 = 0,
+    max_mesh_threadgroups_per_grid_z: u32 = 0,
     max_ray_tracing_recursion_depth: u32 = 0,
     shader_binding_table_alignment: u64 = 0,
     max_acceleration_structure_instances: u32 = 0,
@@ -1223,6 +1226,7 @@ pub const AdvancedFeatureError = error{
     MissingMeshStage,
     InvalidMeshThreadgroupSize,
     InvalidMeshDispatch,
+    UnsupportedMeshShaderBindings,
     UnsupportedAccelerationStructures,
     UnsupportedRayTracing,
     UnsupportedRayTracingProceduralGeometry,
@@ -3565,6 +3569,12 @@ pub const MeshDispatchDescriptor = struct {
         if (self.threadgroup_count_x == 0 or self.threadgroup_count_y == 0 or self.threadgroup_count_z == 0) {
             return AdvancedFeatureError.InvalidMeshDispatch;
         }
+        if ((limits.max_mesh_threadgroups_per_grid_x != 0 and self.threadgroup_count_x > limits.max_mesh_threadgroups_per_grid_x) or
+            (limits.max_mesh_threadgroups_per_grid_y != 0 and self.threadgroup_count_y > limits.max_mesh_threadgroups_per_grid_y) or
+            (limits.max_mesh_threadgroups_per_grid_z != 0 and self.threadgroup_count_z > limits.max_mesh_threadgroups_per_grid_z))
+        {
+            return AdvancedFeatureError.InvalidMeshDispatch;
+        }
     }
 
     pub fn totalThreadgroups(self: MeshDispatchDescriptor) u64 {
@@ -4919,6 +4929,115 @@ pub const RenderPipelineDescriptor = struct {
         for (self.color_attachments) |attachment| {
             try attachment.validate();
         }
+        if (self.depth_stencil) |depth_stencil| try depth_stencil.validate();
+    }
+};
+
+pub const TessellationRenderPipelineDescriptor = struct {
+    render: RenderPipelineDescriptor,
+    tessellation: TessellationDescriptor,
+    control: ProgrammableStageDescriptor,
+    evaluation: ProgrammableStageDescriptor,
+
+    pub fn validate(
+        self: TessellationRenderPipelineDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (ShaderError || PipelineError || BindingError || AdvancedFeatureError)!void {
+        try self.render.validate();
+        try self.tessellation.validate(features, limits);
+        try self.control.validate(.tessellation_control);
+        try self.evaluation.validate(.tessellation_evaluation);
+        try validateProgrammableStageReflection(
+            self.control,
+            .tessellation_control,
+            self.render.bind_group_layouts,
+            self.render.resource_table_layouts,
+        );
+        try validateProgrammableStageReflection(
+            self.evaluation,
+            .tessellation_evaluation,
+            self.render.bind_group_layouts,
+            self.render.resource_table_layouts,
+        );
+        if (self.tessellation.control_stage) |stage| {
+            if (!std.mem.eql(u8, stage.entry_point, self.control.entry_point)) return ShaderError.ShaderReflectionEntryPointMismatch;
+        }
+        if (self.tessellation.evaluation_stage) |stage| {
+            if (!std.mem.eql(u8, stage.entry_point, self.evaluation.entry_point)) return ShaderError.ShaderReflectionEntryPointMismatch;
+        }
+    }
+};
+
+pub const MeshRenderPipelineDescriptor = struct {
+    label: ?[]const u8 = null,
+    pipeline: MeshPipelineDescriptor,
+    mesh: ProgrammableStageDescriptor,
+    task: ?ProgrammableStageDescriptor = null,
+    fragment: ?ProgrammableStageDescriptor = null,
+    bind_group_layouts: []const BindGroupLayoutDescriptor = &.{},
+    resource_table_layouts: []const DescriptorIndexingLayoutDescriptor = &.{},
+    front_facing_winding: Winding = .counter_clockwise,
+    cull_mode: CullMode = .none,
+    fill_mode: TriangleFillMode = .fill,
+    depth_bias: DepthBiasDescriptor = .{},
+    conservative_rasterization: bool = false,
+    sample_count: u32 = 1,
+    color_attachments: []const RenderPipelineColorAttachmentDescriptor = &.{},
+    depth_stencil: ?DepthStencilDescriptor = null,
+    root_constant_layout: ?RootConstantLayoutDescriptor = null,
+    driver_cache: ?DriverPipelineCacheDescriptor = null,
+    cache_policy: ObjectCachePolicy = .{},
+
+    pub fn validate(
+        self: MeshRenderPipelineDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (ShaderError || PipelineError || BindingError || AdvancedFeatureError)!void {
+        try self.pipeline.validate(features, limits);
+        try self.mesh.validate(.mesh);
+        if (!std.mem.eql(u8, self.pipeline.mesh_entry_point, self.mesh.entry_point)) {
+            return ShaderError.ShaderReflectionEntryPointMismatch;
+        }
+        if ((self.pipeline.task_entry_point == null) != (self.task == null)) return AdvancedFeatureError.MissingMeshStage;
+        if (self.task) |task| {
+            try task.validate(.task);
+            if (!std.mem.eql(u8, self.pipeline.task_entry_point.?, task.entry_point)) {
+                return ShaderError.ShaderReflectionEntryPointMismatch;
+            }
+        }
+        if (self.fragment) |fragment| try fragment.validate(.fragment);
+        for (self.bind_group_layouts) |layout| try layout.validate();
+        for (self.resource_table_layouts) |layout| try layout.validateShape();
+        for (self.bind_group_layouts) |layout| {
+            for (layout.entries) |entry| {
+                if (entry.visibility.vertex or entry.visibility.compute or !entry.visibility.fragment) {
+                    return AdvancedFeatureError.UnsupportedMeshShaderBindings;
+                }
+            }
+        }
+        for (self.resource_table_layouts) |layout| {
+            for (layout.ranges) |range| {
+                if (range.visibility.vertex or range.visibility.compute or !range.visibility.fragment) {
+                    return AdvancedFeatureError.UnsupportedMeshShaderBindings;
+                }
+            }
+        }
+        if (self.root_constant_layout) |layout| {
+            for (layout.ranges) |range| {
+                if (range.visibility.vertex or range.visibility.compute or !range.visibility.fragment) {
+                    return AdvancedFeatureError.UnsupportedMeshShaderBindings;
+                }
+            }
+        }
+        try validateProgrammableStageReflection(self.mesh, .mesh, self.bind_group_layouts, self.resource_table_layouts);
+        if (self.task) |task| try validateProgrammableStageReflection(task, .task, self.bind_group_layouts, self.resource_table_layouts);
+        if (self.fragment) |fragment| try validateProgrammableStageReflection(fragment, .fragment, self.bind_group_layouts, self.resource_table_layouts);
+        if (self.color_attachments.len == 0) return PipelineError.MissingColorAttachment;
+        if (self.color_attachments.len > default_max_color_attachments) return PipelineError.UnsupportedMultipleRenderTargets;
+        try self.depth_bias.validate();
+        try validateSampleCount(self.sample_count);
+        for (self.color_attachments) |attachment| try attachment.validate();
         if (self.depth_stencil) |depth_stencil| try depth_stencil.validate();
     }
 };
@@ -14530,6 +14649,36 @@ test "advanced geometry shader stages are classified for Slang reflection" {
         .stage = .mesh,
         .entry_point = "mesh_main",
     });
+}
+
+test "Period 51 advanced raster semantics stay absent until exact contracts exist" {
+    try std.testing.expect(!@hasField(DeviceFeatures, "variable_rasterization_rate"));
+    try std.testing.expect(!@hasField(DeviceFeatures, "tile_shaders"));
+    try std.testing.expect(!@hasField(DeviceFeatures, "raster_order_groups"));
+    try std.testing.expect(!@hasField(DeviceFeatures, "layered_rendering"));
+    try std.testing.expect(!@hasField(DeviceFeatures, "logical_attachment_mapping"));
+    try std.testing.expect(!@hasField(DeviceFeatures, "depth_clip_control"));
+    try std.testing.expect(!@hasField(DeviceFeatures, "programmable_sample_positions"));
+}
+
+test "mesh render pipeline rejects non-fragment binding visibility" {
+    const entries = [_]BindGroupLayoutEntry{.{
+        .binding = 0,
+        .resource = .sampled_texture,
+        .visibility = .{ .vertex = true },
+    }};
+    const layouts = [_]BindGroupLayoutDescriptor{.{ .entries = &entries }};
+    const attachments = [_]RenderPipelineColorAttachmentDescriptor{.{ .format = .bgra8_unorm }};
+    try std.testing.expectError(AdvancedFeatureError.UnsupportedMeshShaderBindings, (MeshRenderPipelineDescriptor{
+        .pipeline = .{ .mesh_entry_point = "mesh_main" },
+        .mesh = .{
+            .module = .{ .source = .{ .spirv_bytes = &.{1} } },
+            .stage = .mesh,
+            .entry_point = "mesh_main",
+        },
+        .bind_group_layouts = &layouts,
+        .color_attachments = &attachments,
+    }).validate(.{ .mesh_shaders = true }, .{}));
 }
 
 test "acceleration structure descriptors estimate build sizes" {

@@ -26,6 +26,25 @@ pub fn init(
     allocator: std.mem.Allocator,
     descriptor: core.RenderPipelineDescriptor,
 ) !VulkanRenderPipelineState {
+    return initInternal(gc, allocator, descriptor, null);
+}
+
+pub fn initTessellation(
+    gc: *const GraphicsContext,
+    allocator: std.mem.Allocator,
+    descriptor: core.TessellationRenderPipelineDescriptor,
+) !VulkanRenderPipelineState {
+    try descriptor.control.validate(.tessellation_control);
+    try descriptor.evaluation.validate(.tessellation_evaluation);
+    return initInternal(gc, allocator, descriptor.render, descriptor);
+}
+
+fn initInternal(
+    gc: *const GraphicsContext,
+    allocator: std.mem.Allocator,
+    descriptor: core.RenderPipelineDescriptor,
+    tessellation: ?core.TessellationRenderPipelineDescriptor,
+) !VulkanRenderPipelineState {
     try descriptor.validate();
     for (descriptor.color_attachments) |attachment| {
         if (!gc.supportsSampleCount(attachment.format, descriptor.sample_count)) {
@@ -50,6 +69,17 @@ pub fn init(
         null;
     defer if (fragment_module) |*module| module.deinit();
 
+    var control_module: ?VulkanShaderModule = if (tessellation) |advanced|
+        try VulkanShaderModule.init(gc, allocator, advanced.control.module)
+    else
+        null;
+    defer if (control_module) |*module| module.deinit();
+    var evaluation_module: ?VulkanShaderModule = if (tessellation) |advanced|
+        try VulkanShaderModule.init(gc, allocator, advanced.evaluation.module)
+    else
+        null;
+    defer if (evaluation_module) |*module| module.deinit();
+
     const vertex_entry = try allocator.dupeZ(u8, descriptor.vertex.entry_point);
     defer allocator.free(vertex_entry);
     const fragment_entry = if (descriptor.fragment) |fragment|
@@ -57,6 +87,10 @@ pub fn init(
     else
         null;
     defer if (fragment_entry) |entry| allocator.free(entry);
+    const control_entry = if (tessellation) |advanced| try allocator.dupeZ(u8, advanced.control.entry_point) else null;
+    defer if (control_entry) |entry| allocator.free(entry);
+    const evaluation_entry = if (tessellation) |advanced| try allocator.dupeZ(u8, advanced.evaluation.entry_point) else null;
+    defer if (evaluation_entry) |entry| allocator.free(entry);
 
     var vertex_specialization = try SpecializationState.init(allocator, descriptor.vertex.specialization);
     defer vertex_specialization.deinit();
@@ -65,8 +99,18 @@ pub fn init(
     else
         SpecializationState.empty();
     defer fragment_specialization.deinit();
+    var control_specialization = if (tessellation) |advanced|
+        try SpecializationState.init(allocator, advanced.control.specialization)
+    else
+        SpecializationState.empty();
+    defer control_specialization.deinit();
+    var evaluation_specialization = if (tessellation) |advanced|
+        try SpecializationState.init(allocator, advanced.evaluation.specialization)
+    else
+        SpecializationState.empty();
+    defer evaluation_specialization.deinit();
 
-    var stages_buffer: [2]vk.PipelineShaderStageCreateInfo = undefined;
+    var stages_buffer: [4]vk.PipelineShaderStageCreateInfo = undefined;
     stages_buffer[0] = .{
         .stage = .{ .vertex_bit = true },
         .module = vertex_module.handle,
@@ -74,14 +118,32 @@ pub fn init(
         .p_specialization_info = vertex_specialization.infoPtr(),
     };
     var stage_count: u32 = 1;
+    if (control_module) |module| {
+        stages_buffer[stage_count] = .{
+            .stage = .{ .tessellation_control_bit = true },
+            .module = module.handle,
+            .p_name = control_entry.?,
+            .p_specialization_info = control_specialization.infoPtr(),
+        };
+        stage_count += 1;
+    }
+    if (evaluation_module) |module| {
+        stages_buffer[stage_count] = .{
+            .stage = .{ .tessellation_evaluation_bit = true },
+            .module = module.handle,
+            .p_name = evaluation_entry.?,
+            .p_specialization_info = evaluation_specialization.infoPtr(),
+        };
+        stage_count += 1;
+    }
     if (fragment_module) |module| {
-        stages_buffer[1] = .{
+        stages_buffer[stage_count] = .{
             .stage = .{ .fragment_bit = true },
             .module = module.handle,
             .p_name = fragment_entry.?,
             .p_specialization_info = fragment_specialization.infoPtr(),
         };
-        stage_count = 2;
+        stage_count += 1;
     }
 
     const vertex_bindings = try makeVertexBindings(allocator, descriptor.vertex_descriptor);
@@ -104,9 +166,12 @@ pub fn init(
     };
 
     const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
-        .topology = primitiveTopology(descriptor.primitive_topology),
+        .topology = if (tessellation != null) .patch_list else primitiveTopology(descriptor.primitive_topology),
         .primitive_restart_enable = .false,
     };
+    const tessellation_state = if (tessellation) |advanced| vk.PipelineTessellationStateCreateInfo{
+        .patch_control_points = advanced.tessellation.control_point_count,
+    } else null;
 
     const viewport_state = vk.PipelineViewportStateCreateInfo{
         .viewport_count = 1,
@@ -187,7 +252,7 @@ pub fn init(
         .p_stages = &stages_buffer,
         .p_vertex_input_state = &vertex_input,
         .p_input_assembly_state = &input_assembly,
-        .p_tessellation_state = null,
+        .p_tessellation_state = if (tessellation_state) |*state| state else null,
         .p_viewport_state = &viewport_state,
         .p_rasterization_state = &rasterization,
         .p_multisample_state = &multisample,
@@ -206,6 +271,196 @@ pub fn init(
     var pipeline: vk.Pipeline = undefined;
     _ = try gc.dev.createGraphicsPipelines(pipeline_cache.handle, &.{pipeline_info}, null, (&pipeline)[0..1]);
 
+    return .{
+        .gc = gc,
+        .allocator = allocator,
+        .handle = pipeline,
+        .layout = layout,
+        .bind_group_layouts = bind_group_layouts,
+        .resource_table_layouts = resource_table_layouts,
+        .render_pass = render_pass,
+        .uses_depth = descriptor.depth_stencil != null,
+        .sample_count = descriptor.sample_count,
+        .depth_bias = descriptor.depth_bias,
+    };
+}
+
+pub fn initMesh(
+    gc: *const GraphicsContext,
+    allocator: std.mem.Allocator,
+    descriptor: core.MeshRenderPipelineDescriptor,
+) !VulkanRenderPipelineState {
+    try descriptor.mesh.validate(.mesh);
+    if (descriptor.task) |task| try task.validate(.task);
+    if (descriptor.fragment) |fragment| try fragment.validate(.fragment);
+    for (descriptor.color_attachments) |attachment| {
+        if (!gc.supportsSampleCount(attachment.format, descriptor.sample_count)) return core.PipelineError.UnsupportedSampleCount;
+    }
+    if (descriptor.depth_stencil) |depth_stencil| {
+        if (!gc.supportsSampleCount(depth_stencil.format, descriptor.sample_count)) return core.PipelineError.UnsupportedSampleCount;
+    }
+
+    const render_shape = core.RenderPipelineDescriptor{
+        .label = descriptor.label,
+        .vertex = descriptor.mesh,
+        .fragment = descriptor.fragment,
+        .bind_group_layouts = descriptor.bind_group_layouts,
+        .resource_table_layouts = descriptor.resource_table_layouts,
+        .front_facing_winding = descriptor.front_facing_winding,
+        .cull_mode = descriptor.cull_mode,
+        .fill_mode = descriptor.fill_mode,
+        .depth_bias = descriptor.depth_bias,
+        .conservative_rasterization = descriptor.conservative_rasterization,
+        .sample_count = descriptor.sample_count,
+        .color_attachments = descriptor.color_attachments,
+        .depth_stencil = descriptor.depth_stencil,
+        .root_constant_layout = descriptor.root_constant_layout,
+        .driver_cache = descriptor.driver_cache,
+        .cache_policy = descriptor.cache_policy,
+    };
+    const render_pass = try createRenderPassForDescriptor(gc, render_shape);
+    errdefer gc.dev.destroyRenderPass(render_pass, null);
+
+    var mesh_module = try VulkanShaderModule.init(gc, allocator, descriptor.mesh.module);
+    defer mesh_module.deinit();
+    var task_module: ?VulkanShaderModule = if (descriptor.task) |task|
+        try VulkanShaderModule.init(gc, allocator, task.module)
+    else
+        null;
+    defer if (task_module) |*module| module.deinit();
+    var fragment_module: ?VulkanShaderModule = if (descriptor.fragment) |fragment|
+        try VulkanShaderModule.init(gc, allocator, fragment.module)
+    else
+        null;
+    defer if (fragment_module) |*module| module.deinit();
+
+    const mesh_entry = try allocator.dupeZ(u8, descriptor.mesh.entry_point);
+    defer allocator.free(mesh_entry);
+    const task_entry = if (descriptor.task) |task| try allocator.dupeZ(u8, task.entry_point) else null;
+    defer if (task_entry) |entry| allocator.free(entry);
+    const fragment_entry = if (descriptor.fragment) |fragment| try allocator.dupeZ(u8, fragment.entry_point) else null;
+    defer if (fragment_entry) |entry| allocator.free(entry);
+
+    var mesh_specialization = try SpecializationState.init(allocator, descriptor.mesh.specialization);
+    defer mesh_specialization.deinit();
+    var task_specialization = if (descriptor.task) |task|
+        try SpecializationState.init(allocator, task.specialization)
+    else
+        SpecializationState.empty();
+    defer task_specialization.deinit();
+    var fragment_specialization = if (descriptor.fragment) |fragment|
+        try SpecializationState.init(allocator, fragment.specialization)
+    else
+        SpecializationState.empty();
+    defer fragment_specialization.deinit();
+
+    var stages: [3]vk.PipelineShaderStageCreateInfo = undefined;
+    var stage_count: u32 = 0;
+    if (task_module) |module| {
+        stages[stage_count] = .{
+            .stage = .{ .task_bit_ext = true },
+            .module = module.handle,
+            .p_name = task_entry.?,
+            .p_specialization_info = task_specialization.infoPtr(),
+        };
+        stage_count += 1;
+    }
+    stages[stage_count] = .{
+        .stage = .{ .mesh_bit_ext = true },
+        .module = mesh_module.handle,
+        .p_name = mesh_entry,
+        .p_specialization_info = mesh_specialization.infoPtr(),
+    };
+    stage_count += 1;
+    if (fragment_module) |module| {
+        stages[stage_count] = .{
+            .stage = .{ .fragment_bit = true },
+            .module = module.handle,
+            .p_name = fragment_entry.?,
+            .p_specialization_info = fragment_specialization.infoPtr(),
+        };
+        stage_count += 1;
+    }
+
+    const viewport_state = vk.PipelineViewportStateCreateInfo{
+        .viewport_count = 1,
+        .p_viewports = undefined,
+        .scissor_count = 1,
+        .p_scissors = undefined,
+    };
+    const rasterization = vk.PipelineRasterizationStateCreateInfo{
+        .depth_clamp_enable = .false,
+        .rasterizer_discard_enable = .false,
+        .polygon_mode = polygonMode(descriptor.fill_mode),
+        .cull_mode = cullMode(descriptor.cull_mode),
+        .front_face = frontFace(descriptor.front_facing_winding),
+        .depth_bias_enable = if (descriptor.depth_bias.enabled) .true else .false,
+        .depth_bias_constant_factor = descriptor.depth_bias.constant,
+        .depth_bias_clamp = descriptor.depth_bias.clamp,
+        .depth_bias_slope_factor = descriptor.depth_bias.slope,
+        .line_width = 1,
+    };
+    const multisample = vk.PipelineMultisampleStateCreateInfo{
+        .rasterization_samples = VulkanTexture.sampleCountFlags(descriptor.sample_count),
+        .sample_shading_enable = .false,
+        .min_sample_shading = 1,
+        .alpha_to_coverage_enable = .false,
+        .alpha_to_one_enable = .false,
+    };
+    const depth_stencil = if (descriptor.depth_stencil) |depth| makeDepthStencilState(depth) else null;
+    const color_blend_attachments = try makeColorBlendAttachments(allocator, descriptor.color_attachments);
+    defer allocator.free(color_blend_attachments);
+    const color_blend = vk.PipelineColorBlendStateCreateInfo{
+        .logic_op_enable = .false,
+        .logic_op = .copy,
+        .attachment_count = @intCast(color_blend_attachments.len),
+        .p_attachments = color_blend_attachments.ptr,
+        .blend_constants = [_]f32{ 0, 0, 0, 0 },
+    };
+    const dynamic_states = [_]vk.DynamicState{ .viewport, .scissor, .blend_constants, .stencil_reference, .depth_bias };
+    const dynamic_state = vk.PipelineDynamicStateCreateInfo{
+        .dynamic_state_count = dynamic_states.len,
+        .p_dynamic_states = &dynamic_states,
+    };
+
+    const bind_group_layouts = try makeBindGroupLayouts(gc, allocator, descriptor.bind_group_layouts);
+    errdefer destroyBindGroupLayouts(allocator, bind_group_layouts);
+    const resource_table_layouts = try makeResourceTableLayouts(gc, allocator, descriptor.resource_table_layouts);
+    errdefer destroyResourceTableLayouts(allocator, resource_table_layouts);
+    const set_layout_handles = try makeDescriptorSetLayoutHandles(allocator, bind_group_layouts, resource_table_layouts);
+    defer allocator.free(set_layout_handles);
+    const push_constant_ranges = try makePushConstantRanges(allocator, descriptor.root_constant_layout);
+    defer allocator.free(push_constant_ranges);
+    const layout = try gc.dev.createPipelineLayout(&.{
+        .set_layout_count = @intCast(set_layout_handles.len),
+        .p_set_layouts = if (set_layout_handles.len == 0) null else set_layout_handles.ptr,
+        .push_constant_range_count = @intCast(push_constant_ranges.len),
+        .p_push_constant_ranges = if (push_constant_ranges.len == 0) null else push_constant_ranges.ptr,
+    }, null);
+    errdefer gc.dev.destroyPipelineLayout(layout, null);
+
+    const pipeline_info = vk.GraphicsPipelineCreateInfo{
+        .stage_count = stage_count,
+        .p_stages = &stages,
+        .p_vertex_input_state = null,
+        .p_input_assembly_state = null,
+        .p_tessellation_state = null,
+        .p_viewport_state = &viewport_state,
+        .p_rasterization_state = &rasterization,
+        .p_multisample_state = &multisample,
+        .p_depth_stencil_state = if (depth_stencil) |*state| state else null,
+        .p_color_blend_state = &color_blend,
+        .p_dynamic_state = &dynamic_state,
+        .layout = layout,
+        .render_pass = render_pass,
+        .subpass = 0,
+        .base_pipeline_handle = .null_handle,
+        .base_pipeline_index = -1,
+    };
+    var pipeline_cache = try PipelineCache.Session.init(gc, allocator, descriptor.driver_cache);
+    defer pipeline_cache.deinit();
+    var pipeline: vk.Pipeline = undefined;
+    _ = try gc.dev.createGraphicsPipelines(pipeline_cache.handle, &.{pipeline_info}, null, (&pipeline)[0..1]);
     return .{
         .gc = gc,
         .allocator = allocator,

@@ -84,6 +84,11 @@ indirect_draw multi_draw depth_attachments offscreen_render_targets
 msaa_render_targets indexed_draw
 ```
 
+Period 51 中，`tessellation` 表示完整的 Vulkan source-to-patch-draw 路径；Metal
+保持 false。`mesh_shaders` 表示完整的 mesh-only pipeline 与 dispatch 路径。
+`task_shaders` 在两个 backend 上都保持 false，因为 pinned compiler 尚不能稳定生成可选
+task/object artifact，即使 `native_features.task_shaders` 报告 device 原生支持也不例外。
+
 ### Compute
 
 ```text
@@ -154,7 +159,7 @@ Feature 为 true 时，descriptor 仍必须满足对应 limit。
 | Transfer | `buffer_texture_copy_offset_alignment`, `buffer_texture_copy_row_pitch_alignment` |
 | Binding | `max_bindless_descriptors_per_range`, `max_bindless_ranges_per_layout` |
 | Reusable command | `max_indirect_command_count` |
-| Advanced geometry | `max_tessellation_control_points`, `max_mesh_threads_per_threadgroup`, `max_task_threads_per_threadgroup` |
+| Advanced geometry | `max_tessellation_control_points`, `max_mesh_threads_per_threadgroup`, `max_task_threads_per_threadgroup`, `max_mesh_threadgroups_per_grid_x`, `max_mesh_threadgroups_per_grid_y`, `max_mesh_threadgroups_per_grid_z` |
 | Ray tracing | `max_ray_tracing_recursion_depth`, `shader_binding_table_alignment`, `max_acceleration_structure_instances`, `max_shader_binding_table_records` |
 | Driver artifact | `max_driver_cache_identity_bytes` |
 | Sparse resource | `sparse_buffer_page_size`, `sparse_texture_page_width`, `sparse_texture_page_height`, `sparse_texture_page_depth`, `max_sparse_regions_per_commit` |

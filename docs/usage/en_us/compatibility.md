@@ -43,7 +43,7 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 exe.root_module.addImport("vkmtl", vkmtl_dep.module("vkmtl"));
 ```
 
-The JSON manifest uses schema version 1 and contains three arrays:
+Schema version 1 remains accepted and contains three arrays:
 
 ```json
 {
@@ -74,8 +74,10 @@ Ray-tracing entries contain `name`, `source`,
 `closest_hit_entry`, `any_hit_entry`, and `intersection_entry`. Source paths,
 including `metal_ray_generation_source`, are relative to the manifest file and
 must remain inside the LazyPath owner's logical root. Generated manifests are
-not supported by schema version 1 because shader inputs are enumerated while
-constructing the dependency graph.
+not supported because shader inputs are enumerated while constructing the
+dependency graph. Schema version 2 retains all three arrays and adds
+`tessellation_shaders` plus `mesh_shaders`; this is an additive build-contract
+extension and does not invalidate schema-1 consumers.
 
 The build tracks the manifest and all declared shader sources, consumes Slang
 depfiles for include/import dependencies, generates SPIR-V, MSL, and reflection

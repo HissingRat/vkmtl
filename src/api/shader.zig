@@ -1,5 +1,6 @@
 const core = @import("../core.zig");
 const compiler = @import("../shader/compiler.zig");
+const runtime = @import("../runtime/window_context.zig");
 
 pub const Reflection = @import("../shader/reflection.zig");
 pub const shader_reflection_schema_version = core.shader_reflection_schema_version;
@@ -28,10 +29,34 @@ pub const ShaderError = core.ShaderError;
 pub const RenderShaderCompileOptions = compiler.RenderShaderOptions;
 pub const ComputeShaderCompileOptions = compiler.ComputeShaderOptions;
 pub const RayTracingShaderCompileOptions = compiler.RayTracingShaderOptions;
+pub const TessellationShaderCompileOptions = compiler.TessellationShaderOptions;
+pub const MeshShaderCompileOptions = compiler.MeshShaderOptions;
 pub const RenderShaderStages = compiler.RenderShaderStages;
 pub const CompiledRenderShader = compiler.CompiledRenderShader;
 pub const CompiledComputeShader = compiler.CompiledComputeShader;
 pub const CompiledRayTracingShader = compiler.CompiledRayTracingShader;
+pub const TessellationShaderStages = compiler.TessellationShaderStages;
+pub const MeshShaderStages = compiler.MeshShaderStages;
+pub const CompiledTessellationShader = compiler.CompiledTessellationShader;
+pub const CompiledMeshShader = compiler.CompiledMeshShader;
 
 pub const descriptorIndexingRangeCountForReflection = core.descriptorIndexingRangeCountForReflection;
 pub const deriveDescriptorIndexingLayoutFromReflection = core.deriveDescriptorIndexingLayoutFromReflection;
+
+pub fn compileTessellationShader(
+    device: *runtime.Device,
+    name: []const u8,
+    source: []const u8,
+    options: TessellationShaderCompileOptions,
+) !CompiledTessellationShader {
+    return runtime.compileTessellationShader(device, name, source, options);
+}
+
+pub fn compileMeshShader(
+    device: *runtime.Device,
+    name: []const u8,
+    source: []const u8,
+    options: MeshShaderCompileOptions,
+) !CompiledMeshShader {
+    return runtime.compileMeshShader(device, name, source, options);
+}

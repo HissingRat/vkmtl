@@ -34,6 +34,8 @@ pub const StencilDescriptor = core.StencilDescriptor;
 pub const DepthStencilDescriptor = core.DepthStencilDescriptor;
 pub const RenderPipelineColorAttachmentDescriptor = core.RenderPipelineColorAttachmentDescriptor;
 pub const RenderPipelineDescriptor = core.RenderPipelineDescriptor;
+pub const TessellationRenderPipelineDescriptor = core.TessellationRenderPipelineDescriptor;
+pub const MeshRenderPipelineDescriptor = core.MeshRenderPipelineDescriptor;
 pub const RenderPipelineCacheKeyDescriptor = core.RenderPipelineCacheKeyDescriptor;
 pub const PipelineError = core.PipelineError;
 pub const LoadAction = core.LoadAction;
@@ -67,3 +69,17 @@ pub const planTessellationPatchDraw = runtime.planTessellationPatchDraw;
 pub const validateMeshPipelineDescriptor = runtime.validateMeshPipelineDescriptor;
 pub const validateMeshDispatchDescriptor = runtime.validateMeshDispatchDescriptor;
 pub const planMeshDispatch = runtime.planMeshDispatch;
+
+pub fn makeTessellationPipelineState(
+    device: *runtime.Device,
+    descriptor: TessellationRenderPipelineDescriptor,
+) !runtime.RenderPipelineState {
+    return runtime.makeTessellationRenderPipelineState(device, descriptor);
+}
+
+pub fn makeMeshPipelineState(
+    device: *runtime.Device,
+    descriptor: MeshRenderPipelineDescriptor,
+) !runtime.RenderPipelineState {
+    return runtime.makeMeshRenderPipelineState(device, descriptor);
+}

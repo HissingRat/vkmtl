@@ -226,6 +226,20 @@ pub fn makeRenderPipelineState(self: *VulkanClearScreen, descriptor: core.Render
     return try VulkanRenderPipelineState.init(self.gc, self.allocator, descriptor);
 }
 
+pub fn makeTessellationRenderPipelineState(
+    self: *VulkanClearScreen,
+    descriptor: core.TessellationRenderPipelineDescriptor,
+) !VulkanRenderPipelineState {
+    return VulkanRenderPipelineState.initTessellation(self.gc, self.allocator, descriptor);
+}
+
+pub fn makeMeshRenderPipelineState(
+    self: *VulkanClearScreen,
+    descriptor: core.MeshRenderPipelineDescriptor,
+) !VulkanRenderPipelineState {
+    return VulkanRenderPipelineState.initMesh(self.gc, self.allocator, descriptor);
+}
+
 pub fn makeComputePipelineState(self: *VulkanClearScreen, descriptor: core.ComputePipelineDescriptor) !VulkanComputePipelineState {
     return try VulkanComputePipelineState.init(self.gc, self.allocator, descriptor);
 }

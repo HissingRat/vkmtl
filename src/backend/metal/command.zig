@@ -916,6 +916,28 @@ pub const RenderCommandEncoder = struct {
         ));
     }
 
+    pub fn drawMeshThreadgroups(
+        self: *RenderCommandEncoder,
+        descriptor: core.MeshDispatchDescriptor,
+        limits: core.DeviceLimits,
+    ) !void {
+        const plan = try core.MeshDispatchPlan.fromDescriptor(
+            .metal,
+            descriptor,
+            .{ .mesh_shaders = true, .task_shaders = descriptor.pipeline.task_entry_point != null },
+            limits,
+        );
+        const lowering = try core.metalMeshDispatchLowering(plan);
+        try check(metal.vkmtl_metal_render_command_encoder_draw_mesh_threadgroups(
+            self.handle,
+            lowering.group_count_x,
+            lowering.group_count_y,
+            lowering.group_count_z,
+            lowering.object_threads_per_threadgroup,
+            lowering.mesh_threads_per_threadgroup,
+        ));
+    }
+
     pub fn executeIndirectCommands(
         self: *RenderCommandEncoder,
         buffer: *const MetalIndirectCommandBuffer,

@@ -323,6 +323,13 @@ typedef struct vkmtl_metal_device_capabilities {
     unsigned int heaps;
     unsigned int memory_budget;
     unsigned int memoryless_attachments;
+    unsigned int mesh_shaders;
+    unsigned int task_shaders;
+    unsigned int max_mesh_threads_per_threadgroup;
+    unsigned int max_task_threads_per_threadgroup;
+    unsigned int max_mesh_threadgroups_per_grid_x;
+    unsigned int max_mesh_threadgroups_per_grid_y;
+    unsigned int max_mesh_threadgroups_per_grid_z;
     uint64_t recommended_working_set_size;
     uint64_t current_allocated_size;
 } vkmtl_metal_device_capabilities;
@@ -673,6 +680,48 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     const vkmtl_metal_vertex_attribute *vertex_attributes,
     size_t vertex_attribute_count,
     unsigned int support_indirect_command_buffers,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
+    vkmtl_metal_render_pipeline_state **out_pipeline
+);
+vkmtl_metal_status vkmtl_metal_mesh_render_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *mesh_shader,
+    const char *mesh_entry,
+    size_t mesh_entry_len,
+    const vkmtl_metal_function_constant *mesh_constants,
+    size_t mesh_constant_count,
+    vkmtl_metal_shader_module *object_shader,
+    const char *object_entry,
+    size_t object_entry_len,
+    const vkmtl_metal_function_constant *object_constants,
+    size_t object_constant_count,
+    vkmtl_metal_shader_module *fragment_shader,
+    const char *fragment_entry,
+    size_t fragment_entry_len,
+    const vkmtl_metal_function_constant *fragment_constants,
+    size_t fragment_constant_count,
+    const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
+    size_t color_attachment_count,
+    vkmtl_metal_texture_format depth_format,
+    vkmtl_metal_compare_function depth_compare_function,
+    unsigned int depth_write_enabled,
+    unsigned int stencil_enabled,
+    vkmtl_metal_stencil_operation front_stencil_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function front_stencil_compare_function,
+    vkmtl_metal_stencil_operation back_stencil_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function back_stencil_compare_function,
+    unsigned int stencil_read_mask,
+    unsigned int stencil_write_mask,
+    unsigned int sample_count,
+    unsigned int mesh_threads_per_threadgroup,
+    unsigned int object_threads_per_threadgroup,
     const char *cache_path,
     size_t cache_path_len,
     uint64_t cache_identity_hash,
@@ -1033,6 +1082,14 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     unsigned int vertex_count,
     unsigned int instance_count,
     unsigned int base_instance
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_mesh_threadgroups(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int threadgroup_count_x,
+    unsigned int threadgroup_count_y,
+    unsigned int threadgroup_count_z,
+    unsigned int object_threads_per_threadgroup,
+    unsigned int mesh_threads_per_threadgroup
 );
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(
     vkmtl_metal_render_command_encoder *encoder,

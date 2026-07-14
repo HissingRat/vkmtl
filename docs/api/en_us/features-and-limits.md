@@ -91,6 +91,12 @@ indirect_draw multi_draw depth_attachments offscreen_render_targets
 msaa_render_targets indexed_draw
 ```
 
+For Period 51, `tessellation` means the complete Vulkan source-to-patch-draw
+path; Metal keeps it false. `mesh_shaders` means a complete mesh-only pipeline
+and dispatch path. `task_shaders` remains false on both backends because the
+pinned compiler cannot stably produce the optional task/object artifact, even
+when `native_features.task_shaders` reports device support.
+
 ### Compute
 
 ```text
@@ -163,7 +169,7 @@ Limits constrain descriptors even when the matching feature is true.
 | Transfer | `buffer_texture_copy_offset_alignment`, `buffer_texture_copy_row_pitch_alignment` |
 | Binding | `max_bindless_descriptors_per_range`, `max_bindless_ranges_per_layout` |
 | Reusable commands | `max_indirect_command_count` |
-| Advanced geometry | `max_tessellation_control_points`, `max_mesh_threads_per_threadgroup`, `max_task_threads_per_threadgroup` |
+| Advanced geometry | `max_tessellation_control_points`, `max_mesh_threads_per_threadgroup`, `max_task_threads_per_threadgroup`, `max_mesh_threadgroups_per_grid_x`, `max_mesh_threadgroups_per_grid_y`, `max_mesh_threadgroups_per_grid_z` |
 | Ray tracing | `max_ray_tracing_recursion_depth`, `shader_binding_table_alignment`, `max_acceleration_structure_instances`, `max_shader_binding_table_records` |
 | Driver artifacts | `max_driver_cache_identity_bytes` |
 | Sparse resources | `sparse_buffer_page_size`, `sparse_texture_page_width`, `sparse_texture_page_height`, `sparse_texture_page_depth`, `max_sparse_regions_per_commit` |

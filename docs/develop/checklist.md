@@ -36,8 +36,8 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-50 are complete. Period 51 advanced
-  rasterization and geometry is the next mainline priority.
+  semantic-support ledger. Periods 46-51 are complete. Period 52 ray-tracing
+  breadth is the next mainline priority.
 
 ## Native Semantic Coverage Inventory
 
@@ -2754,6 +2754,46 @@ obvious render and binding blockers.
 - [x] Update inventories, routing, compatibility docs, examples, and matrices.
 - [x] Run complete API/backend validation and truthful physical evidence probes.
 - [x] Publish an exact-commit closeout with unsupported/rerouted semantics.
+
+## Period 51 Phase 1 Checklist
+
+- [x] Probe the pinned Slang compiler for Vulkan/Metal tessellation and mesh
+  stage artifacts before allocating executable support.
+- [x] Allocate schema-2 shader entries and domain-facade operations without
+  changing the guarded root, `Device`, `WindowContext`, or handle-name sets.
+- [x] Separate native-device availability from complete shader-to-command
+  execution and record the Metal tessellation compiler boundary.
+
+## Period 51 Phase 2 Checklist
+
+- [x] Precompile schema-2 tessellation artifacts and retain schema-1 support.
+- [x] Enable Vulkan tessellation and create patch-list pipelines with complete
+  stage, patch-count, feature, and limit validation.
+- [x] Encode native patch draws, add a visible Vulkan-ready example, and keep Metal
+  tessellation precisely closed under the current artifact contract.
+
+## Period 51 Phase 3 Checklist
+
+- [x] Precompile mesh artifacts for both native targets and precisely close the
+  crashing pinned-compiler task/amplification artifact path.
+- [x] Query/enable Vulkan EXT mesh/task features and create Metal/Vulkan native
+  mesh pipelines.
+- [x] Encode native mesh grids with axis/total limit validation and add visible
+  public evidence.
+
+## Period 51 Phase 4 Checklist
+
+- [x] Split the six advanced raster families into independently meaningful
+  executable or precise unsupported outcomes.
+- [x] Keep tile/imageblock, ordered programmable blend, layer/amplification,
+  attachment remap, rate-map, and sample/depth controls from being conflated.
+- [x] Add focused rejection tests for every closed semantic.
+
+## Period 51 Phase 5 Checklist
+
+- [x] Update inventories, routing, compatibility docs, examples, and matrices.
+- [x] Run complete API/backend validation and truthful physical evidence probes.
+- [x] Publish an exact-commit closeout with executable and unsupported outcomes.
 
 ## First Backend-Independent Triangle Checklist
 

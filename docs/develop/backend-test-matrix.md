@@ -27,7 +27,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation draw plans, and mesh/task dispatch plans.
-- `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`
+- `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`; Vulkan tessellation and both mesh paths are executable when their usable gates open, while Metal tessellation and task/object stages remain precisely closed.
 - `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, and Period 29 routing.
 - `ray_tracing_feature_gates`: `zig build run-ray-traced-scene`
 
@@ -168,7 +168,7 @@ conservative until the relevant backend period lands.
 | Compute bind groups/root constants | Descriptor sets/push constants | Resource slots/inline bytes | Ordinary path is executable; function tables stay deferred |
 | Compute buffer/texture barriers | Native pipeline barriers plus hazard state | Automatic hazard/order composition plus hazard state | Native fences/events stay Period 48 |
 | 32-bit integer atomics/threadgroup memory | Core SPIR-V semantics and queried shared-memory limit | Native atomic/groupshared semantics and queried limit | Storage-texture/64-bit atomic breadth is not promised |
-| Portable reflection | Schema-1 array/access metadata consumed with SPIR-V | Same schema-1 metadata consumed with MSL | Advanced backend-only protocols stay deferred |
+| Portable reflection | Schema-1/2 array/access metadata consumed with SPIR-V | Same schema-1/2 metadata consumed with MSL | Advanced-stage resource visibility remains deferred |
 | Managed synchronization | Host-coherent managed buffers | `didModifyRange` plus `synchronizeResource` | Automatic at current map/read/write boundaries |
 
 ## Period 43 Debug Label And Marker Expectations
@@ -241,10 +241,10 @@ conservative until the relevant backend period lands.
 | Residency churn planning | Runtime commit/evict cycle summary | Runtime commit/evict cycle summary | `vkmtl.resource.planSparseResidencyChurn(device, descriptor)` and `vkmtl.resource.SparseResidencyMap.runChurn(...)` |
 | Native sparse/tiled page binding | Typed unsupported | Typed unsupported | Current planning descriptors do not identify actual resources |
 | Tessellation draw planning | Runtime patch-list draw metadata plan | Runtime factor-buffer metadata plan | `vkmtl.render.planTessellationPatchDraw(device, descriptor)` |
-| Native tessellation pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
+| Native tessellation pipeline | Executable feature-gated patch-list pipeline and draw | Unsupported: pinned Slang Metal target rejects hull/domain stages | Period 51 schema-2 artifacts and public example |
 | Mesh/task dispatch planning | Runtime task/mesh dispatch metadata plan | Runtime object/mesh dispatch metadata plan | `vkmtl.render.planMeshDispatch(device, descriptor)` |
-| Native mesh/task pipeline | Deferred | Deferred | Period44 device-matrix work after backend pipeline hooks |
-| Advanced geometry examples | Feature-gated planning examples | Feature-gated planning examples | `examples/tessellation` and `examples/mesh_shader` |
+| Native mesh/task pipeline | Executable `VK_EXT_mesh_shader` mesh-only pipeline; task artifact closed | Executable native mesh-only pipeline; object artifact closed | Period 51; pinned task compiler probes crash on both targets |
+| Advanced geometry examples | Visible Vulkan-ready tessellation and mesh render loops | Physical visible mesh render loop; tessellation exits unsupported | `examples/tessellation` and `examples/mesh_shader` |
 
 ## Period 28 Ray Tracing And Native Parity Expectations
 

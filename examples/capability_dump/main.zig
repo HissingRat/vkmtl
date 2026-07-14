@@ -143,6 +143,14 @@ fn dumpReport(report: vkmtl.diagnostics.DeviceCapabilityReport) void {
     std.debug.print("  max texture array layers: {}\n", .{report.limits.max_texture_array_layers});
     std.debug.print("  max compute threads/threadgroup: {}\n", .{report.limits.max_compute_total_threads_per_threadgroup});
     std.debug.print("  max compute threadgroup memory bytes: {}\n", .{report.limits.max_compute_threadgroup_memory_bytes});
+    std.debug.print("  max tessellation control points: {}\n", .{report.limits.max_tessellation_control_points});
+    std.debug.print("  max mesh threads/threadgroup: {}\n", .{report.limits.max_mesh_threads_per_threadgroup});
+    std.debug.print("  max task threads/threadgroup: {}\n", .{report.limits.max_task_threads_per_threadgroup});
+    std.debug.print("  max mesh threadgroups/grid: {}x{}x{}\n", .{
+        report.limits.max_mesh_threadgroups_per_grid_x,
+        report.limits.max_mesh_threadgroups_per_grid_y,
+        report.limits.max_mesh_threadgroups_per_grid_z,
+    });
     std.debug.print("  buffer/texture copy offset alignment: {}\n", .{report.limits.buffer_texture_copy_offset_alignment});
     std.debug.print("  buffer/texture copy row-pitch alignment: {}\n", .{report.limits.buffer_texture_copy_row_pitch_alignment});
     std.debug.print("  max bindless descriptors/range: {}\n", .{report.limits.max_bindless_descriptors_per_range});
@@ -185,6 +193,7 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  external textures: {}\n", .{features.external_textures});
     std.debug.print("  tessellation: {}\n", .{features.tessellation});
     std.debug.print("  mesh shaders: {}\n", .{features.mesh_shaders});
+    std.debug.print("  task shaders: {}\n", .{features.task_shaders});
     std.debug.print("  ray tracing: {}\n", .{features.ray_tracing});
     std.debug.print("  driver pipeline cache: {}\n", .{features.driver_pipeline_cache});
     std.debug.print("  Metal binary archive: {}\n", .{features.metal_binary_archive});

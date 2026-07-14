@@ -586,6 +586,68 @@ fn hashRenderPipelineDescriptor(hash: *u64, descriptor: core.RenderPipelineDescr
     hashDriverPipelineCacheDescriptor(hash, descriptor.driver_cache);
 }
 
+fn hashMeshRenderPipelineDescriptor(hash: *u64, descriptor: core.MeshRenderPipelineDescriptor) void {
+    hashProgrammableStage(hash, descriptor.mesh);
+    if (descriptor.task) |task| {
+        hashBool(hash, true);
+        hashProgrammableStage(hash, task);
+    } else {
+        hashBool(hash, false);
+    }
+    if (descriptor.fragment) |fragment| {
+        hashBool(hash, true);
+        hashProgrammableStage(hash, fragment);
+    } else {
+        hashBool(hash, false);
+    }
+    hashU64(hash, descriptor.bind_group_layouts.len);
+    for (descriptor.bind_group_layouts) |layout| hashBindGroupLayoutDescriptor(hash, layout);
+    hashU64(hash, descriptor.resource_table_layouts.len);
+    for (descriptor.resource_table_layouts) |layout| hashDescriptorIndexingLayoutDescriptor(hash, layout);
+    hashU64(hash, @intFromEnum(descriptor.front_facing_winding));
+    hashU64(hash, @intFromEnum(descriptor.cull_mode));
+    hashU64(hash, @intFromEnum(descriptor.fill_mode));
+    hashBool(hash, descriptor.depth_bias.enabled);
+    hashF32(hash, descriptor.depth_bias.constant);
+    hashF32(hash, descriptor.depth_bias.slope);
+    hashF32(hash, descriptor.depth_bias.clamp);
+    hashBool(hash, descriptor.conservative_rasterization);
+    hashU64(hash, descriptor.sample_count);
+    hashU64(hash, descriptor.color_attachments.len);
+    for (descriptor.color_attachments) |attachment| {
+        hashU64(hash, @intFromEnum(attachment.format));
+        hashBool(hash, attachment.write_mask.red);
+        hashBool(hash, attachment.write_mask.green);
+        hashBool(hash, attachment.write_mask.blue);
+        hashBool(hash, attachment.write_mask.alpha);
+        hashBool(hash, attachment.blend != null);
+    }
+    if (descriptor.depth_stencil) |depth_stencil| {
+        hashBool(hash, true);
+        hashDepthStencilDescriptor(hash, depth_stencil);
+    } else {
+        hashBool(hash, false);
+    }
+    hashRootConstantLayout(hash, descriptor.root_constant_layout);
+    hashDriverPipelineCacheDescriptor(hash, descriptor.driver_cache);
+    hashU64(hash, descriptor.pipeline.mesh_threads_per_threadgroup);
+    hashU64(hash, descriptor.pipeline.task_threads_per_threadgroup);
+}
+
+fn hashMeshPipelineDescriptor(backend: core.Backend, descriptor: core.MeshPipelineDescriptor) u64 {
+    var hash = objectFingerprintStart(.render_pipeline, backend);
+    hashBytes(&hash, descriptor.mesh_entry_point);
+    if (descriptor.task_entry_point) |entry| {
+        hashBool(&hash, true);
+        hashBytes(&hash, entry);
+    } else {
+        hashBool(&hash, false);
+    }
+    hashU64(&hash, descriptor.mesh_threads_per_threadgroup);
+    hashU64(&hash, descriptor.task_threads_per_threadgroup);
+    return hash;
+}
+
 fn hashComputePipelineDescriptor(hash: *u64, descriptor: core.ComputePipelineDescriptor) void {
     hashProgrammableStage(hash, descriptor.compute);
     hashU64(hash, descriptor.bind_group_layouts.len);
@@ -3433,6 +3495,12 @@ pub const RenderPipelineState = struct {
         metal: MetalRenderPipelineState,
     };
 
+    const Kind = enum {
+        ordinary,
+        tessellation,
+        mesh,
+    };
+
     const State = struct {
         backend: core.Backend,
         tracker: *ResourceTracker,
@@ -3442,6 +3510,10 @@ pub const RenderPipelineState = struct {
         root_constant_ranges: []core.RootConstantRange = &.{},
         resource_table_layout_base: u32 = 0,
         resource_table_layout_hashes: []u64 = &.{},
+        kind: Kind = .ordinary,
+        tessellation: ?core.TessellationDescriptor = null,
+        mesh_pipeline_hash: u64 = 0,
+        mesh_limits: core.DeviceLimits = .{},
         alive: bool = true,
         impl: Impl,
     };
@@ -3490,6 +3562,22 @@ pub const RenderPipelineState = struct {
 
     fn resourceTableLayoutHashes(self: RenderPipelineState) []const u64 {
         return self.state().resource_table_layout_hashes;
+    }
+
+    fn kind(self: RenderPipelineState) Kind {
+        return self.state().kind;
+    }
+
+    fn tessellationDescriptor(self: RenderPipelineState) ?core.TessellationDescriptor {
+        return self.state().tessellation;
+    }
+
+    fn meshPipelineHash(self: RenderPipelineState) u64 {
+        return self.state().mesh_pipeline_hash;
+    }
+
+    fn meshLimits(self: RenderPipelineState) core.DeviceLimits {
+        return self.state().mesh_limits;
     }
 
     pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
@@ -6069,6 +6157,10 @@ pub const RenderCommandEncoder = struct {
         active_resource_table_layout_base: u32 = 0,
         active_resource_table_layout_count: u32 = 0,
         active_resource_table_layout_hashes: [core.default_max_bind_group_slots]u64 = @splat(0),
+        active_pipeline_kind: RenderPipelineState.Kind = .ordinary,
+        active_tessellation: ?core.TessellationDescriptor = null,
+        active_mesh_pipeline_hash: u64 = 0,
+        active_mesh_limits: core.DeviceLimits = .{},
         occlusion_query_set: ?*QuerySet = null,
         impl: ?Impl = null,
     };
@@ -6094,6 +6186,10 @@ pub const RenderCommandEncoder = struct {
         self.privateState().active_root_constant_layout = pipeline.rootConstantLayout();
         self.privateState().active_resource_table_layout_base = pipeline.resourceTableLayoutBase();
         self.privateState().active_resource_table_layout_count = @intCast(pipeline.resourceTableLayoutHashes().len);
+        self.privateState().active_pipeline_kind = pipeline.kind();
+        self.privateState().active_tessellation = pipeline.tessellationDescriptor();
+        self.privateState().active_mesh_pipeline_hash = pipeline.meshPipelineHash();
+        self.privateState().active_mesh_limits = pipeline.meshLimits();
         @memcpy(
             self.privateState().active_resource_table_layout_hashes[0..pipeline.resourceTableLayoutHashes().len],
             pipeline.resourceTableLayoutHashes(),
@@ -6321,6 +6417,69 @@ pub const RenderCommandEncoder = struct {
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| try vulkan.drawPrimitives(descriptor),
             .metal => |*metal| try metal.drawPrimitives(descriptor),
+        };
+    }
+
+    pub fn drawTessellationPatches(
+        self: *RenderCommandEncoder,
+        descriptor: core.TessellationPatchDrawDescriptor,
+    ) !void {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        if (self.privateState().active_pipeline_kind != .tessellation) {
+            return core.CommandEncodingError.InvalidRenderCommandEncoderState;
+        }
+        const pipeline_tessellation = self.privateState().active_tessellation orelse
+            return core.CommandEncodingError.InvalidRenderCommandEncoderState;
+        if (pipeline_tessellation.control_point_count != descriptor.tessellation.control_point_count or
+            pipeline_tessellation.domain != descriptor.tessellation.domain or
+            pipeline_tessellation.partition_mode != descriptor.tessellation.partition_mode)
+        {
+            return core.AdvancedFeatureError.InvalidTessellationPatchDraw;
+        }
+        const plan = try core.TessellationDrawPlan.fromDescriptor(
+            self.privateState().backend,
+            descriptor,
+            .{ .tessellation = true },
+            .{ .max_tessellation_control_points = pipeline_tessellation.control_point_count },
+        );
+        const lowering = try core.vulkanTessellationDrawLowering(plan);
+        try self.privateState().debug.drawPrimitives(.{
+            .vertex_start = lowering.first_vertex,
+            .vertex_count = lowering.draw_vertex_count,
+            .instance_count = lowering.draw_instance_count,
+            .base_instance = lowering.first_instance,
+        });
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.drawTessellationPatches(descriptor),
+            .metal => return core.AdvancedFeatureError.UnsupportedTessellation,
+        };
+    }
+
+    pub fn drawMeshThreadgroups(
+        self: *RenderCommandEncoder,
+        descriptor: core.MeshDispatchDescriptor,
+    ) !void {
+        assertObjectAlive(self.privateState().alive, "render_command_encoder");
+        if (self.privateState().active_pipeline_kind != .mesh or
+            self.privateState().active_mesh_pipeline_hash != hashMeshPipelineDescriptor(self.privateState().backend, descriptor.pipeline))
+        {
+            return core.CommandEncodingError.InvalidRenderCommandEncoderState;
+        }
+        const limits = self.privateState().active_mesh_limits;
+        const features = core.DeviceFeatures{
+            .mesh_shaders = true,
+            .task_shaders = descriptor.pipeline.task_entry_point != null,
+        };
+        _ = try core.MeshDispatchPlan.fromDescriptor(
+            self.privateState().backend,
+            descriptor,
+            features,
+            limits,
+        );
+        try self.privateState().debug.drawPrimitives(.{ .vertex_count = 1 });
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| try vulkan.drawMeshThreadgroups(descriptor, limits),
+            .metal => |*metal| try metal.drawMeshThreadgroups(descriptor, limits),
         };
     }
 
@@ -7972,6 +8131,143 @@ pub const Device = struct {
 pub const validateDescriptorIndexingLayout = Device.validateDescriptorIndexingLayout;
 pub const planResourceTablePressure = Device.planResourceTablePressure;
 
+pub fn compileTessellationShader(
+    device: *Device,
+    name: []const u8,
+    source: []const u8,
+    options: ShaderCompiler.TessellationShaderOptions,
+) !ShaderCompiler.CompiledTessellationShader {
+    return ShaderCompiler.compileTessellationShader(device.state().allocator, name, source, options);
+}
+
+pub fn compileMeshShader(
+    device: *Device,
+    name: []const u8,
+    source: []const u8,
+    options: ShaderCompiler.MeshShaderOptions,
+) !ShaderCompiler.CompiledMeshShader {
+    return ShaderCompiler.compileMeshShader(device.state().allocator, name, source, options);
+}
+
+pub fn makeTessellationRenderPipelineState(
+    device: *Device,
+    descriptor: core.TessellationRenderPipelineDescriptor,
+) !RenderPipelineState {
+    try descriptor.validate(device.features(), device.limits());
+    const render = descriptor.render;
+    if (render.bind_group_layouts.len + render.resource_table_layouts.len > device.limits().max_bind_group_slots) {
+        return core.CommandEncodingError.InvalidBindGroupIndex;
+    }
+    for (render.resource_table_layouts) |layout| try layout.validate(device.features(), device.limits());
+    if (render.driver_cache) |cache| try cache.validate(device.features(), device.limits());
+    try validateRuntimeRenderPipelineShape(render, device.features());
+    try validateRuntimeRootConstantLayout(render.root_constant_layout, device.features(), device.limits());
+    try validateRuntimeSpecialization(render.vertex, device.features());
+    try validateRuntimeSpecialization(descriptor.control, device.features());
+    try validateRuntimeSpecialization(descriptor.evaluation, device.features());
+    if (render.fragment) |fragment| try validateRuntimeSpecialization(fragment, device.features());
+    try ShaderReflection.validateRenderPipelineDescriptor(device.state().allocator, render);
+
+    const root_constant_ranges = try copyRootConstantRanges(device.state().allocator, render.root_constant_layout);
+    errdefer device.state().allocator.free(root_constant_ranges);
+    const resource_table_layout_hashes = try copyResourceTableLayoutFingerprints(
+        device.state().allocator,
+        render.resource_table_layouts,
+    );
+    errdefer device.state().allocator.free(resource_table_layout_hashes);
+
+    var fingerprint = objectFingerprintStart(.render_pipeline, device.state().backend);
+    hashRenderPipelineDescriptor(&fingerprint, render);
+    hashProgrammableStage(&fingerprint, descriptor.control);
+    hashProgrammableStage(&fingerprint, descriptor.evaluation);
+    hashU64(&fingerprint, descriptor.tessellation.control_point_count);
+    hashU64(&fingerprint, @intFromEnum(descriptor.tessellation.domain));
+    hashU64(&fingerprint, @intFromEnum(descriptor.tessellation.partition_mode));
+    const lookup = device.state().tracker.beginObjectCacheLookup(.render_pipeline, fingerprint, render.cache_policy);
+    const timer_start = objectCreationTimerStart();
+    const impl = switch (device.state().impl) {
+        .vulkan => |*vulkan| RenderPipelineState.Impl{
+            .vulkan = try vulkan.makeTessellationRenderPipelineState(descriptor),
+        },
+        .metal => return core.AdvancedFeatureError.UnsupportedTessellation,
+    };
+    const elapsed_ns = objectCreationElapsedNs(timer_start);
+    device.state().tracker.retain(.render_pipeline_state);
+    device.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+    var pipeline = RenderPipelineState.init(.{
+        .backend = device.state().backend,
+        .tracker = device.state().tracker,
+        .allocator = device.state().allocator,
+        .label_value = render.label,
+        .native_labels_enabled = true,
+        .root_constant_ranges = root_constant_ranges,
+        .resource_table_layout_base = @intCast(render.bind_group_layouts.len),
+        .resource_table_layout_hashes = resource_table_layout_hashes,
+        .kind = .tessellation,
+        .tessellation = descriptor.tessellation,
+        .impl = impl,
+    });
+    pipeline.setLabel(render.label);
+    return pipeline;
+}
+
+pub fn makeMeshRenderPipelineState(
+    device: *Device,
+    descriptor: core.MeshRenderPipelineDescriptor,
+) !RenderPipelineState {
+    try descriptor.validate(device.features(), device.limits());
+    if (descriptor.bind_group_layouts.len + descriptor.resource_table_layouts.len > device.limits().max_bind_group_slots) {
+        return core.CommandEncodingError.InvalidBindGroupIndex;
+    }
+    for (descriptor.resource_table_layouts) |layout| try layout.validate(device.features(), device.limits());
+    if (descriptor.driver_cache) |cache| try cache.validate(device.features(), device.limits());
+    try validateRuntimeMeshPipelineShape(descriptor, device.features());
+    try validateRuntimeRootConstantLayout(descriptor.root_constant_layout, device.features(), device.limits());
+    try validateRuntimeSpecialization(descriptor.mesh, device.features());
+    if (descriptor.task) |task| try validateRuntimeSpecialization(task, device.features());
+    if (descriptor.fragment) |fragment| try validateRuntimeSpecialization(fragment, device.features());
+
+    const root_constant_ranges = try copyRootConstantRanges(device.state().allocator, descriptor.root_constant_layout);
+    errdefer device.state().allocator.free(root_constant_ranges);
+    const resource_table_layout_hashes = try copyResourceTableLayoutFingerprints(
+        device.state().allocator,
+        descriptor.resource_table_layouts,
+    );
+    errdefer device.state().allocator.free(resource_table_layout_hashes);
+
+    var fingerprint = objectFingerprintStart(.render_pipeline, device.state().backend);
+    hashMeshRenderPipelineDescriptor(&fingerprint, descriptor);
+    const lookup = device.state().tracker.beginObjectCacheLookup(.render_pipeline, fingerprint, descriptor.cache_policy);
+    const timer_start = objectCreationTimerStart();
+    const impl = switch (device.state().impl) {
+        .vulkan => |*vulkan| RenderPipelineState.Impl{
+            .vulkan = try vulkan.makeMeshRenderPipelineState(descriptor),
+        },
+        .metal => |*metal| RenderPipelineState.Impl{
+            .metal = try metal.makeMeshRenderPipelineState(device.state().allocator, descriptor),
+        },
+    };
+    const elapsed_ns = objectCreationElapsedNs(timer_start);
+    device.state().tracker.retain(.render_pipeline_state);
+    device.state().tracker.finishObjectCacheLookup(lookup, elapsed_ns);
+    var pipeline = RenderPipelineState.init(.{
+        .backend = device.state().backend,
+        .tracker = device.state().tracker,
+        .allocator = device.state().allocator,
+        .label_value = descriptor.label,
+        .native_labels_enabled = true,
+        .root_constant_ranges = root_constant_ranges,
+        .resource_table_layout_base = @intCast(descriptor.bind_group_layouts.len),
+        .resource_table_layout_hashes = resource_table_layout_hashes,
+        .kind = .mesh,
+        .mesh_pipeline_hash = hashMeshPipelineDescriptor(device.state().backend, descriptor.pipeline),
+        .mesh_limits = device.limits(),
+        .impl = impl,
+    });
+    pipeline.setLabel(descriptor.label);
+    return pipeline;
+}
+
 pub const validateSparseMappingCommit = Device.validateSparseMappingCommit;
 pub const planSparseMappingCommit = Device.planSparseMappingCommit;
 pub const planSparseResidencyChurn = Device.planSparseResidencyChurn;
@@ -8670,6 +8966,32 @@ fn validateRuntimeRenderPipelineShape(
         if (buffer.instance_step_rate != 1 and !features.vertex_instance_step_rate) {
             return core.PipelineError.UnsupportedInstanceStepRate;
         }
+    }
+}
+
+fn validateRuntimeMeshPipelineShape(
+    descriptor: core.MeshRenderPipelineDescriptor,
+    features: core.DeviceFeatures,
+) core.PipelineError!void {
+    if (descriptor.fill_mode != .fill and !features.wireframe_fill_mode) return core.PipelineError.UnsupportedFillMode;
+    if (descriptor.depth_bias.enabled and !features.depth_bias) return core.PipelineError.UnsupportedDepthBias;
+    if (descriptor.conservative_rasterization and !features.conservative_rasterization) {
+        return core.PipelineError.UnsupportedConservativeRasterization;
+    }
+    var first_blend: ?core.RenderPipelineBlendDescriptor = null;
+    for (descriptor.color_attachments) |attachment| {
+        const blend = attachment.blend orelse continue;
+        if (!features.blend_state) return core.PipelineError.UnsupportedBlendState;
+        if (first_blend) |existing| {
+            if (!core.RenderPipelineBlendDescriptor.eql(existing, blend) and !features.independent_blend) {
+                return core.PipelineError.UnsupportedIndependentBlend;
+            }
+        } else {
+            first_blend = blend;
+        }
+    }
+    if (descriptor.depth_stencil) |depth_stencil| {
+        if (depth_stencil.stencil.enabled and !features.stencil_state) return core.PipelineError.UnsupportedStencilState;
     }
 }
 

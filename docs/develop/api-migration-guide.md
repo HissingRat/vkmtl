@@ -5,6 +5,26 @@ Period 1 Phase 9 surface. The cutover is breaking because vkmtl has not yet made
 a tagged compatibility promise. It reorganizes names and owners without
 intentionally changing backend behavior.
 
+## Period 51 v0.2.0 Advanced Geometry Update
+
+Schema version 2 adds `tessellation_shaders` and `mesh_shaders` while schema 1
+remains accepted. Resolve advanced artifacts with
+`vkmtl.shader.compileTessellationShader(...)` or
+`vkmtl.shader.compileMeshShader(...)`, create the pipeline through
+`vkmtl.render.makeTessellationPipelineState(...)` or
+`vkmtl.render.makeMeshPipelineState(...)`, and encode through the corresponding
+render-encoder draw method. No new `Device` factory or flat-root alias is
+added.
+
+Existing callers need no source change. Callers that adopt the new enums,
+descriptors, methods, limits, or schema fields target `v0.2.0`. Query usable
+features before creation: Metal tessellation is unsupported under the current
+Slang artifact contract, and `task_shaders` remains false because the pinned
+compiler cannot stably produce task/object artifacts. Mesh and tessellation
+advanced stages are currently resource-free; `ShaderVisibility` has not yet
+admitted their binding stages. Mesh layouts may use fragment-only visibility;
+other visibility returns `UnsupportedMeshShaderBindings` before backend work.
+
 ## Period 50 v0.2.0 Binding, Indirect Command, And Driver Cache Update
 
 Render and compute pipeline descriptors now accept

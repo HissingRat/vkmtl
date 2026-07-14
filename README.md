@@ -80,8 +80,9 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 exe.root_module.addImport("vkmtl", vkmtl_dep.module("vkmtl"));
 ```
 
-The schema-version-1 manifest has `render_shaders`, `compute_shaders`, and
-`ray_tracing_shaders` arrays. It must be a source-backed LazyPath; shader source
+Schema version 1 remains accepted with `render_shaders`, `compute_shaders`, and
+`ray_tracing_shaders`. Schema version 2 adds `tessellation_shaders` and
+`mesh_shaders`. The manifest must be a source-backed LazyPath; shader source
 paths are relative to it and stay inside its logical package root. The
 dependency tracks those sources plus Slang include/import depfiles and embeds
 their SPIR-V, MSL, and reflection blobs; runtime code does not launch `slangc`

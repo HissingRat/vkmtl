@@ -38,7 +38,7 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 exe.root_module.addImport("vkmtl", vkmtl_dep.module("vkmtl"));
 ```
 
-JSON manifest 使用 schema version 1，并包含三个 array：
+Schema version 1 继续受支持，并包含三个 array：
 
 ```json
 {
@@ -67,8 +67,10 @@ Render entry 包含 `name`、`source`、`vertex_entry`、`fragment_entry`；comp
 `metal_ray_generation_source`、`ray_generation_entry`、`miss_entry`、
 `closest_hit_entry`、`any_hit_entry`、`intersection_entry`。所有 source path（包括
 `metal_ray_generation_source`）都相对于 manifest 文件解析，且不能越出
-LazyPath owner 的 logical root。Schema version 1 不支持 generated manifest，因为
-dependency graph 会在 configuration 时枚举 shader input。
+LazyPath owner 的 logical root。Generated manifest 不受支持，因为 dependency graph
+会在 configuration 时枚举 shader input。Schema version 2 保留以上三个 array，并增加
+`tessellation_shaders` 与 `mesh_shaders`；这是 additive build-contract extension，
+不会让 schema-version-1 consumer 失效。
 
 构建会追踪 manifest 和其中声明的所有 shader source，并通过 Slang
 depfile 追踪 include/import dependency，然后生成 SPIR-V、MSL、reflection blob

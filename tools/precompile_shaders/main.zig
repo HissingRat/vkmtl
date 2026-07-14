@@ -31,6 +31,25 @@ const RayTracingSpec = struct {
     intersection_entry: []const u8,
 };
 
+const TessellationSpec = struct {
+    name: []const u8,
+    source_path: []const u8,
+    source_label: []const u8,
+    vertex_entry: []const u8,
+    control_entry: []const u8,
+    evaluation_entry: []const u8,
+    fragment_entry: []const u8,
+};
+
+const MeshSpec = struct {
+    name: []const u8,
+    source_path: []const u8,
+    source_label: []const u8,
+    mesh_entry: []const u8,
+    task_entry: ?[]const u8,
+    fragment_entry: []const u8,
+};
+
 const GeneratedRender = struct {
     spec: RenderSpec,
     hash: [64]u8,
@@ -43,6 +62,16 @@ const GeneratedCompute = struct {
 
 const GeneratedRayTracing = struct {
     spec: RayTracingSpec,
+    hash: [64]u8,
+};
+
+const GeneratedTessellation = struct {
+    spec: TessellationSpec,
+    hash: [64]u8,
+};
+
+const GeneratedMesh = struct {
+    spec: MeshSpec,
     hash: [64]u8,
 };
 
@@ -119,6 +148,35 @@ pub fn main(init: std.process.Init) !void {
         };
         try generated_ray_tracing.append(allocator, try precompileRayTracing(allocator, io, output_dir, slangc, spec, &merged_depfile));
     }
+
+    var generated_tessellation: std.ArrayList(GeneratedTessellation) = .empty;
+    defer generated_tessellation.deinit(allocator);
+    for (parsed_manifest.value.tessellation_shaders) |decl| {
+        const spec = TessellationSpec{
+            .name = decl.name,
+            .source_path = args.next() orelse return missingSourceArgument(decl.source),
+            .source_label = decl.source,
+            .vertex_entry = decl.vertex_entry,
+            .control_entry = decl.control_entry,
+            .evaluation_entry = decl.evaluation_entry,
+            .fragment_entry = decl.fragment_entry,
+        };
+        try generated_tessellation.append(allocator, try precompileTessellation(allocator, io, output_dir, slangc, spec, &merged_depfile));
+    }
+
+    var generated_mesh: std.ArrayList(GeneratedMesh) = .empty;
+    defer generated_mesh.deinit(allocator);
+    for (parsed_manifest.value.mesh_shaders) |decl| {
+        const spec = MeshSpec{
+            .name = decl.name,
+            .source_path = args.next() orelse return missingSourceArgument(decl.source),
+            .source_label = decl.source,
+            .mesh_entry = decl.mesh_entry,
+            .task_entry = decl.task_entry,
+            .fragment_entry = decl.fragment_entry,
+        };
+        try generated_mesh.append(allocator, try precompileMesh(allocator, io, output_dir, slangc, spec, &merged_depfile));
+    }
     if (args.next() != null) {
         std.debug.print("shader manifest received more source arguments than it declares\n", .{});
         return error.InvalidArguments;
@@ -130,6 +188,8 @@ pub fn main(init: std.process.Init) !void {
         generated_render.items,
         generated_compute.items,
         generated_ray_tracing.items,
+        generated_tessellation.items,
+        generated_mesh.items,
     );
     try merged_depfile.append(allocator, '\n');
     try writeFile(output_depfile, merged_depfile.items);
@@ -291,10 +351,106 @@ fn precompileRayTracing(
     return .{ .spec = spec, .hash = hash };
 }
 
+fn precompileTessellation(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    output_dir: []const u8,
+    slangc: []const u8,
+    spec: TessellationSpec,
+    merged_depfile: *std.ArrayList(u8),
+) !GeneratedTessellation {
+    const source = try readFile(allocator, spec.source_path);
+    defer allocator.free(source);
+    const hash = sourceHash(source);
+
+    const shader_dir = try std.fs.path.join(allocator, &.{ output_dir, spec.name });
+    defer allocator.free(shader_dir);
+    try makeDirPath(shader_dir);
+
+    inline for (.{
+        .{ "vert", Stage.vertex, spec.vertex_entry },
+        .{ "control", Stage.tessellation_control, spec.control_entry },
+        .{ "evaluation", Stage.tessellation_evaluation, spec.evaluation_entry },
+        .{ "frag", Stage.fragment, spec.fragment_entry },
+    }) |stage_spec| {
+        const spirv = try std.fs.path.join(allocator, &.{ shader_dir, stage_spec[0] ++ ".spv" });
+        defer allocator.free(spirv);
+        const reflect = try std.fs.path.join(allocator, &.{ shader_dir, stage_spec[0] ++ ".reflect.json" });
+        defer allocator.free(reflect);
+        try runSlang(allocator, io, slangc, spec.source_path, stage_spec[1], stage_spec[2], .spirv, spirv, merged_depfile);
+        const reflection_json = try renderStageReflectionJson(allocator, spec.name, spec.source_label, source, stage_spec[1], stage_spec[2]);
+        defer allocator.free(reflection_json);
+        try writeFile(reflect, reflection_json);
+    }
+
+    return .{ .spec = spec, .hash = hash };
+}
+
+fn precompileMesh(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    output_dir: []const u8,
+    slangc: []const u8,
+    spec: MeshSpec,
+    merged_depfile: *std.ArrayList(u8),
+) !GeneratedMesh {
+    if (spec.task_entry != null) {
+        return error.TaskShaderArtifactsUnsupportedByPinnedSlang;
+    }
+    const source = try readFile(allocator, spec.source_path);
+    defer allocator.free(source);
+    const hash = sourceHash(source);
+
+    const shader_dir = try std.fs.path.join(allocator, &.{ output_dir, spec.name });
+    defer allocator.free(shader_dir);
+    try makeDirPath(shader_dir);
+
+    try precompileDualTargetStage(allocator, io, shader_dir, slangc, spec.source_path, spec.source_label, source, spec.name, "mesh", .mesh, spec.mesh_entry, merged_depfile);
+    try precompileDualTargetStage(allocator, io, shader_dir, slangc, spec.source_path, spec.source_label, source, spec.name, "frag", .fragment, spec.fragment_entry, merged_depfile);
+    return .{ .spec = spec, .hash = hash };
+}
+
+fn precompileDualTargetStage(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    shader_dir: []const u8,
+    slangc: []const u8,
+    source_path: []const u8,
+    source_label: []const u8,
+    source: []const u8,
+    name: []const u8,
+    basename: []const u8,
+    stage: Stage,
+    entry: []const u8,
+    merged_depfile: *std.ArrayList(u8),
+) !void {
+    const spirv_name = try std.fmt.allocPrint(allocator, "{s}.spv", .{basename});
+    defer allocator.free(spirv_name);
+    const msl_name = try std.fmt.allocPrint(allocator, "{s}.msl", .{basename});
+    defer allocator.free(msl_name);
+    const reflect_name = try std.fmt.allocPrint(allocator, "{s}.reflect.json", .{basename});
+    defer allocator.free(reflect_name);
+    const spirv = try std.fs.path.join(allocator, &.{ shader_dir, spirv_name });
+    defer allocator.free(spirv);
+    const msl = try std.fs.path.join(allocator, &.{ shader_dir, msl_name });
+    defer allocator.free(msl);
+    const reflect = try std.fs.path.join(allocator, &.{ shader_dir, reflect_name });
+    defer allocator.free(reflect);
+    try runSlang(allocator, io, slangc, source_path, stage, entry, .spirv, spirv, merged_depfile);
+    try runSlang(allocator, io, slangc, source_path, stage, entry, .msl, msl, merged_depfile);
+    const reflection_json = try renderStageReflectionJson(allocator, name, source_label, source, stage, entry);
+    defer allocator.free(reflection_json);
+    try writeFile(reflect, reflection_json);
+}
+
 const Stage = enum {
     vertex,
     fragment,
     compute,
+    tessellation_control,
+    tessellation_evaluation,
+    mesh,
+    task,
 };
 
 const Target = enum {
@@ -317,6 +473,9 @@ fn runSlang(
         .vertex => "vs_6_0",
         .fragment => "ps_6_0",
         .compute => "cs_6_0",
+        .tessellation_control => "hs_6_0",
+        .tessellation_evaluation => "ds_6_0",
+        .mesh, .task => "sm_6_5",
     };
     const target_name = switch (target) {
         .spirv => "spirv",
@@ -435,6 +594,8 @@ fn writeGeneratedModule(
     render_items: []const GeneratedRender,
     compute_items: []const GeneratedCompute,
     ray_tracing_items: []const GeneratedRayTracing,
+    tessellation_items: []const GeneratedTessellation,
+    mesh_items: []const GeneratedMesh,
 ) !void {
     var zig: std.ArrayList(u8) = .empty;
     defer zig.deinit(allocator);
@@ -481,6 +642,40 @@ fn writeGeneratedModule(
         \\    closest_hit_reflection: []const u8,
         \\    any_hit_reflection: []const u8,
         \\    intersection_reflection: []const u8,
+        \\};
+        \\
+        \\pub const TessellationShaderBlob = struct {
+        \\    name: []const u8,
+        \\    source_hash: []const u8,
+        \\    vertex_entry: []const u8,
+        \\    control_entry: []const u8,
+        \\    evaluation_entry: []const u8,
+        \\    fragment_entry: []const u8,
+        \\    vertex_spirv: []const u8,
+        \\    control_spirv: []const u8,
+        \\    evaluation_spirv: []const u8,
+        \\    fragment_spirv: []const u8,
+        \\    vertex_reflection: []const u8,
+        \\    control_reflection: []const u8,
+        \\    evaluation_reflection: []const u8,
+        \\    fragment_reflection: []const u8,
+        \\};
+        \\
+        \\pub const MeshShaderBlob = struct {
+        \\    name: []const u8,
+        \\    source_hash: []const u8,
+        \\    mesh_entry: []const u8,
+        \\    task_entry: ?[]const u8,
+        \\    fragment_entry: []const u8,
+        \\    mesh_spirv: []const u8,
+        \\    task_spirv: ?[]const u8,
+        \\    fragment_spirv: []const u8,
+        \\    mesh_msl: []const u8,
+        \\    task_msl: ?[]const u8,
+        \\    fragment_msl: []const u8,
+        \\    mesh_reflection: []const u8,
+        \\    task_reflection: ?[]const u8,
+        \\    fragment_reflection: []const u8,
         \\};
         \\
         \\pub const render_shaders = [_]RenderShaderBlob{
@@ -553,6 +748,82 @@ fn writeGeneratedModule(
                 item.spec.name,
                 item.spec.name,
                 item.spec.name,
+                item.spec.name,
+            },
+        );
+    }
+    try zig.appendSlice(allocator,
+        \\};
+        \\
+        \\pub const tessellation_shaders = [_]TessellationShaderBlob{
+        \\
+    );
+    for (tessellation_items) |item| {
+        try zig.print(
+            allocator,
+            "    .{{ .name = \"{s}\", .source_hash = \"{s}\", .vertex_entry = \"{s}\", .control_entry = \"{s}\", .evaluation_entry = \"{s}\", .fragment_entry = \"{s}\", .vertex_spirv = @embedFile(\"{s}/vert.spv\"), .control_spirv = @embedFile(\"{s}/control.spv\"), .evaluation_spirv = @embedFile(\"{s}/evaluation.spv\"), .fragment_spirv = @embedFile(\"{s}/frag.spv\"), .vertex_reflection = @embedFile(\"{s}/vert.reflect.json\"), .control_reflection = @embedFile(\"{s}/control.reflect.json\"), .evaluation_reflection = @embedFile(\"{s}/evaluation.reflect.json\"), .fragment_reflection = @embedFile(\"{s}/frag.reflect.json\") }},\n",
+            .{
+                item.spec.name,
+                item.hash,
+                item.spec.vertex_entry,
+                item.spec.control_entry,
+                item.spec.evaluation_entry,
+                item.spec.fragment_entry,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+                item.spec.name,
+            },
+        );
+    }
+    try zig.appendSlice(allocator,
+        \\};
+        \\
+        \\pub const mesh_shaders = [_]MeshShaderBlob{
+        \\
+    );
+    for (mesh_items) |item| {
+        const task_entry = if (item.spec.task_entry) |entry|
+            try std.fmt.allocPrint(allocator, "\"{s}\"", .{entry})
+        else
+            try allocator.dupe(u8, "null");
+        defer allocator.free(task_entry);
+        const task_spirv = if (item.spec.task_entry != null)
+            try std.fmt.allocPrint(allocator, "@embedFile(\"{s}/task.spv\")", .{item.spec.name})
+        else
+            try allocator.dupe(u8, "null");
+        defer allocator.free(task_spirv);
+        const task_msl = if (item.spec.task_entry != null)
+            try std.fmt.allocPrint(allocator, "@embedFile(\"{s}/task.msl\")", .{item.spec.name})
+        else
+            try allocator.dupe(u8, "null");
+        defer allocator.free(task_msl);
+        const task_reflection = if (item.spec.task_entry != null)
+            try std.fmt.allocPrint(allocator, "@embedFile(\"{s}/task.reflect.json\")", .{item.spec.name})
+        else
+            try allocator.dupe(u8, "null");
+        defer allocator.free(task_reflection);
+        try zig.print(
+            allocator,
+            "    .{{ .name = \"{s}\", .source_hash = \"{s}\", .mesh_entry = \"{s}\", .task_entry = {s}, .fragment_entry = \"{s}\", .mesh_spirv = @embedFile(\"{s}/mesh.spv\"), .task_spirv = {s}, .fragment_spirv = @embedFile(\"{s}/frag.spv\"), .mesh_msl = @embedFile(\"{s}/mesh.msl\"), .task_msl = {s}, .fragment_msl = @embedFile(\"{s}/frag.msl\"), .mesh_reflection = @embedFile(\"{s}/mesh.reflect.json\"), .task_reflection = {s}, .fragment_reflection = @embedFile(\"{s}/frag.reflect.json\") }},\n",
+            .{
+                item.spec.name,
+                item.hash,
+                item.spec.mesh_entry,
+                task_entry,
+                item.spec.fragment_entry,
+                item.spec.name,
+                task_spirv,
+                item.spec.name,
+                item.spec.name,
+                task_msl,
+                item.spec.name,
+                item.spec.name,
+                task_reflection,
                 item.spec.name,
             },
         );
@@ -910,6 +1181,10 @@ fn stageName(stage: Stage) []const u8 {
         .vertex => "vertex",
         .fragment => "fragment",
         .compute => "compute",
+        .tessellation_control => "tessellation_control",
+        .tessellation_evaluation => "tessellation_evaluation",
+        .mesh => "mesh",
+        .task => "task",
     };
 }
 

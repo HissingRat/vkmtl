@@ -918,11 +918,16 @@ See `docs/develop/period50/`.
 
 ## Period 51: Advanced Rasterization And Geometry
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
 Goal: execute tessellation and mesh/object/task pipelines and resolve tile,
 imageblock, raster-order, variable-rate, layered, and programmable-blend
 semantics through exact mappings or precise unsupported results.
+
+Vulkan tessellation and Metal/Vulkan mesh-only execution are implemented.
+Metal tessellation, task/object artifacts, advanced-stage resource binding,
+and the six advanced raster families are precisely closed under the current
+shader and render contracts. See `docs/develop/period51/`.
 
 ## Period 52: Ray Tracing Breadth
 
@@ -990,8 +995,8 @@ See `docs/develop/period32+/target.md`.
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Periods
-  46-50 are complete implementation slices. Period 51 is the active mainline
-  target; Periods 51-54 remain routed from the gap ledger and must not be reordered
+  46-51 are complete implementation slices. Period 52 is the active mainline
+  target; Periods 52-54 remain routed from the gap ledger and must not be reordered
   around their stated dependencies without updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the

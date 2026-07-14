@@ -27,19 +27,22 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 });
 ```
 
-Schema version 1 has these arrays and fields:
+Schema version 1 remains accepted with the first three arrays. Schema version
+2 retains them and adds the two advanced-geometry arrays:
 
 | Array | Required entry fields |
 | --- | --- |
 | `render_shaders` | `name`, `source`, `vertex_entry`, `fragment_entry` |
 | `compute_shaders` | `name`, `source`, `entry` |
 | `ray_tracing_shaders` | `name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`, `miss_entry`, `closest_hit_entry`, `any_hit_entry`, `intersection_entry` |
+| `tessellation_shaders` | `name`, `source`, `vertex_entry`, `control_entry`, `evaluation_entry`, `fragment_entry` |
+| `mesh_shaders` | `name`, `source`, `mesh_entry`, optional `task_entry`, `fragment_entry` |
 
-Each array may be empty. Names are unique across all three arrays and use the
+Each array may be empty. Names are unique across all arrays and use the
 portable lowercase form `[a-z0-9_.-]+` (`.` and `..` are not names). `source`
 and `metal_ray_generation_source` are relative to the manifest file and must
-stay inside the LazyPath owner's logical root. Schema version 1 does not accept
-a generated manifest because the dependency graph enumerates shader inputs
+stay inside the LazyPath owner's logical root. Neither schema accepts a
+generated manifest because the dependency graph enumerates shader inputs
 during configuration. The build tracks the manifest and every declared source
 as inputs, then consumes Slang depfiles so include/import changes also
 invalidate cached artifacts.
@@ -68,6 +71,17 @@ Compute shaders use `compute.spv`, `compute.msl`, and
 `compute.reflect.json`. The source hash is stored in embedded blob metadata. If
 no blob matches the name, entry points, and source hash, vkmtl returns
 `PrecompiledShaderMissing`.
+
+Tessellation entries produce vertex, control, evaluation, and fragment SPIR-V
+for Vulkan. The pinned Slang Metal target rejects hull/domain stages, so Metal
+tessellation remains unsupported under the source-only artifact contract.
+Mesh entries produce mesh/fragment SPIR-V and MSL and are executable on a
+capable selected backend. The current pinned compiler crashes for the probed
+task/amplification form; `task_entry` therefore remains a non-usable gate and
+`DeviceFeatures.task_shaders` stays false. Advanced-stage resource bindings
+are not yet part of `ShaderVisibility`; the executable Period 51 mesh and
+tessellation subset keeps advanced stages resource-free while ordinary
+fragment bindings remain available.
 
 ## Build Commands
 

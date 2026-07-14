@@ -999,6 +999,49 @@ pub const RenderCommandEncoder = struct {
         );
     }
 
+    pub fn drawTessellationPatches(
+        self: *RenderCommandEncoder,
+        descriptor: core.TessellationPatchDrawDescriptor,
+    ) !void {
+        const plan = try core.TessellationDrawPlan.fromDescriptor(
+            .vulkan,
+            descriptor,
+            .{ .tessellation = true },
+            .{ .max_tessellation_control_points = descriptor.tessellation.control_point_count },
+        );
+        const lowering = try core.vulkanTessellationDrawLowering(plan);
+        self.gc.dev.cmdDraw(
+            self.cmdbuf,
+            lowering.draw_vertex_count,
+            lowering.draw_instance_count,
+            lowering.first_vertex,
+            lowering.first_instance,
+        );
+    }
+
+    pub fn drawMeshThreadgroups(
+        self: *RenderCommandEncoder,
+        descriptor: core.MeshDispatchDescriptor,
+        limits: core.DeviceLimits,
+    ) !void {
+        const plan = try core.MeshDispatchPlan.fromDescriptor(
+            .vulkan,
+            descriptor,
+            .{
+                .mesh_shaders = true,
+                .task_shaders = descriptor.pipeline.task_entry_point != null,
+            },
+            limits,
+        );
+        const lowering = try core.vulkanMeshDispatchLowering(plan);
+        self.gc.dev.cmdDrawMeshTasksEXT(
+            self.cmdbuf,
+            lowering.group_count_x,
+            lowering.group_count_y,
+            lowering.group_count_z,
+        );
+    }
+
     pub fn drawIndexedPrimitives(
         self: *RenderCommandEncoder,
         descriptor: core.DrawIndexedPrimitivesDescriptor,

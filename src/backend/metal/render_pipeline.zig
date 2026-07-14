@@ -103,6 +103,94 @@ pub fn init(
     };
 }
 
+pub fn initMesh(
+    owner: *MetalClearScreen,
+    allocator: std.mem.Allocator,
+    descriptor: core.MeshRenderPipelineDescriptor,
+) !MetalRenderPipelineState {
+    var mesh_module = try MetalShaderModule.init(owner, allocator, descriptor.mesh.module);
+    defer mesh_module.deinit();
+    var object_module: ?MetalShaderModule = if (descriptor.task) |task|
+        try MetalShaderModule.init(owner, allocator, task.module)
+    else
+        null;
+    defer if (object_module) |*module| module.deinit();
+    var fragment_module: ?MetalShaderModule = if (descriptor.fragment) |fragment|
+        try MetalShaderModule.init(owner, allocator, fragment.module)
+    else
+        null;
+    defer if (fragment_module) |*module| module.deinit();
+
+    const mesh_constants = try specialization.translate(allocator, descriptor.mesh.specialization);
+    defer allocator.free(mesh_constants);
+    const object_constants = if (descriptor.task) |task|
+        try specialization.translate(allocator, task.specialization)
+    else
+        try allocator.alloc(metal.vkmtl_metal_function_constant, 0);
+    defer allocator.free(object_constants);
+    const fragment_constants = if (descriptor.fragment) |fragment|
+        try specialization.translate(allocator, fragment.specialization)
+    else
+        try allocator.alloc(metal.vkmtl_metal_function_constant, 0);
+    defer allocator.free(fragment_constants);
+
+    const color_attachments = makeColorAttachments(descriptor.color_attachments);
+    const color_attachment_slice = color_attachments[0..descriptor.color_attachments.len];
+    const stencil = if (descriptor.depth_stencil) |depth| depth.stencil else core.StencilDescriptor{};
+    var handle: ?*metal.vkmtl_metal_render_pipeline_state = null;
+    try check(metal.vkmtl_metal_mesh_render_pipeline_state_create(
+        owner.handle,
+        mesh_module.handle,
+        descriptor.mesh.entry_point.ptr,
+        descriptor.mesh.entry_point.len,
+        if (mesh_constants.len == 0) null else mesh_constants.ptr,
+        mesh_constants.len,
+        if (object_module) |module| module.handle else null,
+        if (descriptor.task) |task| task.entry_point.ptr else null,
+        if (descriptor.task) |task| task.entry_point.len else 0,
+        if (object_constants.len == 0) null else object_constants.ptr,
+        object_constants.len,
+        if (fragment_module) |module| module.handle else null,
+        if (descriptor.fragment) |fragment| fragment.entry_point.ptr else null,
+        if (descriptor.fragment) |fragment| fragment.entry_point.len else 0,
+        if (fragment_constants.len == 0) null else fragment_constants.ptr,
+        fragment_constants.len,
+        color_attachment_slice.ptr,
+        color_attachment_slice.len,
+        if (descriptor.depth_stencil) |depth| textureFormat(depth.format) else metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID,
+        if (descriptor.depth_stencil) |depth| compareFunction(depth.depth_compare_function) else metal.VKMTL_METAL_COMPARE_FUNCTION_ALWAYS,
+        if (descriptor.depth_stencil) |depth| @intFromBool(depth.depth_write_enabled) else 0,
+        @intFromBool(stencil.enabled),
+        stencilOperation(stencil.front.stencil_fail_operation),
+        stencilOperation(stencil.front.depth_fail_operation),
+        stencilOperation(stencil.front.depth_stencil_pass_operation),
+        compareFunction(stencil.front.stencil_compare_function),
+        stencilOperation(stencil.back.stencil_fail_operation),
+        stencilOperation(stencil.back.depth_fail_operation),
+        stencilOperation(stencil.back.depth_stencil_pass_operation),
+        compareFunction(stencil.back.stencil_compare_function),
+        stencil.read_mask,
+        stencil.write_mask,
+        descriptor.sample_count,
+        descriptor.pipeline.mesh_threads_per_threadgroup,
+        if (descriptor.pipeline.task_entry_point != null) descriptor.pipeline.task_threads_per_threadgroup else 0,
+        if (descriptor.driver_cache) |cache| cache.path.ptr else null,
+        if (descriptor.driver_cache) |cache| cache.path.len else 0,
+        if (descriptor.driver_cache) |cache| cache_identity.hash(cache.identity) else 0,
+        if (descriptor.driver_cache) |cache| @intFromBool(cache.read_only) else 0,
+        &handle,
+    ));
+
+    return .{
+        .handle = handle orelse return Error.InvalidPipeline,
+        .supports_indirect_command_buffers = false,
+        .uses_depth = descriptor.depth_stencil != null,
+        .sample_count = descriptor.sample_count,
+        .fill_mode = triangleFillMode(descriptor.fill_mode),
+        .depth_bias = descriptor.depth_bias,
+    };
+}
+
 fn createNativePipeline(
     owner: *metal.vkmtl_metal_clear_screen,
     vertex_module: *metal.vkmtl_metal_shader_module,

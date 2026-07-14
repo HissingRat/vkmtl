@@ -1472,6 +1472,27 @@ vkmtl_metal_status vkmtl_metal_clear_screen_copy_capabilities(
 
         out_capabilities->ray_tracing = vkmtl_device_supports_raytracing(device) ? 1u : 0u;
 
+        if (@available(macOS 13.0, *)) {
+            BOOL supports_mesh_shaders =
+                [device supportsFamily:MTLGPUFamilyApple7] ||
+                [device supportsFamily:MTLGPUFamilyMac2];
+            if (supports_mesh_shaders) {
+                out_capabilities->mesh_shaders = 1u;
+                out_capabilities->task_shaders = 1u;
+                out_capabilities->max_mesh_threads_per_threadgroup =
+                    MIN(out_capabilities->max_threads_per_threadgroup_total, 256u);
+                out_capabilities->max_task_threads_per_threadgroup =
+                    MIN(out_capabilities->max_threads_per_threadgroup_total, 256u);
+                // Metal exposes exact mesh-stage limits on the compiled
+                // pipeline state, not as device-wide properties. Keep a
+                // conservative vkmtl creation ceiling and a 16-bit portable
+                // per-axis grid ceiling before pipeline creation.
+                out_capabilities->max_mesh_threadgroups_per_grid_x = 65535u;
+                out_capabilities->max_mesh_threadgroups_per_grid_y = 65535u;
+                out_capabilities->max_mesh_threadgroups_per_grid_z = 65535u;
+            }
+        }
+
         if ([device respondsToSelector:@selector(newBinaryArchiveWithDescriptor:error:)]) {
             out_capabilities->binary_archive = 1;
         }
@@ -3033,6 +3054,264 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
         *out_pipeline = state;
         return VKMTL_METAL_STATUS_OK;
     }
+}
+
+vkmtl_metal_status vkmtl_metal_mesh_render_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *mesh_shader,
+    const char *mesh_entry,
+    size_t mesh_entry_len,
+    const vkmtl_metal_function_constant *mesh_constants,
+    size_t mesh_constant_count,
+    vkmtl_metal_shader_module *object_shader,
+    const char *object_entry,
+    size_t object_entry_len,
+    const vkmtl_metal_function_constant *object_constants,
+    size_t object_constant_count,
+    vkmtl_metal_shader_module *fragment_shader,
+    const char *fragment_entry,
+    size_t fragment_entry_len,
+    const vkmtl_metal_function_constant *fragment_constants,
+    size_t fragment_constant_count,
+    const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
+    size_t color_attachment_count,
+    vkmtl_metal_texture_format depth_format,
+    vkmtl_metal_compare_function depth_compare_function,
+    unsigned int depth_write_enabled,
+    unsigned int stencil_enabled,
+    vkmtl_metal_stencil_operation front_stencil_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function front_stencil_compare_function,
+    vkmtl_metal_stencil_operation back_stencil_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function back_stencil_compare_function,
+    unsigned int stencil_read_mask,
+    unsigned int stencil_write_mask,
+    unsigned int sample_count,
+    unsigned int mesh_threads_per_threadgroup,
+    unsigned int object_threads_per_threadgroup,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
+    vkmtl_metal_render_pipeline_state **out_pipeline
+) {
+    if (out_pipeline == NULL) return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    *out_pipeline = NULL;
+    if (owner == NULL || owner->device == nil || mesh_shader == NULL ||
+        mesh_shader->library == nil || mesh_entry == NULL || mesh_entry_len == 0 ||
+        mesh_threads_per_threadgroup == 0 || sample_count == 0 ||
+        color_attachments == NULL || color_attachment_count == 0 || color_attachment_count > 4 ||
+        (mesh_constant_count != 0 && mesh_constants == NULL) ||
+        (object_constant_count != 0 && object_constants == NULL) ||
+        (fragment_constant_count != 0 && fragment_constants == NULL)) {
+        return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    }
+    if (![owner->device supportsTextureSampleCount:sample_count]) {
+        return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+    }
+    if (@available(macOS 13.0, *)) {
+      @autoreleasepool {
+        NSString *mesh_name = [[NSString alloc] initWithBytes:mesh_entry
+                                                      length:mesh_entry_len
+                                                    encoding:NSUTF8StringEncoding];
+        if (mesh_name == nil) return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+        id<MTLFunction> mesh_function = vkmtl_new_function_with_constants(
+            mesh_shader->library, mesh_name, mesh_constants, mesh_constant_count);
+        [mesh_name release];
+        if (mesh_function == nil) return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+
+        id<MTLFunction> object_function = nil;
+        if (object_shader != NULL && object_shader->library != nil) {
+            if (object_entry == NULL || object_entry_len == 0 || object_threads_per_threadgroup == 0) {
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+            NSString *object_name = [[NSString alloc] initWithBytes:object_entry
+                                                             length:object_entry_len
+                                                           encoding:NSUTF8StringEncoding];
+            if (object_name == nil) {
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+            object_function = vkmtl_new_function_with_constants(
+                object_shader->library, object_name, object_constants, object_constant_count);
+            [object_name release];
+            if (object_function == nil) {
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+        }
+
+        id<MTLFunction> fragment_function = nil;
+        if (fragment_shader != NULL && fragment_shader->library != nil) {
+            if (fragment_entry == NULL || fragment_entry_len == 0) {
+                [object_function release];
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+            NSString *fragment_name = [[NSString alloc] initWithBytes:fragment_entry
+                                                               length:fragment_entry_len
+                                                             encoding:NSUTF8StringEncoding];
+            if (fragment_name == nil) {
+                [object_function release];
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+            fragment_function = vkmtl_new_function_with_constants(
+                fragment_shader->library, fragment_name, fragment_constants, fragment_constant_count);
+            [fragment_name release];
+            if (fragment_function == nil) {
+                [object_function release];
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+        }
+
+        MTLMeshRenderPipelineDescriptor *descriptor = [[MTLMeshRenderPipelineDescriptor alloc] init];
+        if (descriptor == nil) {
+            [fragment_function release];
+            [object_function release];
+            [mesh_function release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        descriptor.meshFunction = mesh_function;
+        descriptor.objectFunction = object_function;
+        descriptor.fragmentFunction = fragment_function;
+        descriptor.maxTotalThreadsPerMeshThreadgroup = mesh_threads_per_threadgroup;
+        if (object_function != nil) {
+            descriptor.maxTotalThreadsPerObjectThreadgroup = object_threads_per_threadgroup;
+        }
+        descriptor.rasterSampleCount = sample_count;
+        for (size_t i = 0; i < color_attachment_count; i += 1) {
+            const vkmtl_metal_render_pipeline_color_attachment attachment = color_attachments[i];
+            if (attachment.format == VKMTL_METAL_TEXTURE_FORMAT_INVALID) {
+                [descriptor release];
+                [fragment_function release];
+                [object_function release];
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+            descriptor.colorAttachments[i].pixelFormat = vkmtl_texture_pixel_format(attachment.format);
+            descriptor.colorAttachments[i].writeMask = vkmtl_color_write_mask(attachment.color_write_mask);
+            if (attachment.blend_enabled != 0) {
+                descriptor.colorAttachments[i].blendingEnabled = YES;
+                descriptor.colorAttachments[i].sourceRGBBlendFactor = vkmtl_blend_factor(attachment.source_rgb_blend_factor);
+                descriptor.colorAttachments[i].destinationRGBBlendFactor = vkmtl_blend_factor(attachment.destination_rgb_blend_factor);
+                descriptor.colorAttachments[i].rgbBlendOperation = vkmtl_blend_operation(attachment.rgb_blend_operation);
+                descriptor.colorAttachments[i].sourceAlphaBlendFactor = vkmtl_blend_factor(attachment.source_alpha_blend_factor);
+                descriptor.colorAttachments[i].destinationAlphaBlendFactor = vkmtl_blend_factor(attachment.destination_alpha_blend_factor);
+                descriptor.colorAttachments[i].alphaBlendOperation = vkmtl_blend_operation(attachment.alpha_blend_operation);
+            }
+        }
+        if (vkmtl_texture_format_has_depth(depth_format)) {
+            descriptor.depthAttachmentPixelFormat = vkmtl_texture_pixel_format(depth_format);
+        }
+        if (vkmtl_texture_format_has_stencil(depth_format)) {
+            descriptor.stencilAttachmentPixelFormat = vkmtl_texture_pixel_format(depth_format);
+        }
+
+        vkmtl_binary_archive_session archive = {0};
+        if (cache_path != NULL && cache_path_len != 0) {
+            if (@available(macOS 15.0, *)) {
+                archive = vkmtl_binary_archive_begin(
+                    owner->device,
+                    cache_path,
+                    cache_path_len,
+                    cache_identity_hash,
+                    cache_read_only
+                );
+                if (archive.archive != nil) {
+                    NSError *archive_error = nil;
+                    [archive.archive addMeshRenderPipelineFunctionsWithDescriptor:descriptor error:&archive_error];
+                    descriptor.binaryArchives = @[archive.archive];
+                }
+            } else {
+                [descriptor release];
+                [fragment_function release];
+                [object_function release];
+                [mesh_function release];
+                return VKMTL_METAL_STATUS_UNSUPPORTED;
+            }
+        }
+
+        NSError *error = nil;
+        id<MTLRenderPipelineState> pipeline = [owner->device
+            newRenderPipelineStateWithMeshDescriptor:descriptor
+                                             options:MTLPipelineOptionNone
+                                          reflection:nil
+                                               error:&error];
+        vkmtl_binary_archive_finish(&archive, pipeline != nil);
+        [descriptor release];
+        [fragment_function release];
+        [object_function release];
+        [mesh_function release];
+        if (pipeline == nil) {
+            if (error != nil) {
+                fprintf(stderr, "vkmtl Metal mesh pipeline error: %s\n", error.localizedDescription.UTF8String);
+            }
+            return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+        }
+
+        id<MTLDepthStencilState> depth_stencil = nil;
+        if (depth_format != VKMTL_METAL_TEXTURE_FORMAT_INVALID || stencil_enabled != 0) {
+            MTLDepthStencilDescriptor *depth_descriptor = [[MTLDepthStencilDescriptor alloc] init];
+            if (depth_descriptor == nil) {
+                [pipeline release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+            depth_descriptor.depthCompareFunction = vkmtl_compare_function(depth_compare_function);
+            depth_descriptor.depthWriteEnabled = depth_write_enabled != 0;
+            if (stencil_enabled != 0) {
+                MTLStencilDescriptor *front = [[MTLStencilDescriptor alloc] init];
+                MTLStencilDescriptor *back = [[MTLStencilDescriptor alloc] init];
+                if (front == nil || back == nil) {
+                    [front release];
+                    [back release];
+                    [depth_descriptor release];
+                    [pipeline release];
+                    return VKMTL_METAL_STATUS_COMMAND_FAILED;
+                }
+                front.stencilFailureOperation = vkmtl_stencil_operation(front_stencil_fail_operation);
+                front.depthFailureOperation = vkmtl_stencil_operation(front_depth_fail_operation);
+                front.depthStencilPassOperation = vkmtl_stencil_operation(front_depth_stencil_pass_operation);
+                front.stencilCompareFunction = vkmtl_compare_function(front_stencil_compare_function);
+                front.readMask = stencil_read_mask;
+                front.writeMask = stencil_write_mask;
+                back.stencilFailureOperation = vkmtl_stencil_operation(back_stencil_fail_operation);
+                back.depthFailureOperation = vkmtl_stencil_operation(back_depth_fail_operation);
+                back.depthStencilPassOperation = vkmtl_stencil_operation(back_depth_stencil_pass_operation);
+                back.stencilCompareFunction = vkmtl_compare_function(back_stencil_compare_function);
+                back.readMask = stencil_read_mask;
+                back.writeMask = stencil_write_mask;
+                depth_descriptor.frontFaceStencil = front;
+                depth_descriptor.backFaceStencil = back;
+                [front release];
+                [back release];
+            }
+            depth_stencil = [owner->device newDepthStencilStateWithDescriptor:depth_descriptor];
+            [depth_descriptor release];
+            if (depth_stencil == nil) {
+                [pipeline release];
+                return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+            }
+        }
+
+        vkmtl_metal_render_pipeline_state *state = calloc(1, sizeof(vkmtl_metal_render_pipeline_state));
+        if (state == NULL) {
+            [depth_stencil release];
+            [pipeline release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        state->pipeline = pipeline;
+        state->depth_stencil = depth_stencil;
+        *out_pipeline = state;
+        return VKMTL_METAL_STATUS_OK;
+      }
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
 void vkmtl_metal_render_pipeline_state_destroy(vkmtl_metal_render_pipeline_state *pipeline) {
@@ -4914,6 +5193,32 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
         }
         return VKMTL_METAL_STATUS_OK;
     }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_mesh_threadgroups(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int threadgroup_count_x,
+    unsigned int threadgroup_count_y,
+    unsigned int threadgroup_count_z,
+    unsigned int object_threads_per_threadgroup,
+    unsigned int mesh_threads_per_threadgroup
+) {
+    if (encoder == NULL || encoder->encoder == nil || encoder->ended != 0 ||
+        threadgroup_count_x == 0 || threadgroup_count_y == 0 || threadgroup_count_z == 0 ||
+        mesh_threads_per_threadgroup == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (@available(macOS 13.0, *)) {
+        [encoder->encoder
+            drawMeshThreadgroups:MTLSizeMake(threadgroup_count_x, threadgroup_count_y, threadgroup_count_z)
+            threadsPerObjectThreadgroup:MTLSizeMake(
+                object_threads_per_threadgroup == 0 ? 1 : object_threads_per_threadgroup,
+                1,
+                1)
+            threadsPerMeshThreadgroup:MTLSizeMake(mesh_threads_per_threadgroup, 1, 1)];
+        return VKMTL_METAL_STATUS_OK;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
 vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_indexed_primitives(

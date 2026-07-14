@@ -100,7 +100,7 @@ Default `zig build` prepares the pinned Slang distribution under
 listed by the current manifest. Runtime never launches `slangc`, and release
 artifacts do not need to carry a Slang compiler or setup scripts.
 
-External applications select a schema-version-1 manifest through the dependency
+External applications select a source-backed manifest through the dependency
 option:
 
 ```zig
@@ -111,11 +111,12 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 });
 ```
 
-The manifest arrays are `render_shaders`, `compute_shaders`, and
-`ray_tracing_shaders`; their entries declare `name`, relative source paths, and
-the stage-specific entry points. Shader names must be unique lowercase portable
+Schema version 1 contains `render_shaders`, `compute_shaders`, and
+`ray_tracing_shaders`. Schema version 2 retains them and adds
+`tessellation_shaders` and `mesh_shaders`; their entries declare `name`,
+relative source paths, and stage-specific entry points. Shader names must be unique lowercase portable
 `[a-z0-9_.-]+` filesystem components. The manifest must be source-backed;
-generated manifests are not supported by schema version 1. Sources stay inside
+generated manifests are not supported by either schema. Sources stay inside
 the LazyPath owner's logical root. The manifest, every declared source, and
 Slang include/import dependencies from compiler depfiles are tracked build
 inputs.

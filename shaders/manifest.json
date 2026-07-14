@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "render_shaders": [
     {
       "name": "triangle",
@@ -66,6 +66,24 @@
       "closest_hit_entry": "closest_hit",
       "any_hit_entry": "any_hit",
       "intersection_entry": "intersect_sphere"
+    }
+  ],
+  "tessellation_shaders": [
+    {
+      "name": "tessellation",
+      "source": "../examples/tessellation/shaders/tessellation.slang",
+      "vertex_entry": "vs_main",
+      "control_entry": "hs_main",
+      "evaluation_entry": "ds_main",
+      "fragment_entry": "fs_main"
+    }
+  ],
+  "mesh_shaders": [
+    {
+      "name": "mesh_shader",
+      "source": "../examples/mesh_shader/shaders/mesh_shader.slang",
+      "mesh_entry": "mesh_main",
+      "fragment_entry": "fs_main"
     }
   ]
 }

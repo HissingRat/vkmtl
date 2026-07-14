@@ -4,8 +4,13 @@ const glfw = @import("zig_glfw");
 const common = @import("vkmtl_examples_common");
 
 const app_name = "vkmtl mesh shader";
+const shader_source = @embedFile("shaders/mesh_shader.slang");
 
-pub fn main() !void {
+const color_attachments = [_]vkmtl.render.RenderPipelineColorAttachmentDescriptor{
+    .{ .format = .bgra8_unorm_srgb },
+};
+
+pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
 
@@ -29,50 +34,58 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
-    const descriptor = vkmtl.render.MeshPipelineDescriptor{
-        .mesh_entry_point = "mesh_main",
-        .mesh_threads_per_threadgroup = 32,
-    };
-    const dispatch = vkmtl.render.MeshDispatchDescriptor{
-        .pipeline = descriptor,
-        .threadgroup_count_x = 8,
-        .threadgroup_count_y = 1,
-        .threadgroup_count_z = 1,
-    };
-
-    const dispatch_plan = vkmtl.render.planMeshDispatch(device, dispatch) catch |err| {
-        std.debug.print("mesh shader dispatch unsupported: {s}\n", .{@errorName(err)});
+    if (!device.features().mesh_shaders) {
+        std.debug.print("mesh shaders unavailable on backend {s}\n", .{@tagName(device.selectedBackend())});
         return;
-    };
-    std.debug.print("mesh dispatch plan: groups={}x{}x{}, total={}\n", .{
-        dispatch_plan.threadgroup_count_x,
-        dispatch_plan.threadgroup_count_y,
-        dispatch_plan.threadgroup_count_z,
-        dispatch_plan.total_threadgroups,
-    });
+    }
+    var queue = context.queue();
+    var swapchain = context.swapchain();
 
-    switch (device.selectedBackend()) {
-        .vulkan => {
-            const lowering = try vkmtl.native.vulkan.planMeshDispatch(device, dispatch);
-            std.debug.print("Vulkan mesh dispatch plan ok: mesh_entry={s}, threads={}, groups={}x{}x{}, total={}\n", .{
-                lowering.mesh_entry_point,
-                lowering.mesh_threads_per_threadgroup,
-                lowering.group_count_x,
-                lowering.group_count_y,
-                lowering.group_count_z,
-                lowering.total_threadgroups,
-            });
-        },
-        .metal => {
-            const lowering = try vkmtl.native.metal.planMeshDispatch(device, dispatch);
-            std.debug.print("Metal mesh dispatch plan ok: mesh_entry={s}, object_stage={}, groups={}x{}x{}, total={}\n", .{
-                lowering.mesh_entry_point,
-                lowering.hasObjectStage(),
-                lowering.group_count_x,
-                lowering.group_count_y,
-                lowering.group_count_z,
-                lowering.total_threadgroups,
-            });
-        },
+    var compiled_shader = try vkmtl.shader.compileMeshShader(
+        &device,
+        "mesh_shader",
+        shader_source,
+        .{},
+    );
+    defer compiled_shader.deinit();
+    const stages = compiled_shader.stageDescriptors(device.selectedBackend());
+
+    const mesh_pipeline = vkmtl.render.MeshPipelineDescriptor{
+        .mesh_entry_point = "mesh_main",
+        .mesh_threads_per_threadgroup = 1,
+    };
+    var pipeline = try vkmtl.render.makeMeshPipelineState(&device, .{
+        .pipeline = mesh_pipeline,
+        .mesh = stages.mesh,
+        .fragment = stages.fragment,
+        .color_attachments = color_attachments[0..],
+    });
+    defer pipeline.deinit();
+
+    var reported_submission = false;
+    while (!glfw.windowShouldClose(window)) {
+        const extent = common.framebufferExtent(window);
+        if (extent.isZero()) {
+            glfw.pollEvents();
+            continue;
+        }
+        try swapchain.resize(extent);
+
+        var command_buffer = try queue.makeCommandBuffer();
+        var encoder = try command_buffer.makeRenderCommandEncoder(.{
+            .color_attachments = &.{.{
+                .clear_color = .{ .red = 0.025, .green = 0.035, .blue = 0.06, .alpha = 1.0 },
+            }},
+        });
+        try encoder.setRenderPipelineState(&pipeline);
+        try encoder.drawMeshThreadgroups(.{ .pipeline = mesh_pipeline });
+        try encoder.endEncoding();
+        try command_buffer.presentDrawable();
+        try command_buffer.commit();
+        if (!reported_submission) {
+            std.debug.print("native_mesh_frame_submitted={s}\n", .{@tagName(device.selectedBackend())});
+            reported_submission = true;
+        }
+        glfw.pollEvents();
     }
 }

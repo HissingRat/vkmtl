@@ -50,8 +50,8 @@ after their deterministic check.
 | Multi-window | `zig build run-multi-window` | Two-window probe | Prints both surface records, then availability or the expected feature-gate line. |
 | External texture | `zig build run-external-texture` | Auto-exit probe | Prints `external texture wrapper ok: ...` or an explicit unsupported line. |
 | Streaming texture | `zig build run-streaming-texture` | Auto-exit probe | Prints residency success or `streaming texture unsupported: ...`. |
-| Tessellation | `zig build run-tessellation` | Auto-exit plan probe | Prints the portable and selected native plan, or a typed unsupported line. |
-| Mesh shader | `zig build run-mesh-shader` | Auto-exit plan probe | Prints the portable and selected native plan, or a typed unsupported line. |
+| Tessellation | `zig build run-tessellation` | Window | Renders native Vulkan patches, or exits with a typed unsupported line. |
+| Mesh shader | `zig build run-mesh-shader` | Window | Renders one native Metal/Vulkan mesh grid, or exits with a typed unsupported line. |
 | Ray-traced scene | `zig build run-ray-traced-scene` | Window when supported | Visible RT scene plus the backend-specific `driver_pixels=visible_...` marker, or an actionable unsupported diagnostic. |
 
 The repository does not commit screenshot image assets. Visual evidence is
@@ -379,10 +379,12 @@ zig build run-streaming-texture
 
 ## Advanced Geometry
 
-`examples/tessellation` and `examples/mesh_shader` exercise portable
-`vkmtl.render` planning and explicitly selected `vkmtl.native.vulkan` or
-`vkmtl.native.metal` inspection. They print unsupported-feature messages until
-the selected backend exposes the required advanced geometry features.
+`examples/tessellation` and `examples/mesh_shader` compile schema-2 embedded
+Slang artifacts, create public advanced render pipelines, encode native draw
+commands, and present visible output. Tessellation currently executes only on
+a capable Vulkan device. Mesh-only execution is available on capable Metal and
+`VK_EXT_mesh_shader` devices. Task/object stages remain unavailable under the
+pinned compiler, and unsupported selections exit before pipeline creation.
 
 Run them with:
 

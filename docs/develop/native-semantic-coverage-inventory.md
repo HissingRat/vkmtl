@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 50 complete, 2026-07-13.
+Status: Period 51 complete, 2026-07-14.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -25,7 +25,9 @@ lifecycle, hazard, and presentation rows. Period 49 closes eight memory,
 residency, cache, and optimization rows. Period 50 splits CPU-authored reusable
 commands from GPU-authored mutation, producing 109 Metal semantic units; it
 closes scalable tables, reusable command lists, linked-function decisions, and
-driver artifacts, leaving 42 incomplete units routed exactly once.
+driver artifacts. Period 51 closes eight advanced geometry/raster rows through
+executable mesh/tessellation subsets or precise unsupported decisions, leaving
+34 incomplete units routed exactly once.
 It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
 
@@ -161,8 +163,8 @@ develops a different lowering or support state.
 
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
-| GEO-01 | Tessellation pipeline and patch draw | `render` | `incomplete` | `incomplete` | Public plans exist; visible native executable pipeline hooks are missing. |
-| GEO-02 | Mesh/object/task pipeline and dispatch | `render` | `incomplete` | `incomplete` | Public plans exist; visible native executable pipeline hooks are missing. |
+| GEO-01 | Tessellation pipeline and patch draw under the source-only artifact contract | `render` | `unsupported` | `native-exact` | Vulkan compiles schema-2 SPIR-V, enables tessellation, creates patch-list pipelines, and draws patches. The pinned Slang Metal target rejects hull/domain stages. |
+| GEO-02 | Resource-free mesh pipeline and dispatch; optional task/object stage separately gated | `render` | `native-exact` | `native-exact` | Physical Metal mesh rendering plus Vulkan forced-build/unit evidence. Pinned task/object compilation crashes, so usable task support stays false on both backends. |
 | RT-01 | Basic native acceleration structure, RT pipeline, dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Visible physical Metal and Vulkan paths are recorded. Device capability gates apply. |
 | RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | Metal visible scene evidence and Vulkan procedural superset evidence exist; shared scene-layout/multi-instance breadth remains incomplete. |
 | RT-03 | Procedural geometry and custom intersection | `ray_tracing` | `incomplete` | `native-exact` | Vulkan procedural output is observed; Metal intersection-function-table lowering is deferred. |
@@ -176,7 +178,7 @@ develops a different lowering or support state.
 
 ## Metal Source-Coverage Ledger
 
-Period 45 established the source ledger; Periods 46-50 refined it to 109 units
+Period 45 established the source ledger; Periods 46-51 refined it to 109 units
 by splitting exact query subsets, Period 47's portable targets from their
 advanced remainders, and CPU-authored reusable commands from GPU-authored
 mutation. Missing vkmtl concepts remain explicit `missing-contract` entries;
@@ -189,8 +191,8 @@ their presence in the ledger does not admit public API or claim execution.
 | Heaps, placement resources, residency sets, sparse resources | Audited | Period 49 executes native placement heaps and closes residency/sparse execution as unsupported under the current handle-free mapping contract. |
 | Argument buffers/tables and indirect command buffers | Audited | Period 50 executes classic argument-buffer/descriptor-indexing tables and CPU-authored reusable command lists. GPU mutation is explicitly unsupported; Metal 4 argument tables stay in Period 54. |
 | Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; RT function tables remain Period 52. |
-| Tessellation, object/mesh shaders, layered rendering, amplification | Audited/incomplete | Period 51 owns executable advanced geometry. |
-| Tile shaders, imageblocks, raster-order groups, programmable blending | Audited/missing-contract | Period 51 decides exact composition or unsupported. |
+| Tessellation, object/mesh shaders, layered rendering, amplification | Audited | Period 51 executes Vulkan tessellation and mesh-only paths on both backends; task/object artifacts, advanced-stage bindings, and layered/amplified rendering are precisely unsupported under current contracts. |
+| Tile shaders, imageblocks, raster-order groups, programmable blending | Audited | Period 51 closes these unsupported because the current pass/shader contracts cannot preserve their observable memory and ordering semantics. |
 | Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 completed native timestamp/Boolean visibility subsets; Period 54 owns calibrated and device-specific counter breadth. |
 | Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited/incomplete | Period 52 owns RT breadth. |
 | Fast resource loading / Metal I/O | Audited/missing-contract | Period 53 owns I/O and transfer composition. |
@@ -223,7 +225,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-50 are complete. The updated exactly-once gap
-routing establishes Periods 51-54; Period 51 is next.
+The source audit and Periods 46-51 are complete. The updated exactly-once gap
+routing establishes Periods 52-54; Period 52 is next.
 `period45/gap-backlog.md` records the remaining dependency order and
 acceptance boundaries.

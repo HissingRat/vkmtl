@@ -19,7 +19,7 @@ exe.root_module.addImport("vkmtl", vkmtl);
 ```
 
 `shader_manifest` 是 consumer 自己拥有的 source-backed `std.Build.LazyPath`。
-Schema version 1 不支持 generated manifest。Schema version 1 包含
+Generated manifest 不受支持。Schema version 1 包含
 `render_shaders`、`compute_shaders`、`ray_tracing_shaders` 三个 array。Render entry 使用
 `name`、`source`、`vertex_entry`、`fragment_entry`；compute entry 使用 `name`、`source`、
 `entry`；ray-tracing entry 使用 `name`、`source`、`metal_ray_generation_source`、
@@ -27,6 +27,9 @@ Schema version 1 不支持 generated manifest。Schema version 1 包含
 `intersection_entry`。Source path 相对于 manifest，不能越出 LazyPath owner root；
 Slang include/import dependency 通过 depfile 追踪。Shader name 必须全局唯一，并使用
 lowercase portable `[a-z0-9_.-]+`。
+Schema version 2 保留以上 array，并增加 `tessellation_shaders` 与 `mesh_shaders`；
+前者声明 vertex/control/evaluation/fragment entry，后者声明 mesh、可选 task 与 fragment
+entry。
 
 未知 build host 还需要把构建期 compiler 作为 dependency option 转发：
 

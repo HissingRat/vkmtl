@@ -27,18 +27,21 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 });
 ```
 
-Schema version 1 包含以下 array 与字段：
+Schema version 1 继续支持前三个 array。Schema version 2 保留它们，并增加两个高级
+geometry array：
 
 | Array | 必填 entry field |
 | --- | --- |
 | `render_shaders` | `name`、`source`、`vertex_entry`、`fragment_entry` |
 | `compute_shaders` | `name`、`source`、`entry` |
 | `ray_tracing_shaders` | `name`、`source`、`metal_ray_generation_source`、`ray_generation_entry`、`miss_entry`、`closest_hit_entry`、`any_hit_entry`、`intersection_entry` |
+| `tessellation_shaders` | `name`、`source`、`vertex_entry`、`control_entry`、`evaluation_entry`、`fragment_entry` |
+| `mesh_shaders` | `name`、`source`、`mesh_entry`、可选 `task_entry`、`fragment_entry` |
 
-每个 array 都可以为空。Name 在三个 array 中必须全局唯一，并使用 portable lowercase 形式
+每个 array 都可以为空。Name 在所有 array 中必须全局唯一，并使用 portable lowercase 形式
 `[a-z0-9_.-]+`（`.` 和 `..` 不是合法 name）。`source` 与
 `metal_ray_generation_source` 都相对于 manifest 文件解析，且不能越出
-LazyPath owner 的 logical root。Schema version 1 不支持 generated manifest，因为
+LazyPath owner 的 logical root。两个 schema 都不支持 generated manifest，因为
 dependency graph 会在 configuration 时枚举 shader input。构建会追踪 manifest、
 每个已声明 source，并通过 Slang depfile 追踪 include/import dependency。
 
@@ -63,6 +66,15 @@ zig-out/shaders/<shader-name>/
 Compute shader 使用 `compute.spv`、`compute.msl` 和 `compute.reflect.json`。
 source hash 保存在内嵌 blob metadata 里。找不到匹配 name、entry 和 source hash 的 blob
 时会报 `PrecompiledShaderMissing`。
+
+Tessellation entry 会为 Vulkan 生成 vertex、control、evaluation 与 fragment SPIR-V。
+当前 pinned Slang 的 Metal target 会拒绝 hull/domain stage，因此在纯 Slang artifact
+contract 下 Metal tessellation 明确不支持。Mesh entry 会生成 mesh/fragment SPIR-V 与
+MSL，并在 capability 合格的 backend 上执行。当前 pinned compiler 会在已探测的
+task/amplification 形式上崩溃，因此 `task_entry` 尚不能打开 usable gate，
+`DeviceFeatures.task_shaders` 保持 false。`ShaderVisibility` 目前也尚未包含高级 stage；
+Period 51 的 executable tessellation/mesh 子集要求高级 stage 不使用资源绑定，普通
+fragment binding 仍然可用。
 
 ## 构建命令
 

@@ -11,6 +11,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added schema-2 tessellation and mesh shader declarations while retaining
+  schema-1 manifest compatibility.
+- Added executable Vulkan tessellation pipelines and patch draws, plus native
+  Metal/Vulkan mesh-only pipelines and mesh-grid dispatch.
+- Added visible public tessellation and mesh examples; the Metal mesh example
+  has physical Apple M4 Pro execution evidence.
 - Added native Metal argument-buffer and Vulkan descriptor-indexing resource
   tables with compatible render/compute pipeline layouts and exact runtime
   layout validation.
@@ -59,6 +65,13 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- `tessellation` and `mesh_shaders` now report complete selected-backend
+  execution paths. Metal tessellation and task/object artifacts remain
+  explicitly closed; native-only task bits do not set usable `task_shaders`.
+- Variable-rate maps, tile/imageblock memory, raster-order/programmed blend,
+  layered amplification, logical attachment remapping, depth clip control, and
+  programmable sample positions are explicitly unsupported under the current
+  portable contracts.
 - `argument_buffers`, `descriptor_indexing`, `driver_pipeline_cache`, and
   `metal_binary_archive` now report usable execution paths instead of
   planning-only availability.
@@ -97,6 +110,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 51 adds advanced shader/pipeline descriptors and facade operations,
+  two render-encoder methods, mesh grid limits, shader-stage values, and
+  manifest schema 2. `UnsupportedMeshShaderBindings` records a mesh pipeline
+  layout that requests non-fragment visibility. These additive changes target
+  `v0.2.0`; schema 1 and ordinary render defaults remain unchanged.
 - Period 50 adds defaulted resource-table-layout and driver-cache pipeline
   fields, one command-domain runtime handle and factory, render/compute encoder
   methods, `indirect_command_buffers`, `max_indirect_command_count`, and typed

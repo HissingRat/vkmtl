@@ -80,11 +80,12 @@ Repository examples, their common window adapter, tools, and tests are not
 package module exports and are not covered by application source compatibility.
 
 Consumers that declare shaders pass `shader_manifest` as a source-backed
-`std.Build.LazyPath`. Generated manifests are not supported by schema version 1
-because vkmtl enumerates shader inputs while constructing the dependency build
-graph. The manifest contains `render_shaders`, `compute_shaders`, and
-`ray_tracing_shaders` arrays. Source paths are resolved relative to the
-manifest file.
+`std.Build.LazyPath`. Generated manifests are not supported because vkmtl
+enumerates shader inputs while constructing the dependency build graph.
+Schema version 1 contains `render_shaders`, `compute_shaders`, and
+`ray_tracing_shaders`; schema version 2 retains them and adds
+`tessellation_shaders` and `mesh_shaders`. Source paths are resolved relative
+to the manifest file.
 
 ```json
 {
@@ -106,6 +107,10 @@ A compute entry contains `name`, `source`, and `entry`. A ray-tracing entry
 contains `name`, `source`, `metal_ray_generation_source`,
 `ray_generation_entry`, `miss_entry`, `closest_hit_entry`, `any_hit_entry`, and
 `intersection_entry`.
+Tessellation entries contain `vertex_entry`, `control_entry`,
+`evaluation_entry`, and `fragment_entry`. Mesh entries contain `mesh_entry`,
+optional `task_entry`, and `fragment_entry`. Schema 2 is additive and schema 1
+remains accepted throughout `v0.1.x`.
 
 Declared source paths must stay inside the LazyPath owner's logical root. The
 recommended `b.path(...)` form retains the consumer build root as that owner.

@@ -88,7 +88,7 @@ MoltenVK ICD JSON。
 `.zig-cache/vkmtl-tools`，并在构建期预编译当前 manifest 中的 embedded shader。运行时不会启动
 `slangc`，发布产物也不需要携带 Slang compiler 或脚本。
 
-外部应用通过 dependency option 选择 schema-version-1 manifest：
+外部应用通过 dependency option 选择 source-backed manifest：
 
 ```zig
 const vkmtl_dep = b.dependency("vkmtl", .{
@@ -98,10 +98,12 @@ const vkmtl_dep = b.dependency("vkmtl", .{
 });
 ```
 
-Manifest array 是 `render_shaders`、`compute_shaders`、`ray_tracing_shaders`；entry 声明
+Schema version 1 的 array 是 `render_shaders`、`compute_shaders`、
+`ray_tracing_shaders`；schema version 2 保留它们，并增加 `tessellation_shaders` 与
+`mesh_shaders`。Entry 声明
 `name`、相对 source path 和各 stage entry point。Shader name 必须全局唯一，并使用 lowercase
 portable `[a-z0-9_.-]+` filesystem component。Manifest 必须是 source-backed LazyPath；
-schema version 1 不支持 generated manifest。Source 不能越出 LazyPath owner root。
+两个 schema 都不支持 generated manifest。Source 不能越出 LazyPath owner root。
 Manifest、每个已声明 source 和 Slang depfile 报告的 include/import dependency 都是
 tracked build input。
 

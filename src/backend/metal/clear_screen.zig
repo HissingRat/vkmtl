@@ -197,6 +197,14 @@ pub fn makeRenderPipelineState(
     return try MetalRenderPipelineState.init(self, allocator, descriptor);
 }
 
+pub fn makeMeshRenderPipelineState(
+    self: *MetalClearScreen,
+    allocator: std.mem.Allocator,
+    descriptor: core.MeshRenderPipelineDescriptor,
+) !MetalRenderPipelineState {
+    return try MetalRenderPipelineState.initMesh(self, allocator, descriptor);
+}
+
 pub fn makeComputePipelineState(
     self: *MetalClearScreen,
     allocator: std.mem.Allocator,
@@ -355,6 +363,8 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.memory_budget = capabilities.memory_budget != 0;
     result.memory_pressure = capabilities.memory_budget != 0;
     result.memoryless_attachments = capabilities.memoryless_attachments != 0;
+    result.mesh_shaders = capabilities.mesh_shaders != 0;
+    result.task_shaders = capabilities.task_shaders != 0;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -380,6 +390,10 @@ fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
     result.memory_budget = capabilities.memory_budget != 0;
     result.memory_pressure = capabilities.memory_budget != 0;
     result.memoryless_attachments = capabilities.memoryless_attachments != 0;
+    result.mesh_shaders = capabilities.mesh_shaders != 0;
+    // The pinned Slang toolchain currently cannot produce a stable
+    // task/object artifact, so native availability is not executable support.
+    result.task_shaders = false;
     result.compute_atomics = true;
     result.compute_threadgroup_memory = capabilities.max_threadgroup_memory_length != 0;
     return result;
@@ -419,6 +433,11 @@ fn limitsFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabiliti
     if (capabilities.binary_archive != 0) {
         result.max_driver_cache_identity_bytes = 4096;
     }
+    result.max_mesh_threads_per_threadgroup = capabilities.max_mesh_threads_per_threadgroup;
+    result.max_task_threads_per_threadgroup = capabilities.max_task_threads_per_threadgroup;
+    result.max_mesh_threadgroups_per_grid_x = capabilities.max_mesh_threadgroups_per_grid_x;
+    result.max_mesh_threadgroups_per_grid_y = capabilities.max_mesh_threadgroups_per_grid_y;
+    result.max_mesh_threadgroups_per_grid_z = capabilities.max_mesh_threadgroups_per_grid_z;
     return result;
 }
 
@@ -456,6 +475,13 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
         .heaps = 1,
         .memory_budget = 1,
         .memoryless_attachments = 1,
+        .mesh_shaders = 1,
+        .task_shaders = 1,
+        .max_mesh_threads_per_threadgroup = 256,
+        .max_task_threads_per_threadgroup = 128,
+        .max_mesh_threadgroups_per_grid_x = 65_535,
+        .max_mesh_threadgroups_per_grid_y = 65_535,
+        .max_mesh_threadgroups_per_grid_z = 65_535,
         .recommended_working_set_size = 16 * 1024 * 1024 * 1024,
         .current_allocated_size = 1024 * 1024,
     };
@@ -480,6 +506,8 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.memoryless_attachments);
     try std.testing.expect(native.scheduled_presentation);
     try std.testing.expect(native.minimum_duration_presentation);
+    try std.testing.expect(native.mesh_shaders);
+    try std.testing.expect(native.task_shaders);
     try std.testing.expect(usable.occlusion_queries);
     try std.testing.expect(usable.shader_specialization);
     try std.testing.expect(usable.buffer_gpu_address);
@@ -492,6 +520,8 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(usable.memoryless_attachments);
     try std.testing.expect(usable.scheduled_presentation);
     try std.testing.expect(usable.minimum_duration_presentation);
+    try std.testing.expect(usable.mesh_shaders);
+    try std.testing.expect(!usable.task_shaders);
     try std.testing.expect(usable.argument_buffers);
     try std.testing.expect(usable.metal_binary_archive);
     try std.testing.expect(!usable.ray_tracing);
@@ -501,6 +531,9 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expectEqual(@as(u32, 32 * 1024), queried_limits.max_compute_threadgroup_memory_bytes);
     try std.testing.expectEqual(@as(u32, 128), queried_limits.max_bindless_descriptors_per_range);
     try std.testing.expectEqual(@as(u32, 16), queried_limits.max_bindless_ranges_per_layout);
+    try std.testing.expectEqual(@as(u32, 256), queried_limits.max_mesh_threads_per_threadgroup);
+    try std.testing.expectEqual(@as(u32, 128), queried_limits.max_task_threads_per_threadgroup);
+    try std.testing.expectEqual(@as(u32, 65_535), queried_limits.max_mesh_threadgroups_per_grid_x);
 }
 
 test "Metal format capabilities keep presentation and scaled blit truthful" {

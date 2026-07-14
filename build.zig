@@ -471,7 +471,7 @@ pub fn build(b: *std.Build) void {
     configureVulkanRuntimeForRun(b, tessellation_cmd, target.result.os.tag, vulkan_runtime);
     forwardRunArgs(b, tessellation_cmd);
 
-    const tessellation_step = b.step("run-tessellation", "Run the vkmtl tessellation planning example");
+    const tessellation_step = b.step("run-tessellation", "Run the vkmtl native tessellation example");
     tessellation_step.dependOn(&tessellation_cmd.step);
 
     const mesh_shader = b.addExecutable(.{
@@ -496,7 +496,7 @@ pub fn build(b: *std.Build) void {
     configureVulkanRuntimeForRun(b, mesh_shader_cmd, target.result.os.tag, vulkan_runtime);
     forwardRunArgs(b, mesh_shader_cmd);
 
-    const mesh_shader_step = b.step("run-mesh-shader", "Run the vkmtl mesh shader planning example");
+    const mesh_shader_step = b.step("run-mesh-shader", "Run the vkmtl executable mesh shader example");
     mesh_shader_step.dependOn(&mesh_shader_cmd.step);
 
     const ray_traced_scene = b.addExecutable(.{
@@ -867,6 +867,14 @@ fn addPrecompiledShaderModule(
         requireValidShaderSourcePath(b, manifest_path, shader.metal_ray_generation_source);
         run_generator.addFileArg(manifest_dir.path(b, shader.source));
         run_generator.addFileArg(manifest_dir.path(b, shader.metal_ray_generation_source));
+    }
+    for (manifest.tessellation_shaders) |shader| {
+        requireValidShaderSourcePath(b, manifest_path, shader.source);
+        run_generator.addFileArg(manifest_dir.path(b, shader.source));
+    }
+    for (manifest.mesh_shaders) |shader| {
+        requireValidShaderSourcePath(b, manifest_path, shader.source);
+        run_generator.addFileArg(manifest_dir.path(b, shader.source));
     }
     if (b.pkg_hash.len == 0) {
         b.installDirectory(.{

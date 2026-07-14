@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const schema_version = 1;
+pub const schema_version = 2;
 
 pub const RenderShader = struct {
     name: []const u8,
@@ -26,11 +26,30 @@ pub const RayTracingShader = struct {
     intersection_entry: []const u8,
 };
 
+pub const TessellationShader = struct {
+    name: []const u8,
+    source: []const u8,
+    vertex_entry: []const u8,
+    control_entry: []const u8,
+    evaluation_entry: []const u8,
+    fragment_entry: []const u8,
+};
+
+pub const MeshShader = struct {
+    name: []const u8,
+    source: []const u8,
+    mesh_entry: []const u8,
+    task_entry: ?[]const u8 = null,
+    fragment_entry: []const u8,
+};
+
 pub const Manifest = struct {
     schema_version: u32,
     render_shaders: []const RenderShader = &.{},
     compute_shaders: []const ComputeShader = &.{},
     ray_tracing_shaders: []const RayTracingShader = &.{},
+    tessellation_shaders: []const TessellationShader = &.{},
+    mesh_shaders: []const MeshShader = &.{},
 };
 
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !std.json.Parsed(Manifest) {
@@ -41,11 +60,20 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !std.json.Parsed(M
 }
 
 pub fn sourceCount(value: Manifest) usize {
-    return value.render_shaders.len + value.compute_shaders.len + value.ray_tracing_shaders.len * 2;
+    return value.render_shaders.len +
+        value.compute_shaders.len +
+        value.ray_tracing_shaders.len * 2 +
+        value.tessellation_shaders.len +
+        value.mesh_shaders.len;
 }
 
 fn validate(value: Manifest) !void {
-    if (value.schema_version != schema_version) return error.UnsupportedShaderManifestSchema;
+    if (value.schema_version != 1 and value.schema_version != schema_version) {
+        return error.UnsupportedShaderManifestSchema;
+    }
+    if (value.schema_version == 1 and (value.tessellation_shaders.len != 0 or value.mesh_shaders.len != 0)) {
+        return error.ShaderManifestFeatureRequiresSchema2;
+    }
 
     var names = std.StringHashMapUnmanaged(void).empty;
     defer names.deinit(std.heap.page_allocator);
@@ -67,6 +95,19 @@ fn validate(value: Manifest) !void {
         try validateEntry(shader.closest_hit_entry);
         try validateEntry(shader.any_hit_entry);
         try validateEntry(shader.intersection_entry);
+    }
+    for (value.tessellation_shaders) |shader| {
+        try validateCommon(&names, shader.name, shader.source);
+        try validateEntry(shader.vertex_entry);
+        try validateEntry(shader.control_entry);
+        try validateEntry(shader.evaluation_entry);
+        try validateEntry(shader.fragment_entry);
+    }
+    for (value.mesh_shaders) |shader| {
+        try validateCommon(&names, shader.name, shader.source);
+        try validateEntry(shader.mesh_entry);
+        if (shader.task_entry) |entry| try validateEntry(entry);
+        try validateEntry(shader.fragment_entry);
     }
 }
 
@@ -170,9 +211,50 @@ test "manifest permits empty shader lists" {
     try std.testing.expectEqual(@as(usize, 0), sourceCount(parsed.value));
 }
 
+test "manifest schema v2 accepts tessellation and mesh declarations" {
+    var parsed = try parse(std.testing.allocator,
+        \\{
+        \\  "schema_version": 2,
+        \\  "tessellation_shaders": [{
+        \\    "name": "tess",
+        \\    "source": "tess.slang",
+        \\    "vertex_entry": "vs_main",
+        \\    "control_entry": "hs_main",
+        \\    "evaluation_entry": "ds_main",
+        \\    "fragment_entry": "fs_main"
+        \\  }],
+        \\  "mesh_shaders": [{
+        \\    "name": "mesh",
+        \\    "source": "mesh.slang",
+        \\    "mesh_entry": "mesh_main",
+        \\    "task_entry": "task_main",
+        \\    "fragment_entry": "fs_main"
+        \\  }]
+        \\}
+    );
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 2), sourceCount(parsed.value));
+    try std.testing.expectEqualStrings("hs_main", parsed.value.tessellation_shaders[0].control_entry);
+    try std.testing.expectEqualStrings("task_main", parsed.value.mesh_shaders[0].task_entry.?);
+}
+
+test "manifest schema v1 rejects advanced shader arrays" {
+    try std.testing.expectError(error.ShaderManifestFeatureRequiresSchema2, parse(std.testing.allocator,
+        \\{
+        \\  "schema_version": 1,
+        \\  "mesh_shaders": [{
+        \\    "name": "mesh",
+        \\    "source": "mesh.slang",
+        \\    "mesh_entry": "mesh_main",
+        \\    "fragment_entry": "fs_main"
+        \\  }]
+        \\}
+    ));
+}
+
 test "manifest rejects unsupported schemas" {
     try std.testing.expectError(error.UnsupportedShaderManifestSchema, parse(std.testing.allocator,
-        \\{"schema_version": 2}
+        \\{"schema_version": 3}
     ));
 }
 

@@ -6,9 +6,9 @@ The Metal semantic ledger contains 99 stable semantic units. At Period 45
 closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
 is assigned exactly once in `gap-routing.tsv`.
 
-Periods 46-50 refined broad query, common-workload, synchronization, memory,
-binding, indirect-command, and artifact rows, so the current ledger contains
-109 units and exactly-once routes 42 incomplete
+Periods 46-51 refined broad query, common-workload, synchronization, memory,
+binding, indirect-command, artifact, and advanced-raster rows, so the current ledger contains
+109 units and exactly-once routes 34 incomplete
 IDs.
 
 The periods below are implementation slices, not promises to add all source
@@ -114,15 +114,20 @@ useful evidence rather than an upgraded claim.
 
 ## Period 51: Advanced Rasterization And Geometry
 
+Status: complete.
+
 Priority: specialized rendering after the common path is complete.
 
-- Tessellation and mesh/object/task executable pipelines.
-- Variable rasterization rate, layered rendering, amplification, and logical
-  attachment mapping.
-- Tile shaders, imageblocks, raster-order groups, and programmable blending via
-  exact Vulkan extensions/composition or precise unsupported decisions.
+- [x] Execute Vulkan tessellation and mesh-only Metal/Vulkan pipelines.
+- [x] Keep task/object artifacts and advanced-stage resource binding closed at
+  their pinned-compiler/public-visibility boundaries.
+- [x] Close variable-rate maps, layered amplification, logical attachment
+  mapping, tile/imageblock memory, raster ordering, programmable blending,
+  depth clip, and sample positions with precise unsupported decisions.
 
-Acceptance: visible examples and device gates prove every enabled path.
+Acceptance: complete. A visible public Metal mesh run and forced Vulkan
+build/unit evidence prove the enabled paths; unsupported rows retain no usable
+feature flag.
 
 ## Period 52: Ray Tracing Breadth
 
@@ -166,8 +171,7 @@ gates.
 
 ## Next Slice
 
-Period 50 is complete. Scalable resource tables, CPU-authored reusable command
-lists, and persistent driver pipeline artifacts are executable; GPU-authored
-command mutation and manifest-schema-1 runtime linking are precisely
-unsupported. 42 incomplete semantic units remain routed to Periods 51-54.
-Period 51 is next.
+Period 51 is complete. Vulkan tessellation and mesh-only execution are open;
+Metal tessellation, task/object artifacts, advanced-stage bindings, and the
+remaining advanced raster families are precisely unsupported. 34 incomplete
+semantic units remain routed to Periods 52-54. Period 52 is next.

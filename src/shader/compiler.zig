@@ -19,9 +19,144 @@ pub const RayTracingShaderOptions = struct {
     intersection_entry: []const u8 = "intersection_main",
 };
 
+pub const TessellationShaderOptions = struct {
+    vertex_entry: []const u8 = "vs_main",
+    control_entry: []const u8 = "hs_main",
+    evaluation_entry: []const u8 = "ds_main",
+    fragment_entry: []const u8 = "fs_main",
+};
+
+pub const MeshShaderOptions = struct {
+    mesh_entry: []const u8 = "mesh_main",
+    task_entry: ?[]const u8 = null,
+    fragment_entry: []const u8 = "fs_main",
+};
+
 pub const RenderShaderStages = struct {
     vertex: core.ProgrammableStageDescriptor,
     fragment: core.ProgrammableStageDescriptor,
+};
+
+pub const TessellationShaderStages = struct {
+    vertex: core.ProgrammableStageDescriptor,
+    control: core.ProgrammableStageDescriptor,
+    evaluation: core.ProgrammableStageDescriptor,
+    fragment: core.ProgrammableStageDescriptor,
+};
+
+pub const MeshShaderStages = struct {
+    mesh: core.ProgrammableStageDescriptor,
+    task: ?core.ProgrammableStageDescriptor,
+    fragment: core.ProgrammableStageDescriptor,
+};
+
+pub const CompiledTessellationShader = struct {
+    allocator: std.mem.Allocator,
+    vertex_spirv: []const u8,
+    control_spirv: []const u8,
+    evaluation_spirv: []const u8,
+    fragment_spirv: []const u8,
+    vertex_reflection_json: []const u8,
+    control_reflection_json: []const u8,
+    evaluation_reflection_json: []const u8,
+    fragment_reflection_json: []const u8,
+    vertex_entry: []u8,
+    control_entry: []u8,
+    evaluation_entry: []u8,
+    fragment_entry: []u8,
+
+    pub fn deinit(self: *CompiledTessellationShader) void {
+        const allocator = self.allocator;
+        allocator.free(self.vertex_entry);
+        allocator.free(self.control_entry);
+        allocator.free(self.evaluation_entry);
+        allocator.free(self.fragment_entry);
+        self.* = undefined;
+    }
+
+    pub fn stageDescriptors(self: CompiledTessellationShader, backend: core.Backend) !TessellationShaderStages {
+        if (backend != .vulkan) return error.UnsupportedTessellation;
+        return .{
+            .vertex = self.stage(.vertex, self.vertex_spirv, self.vertex_reflection_json, self.vertex_entry),
+            .control = self.stage(.tessellation_control, self.control_spirv, self.control_reflection_json, self.control_entry),
+            .evaluation = self.stage(.tessellation_evaluation, self.evaluation_spirv, self.evaluation_reflection_json, self.evaluation_entry),
+            .fragment = self.stage(.fragment, self.fragment_spirv, self.fragment_reflection_json, self.fragment_entry),
+        };
+    }
+
+    fn stage(
+        _: CompiledTessellationShader,
+        shader_stage: core.ShaderStage,
+        bytes: []const u8,
+        reflection: []const u8,
+        entry: []const u8,
+    ) core.ProgrammableStageDescriptor {
+        return .{
+            .module = .{ .source = .{ .spirv_bytes = bytes } },
+            .stage = shader_stage,
+            .entry_point = entry,
+            .reflection = .{ .json = reflection },
+        };
+    }
+};
+
+pub const CompiledMeshShader = struct {
+    allocator: std.mem.Allocator,
+    mesh_spirv: []const u8,
+    task_spirv: ?[]const u8,
+    fragment_spirv: []const u8,
+    mesh_msl: []const u8,
+    task_msl: ?[]const u8,
+    fragment_msl: []const u8,
+    mesh_reflection_json: []const u8,
+    task_reflection_json: ?[]const u8,
+    fragment_reflection_json: []const u8,
+    mesh_entry: []u8,
+    task_entry: ?[]u8,
+    fragment_entry: []u8,
+
+    pub fn deinit(self: *CompiledMeshShader) void {
+        const allocator = self.allocator;
+        allocator.free(self.mesh_entry);
+        if (self.task_entry) |entry| allocator.free(entry);
+        allocator.free(self.fragment_entry);
+        self.* = undefined;
+    }
+
+    pub fn stageDescriptors(self: CompiledMeshShader, backend: core.Backend) MeshShaderStages {
+        return .{
+            .mesh = self.stage(backend, .mesh, self.mesh_spirv, self.mesh_msl, self.mesh_reflection_json, self.mesh_entry),
+            .task = if (self.task_entry) |entry| self.stage(
+                backend,
+                .task,
+                self.task_spirv.?,
+                self.task_msl.?,
+                self.task_reflection_json.?,
+                entry,
+            ) else null,
+            .fragment = self.stage(backend, .fragment, self.fragment_spirv, self.fragment_msl, self.fragment_reflection_json, self.fragment_entry),
+        };
+    }
+
+    fn stage(
+        _: CompiledMeshShader,
+        backend: core.Backend,
+        shader_stage: core.ShaderStage,
+        spirv: []const u8,
+        msl: []const u8,
+        reflection: []const u8,
+        entry: []const u8,
+    ) core.ProgrammableStageDescriptor {
+        return .{
+            .module = .{ .source = switch (backend) {
+                .vulkan => .{ .spirv_bytes = spirv },
+                .metal => .{ .msl = msl },
+            } },
+            .stage = shader_stage,
+            .entry_point = entry,
+            .reflection = .{ .json = reflection },
+        };
+    }
 };
 
 pub const CompiledRenderShader = struct {
@@ -322,6 +457,38 @@ pub fn compileRayTracingShader(
     return error.PrecompiledShaderMissing;
 }
 
+pub fn compileTessellationShader(
+    allocator: std.mem.Allocator,
+    name: []const u8,
+    source: []const u8,
+    options: TessellationShaderOptions,
+) !CompiledTessellationShader {
+    try validateShaderName(name);
+    const source_hash = sourceHash(source);
+    if (try loadPrecompiledTessellationShader(allocator, name, source_hash, options)) |result| {
+        std.debug.print("using precompiled slang shader: {s}\n", .{name});
+        return result;
+    }
+    std.debug.print("missing precompiled shader: {s}\n", .{name});
+    return error.PrecompiledShaderMissing;
+}
+
+pub fn compileMeshShader(
+    allocator: std.mem.Allocator,
+    name: []const u8,
+    source: []const u8,
+    options: MeshShaderOptions,
+) !CompiledMeshShader {
+    try validateShaderName(name);
+    const source_hash = sourceHash(source);
+    if (try loadPrecompiledMeshShader(allocator, name, source_hash, options)) |result| {
+        std.debug.print("using precompiled slang shader: {s}\n", .{name});
+        return result;
+    }
+    std.debug.print("missing precompiled shader: {s}\n", .{name});
+    return error.PrecompiledShaderMissing;
+}
+
 const RayTracingCompileStage = enum {
     ray_generation,
     miss,
@@ -418,6 +585,75 @@ fn loadPrecompiledRayTracingShader(
     }
 
     return null;
+}
+
+fn loadPrecompiledTessellationShader(
+    allocator: std.mem.Allocator,
+    name: []const u8,
+    source_hash: [64]u8,
+    options: TessellationShaderOptions,
+) !?CompiledTessellationShader {
+    for (precompiled.tessellation_shaders) |blob| {
+        if (!std.mem.eql(u8, blob.name, name)) continue;
+        if (!std.mem.eql(u8, blob.vertex_entry, options.vertex_entry)) continue;
+        if (!std.mem.eql(u8, blob.control_entry, options.control_entry)) continue;
+        if (!std.mem.eql(u8, blob.evaluation_entry, options.evaluation_entry)) continue;
+        if (!std.mem.eql(u8, blob.fragment_entry, options.fragment_entry)) continue;
+        if (!std.mem.eql(u8, blob.source_hash, source_hash[0..])) continue;
+        return .{
+            .allocator = allocator,
+            .vertex_spirv = blob.vertex_spirv,
+            .control_spirv = blob.control_spirv,
+            .evaluation_spirv = blob.evaluation_spirv,
+            .fragment_spirv = blob.fragment_spirv,
+            .vertex_reflection_json = blob.vertex_reflection,
+            .control_reflection_json = blob.control_reflection,
+            .evaluation_reflection_json = blob.evaluation_reflection,
+            .fragment_reflection_json = blob.fragment_reflection,
+            .vertex_entry = try allocator.dupe(u8, options.vertex_entry),
+            .control_entry = try allocator.dupe(u8, options.control_entry),
+            .evaluation_entry = try allocator.dupe(u8, options.evaluation_entry),
+            .fragment_entry = try allocator.dupe(u8, options.fragment_entry),
+        };
+    }
+    return null;
+}
+
+fn loadPrecompiledMeshShader(
+    allocator: std.mem.Allocator,
+    name: []const u8,
+    source_hash: [64]u8,
+    options: MeshShaderOptions,
+) !?CompiledMeshShader {
+    for (precompiled.mesh_shaders) |blob| {
+        if (!std.mem.eql(u8, blob.name, name)) continue;
+        if (!std.mem.eql(u8, blob.mesh_entry, options.mesh_entry)) continue;
+        if (!optionalStringsEqual(blob.task_entry, options.task_entry)) continue;
+        if (!std.mem.eql(u8, blob.fragment_entry, options.fragment_entry)) continue;
+        if (!std.mem.eql(u8, blob.source_hash, source_hash[0..])) continue;
+        return .{
+            .allocator = allocator,
+            .mesh_spirv = blob.mesh_spirv,
+            .task_spirv = blob.task_spirv,
+            .fragment_spirv = blob.fragment_spirv,
+            .mesh_msl = blob.mesh_msl,
+            .task_msl = blob.task_msl,
+            .fragment_msl = blob.fragment_msl,
+            .mesh_reflection_json = blob.mesh_reflection,
+            .task_reflection_json = blob.task_reflection,
+            .fragment_reflection_json = blob.fragment_reflection,
+            .mesh_entry = try allocator.dupe(u8, options.mesh_entry),
+            .task_entry = if (options.task_entry) |entry| try allocator.dupe(u8, entry) else null,
+            .fragment_entry = try allocator.dupe(u8, options.fragment_entry),
+        };
+    }
+    return null;
+}
+
+fn optionalStringsEqual(lhs: ?[]const u8, rhs: ?[]const u8) bool {
+    if ((lhs == null) != (rhs == null)) return false;
+    if (lhs) |left| return std.mem.eql(u8, left, rhs.?);
+    return true;
 }
 
 fn sourceHash(source: []const u8) [64]u8 {

@@ -1,6 +1,6 @@
 # Public API Inventory
 
-Status: `v0.1.0` compatibility baseline, refreshed on 2026-07-11.
+Status: `v0.1.0` compatibility baseline, refreshed on 2026-07-14.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
@@ -35,9 +35,9 @@ objects are also API:
 rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
 ```
 
-The current result is 405: six module-level operations and 399 methods. Facade
-free functions are declared as `pub const` aliases and therefore are not part
-of that 405 count.
+The current result is 434: 11 module-level operations and 423 methods. Facade
+operations may be `pub const` aliases or direct `pub fn` declarations and are
+counted separately below.
 
 The two owner surfaces targeted by the migration now measure:
 
@@ -58,18 +58,21 @@ part of the release compatibility surface:
 | `shader_manifest` | source-backed `std.Build.LazyPath` | consumer manifest; defaults to the repository `shaders/manifest.json` |
 | `slangc` | string path | explicit build-time compiler for a host without a pinned Slang package |
 
-The shader manifest uses schema version 1:
+Schema version 1 remains accepted. Schema version 2 retains its arrays and
+adds the advanced geometry arrays below:
 
 | Array | Entry fields |
 | --- | --- |
 | `render_shaders` | `name`, `source`, `vertex_entry`, `fragment_entry` |
 | `compute_shaders` | `name`, `source`, `entry` |
 | `ray_tracing_shaders` | `name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`, `miss_entry`, `closest_hit_entry`, `any_hit_entry`, `intersection_entry` |
+| `tessellation_shaders` | `name`, `source`, `vertex_entry`, `control_entry`, `evaluation_entry`, `fragment_entry` |
+| `mesh_shaders` | `name`, `source`, `mesh_entry`, optional `task_entry`, `fragment_entry` |
 
 Names are unique across every array and use lowercase portable
 `[a-z0-9_.-]+`; `.` and `..` are rejected. Shader source paths are relative to
 the manifest and must remain inside the LazyPath owner's logical root. Generated
-manifests are not supported by schema version 1. The build tracks the manifest,
+manifests are not supported by either schema. The build tracks the manifest,
 every declared Slang and Metal source, and Slang include/import dependencies
 reported through depfiles. `b.path(...)` retains its build root as owner; a
 scalar command-line path uses the `zig build` invocation directory as its root.
@@ -168,12 +171,12 @@ aliases and with types used by other domains.
 | --- | ---: | ---: | --- |
 | `api/resource.zig` | 77 | 19 | formats, buffers, textures, samplers, heaps, portable sparse resources, transient allocation |
 | `api/transfer.zig` | 19 | 0 | copy, fill, upload, blit, mipmap, and resolved transfer descriptors |
-| `api/render.zig` | 65 | 6 | pipeline, pass, draw, tessellation, and mesh rendering |
+| `api/render.zig` | 67 | 8 | pipeline, pass, draw, tessellation, and mesh rendering |
 | `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
 | `api/presentation.zig` | 21 | 4 | surfaces, present modes, timed drawable presentation, frame pacing, surface collections |
 | `api/diagnostics.zig` | 80 | 16 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets |
 | `api/command.zig` | 23 | 3 | command lifecycle callbacks, reusable indirect command lists, encoders, labels, queue capability and selection planning |
-| `api/shader.zig` | 33 | 2 | source, reflection, specialization, compiler inputs and results |
+| `api/shader.zig` | 39 | 4 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
 | `api/compute.zig` | 8 | 0 | compute pipeline and dispatch descriptors, atomics, threadgroup memory |
 | `api/ray_tracing.zig` | 53 | 11 | acceleration structures, RT pipelines, SBTs, dispatch, queries, stress plans |
@@ -187,7 +190,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 517 declarations and 88 callable
+Across the 13 top-level facades, this is 525 declarations and 92 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -358,7 +361,7 @@ The current major runtime owner counts are:
 | --- | ---: | --- |
 | `Device` | 34 | creation, compilation, common queries, and queue access |
 | `WindowContext` | 10 | lifecycle, identity, native-view, and owner access only |
-| `RenderCommandEncoder` | 29 | natural render command owner |
+| `RenderCommandEncoder` | 31 | natural render command owner |
 | `ComputeCommandEncoder` | 21 | natural compute command owner |
 | `BlitCommandEncoder` | 21 | natural transfer command owner |
 | `CommandBuffer` | 18 | lifecycle and encoder creation |
@@ -692,6 +695,35 @@ These descriptor, feature, limit, handle, method, and error-set additions
 target `v0.2.0`. CPU-authored command slots inherit active pipeline/resource
 state. GPU-authored mutation, parallel child encoders, dynamic shader linking,
 and runtime function stitching are not part of this allocation.
+
+## Period 51 v0.2.0 Advanced Geometry Update
+
+Period 51 leaves the guarded root 68, `Device` 34, `WindowContext` 10, and
+36-handle allowlists unchanged. `render` gains
+`TessellationRenderPipelineDescriptor`, `MeshRenderPipelineDescriptor`,
+`makeTessellationPipelineState`, and `makeMeshPipelineState`; its declaration
+and operation counts become 67 and eight. `RenderCommandEncoder` gains
+`drawTessellationPatches(...)` and `drawMeshThreadgroups(...)`, bringing it to
+31 public methods.
+
+`shader` gains tessellation/mesh compile options, stage records, compiled
+artifact owners, and two canonical compile functions, bringing it to 39
+declarations and four operations. Shader manifest schema 2 adds
+`tessellation_shaders` and `mesh_shaders`; schema 1 remains accepted without
+behavior changes.
+
+`DeviceLimits` gains mesh grid-axis limits in addition to the existing
+tessellation and mesh/task thread limits. The existing `tessellation`,
+`mesh_shaders`, and `task_shaders` feature fields now distinguish complete
+execution from native query availability. The pinned compiler keeps usable
+task/object support false, and Metal tessellation remains unsupported. The
+advanced-stage binding visibility contract is also explicitly outside this
+slice; `UnsupportedMeshShaderBindings` rejects non-fragment mesh-pipeline
+layout visibility.
+
+These additive descriptors, stage values, methods, feature meanings, limits,
+and schema fields target `v0.2.0`. No `v0.1.x` declaration is removed or
+renamed.
 
 ## Compatibility Impact
 

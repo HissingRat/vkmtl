@@ -168,7 +168,11 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     );
     self.native_features_value.debug_labels = self.debug_utils_enabled;
     self.native_features_value.debug_markers = self.debug_utils_enabled;
-    self.features_value = queryUsableFeatures(self.native_features_value, self.host_query_reset);
+    self.features_value = queryUsableFeatures(
+        self.native_features_value,
+        self.host_query_reset,
+        self.dev.wrapper.dispatch.vkCmdDrawMeshTasksEXT != null,
+    );
     self.limits_value = queryLimits(
         self.instance,
         self.pdev,
@@ -479,8 +483,10 @@ fn queryNativeFeatures(
     result.external_memory = extensions.external_memory;
     result.external_semaphores = extensions.external_semaphore;
     result.external_textures = extensions.external_memory;
-    result.mesh_shaders = extensions.mesh_shader;
-    result.task_shaders = extensions.mesh_shader;
+    if (meshShaderFeatures(instance, pdev, extensions)) |mesh_features| {
+        result.mesh_shaders = mesh_features.mesh_shader == .true;
+        result.task_shaders = mesh_features.task_shader == .true;
+    }
     result.acceleration_structures = ray_tracing.supported;
     result.acceleration_structure_update = ray_tracing.supported;
     result.acceleration_structure_refit = ray_tracing.supported;
@@ -512,12 +518,16 @@ fn queryNativeFeatures(
     return result;
 }
 
-fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: bool) core.DeviceFeatures {
+fn queryUsableFeatures(
+    native_features: core.DeviceFeatures,
+    host_query_reset: bool,
+    mesh_dispatch_available: bool,
+) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.vulkan);
 
     result.sampler_anisotropy = native_features.sampler_anisotropy;
     result.independent_blend = native_features.independent_blend;
-    result.tessellation = false;
+    result.tessellation = native_features.tessellation;
     result.occlusion_queries = native_features.occlusion_queries and host_query_reset;
     result.wireframe_fill_mode = native_features.wireframe_fill_mode;
     result.vertex_instance_step_rate = native_features.vertex_instance_step_rate;
@@ -531,7 +541,9 @@ fn queryUsableFeatures(native_features: core.DeviceFeatures, host_query_reset: b
     result.external_memory = false;
     result.external_semaphores = false;
     result.external_textures = false;
-    result.mesh_shaders = false;
+    result.mesh_shaders = native_features.mesh_shaders and mesh_dispatch_available;
+    // Keep native task-shader availability separate until the pinned Slang
+    // artifact path can compile the task/object stage without crashing.
     result.task_shaders = false;
     result.acceleration_structures = false;
     result.ray_tracing = false;
@@ -591,6 +603,24 @@ fn queryLimits(
     result.max_compute_threads_per_threadgroup_z = props.limits.max_compute_work_group_size[2];
     result.max_compute_total_threads_per_threadgroup = props.limits.max_compute_work_group_invocations;
     result.max_compute_threadgroup_memory_bytes = props.limits.max_compute_shared_memory_size;
+    if (queried_features.mesh_shaders) {
+        var mesh_properties = std.mem.zeroes(vk.PhysicalDeviceMeshShaderPropertiesEXT);
+        mesh_properties.s_type = .physical_device_mesh_shader_properties_ext;
+        var mesh_properties2 = vk.PhysicalDeviceProperties2{
+            .p_next = &mesh_properties,
+            .properties = undefined,
+        };
+        if (getPhysicalDeviceProperties2(instance, pdev, &mesh_properties2)) {
+            result.max_mesh_threads_per_threadgroup = mesh_properties.max_mesh_work_group_invocations;
+            result.max_task_threads_per_threadgroup = if (queried_features.task_shaders)
+                mesh_properties.max_task_work_group_invocations
+            else
+                0;
+            result.max_mesh_threadgroups_per_grid_x = mesh_properties.max_mesh_work_group_count[0];
+            result.max_mesh_threadgroups_per_grid_y = mesh_properties.max_mesh_work_group_count[1];
+            result.max_mesh_threadgroups_per_grid_z = mesh_properties.max_mesh_work_group_count[2];
+        }
+    }
     result.buffer_texture_copy_offset_alignment = props.limits.optimal_buffer_copy_offset_alignment;
     result.buffer_texture_copy_row_pitch_alignment = @intCast(@max(1, props.limits.optimal_buffer_copy_row_pitch_alignment));
     result.max_ray_tracing_recursion_depth = ray_tracing.max_recursion_depth;
@@ -637,6 +667,25 @@ fn descriptorIndexingFeatures(instance: Instance, pdev: vk.PhysicalDevice) ?vk.P
     return descriptor_features;
 }
 
+fn meshShaderFeatures(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
+    support: VulkanExtensionSupport,
+) ?vk.PhysicalDeviceMeshShaderFeaturesEXT {
+    if (!support.mesh_shader) return null;
+    var mesh_features = vk.PhysicalDeviceMeshShaderFeaturesEXT{};
+    var features2 = vk.PhysicalDeviceFeatures2{
+        .p_next = &mesh_features,
+        .features = .{},
+    };
+    if (!getPhysicalDeviceFeatures2(instance, pdev, &features2)) return null;
+    if (mesh_features.mesh_shader != .true) return null;
+    mesh_features.multiview_mesh_shader = .false;
+    mesh_features.primitive_fragment_shading_rate_mesh_shader = .false;
+    mesh_features.mesh_shader_queries = .false;
+    return mesh_features;
+}
+
 const VulkanExtensionSupport = struct {
     descriptor_indexing: bool = false,
     vertex_attribute_divisor_khr: bool = false,
@@ -679,11 +728,7 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_buffer_device_address.name)) result.buffer_device_address = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_spirv_1_4.name)) result.spirv_1_4 = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_shader_float_controls.name)) result.shader_float_controls = true;
-    if (std.mem.eql(u8, extension_name, vk.extensions.ext_mesh_shader.name) or
-        std.mem.eql(u8, extension_name, vk.extensions.nv_mesh_shader.name))
-    {
-        result.mesh_shader = true;
-    }
+    if (std.mem.eql(u8, extension_name, vk.extensions.ext_mesh_shader.name)) result.mesh_shader = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_memory_budget.name)) result.memory_budget = true;
     return result;
 }
@@ -1002,6 +1047,8 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     const enable_host_query_reset = candidate.host_query_reset;
     const descriptor_indexing_features = descriptorIndexingFeatures(instance, candidate.pdev);
     const enable_descriptor_indexing = descriptor_indexing_features != null;
+    const queried_mesh_features = meshShaderFeatures(instance, candidate.pdev, extensions);
+    const enable_mesh_shaders = queried_mesh_features != null;
 
     var extension_names: std.ArrayList([*:0]const u8) = .empty;
     defer extension_names.deinit(allocator);
@@ -1022,6 +1069,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     if (enable_descriptor_indexing and candidate.props.api_version < vk.API_VERSION_1_2.toU32() and extensions.descriptor_indexing) {
         try extension_names.append(allocator, vk.extensions.ext_descriptor_indexing.name);
     }
+    if (enable_mesh_shaders) try extension_names.append(allocator, vk.extensions.ext_mesh_shader.name);
 
     const priority = [_]f32{1};
     const native_features = instance.getPhysicalDeviceFeatures(candidate.pdev);
@@ -1030,6 +1078,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         .fill_mode_non_solid = native_features.fill_mode_non_solid,
         .depth_bias_clamp = native_features.depth_bias_clamp,
         .independent_blend = native_features.independent_blend,
+        .tessellation_shader = native_features.tessellation_shader,
     };
     var vertex_divisor_features = vk.PhysicalDeviceVertexAttributeDivisorFeaturesEXT{
         .vertex_attribute_instance_rate_divisor = if (enable_vertex_divisor) .true else .false,
@@ -1050,6 +1099,7 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
         .timeline_semaphore = if (candidate.timeline_semaphore) .true else .false,
     };
     var enabled_descriptor_indexing_features = descriptor_indexing_features orelse vk.PhysicalDeviceDescriptorIndexingFeatures{};
+    var enabled_mesh_features = queried_mesh_features orelse vk.PhysicalDeviceMeshShaderFeaturesEXT{};
     var device_p_next: ?*anyopaque = null;
     if (enable_host_query_reset) {
         host_query_reset_features.p_next = device_p_next;
@@ -1058,6 +1108,10 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
     if (enable_descriptor_indexing) {
         enabled_descriptor_indexing_features.p_next = device_p_next;
         device_p_next = &enabled_descriptor_indexing_features;
+    }
+    if (enable_mesh_shaders) {
+        enabled_mesh_features.p_next = device_p_next;
+        device_p_next = &enabled_mesh_features;
     }
     if (candidate.timeline_semaphore) {
         timeline_semaphore_features.p_next = device_p_next;
@@ -1365,6 +1419,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .external_textures = true,
         .tessellation = true,
         .mesh_shaders = true,
+        .task_shaders = true,
         .ray_tracing = true,
         .driver_pipeline_cache = true,
         .native_handles = true,
@@ -1378,15 +1433,17 @@ test "Vulkan usable features stay conservative before backend lowering" {
         .memory_budget = true,
         .memory_pressure = true,
     };
-    const usable = queryUsableFeatures(native, true);
+    const usable = queryUsableFeatures(native, true, true);
     try std.testing.expect(usable.descriptor_indexing);
     try std.testing.expect(usable.wireframe_fill_mode);
     try std.testing.expect(usable.independent_blend);
     try std.testing.expect(usable.vertex_instance_step_rate);
     try std.testing.expect(!usable.sparse_buffers);
     try std.testing.expect(!usable.external_textures);
-    try std.testing.expect(!usable.tessellation);
-    try std.testing.expect(!usable.mesh_shaders);
+    try std.testing.expect(usable.tessellation);
+    try std.testing.expect(usable.mesh_shaders);
+    try std.testing.expect(!usable.task_shaders);
+    try std.testing.expect(!queryUsableFeatures(native, true, false).mesh_shaders);
     try std.testing.expect(!usable.ray_tracing);
     try std.testing.expect(usable.driver_pipeline_cache);
     try std.testing.expect(usable.occlusion_queries);
@@ -1396,7 +1453,7 @@ test "Vulkan usable features stay conservative before backend lowering" {
     try std.testing.expect(usable.timeline_fences);
     try std.testing.expect(usable.heaps);
     try std.testing.expect(usable.memory_budget);
-    try std.testing.expect(!queryUsableFeatures(native, false).occlusion_queries);
+    try std.testing.expect(!queryUsableFeatures(native, false, true).occlusion_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);
     try std.testing.expect(usable.debug_labels);

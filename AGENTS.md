@@ -142,9 +142,8 @@ instead of baking backend-specific branches into user-facing code.
 ## Shader Direction
 
 Slang is the shader source language. Public examples should embed `.slang`
-files with `@embedFile(...)` and compile them through the runtime `Device`
-returned by `WindowContext.device()`, using `Device.compileRenderShader(...)`
-or `Device.compileComputeShader(...)`.
+files with `@embedFile(...)` and resolve them through the canonical `shader`
+facade with the runtime `Device` returned by `WindowContext.device()`.
 
 The shader compilation pipeline is:
 
@@ -158,13 +157,19 @@ spawn `slangc`, do not require `slangc` beside the executable, and must report a
 typed missing-precompiled-shader error when no matching name/entry/source hash
 blob exists. Consumers register shaders with the source-backed
 `shader_manifest` `std.Build.LazyPath` dependency option. Generated manifests
-are not supported by schema version 1 because shader inputs are enumerated
-while constructing the dependency build graph. Schema version 1 has
-`render_shaders`, `compute_shaders`, and `ray_tracing_shaders` arrays. Render
+are not supported because shader inputs are enumerated while constructing the
+dependency build graph. Schema version 1 has `render_shaders`,
+`compute_shaders`, and `ray_tracing_shaders` arrays. Schema version 2 retains
+those arrays and adds `tessellation_shaders` and `mesh_shaders`. Render
 entries declare `name`, `source`, `vertex_entry`, and `fragment_entry`; compute
 entries declare `name`, `source`, and `entry`; ray-tracing entries declare
 `name`, `source`, `metal_ray_generation_source`, `ray_generation_entry`,
 `miss_entry`, `closest_hit_entry`, `any_hit_entry`, and `intersection_entry`.
+Tessellation entries declare `vertex_entry`, `control_entry`,
+`evaluation_entry`, and `fragment_entry`; mesh entries declare `mesh_entry`,
+optional `task_entry`, and `fragment_entry`. The pinned compiler currently
+cannot produce a stable task/object artifact, so `task_entry` is schema-valid
+but does not make `task_shaders` usable.
 Source paths are relative to the manifest and must stay inside the LazyPath
 owner's logical root. Names are unique lowercase portable `[a-z0-9_.-]+`
 filesystem components. The manifest, every declared source, and Slang
