@@ -539,6 +539,17 @@ static vkmtl_metal_status vkmtl_query_acceleration_structure_sizes(
     return VKMTL_METAL_STATUS_OK;
 }
 
+static MTLAccelerationStructureSizes vkmtl_max_acceleration_structure_sizes(
+    MTLAccelerationStructureSizes a,
+    MTLAccelerationStructureSizes b
+) {
+    MTLAccelerationStructureSizes result;
+    result.accelerationStructureSize = MAX(a.accelerationStructureSize, b.accelerationStructureSize);
+    result.buildScratchBufferSize = MAX(a.buildScratchBufferSize, b.buildScratchBufferSize);
+    result.refitScratchBufferSize = MAX(a.refitScratchBufferSize, b.refitScratchBufferSize);
+    return result;
+}
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe) {
     if (out_probe == NULL) {
         return VKMTL_METAL_STATUS_NO_DEVICE;
@@ -4095,19 +4106,34 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
             return status;
         }
 
-        MTLAccelerationStructureSizes sizes;
+        MTLAccelerationStructureSizes ordinary_sizes;
         status = vkmtl_query_acceleration_structure_sizes(
             owner->device,
             kind,
             primitive_count,
-            1u,
-            &sizes
+            0u,
+            &ordinary_sizes
         );
         if (status != VKMTL_METAL_STATUS_OK) {
             [descriptor release];
             [auxiliary_buffer release];
             return status;
         }
+        MTLAccelerationStructureSizes update_sizes;
+        status = vkmtl_query_acceleration_structure_sizes(
+            owner->device,
+            kind,
+            primitive_count,
+            1u,
+            &update_sizes
+        );
+        if (status != VKMTL_METAL_STATUS_OK) {
+            [descriptor release];
+            [auxiliary_buffer release];
+            return status;
+        }
+        const MTLAccelerationStructureSizes sizes =
+            vkmtl_max_acceleration_structure_sizes(ordinary_sizes, update_sizes);
         id<MTLAccelerationStructure> acceleration_structure =
             [owner->device newAccelerationStructureWithSize:sizes.accelerationStructureSize];
         if (acceleration_structure == nil) {
@@ -4760,15 +4786,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     vkmtl_metal_acceleration_structure *acceleration_structure,
     vkmtl_metal_buffer *scratch_buffer,
     size_t scratch_offset,
+    size_t required_scratch_size,
     vkmtl_metal_acceleration_structure *update_source,
     vkmtl_metal_acceleration_structure *const *instance_sources,
     size_t instance_source_count,
     unsigned int allow_update,
     unsigned int update
 ) {
-    const size_t required_scratch_size = update != 0
-        ? acceleration_structure != NULL ? acceleration_structure->update_scratch_size : 0
-        : acceleration_structure != NULL ? acceleration_structure->scratch_size : 0;
     if (command_buffer == NULL ||
         command_buffer->command_buffer == nil ||
         acceleration_structure == NULL ||

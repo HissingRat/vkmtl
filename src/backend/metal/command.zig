@@ -213,6 +213,13 @@ pub const CommandBuffer = struct {
         const native_scratch_offset = std.math.cast(usize, scratch_offset) orelse {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         };
+        const required_scratch_size = if (plan.mode == .update and plan.update_scratch_size != 0)
+            plan.update_scratch_size
+        else
+            plan.scratch_size;
+        const native_required_scratch_size = std.math.cast(usize, required_scratch_size) orelse {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        };
         if (geometries.len != 0) {
             if (geometries.len != 1 or acceleration_structure.kind() != .bottom_level) {
                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -238,6 +245,7 @@ pub const CommandBuffer = struct {
             acceleration_structure.handle,
             scratch.handle,
             native_scratch_offset,
+            native_required_scratch_size,
             if (update_source) |source| source.handle else null,
             if (native_instance_source_count == 0) null else &native_instance_sources,
             native_instance_source_count,

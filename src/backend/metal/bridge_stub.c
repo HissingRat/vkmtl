@@ -1983,6 +1983,7 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     vkmtl_metal_acceleration_structure *acceleration_structure,
     vkmtl_metal_buffer *scratch_buffer,
     size_t scratch_offset,
+    size_t required_scratch_size,
     vkmtl_metal_acceleration_structure *update_source,
     vkmtl_metal_acceleration_structure *const *instance_sources,
     size_t instance_source_count,
@@ -1993,6 +1994,7 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     (void)acceleration_structure;
     (void)scratch_buffer;
     (void)scratch_offset;
+    (void)required_scratch_size;
     (void)update_source;
     (void)instance_sources;
     (void)instance_source_count;
