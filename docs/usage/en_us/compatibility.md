@@ -12,10 +12,11 @@ typed error categories, ownership/lifetime rules, and supported capability
 meanings. An intentional portable source break requires `v0.2.0` or later and
 migration guidance.
 
-The current Unreleased Period 46 work extends `QueryError` with
-`QueryBackendFailure` and therefore targets `v0.2.0`, not a `v0.1.x` patch.
-Exhaustive error switches need one new arm; ordinary error propagation is
-unchanged. See the migration guide for the complete query update.
+`HeadlessContext` is an additive `v0.1.x` declaration. Existing
+`WindowContext` callers require no migration, and all ten of its methods keep
+their behavior. The headless owner intentionally excludes surfaces,
+swapchains, current drawables, presentation, and presentation-shaped native
+handles.
 
 This is not a stable binary ABI. Applications must not depend on the size,
 alignment, or contents of opaque `_state` storage, raw native-handle values, or

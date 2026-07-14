@@ -11,6 +11,12 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added root `HeadlessContext` with nested `Options` and borrowed `Device` and
+  `Queue` views for real no-window compute, transfer, resource, ray-tracing,
+  and texture-backed offscreen rendering.
+- Added Metal device/queue initialization without AppKit presentation objects
+  and Vulkan loader/device initialization without a surface,
+  `VK_KHR_swapchain`, or presentation-queue requirement.
 - Added schema-2 tessellation and mesh shader declarations while retaining
   schema-1 manifest compatibility.
 - Added executable Vulkan tessellation pipelines and patch draws, plus native
@@ -65,6 +71,9 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- `examples/compute_readback` and `examples/transfer_readback` now use
+  `HeadlessContext` and no longer initialize or link GLFW. Transfer readback
+  also validates a texture-backed offscreen clear and copy.
 - `tessellation` and `mesh_shaders` now report complete selected-backend
   execution paths. Metal tessellation and task/object artifacts remain
   explicitly closed; native-only task bits do not set usable `task_shaders`.
@@ -110,6 +119,9 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- `HeadlessContext` is an additive `v0.1.x` portable root API. All ten
+  `WindowContext` methods and their behavior remain unchanged; the initial
+  headless owner intentionally has no presentation-shaped native-handle view.
 - Period 51 adds advanced shader/pipeline descriptors and facade operations,
   two render-encoder methods, mesh grid limits, shader-stage values, and
   manifest schema 2. `UnsupportedMeshShaderBindings` records a mesh pipeline

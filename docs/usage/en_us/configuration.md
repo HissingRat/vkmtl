@@ -27,10 +27,11 @@ against the resolved runtime adapter name after backend initialization.
 
 ## Build-Time Override
 
-`zig build ... -Dvulkan` forces `WindowContext` to request Vulkan, even if the
-application passed `.auto` or `.metal`. This is a debugging/testing override for
-the Vulkan backend path; it fails with `VulkanUnavailable` when Vulkan cannot be
-created for the selected surface.
+`zig build ... -Dvulkan` forces both `WindowContext` and `HeadlessContext` to
+request Vulkan, even if the application passed `.auto` or `.metal`. This is a
+debugging/testing override for the Vulkan backend path. It fails with
+`VulkanUnavailable` when Vulkan cannot be created for the selected surface, or
+when a headless run cannot load a Vulkan loader/device.
 
 ## Core Selection Rules
 
@@ -48,7 +49,8 @@ The pure selection logic in `core.selectBackend(...)` follows this order:
 8. If no backend is available, selection returns `NoSupportedBackend`.
 
 Forced unavailable backends return `VulkanUnavailable` or `MetalUnavailable`.
-An adapter name mismatch returns `AdapterNotFound` during `WindowContext.init`.
+An adapter name mismatch returns `AdapterNotFound` during context
+initialization.
 
 ## Runtime Surface Availability
 
@@ -62,6 +64,13 @@ An adapter name mismatch returns `AdapterNotFound` during `WindowContext.init`.
 The bundled examples get both from external `zig_glfw` through
 `examples/common.zig`; vkmtl core does not import GLFW.
 
+`HeadlessContext` does not apply surface availability. On Darwin it can create
+Metal directly; Vulkan is available when the Vulkan loader opens and exposes a
+usable physical device. The headless Vulkan path does not require
+`VK_KHR_swapchain` or a presentation queue. On Windows it opens
+`vulkan-1.dll`; on macOS it tries `libvulkan.1.dylib` then `libvulkan.dylib`;
+on other desktop hosts it tries `libvulkan.so.1` then `libvulkan.so`.
+
 ## Example Overrides
 
 `examples/triangle` accepts a debug environment override:
@@ -73,8 +82,8 @@ zig build run-triangle -Dvulkan
 ```
 
 `VKMTL_BACKEND` is example-level plumbing over `debug_backend_override`.
-`-Dvulkan` is a build-time `WindowContext` override and wins over both
-`VKMTL_BACKEND` and the requested `.auto` / `.metal` preference.
+`-Dvulkan` is a build-time context override and wins over both `VKMTL_BACKEND`
+and the requested `.auto` / `.metal` preference.
 
 ## macOS Vulkan Runtime
 

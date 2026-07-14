@@ -18,7 +18,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `metal/vulkan_pixel_regression`: transfer, compute, and render readback via
   `run-pixel-regression`.
 - `metal/vulkan_soak`: capability dump plus bounded `run-gpu-soak` artifact.
-- `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`
+- `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`; both use `HeadlessContext`, create no GLFW window/surface, and cover transfer, compute, and texture-backed offscreen readback. Metal has physical evidence; Vulkan requires a loader/device host for physical execution.
 - `presentation_feature_gates`: `VKMTL_PIXEL_REGRESSION=1 zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, native resource tables, pipeline-layout compatibility, reusable indirect slots/ranges, resource-table pressure plans, root constant writes, specialization variant fingerprints, and driver-cache identity.
 - `sync_query_regression`: covered by `zig build test`; includes explicit barriers, runtime fences/events, native timeline/shared-event submission, physical queue selection, ownership transfer validation, lifecycle callback-once behavior, presentation fallback, and query readback/resolve validation.

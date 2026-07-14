@@ -5,6 +5,16 @@ Period 1 Phase 9 surface. The cutover is breaking because vkmtl has not yet made
 a tagged compatibility promise. It reorganizes names and owners without
 intentionally changing backend behavior.
 
+## Post-Tag Additive Headless Owner
+
+`HeadlessContext` is an additive `v0.1.x` root declaration and requires no
+migration for existing callers. New no-window code may replace window setup
+with `HeadlessContext.init(...)` and continue using the same borrowed `Device`
+and `Queue` API. It intentionally has no `Surface`, `Swapchain`, current
+drawable, presentation method, or presentation-shaped native-handle view.
+
+Existing `WindowContext` source and behavior are unchanged.
+
 ## Period 51 v0.2.0 Advanced Geometry Update
 
 Schema version 2 adds `tessellation_shaders` and `mesh_shaders` while schema 1

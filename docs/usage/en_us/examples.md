@@ -204,10 +204,12 @@ examples/rainbow_cube/shaders/rainbow_cube.slang
 
 ## Transfer Readback
 
-`examples/transfer_readback` is the first non-rendering Phase 8 example. It
-copies a small RGBA payload buffer to another buffer, copies that payload into a
-texture, copies the texture back into a CPU-visible buffer, validates both
-readbacks, prints `transfer readback ok`, and exits automatically.
+`examples/transfer_readback` uses `HeadlessContext` and does not initialize or
+link GLFW. It copies a small RGBA payload buffer to another buffer, copies that
+payload into a texture, copies the texture back into a CPU-visible buffer, then
+clears a separate texture-view-backed offscreen target and copies it to
+readback. It validates every result, prints `transfer readback ok`, and exits
+automatically.
 
 Run it with:
 
@@ -224,13 +226,14 @@ VKMTL_BACKEND=metal zig build run-transfer-readback
 
 ## Compute Readback
 
-`examples/compute_readback` is the first compute sample. It creates a storage
+`examples/compute_readback` is a true no-window compute sample using
+`HeadlessContext`; it does not initialize or link GLFW. It creates a storage
 texture and a storage buffer, binds both through a compute-visible bind group,
 dispatches a Slang compute shader, copies both resources to CPU-visible
 readback buffers, and validates deterministic bytes before exiting
-automatically. Its compute pipeline attaches runtime-generated reflection JSON and
-derives the storage texture and storage buffer bind group layout from it before
-backend pipeline creation.
+automatically. Its compute pipeline attaches runtime-generated reflection JSON
+and derives the storage texture and storage buffer bind group layout from it
+before backend pipeline creation.
 
 Run it with:
 

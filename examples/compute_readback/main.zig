@@ -1,7 +1,5 @@
 const std = @import("std");
 const vkmtl = @import("vkmtl");
-const glfw = @import("zig_glfw");
-const common = @import("vkmtl_examples_common");
 
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
@@ -13,26 +11,14 @@ const texture_height = 2;
 const texture_pixels_len = texture_width * texture_height * 4;
 
 pub fn main(_: std.process.Init.Minimal) !void {
-    try glfw.init();
-    defer glfw.terminate();
-
-    const window = try glfw.createWindow(.{
-        .width = 64,
-        .height = 64,
-        .title = app_name,
-    });
-    defer glfw.destroyWindow(window);
-
     var debug_allocator = std.heap.DebugAllocator(.{}){};
     defer _ = debug_allocator.deinit();
     const allocator = debug_allocator.allocator();
 
-    var context = try vkmtl.WindowContext.init(allocator, .{
+    var context = try vkmtl.HeadlessContext.init(allocator, .{
         .app_name = app_name,
         .backend = .auto,
         .debug_backend_override = backendOverrideFromEnv(),
-        .surface = common.surfaceDescriptor(window),
-        .presentation = common.presentationDescriptor(window, .fifo),
     });
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});

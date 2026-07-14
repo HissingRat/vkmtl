@@ -1,7 +1,5 @@
 const std = @import("std");
 const vkmtl = @import("vkmtl");
-const glfw = @import("zig_glfw");
-const common = @import("vkmtl_examples_common");
 
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
@@ -11,6 +9,12 @@ const pixels = [_]u8{
     0xff, 0xd1, 0x4a, 0xff,
     0x28, 0xd6, 0x7a, 0xff,
     0x46, 0x95, 0xff, 0xff,
+};
+const offscreen_pixels = [_]u8{
+    0xff, 0x00, 0x00, 0xff,
+    0xff, 0x00, 0x00, 0xff,
+    0xff, 0x00, 0x00, 0xff,
+    0xff, 0x00, 0x00, 0xff,
 };
 
 const LifecycleProbe = struct {
@@ -32,26 +36,14 @@ fn verifyLifecycle(probe: *const LifecycleProbe) !void {
 }
 
 pub fn main() !void {
-    try glfw.init();
-    defer glfw.terminate();
-
-    const window = try glfw.createWindow(.{
-        .width = 64,
-        .height = 64,
-        .title = app_name,
-    });
-    defer glfw.destroyWindow(window);
-
     var debug_allocator = std.heap.DebugAllocator(.{}){};
     defer _ = debug_allocator.deinit();
     const allocator = debug_allocator.allocator();
 
-    var context = try vkmtl.WindowContext.init(allocator, .{
+    var context = try vkmtl.HeadlessContext.init(allocator, .{
         .app_name = app_name,
         .backend = .auto,
         .debug_backend_override = backendOverrideFromEnv(),
-        .surface = common.surfaceDescriptor(window),
-        .presentation = common.presentationDescriptor(window, .fifo),
     });
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
@@ -127,6 +119,50 @@ pub fn main() !void {
         .storage_mode = .managed,
     });
     defer texture_readback.deinit();
+
+    var offscreen_texture = try device.makeTexture(.{
+        .format = .rgba8_unorm,
+        .width = 2,
+        .height = 2,
+        .usage = .{
+            .copy_source = true,
+            .render_attachment = true,
+        },
+        .storage_mode = .private,
+    });
+    defer offscreen_texture.deinit();
+    var offscreen_view = try offscreen_texture.makeTextureView(.{});
+    defer offscreen_view.deinit();
+    var offscreen_readback = try device.makeBuffer(.{
+        .length = offscreen_pixels.len,
+        .usage = .{ .copy_destination = true },
+        .storage_mode = .managed,
+    });
+    defer offscreen_readback.deinit();
+
+    var render_command_buffer = try queue.makeCommandBuffer();
+    var render = try render_command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = &.{.{
+            .target = .{ .texture_view = &offscreen_view },
+            .clear_color = .{ .red = 1.0, .alpha = 1.0 },
+        }},
+    });
+    try render.endEncoding();
+    try render_command_buffer.commit();
+
+    var offscreen_copy_command_buffer = try queue.makeCommandBuffer();
+    var offscreen_copy = try offscreen_copy_command_buffer.makeBlitCommandEncoder();
+    try offscreen_copy.copyTextureToBuffer(&offscreen_texture, &offscreen_readback, .{
+        .source_region = .{ .size = .{ .width = 2, .height = 2 } },
+    });
+    try offscreen_copy.endEncoding();
+    try offscreen_copy_command_buffer.commit();
+
+    var copied_offscreen: [offscreen_pixels.len]u8 = undefined;
+    try offscreen_readback.readBytes(0, copied_offscreen[0..]);
+    if (!std.mem.eql(u8, offscreen_pixels[0..], copied_offscreen[0..])) {
+        return error.OffscreenRenderReadbackMismatch;
+    }
 
     if (work_queue.kind() != .graphics) {
         var ownership_command_buffer = try queue.makeCommandBuffer();
@@ -250,7 +286,7 @@ pub fn main() !void {
         }
     }
 
-    std.debug.print("transfer readback ok (queue={}, timeline={}, shared_event={}, heaps={}, memory_budget={})\n", .{
+    std.debug.print("transfer readback ok (queue={}, timeline={}, shared_event={}, heaps={}, memory_budget={}, offscreen=true)\n", .{
         work_queue.kind(),
         timeline_fence != null,
         shared_event != null,

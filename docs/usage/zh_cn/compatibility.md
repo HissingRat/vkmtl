@@ -9,9 +9,9 @@ portable Zig source API 的兼容性，包括 canonical declaration、公开 own
 default、typed error category、ownership/lifetime rule，以及已声明支持的 capability meaning。
 有意破坏 portable source compatibility 的改动必须进入 `v0.2.0` 或更高版本，并提供迁移说明。
 
-当前 Unreleased 的 Period 46 会给 `QueryError` 增加 `QueryBackendFailure`，因此目标版本是
-`v0.2.0`，不是 `v0.1.x` patch。Exhaustive error switch 需要增加一个分支；普通 error
-propagation 不受影响。完整 query 更新见 migration guide。
+`HeadlessContext` 是 additive `v0.1.x` declaration。现有 `WindowContext` 调用方不需要迁移，
+它的十个方法及行为保持不变。Headless owner 刻意不包含 surface、swapchain、current
+drawable、presentation 和 presentation-shaped native handle。
 
 这不是 stable binary ABI。应用不能依赖 opaque `_state` storage 的 size、alignment、内容，
 不能依赖 raw native-handle value，也不能假设 backend-native escape hatch 在 `0.x` minor

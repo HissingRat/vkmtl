@@ -62,7 +62,7 @@ pub const CommandBuffer = struct {
     gc: *const GraphicsContext,
     queue: GraphicsContext.Queue,
     pool: vk.CommandPool,
-    swapchain: *Swapchain,
+    swapchain: ?*Swapchain,
     color_render_pass: vk.RenderPass,
     depth_render_pass: vk.RenderPass,
     color_framebuffers: []const vk.Framebuffer,
@@ -80,7 +80,7 @@ pub const CommandBuffer = struct {
         gc: *const GraphicsContext,
         pool: vk.CommandPool,
         queue_kind: core.QueueKind,
-        swapchain: *Swapchain,
+        swapchain: ?*Swapchain,
         color_render_pass: vk.RenderPass,
         depth_render_pass: vk.RenderPass,
         color_framebuffers: []const vk.Framebuffer,
@@ -139,7 +139,7 @@ pub const CommandBuffer = struct {
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
     ) !RenderCommandEncoder {
-        try self.swapchain.waitForAllFences();
+        try self.waitForOutstandingWork();
 
         const cmdbuf = self.cmdbuf;
         try self.gc.dev.beginCommandBuffer(cmdbuf, &.{});
@@ -216,7 +216,7 @@ pub const CommandBuffer = struct {
     }
 
     pub fn makeBlitCommandEncoder(self: *CommandBuffer) !BlitCommandEncoder {
-        try self.swapchain.waitForAllFences();
+        try self.waitForOutstandingWork();
         try self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         });
@@ -228,7 +228,7 @@ pub const CommandBuffer = struct {
     }
 
     pub fn makeComputeCommandEncoder(self: *CommandBuffer) !ComputeCommandEncoder {
-        try self.swapchain.waitForAllFences();
+        try self.waitForOutstandingWork();
         try self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         });
@@ -294,7 +294,7 @@ pub const CommandBuffer = struct {
         }
         const range_ptrs = range_ptrs_buffer[0..geometry_count];
 
-        self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         }) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -308,7 +308,7 @@ pub const CommandBuffer = struct {
         pipeline: *const VulkanRayTracingPipelineState,
         dispatch: core.RayDispatchDescriptor,
     ) core.AdvancedFeatureError!void {
-        self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         }) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
@@ -333,7 +333,8 @@ pub const CommandBuffer = struct {
         output: *const VulkanTextureView,
         dispatch: core.RayDispatchDescriptor,
     ) core.AdvancedFeatureError!void {
-        self.swapchain.waitForAllFences() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        const swapchain = self.swapchain orelse return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         try pipeline.updateDescriptorSet(top_level, output, dispatch);
 
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
@@ -362,7 +363,7 @@ pub const CommandBuffer = struct {
         );
 
         output.transitionLayout(self.cmdbuf, .transfer_src_optimal);
-        const swapchain_image = self.swapchain.currentImageHandle();
+        const swapchain_image = swapchain.currentImageHandle();
         transitionSwapchainImage(
             self.gc,
             self.cmdbuf,
@@ -390,8 +391,8 @@ pub const CommandBuffer = struct {
             },
             .dst_offset = .{ .x = 0, .y = 0, .z = 0 },
             .extent = .{
-                .width = @min(output.width, self.swapchain.extent.width),
-                .height = @min(output.height, self.swapchain.extent.height),
+                .width = @min(output.width, swapchain.extent.width),
+                .height = @min(output.height, swapchain.extent.height),
                 .depth = 1,
             },
         };
@@ -446,7 +447,8 @@ pub const CommandBuffer = struct {
         defer self.destroyTemporaryRenderPassResources();
         defer self.destroyTemporaryBlitResources();
         if (self.present_requested) {
-            _ = try self.swapchain.present(self.cmdbuf, self.timeline_waits.items, self.timeline_signals.items);
+            const swapchain = self.swapchain orelse return error.UnsupportedBackendForPresentation;
+            _ = try swapchain.present(self.cmdbuf, self.timeline_waits.items, self.timeline_signals.items);
         } else {
             const wait_semaphores = try self.gc.allocator.alloc(vk.Semaphore, self.timeline_waits.items.len);
             defer self.gc.allocator.free(wait_semaphores);
@@ -497,6 +499,7 @@ pub const CommandBuffer = struct {
             .texture_view => false,
         };
         if (uses_current_drawable) {
+            const swapchain = self.swapchain orelse return error.UnsupportedBackendForPresentation;
             if (color_attachments.len != 1) return error.InvalidRenderPassAttachment;
             if (first_color_attachment.resolve_target != null) return error.InvalidRenderPassAttachment;
             if (descriptor.depth_attachment) |depth_attachment| {
@@ -508,8 +511,8 @@ pub const CommandBuffer = struct {
             const framebuffers = if (descriptor.depth_attachment != null) self.depth_framebuffers else self.color_framebuffers;
             return .{
                 .render_pass = if (descriptor.depth_attachment != null) self.depth_render_pass else self.color_render_pass,
-                .framebuffer = framebuffers[self.swapchain.image_index],
-                .extent = self.swapchain.extent,
+                .framebuffer = framebuffers[swapchain.image_index],
+                .extent = swapchain.extent,
                 .uses_current_drawable = true,
                 .sample_count = 1,
                 .color_layout_count = 0,
@@ -656,6 +659,10 @@ pub const CommandBuffer = struct {
                 .texture_view => |depth_view| depth_view.layout,
             } else null,
         };
+    }
+
+    fn waitForOutstandingWork(self: *CommandBuffer) !void {
+        if (self.swapchain) |swapchain| try swapchain.waitForAllFences();
     }
 
     fn destroyTemporaryRenderPassResources(self: *CommandBuffer) void {

@@ -38,6 +38,13 @@ the documentation identifies the path as executable. Planning-only records,
 typed-unsupported paths, and unimplemented native lowering are not executable
 feature claims.
 
+Additive declarations may enter a patch release when they do not remove,
+rename, or change existing source behavior. `HeadlessContext` is such an
+addition: it owns a no-presentation device/queue runtime while all existing
+`WindowContext` declarations and behavior remain unchanged. Its portable
+contract excludes surfaces, swapchains, current drawables, presentation, and
+presentation-shaped native handles.
+
 ## Explicit Non-Guarantees
 
 vkmtl does not promise:

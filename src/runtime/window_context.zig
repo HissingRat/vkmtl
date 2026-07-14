@@ -4788,6 +4788,7 @@ pub const CommandBuffer = struct {
         label_value: ?[]const u8 = null,
         alive: bool = true,
         uses_current_drawable_pass: bool = false,
+        presentation_available: bool = true,
         queue_kind_value: core.QueueKind = .graphics,
         features_value: core.DeviceFeatures = .{},
         limits_value: core.DeviceLimits = .{},
@@ -4877,6 +4878,9 @@ pub const CommandBuffer = struct {
     ) !RenderCommandEncoder {
         assertObjectAlive(self.privateState().alive, "command_buffer");
         if (self.privateState().queue_kind_value != .graphics) return core.CommandEncodingError.InvalidQueueCapability;
+        if (descriptor.colorTargetUsesCurrentDrawable() and !self.privateState().presentation_available) {
+            return RuntimeError.UnsupportedBackendForPresentation;
+        }
         try descriptor.validateRuntime(self.privateState().backend);
         if (descriptor.occlusion_query_set) |query_set| {
             assertObjectAlive(query_set.state().alive, "query_set");
@@ -4968,6 +4972,7 @@ pub const CommandBuffer = struct {
 
     pub fn presentDrawableWithDescriptor(self: *CommandBuffer, descriptor: core.PresentDrawableDescriptor) !void {
         assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (!self.privateState().presentation_available) return RuntimeError.UnsupportedBackendForPresentation;
         if (!self.privateState().uses_current_drawable_pass) return RuntimeError.PresentRequiresCurrentDrawable;
         const resolved = try descriptor.resolve(self.privateState().features_value);
         try self.privateState().debug.presentDrawable();
@@ -5165,6 +5170,7 @@ pub const CommandBuffer = struct {
         resources: RayTracingDrawableResources,
     ) !core.RayDispatchPlan {
         assertObjectAlive(self.privateState().alive, "command_buffer");
+        if (!self.privateState().presentation_available) return RuntimeError.UnsupportedBackendForPresentation;
         assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
         assertAlive(shader_binding_table.state().alive, .shader_binding_table);
         if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
@@ -6719,6 +6725,7 @@ const RuntimeState = struct {
     allocator: std.mem.Allocator,
     tracker: *ResourceTracker,
     backend: core.Backend,
+    presentation_available: bool = true,
     surface_descriptor: core.SurfaceDescriptor,
     presentation_descriptor: core.PresentationDescriptor,
     adapter_info: core.AdapterInfo,
@@ -6849,6 +6856,7 @@ pub const Queue = struct {
             .backend = self.runtime().backend,
             .tracker = self.runtime().tracker,
             .runtime_impl = &self.runtime().impl,
+            .presentation_available = self.runtime().presentation_available,
             .label_value = descriptor.label,
             .queue_kind_value = self.state().kind,
             .features_value = self.runtime().capability_report.features,
@@ -7669,6 +7677,9 @@ pub const Device = struct {
     }
 
     fn presentModeSupport(self: Device) core.PresentModeSupport {
+        if (!self.state().presentation_available) {
+            return .{ .fifo = false, .mailbox = false, .immediate = false };
+        }
         return core.defaultPresentModeSupport(self.state().backend);
     }
 
@@ -8529,6 +8540,91 @@ fn deinitBackendRuntime(impl: *BackendRuntime) void {
     }
 }
 
+pub fn initHeadlessRuntime(
+    allocator: std.mem.Allocator,
+    app_name: [*:0]const u8,
+    requested_backend: core.BackendPreference,
+    requested_adapter: core.AdapterSelectionDescriptor,
+    requested_debug_override: ?core.Backend,
+) !*anyopaque {
+    const tracker = try allocator.create(ResourceTracker);
+    errdefer allocator.destroy(tracker);
+    tracker.* = .{};
+
+    const backend_preference: core.BackendPreference = if (build_options.force_vulkan) .vulkan else requested_backend;
+    var adapter_selection = requested_adapter;
+    if (build_options.force_vulkan) adapter_selection.backend = .vulkan;
+    const debug_backend_override: ?core.Backend = if (build_options.force_vulkan) null else requested_debug_override;
+    const backend = try core.selectBackend(.{
+        .preference = backend_preference,
+        .adapter_selection = adapter_selection,
+        .debug_override = debug_backend_override,
+    });
+
+    var impl: BackendRuntime = switch (backend) {
+        .vulkan => .{ .vulkan = try VulkanClearScreen.initHeadless(allocator, app_name) },
+        .metal => .{ .metal = try MetalClearScreen.initHeadless() },
+    };
+    errdefer deinitBackendRuntime(&impl);
+
+    const adapter_info = try resolveAdapterInfo(allocator, &impl);
+    errdefer adapter_info.deinit(allocator);
+    try validateAdapterSelection(adapter_selection, adapter_info.info);
+    var capability_report = resolveCapabilityReport(&impl);
+    capability_report.features.native_handles = false;
+    capability_report.features.scheduled_presentation = false;
+    capability_report.features.minimum_duration_presentation = false;
+    const native_gpu_timestamp_queries = switch (impl) {
+        .vulkan => |*vulkan| vulkan.supportsNativeTimestampQueries(),
+        .metal => |*metal| metal.supportsNativeTimestampQueries(),
+    };
+
+    const state_value = try allocator.create(RuntimeState);
+    errdefer allocator.destroy(state_value);
+    state_value.* = .{
+        .allocator = allocator,
+        .tracker = tracker,
+        .backend = backend,
+        .presentation_available = false,
+        .surface_descriptor = .{},
+        .presentation_descriptor = .{ .extent = .{ .width = 0, .height = 0 } },
+        .adapter_info = adapter_info.info,
+        .capability_report = capability_report,
+        .native_gpu_timestamp_queries = native_gpu_timestamp_queries,
+        .owned_adapter_name = adapter_info.owned_name,
+        .impl = impl,
+    };
+    return state_value;
+}
+
+pub fn deinitRuntime(pointer: *anyopaque) void {
+    const state_value = runtimeState(pointer);
+    const allocator = state_value.allocator;
+    state_value.tracker.completeAllWork();
+    state_value.tracker.assertNoLeaks();
+    deinitBackendRuntime(&state_value.impl);
+    if (state_value.owned_adapter_name) |name| allocator.free(name);
+    allocator.destroy(state_value.tracker);
+    allocator.destroy(state_value);
+}
+
+pub fn runtimeSelectedBackend(pointer: *anyopaque) core.Backend {
+    return runtimeState(pointer).backend;
+}
+
+pub fn runtimeAdapterInfo(pointer: *anyopaque) core.AdapterInfo {
+    return runtimeState(pointer).adapter_info;
+}
+
+pub fn runtimeDevice(pointer: *anyopaque) Device {
+    return .{ ._state = pointer };
+}
+
+pub fn runtimeQueue(pointer: *anyopaque) Queue {
+    var device_view = runtimeDevice(pointer);
+    return device_view.queue();
+}
+
 pub const WindowContext = struct {
     _state: *anyopaque,
 
@@ -8585,6 +8681,7 @@ pub const WindowContext = struct {
             .allocator = allocator,
             .tracker = tracker,
             .backend = backend,
+            .presentation_available = true,
             .surface_descriptor = options.surface,
             .presentation_descriptor = options.presentation,
             .adapter_info = adapter_info.info,
@@ -8598,16 +8695,7 @@ pub const WindowContext = struct {
     }
 
     pub fn deinit(self: *WindowContext) void {
-        const state_value = self.state();
-        const allocator = state_value.allocator;
-        state_value.tracker.completeAllWork();
-        state_value.tracker.assertNoLeaks();
-        deinitBackendRuntime(&state_value.impl);
-        if (state_value.owned_adapter_name) |name| {
-            allocator.free(name);
-        }
-        allocator.destroy(state_value.tracker);
-        allocator.destroy(state_value);
+        deinitRuntime(self._state);
         self._state = undefined;
     }
 
@@ -12788,6 +12876,24 @@ test "runtime render pipeline gate rejects unsupported raster state" {
     stepped.vertex_descriptor = .{ .buffers = stepped_buffers[0..] };
     try std.testing.expectError(core.PipelineError.UnsupportedInstanceStepRate, validateRuntimeRenderPipelineShape(stepped, .{}));
     try validateRuntimeRenderPipelineShape(stepped, .{ .vertex_instance_step_rate = true });
+}
+
+test "headless command buffer rejects current drawable render passes" {
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .metal,
+        .presentation_available = false,
+    });
+    const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
+    try std.testing.expectError(
+        RuntimeError.UnsupportedBackendForPresentation,
+        command_buffer.makeRenderCommandEncoder(.{
+            .color_attachments = color_attachments[0..],
+        }),
+    );
+    try std.testing.expectError(
+        RuntimeError.UnsupportedBackendForPresentation,
+        command_buffer.presentDrawable(),
+    );
 }
 
 test "runtime render encoder validates bind group binding" {

@@ -929,6 +929,21 @@ Metal tessellation, task/object artifacts, advanced-stage resource binding,
 and the six advanced raster families are precisely closed under the current
 shader and render contracts. See `docs/develop/period51/`.
 
+## Headless Runtime Context
+
+Status: complete additive runtime refactor.
+
+Goal: add a real no-window `HeadlessContext` for compute, transfer, resources,
+ray tracing, and offscreen rendering while leaving the released
+`WindowContext` API and presentation behavior unchanged.
+
+Metal compute, transfer, and texture-backed offscreen execution are physically
+observed. The Vulkan no-surface loader/device path builds on the forced backend
+row; physical execution remains a device-matrix rerun on a host with a Vulkan
+loader and device.
+
+See `docs/develop/headless-context.md`.
+
 ## Period 52: Ray Tracing Breadth
 
 Status: planned from the Period 45 semantic audit.
@@ -988,16 +1003,19 @@ See `docs/develop/period32+/target.md`.
 ## Priority Notes
 
 - Period 1 Phase 9 staged API migration and the `v0.1.0` release are complete.
-  The guarded baseline remains 68 root declarations, 34 public `Device`
-  methods, and 10 public `WindowContext` methods. Period 46's public error-set
-  expansion is explicitly targeted at `v0.2.0`.
+  The released baseline was 68 root declarations, 34 public `Device` methods,
+  and 10 public `WindowContext` methods. The additive headless owner moves the
+  current guard to root 69 and six `HeadlessContext` methods while retaining
+  both existing owner allowlists. Period 46's public error-set expansion is
+  explicitly targeted at `v0.2.0`.
 - Periods 42 through 44 and all nine Period 44 release-evidence gates are
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Periods
-  46-51 are complete implementation slices. Period 52 is the active mainline
-  target; Periods 52-54 remain routed from the gap ledger and must not be reordered
-  around their stated dependencies without updating the inventory and backlog.
+  46-51 plus the additive headless runtime are complete implementation slices.
+  Period 52 is the active mainline target; Periods 52-54 remain routed from the
+  gap ledger and must not be reordered around their stated dependencies without
+  updating the inventory and backlog.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the
   deterministic capability contract and unit coverage because the host had no

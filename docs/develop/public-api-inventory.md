@@ -1,6 +1,7 @@
 # Public API Inventory
 
-Status: `v0.1.0` compatibility baseline, refreshed on 2026-07-14.
+Status: `v0.1.x` compatibility baseline plus additive headless owner, refreshed
+on 2026-07-14.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
@@ -22,10 +23,10 @@ Root declarations are counted with:
 rg -c '^pub const ' src/vkmtl.zig
 ```
 
-The result is 68:
+The result is 69:
 
 - 13 domain facade entry points;
-- 27 portable root declarations;
+- 28 portable root declarations;
 - 28 approved common aliases whose canonical definitions remain in facades.
 
 Runtime public functions are counted independently because methods on exported
@@ -33,24 +34,29 @@ objects are also API:
 
 ```sh
 rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
+rg -c '^[ ]*pub fn ' src/runtime/headless_context.zig
 ```
 
-The current result is 434: 11 module-level operations and 423 methods. Facade
-operations may be `pub const` aliases or direct `pub fn` declarations and are
-counted separately below.
+The current results are 440 in `window_context.zig` and six in
+`headless_context.zig`. The former is 17 module-level operations and 423
+methods; six module-level declarations are private cross-file context-owner
+plumbing and are not reachable through `vkmtl`. Facade operations may be
+`pub const` aliases or direct `pub fn` declarations and are counted separately
+below.
 
-The two owner surfaces targeted by the migration now measure:
+The context and device owner surfaces now measure:
 
 ```text
-Device         34 public methods
-WindowContext  10 public methods
+Device           34 public methods
+WindowContext    10 public methods
+HeadlessContext   6 public methods
 ```
 
 ## Package And Shader Build Contract
 
 The package exports one supported module named `vkmtl`. Repository example
 support modules, tools, and tests are not consumer module exports. Package
-specific build options are not part of the 68-name Zig root count, but they are
+specific build options are not part of the 69-name Zig root count, but they are
 part of the release compatibility surface:
 
 | Dependency option | Type | Contract |
@@ -107,7 +113,7 @@ native
 `native.vulkan` and `native.metal` are nested under `native`; they are not
 additional root declarations.
 
-### Portable Root: 27
+### Portable Root: 28
 
 ```text
 BackendPreference
@@ -125,6 +131,7 @@ selectBackend
 enumerateAdapters
 WindowContext
 WindowContextOptions
+HeadlessContext
 Buffer
 MappedBufferRange
 Texture
@@ -338,19 +345,19 @@ public lowering-mode enum; backend selection stays internal to query planning.
 
 ## Runtime Handle Representation
 
-All 36 guarded exported runtime handles now expose one implementation-storage
+All 37 guarded exported runtime handles now expose one implementation-storage
 field named `_state` and no other field. Value-owned resources, pipelines, binding
 objects, synchronization objects, command buffers, encoders, queues, and
-similar wrappers use inline opaque byte storage. `WindowContext` owns a
-heap-allocated runtime state, while `Device`, `Surface`, and `Swapchain` expose
-borrowed `*anyopaque` views into it.
+similar wrappers use inline opaque byte storage. `WindowContext` and
+`HeadlessContext` own a heap-allocated runtime state, while `Device`, `Surface`,
+and `Swapchain` expose borrowed `*anyopaque` views into it.
 
 Consequently, the public field graph no longer reaches `BackendRuntime`, a
 backend `Impl` union, `ResourceTracker`, debug state, or a private state record.
 Construction, queries, mutation, and destruction go through documented public
 methods. Direct struct literals and reads or writes of `_state` are unsupported
 even though Zig can spell the field name. `zig build run-api-guard` locks the
-36-name handle set and this single-field representation alongside the root and
+37-name handle set and this single-field representation alongside the root and
 owner-method allowlists.
 
 ## Runtime Owner Inventory
@@ -361,6 +368,7 @@ The current major runtime owner counts are:
 | --- | ---: | --- |
 | `Device` | 34 | creation, compilation, common queries, and queue access |
 | `WindowContext` | 10 | lifecycle, identity, native-view, and owner access only |
+| `HeadlessContext` | 6 | no-presentation lifecycle, identity, device, and queue access |
 | `RenderCommandEncoder` | 31 | natural render command owner |
 | `ComputeCommandEncoder` | 21 | natural compute command owner |
 | `BlitCommandEncoder` | 21 | natural transfer command owner |
@@ -725,6 +733,34 @@ These additive descriptors, stage values, methods, feature meanings, limits,
 and schema fields target `v0.2.0`. No `v0.1.x` declaration is removed or
 renamed.
 
+## Additive v0.1.x Headless Owner Update
+
+`HeadlessContext` is admitted as the 28th portable root declaration because
+backend-neutral GPU initialization without presentation is a common owner path
+on both Metal and Vulkan. Its nested `Options` avoids allocating a second root
+name. The six-method allowlist is exact:
+
+```text
+init
+deinit
+selectedBackend
+adapterInfo
+device
+queue
+```
+
+The owner shares private runtime state, `Device`, `Queue`, resource, pipeline,
+and command implementations with `WindowContext`. It adds no `Surface`,
+`Swapchain`, current-drawable, present, `nativeHandles`, or `nativeHandleView`
+route. The existing native-handle record is presentation-shaped, so returning
+it would invent invalid sentinel semantics. A future device-only native escape
+hatch requires a separate `native` allocation decision.
+
+This update moves the current guard to root 69, `Device` 34,
+`WindowContext` 10, `HeadlessContext` six, and 37 runtime handles. It is an
+additive `v0.1.x` change: no existing root declaration, owner method, default,
+or `WindowContext` behavior changes.
+
 ## Compatibility Impact
 
 This is an intentional pre-tag breaking migration:
@@ -750,12 +786,16 @@ were intentionally changed by this namespace and owner cutover. Code that used
 runtime struct literals or implementation fields must move to public factories
 and methods; there is intentionally no raw-layout compatibility layer.
 
+The later `HeadlessContext` allocation is additive and does not reopen that
+breaking cutover. Existing `WindowContext` callers require no migration.
+
 ## Verification Commands
 
 ```sh
 zig build run-api-guard
-# API guard passed: root=68 (facades=13 core=27 aliases=28),
-# Device methods=34, WindowContext methods=10, runtime handles=36
+# API guard passed: root=69 (facades=13 core=28 aliases=28),
+# Device methods=34, WindowContext methods=10, HeadlessContext methods=6,
+# runtime handles=37
 
 awk '
   /^pub const Device = struct \{/ { active=1; next }
@@ -771,6 +811,13 @@ awk '
   END { print count }
 ' src/runtime/window_context.zig
 # 10
+
+awk '
+  /^pub const HeadlessContext = struct \{/ { active=1; next }
+  active && /^    pub fn / { count++ }
+  END { print count }
+' src/runtime/headless_context.zig
+# 6
 
 for file in src/api/*.zig src/api/native/*.zig; do
   printf '%-38s ' "$file"
@@ -792,7 +839,7 @@ When the public surface changes:
 
 - [ ] Assign each declaration one canonical lane and namespace.
 - [ ] Record and justify any new flat root name.
-- [ ] Recount the 68-name root and all changed facades.
+- [ ] Recount the 69-name root and all changed facades.
 - [ ] Recount affected runtime owner methods.
 - [ ] Confirm every guarded runtime handle still has exactly one `_state`
   storage field and exposes no private implementation type.

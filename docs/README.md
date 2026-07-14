@@ -44,6 +44,8 @@ vkmtl documentation is organized by audience and purpose.
   namespace, and compatibility inventory
 - `develop/native-semantic-coverage-inventory.md`: Metal/Vulkan semantic
   lowering status, unsupported behavior, and execution evidence
+- `develop/headless-context.md`: no-window context allocation, backend
+  lowering, presentation boundary, and validation evidence
 - `develop/api-migration-roadmap.md`: completed staged plan for canonical
   facades, caller migration, owner convergence, and pre-tag cleanup
 - `develop/api-migration-map.md`: implemented final root, namespace,
@@ -85,6 +87,8 @@ vkmtl documentation is organized by audience and purpose.
   attachments, and sparse/residency support boundaries
 - `develop/period50/`: scalable resource tables, reusable indirect commands,
   driver pipeline artifacts, and explicit dynamic-linking boundaries
+- `develop/period51/`: advanced rasterization, tessellation, and mesh geometry
+  closure
 - `develop/backend-test-matrix.md`: backend/host validation matrix
 - `develop/validation-matrix.md`: validation coverage inventory
 

@@ -28,6 +28,10 @@ Canonical public type 是 `vkmtl.diagnostics.DeviceFeatures`、
 
 应用必须同时检查 usable feature、limit 和 format capability，不能把 platform/backend 名称当作
 feature gate。
+需要 owner 的 capability 会按当前 owner 报告：`HeadlessContext` 会在
+`native_features` 保留 native device 事实，但 usable scheduled-presentation field、present-mode
+support、native-handle route 和 format `presentation` flag 都保持关闭，因为它没有 surface 或
+drawable。
 
 ## Status Vocabulary
 
@@ -186,7 +190,8 @@ depth_copy stencil_copy color_resolve depth_resolve stencil_resolve
 ```
 
 不要从 format 名称推断 copy、blit、resolve、presentation 或 depth/stencil 行为。Encoding 前同时
-检查对应 capability flag 和 transfer alignment limit。
+检查对应 capability flag 和 transfer alignment limit。即使同一 native adapter 可以通过
+`WindowContext` 呈现，headless device 也会报告 `presentation = false`。
 
 ## Evidence 与 Diagnostics
 

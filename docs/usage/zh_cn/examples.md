@@ -118,8 +118,9 @@ zig build run-rainbow-cube
 
 ## Transfer Readback
 
-`examples/transfer_readback` 是第一个非渲染 Phase 8 示例。它验证 buffer copy、buffer-to-texture、
-texture-to-buffer 和 CPU-visible readback，成功后打印 `transfer readback ok` 并自动退出。
+`examples/transfer_readback` 使用 `HeadlessContext`，不初始化或链接 GLFW。它验证 buffer copy、
+buffer-to-texture、texture-to-buffer 和 CPU-visible readback，还会 clear 一个绑定 texture view
+的 offscreen target，再 copy 并校验结果。成功后打印 `transfer readback ok` 并自动退出。
 
 ```sh
 zig build run-transfer-readback
@@ -134,9 +135,9 @@ VKMTL_BACKEND=metal zig build run-transfer-readback
 
 ## Compute Readback
 
-`examples/compute_readback` 是第一个 compute 示例。它创建 storage texture 和 storage buffer，
-通过 compute-visible bind group 绑定，dispatch Slang compute shader，再把资源 copy 到 CPU-visible
-readback buffer 并验证确定性 bytes。
+`examples/compute_readback` 是使用 `HeadlessContext` 的真正无窗口 compute 示例，不初始化或
+链接 GLFW。它创建 storage texture 和 storage buffer，通过 compute-visible bind group 绑定，
+dispatch Slang compute shader，再把资源 copy 到 CPU-visible readback buffer 并验证确定性 bytes。
 
 ```sh
 zig build run-compute-readback

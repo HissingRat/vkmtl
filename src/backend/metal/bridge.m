@@ -652,6 +652,57 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_create_headless(
+    vkmtl_metal_clear_screen **out_clear_screen
+) {
+    if (out_clear_screen == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_SURFACE;
+    }
+    *out_clear_screen = NULL;
+
+    @autoreleasepool {
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        if (device == nil) {
+            return VKMTL_METAL_STATUS_NO_DEVICE;
+        }
+
+        id<MTLCommandQueue> queue = [device newCommandQueue];
+        id<MTLCommandQueue> compute_queue = [device newCommandQueue];
+        id<MTLCommandQueue> transfer_queue = [device newCommandQueue];
+        if (queue == nil || compute_queue == nil || transfer_queue == nil) {
+            [queue release];
+            [compute_queue release];
+            [transfer_queue release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        vkmtl_metal_clear_screen *clear_screen = calloc(1, sizeof(vkmtl_metal_clear_screen));
+        if (clear_screen == NULL) {
+            [queue release];
+            [compute_queue release];
+            [transfer_queue release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        clear_screen->device = [device retain];
+        clear_screen->queue = queue;
+        clear_screen->compute_queue = compute_queue;
+        clear_screen->transfer_queue = transfer_queue;
+        if (@available(macOS 10.13, *)) {
+            id<MTLBuffer> address_probe = [device newBufferWithLength:4 options:MTLResourceStorageModePrivate];
+            if (address_probe != nil &&
+                [address_probe respondsToSelector:@selector(gpuAddress)] &&
+                [address_probe gpuAddress] != 0) {
+                clear_screen->buffer_gpu_address = 1;
+            }
+            [address_probe release];
+        }
+
+        *out_clear_screen = clear_screen;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen) {
     if (clear_screen == NULL) {
         return;
@@ -4562,7 +4613,6 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     *out_encoder = NULL;
 
     if (owner == NULL ||
-        owner->layer == nil ||
         command_buffer == NULL ||
         command_buffer->command_buffer == nil ||
         color_attachments == NULL ||
@@ -4593,6 +4643,9 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
             } else {
                 if (i != 0 || color_attachment_count != 1) {
                     return VKMTL_METAL_STATUS_INVALID_TEXTURE_VIEW;
+                }
+                if (owner->layer == nil) {
+                    return VKMTL_METAL_STATUS_INVALID_SURFACE;
                 }
                 drawable = [owner->layer nextDrawable];
                 if (drawable == nil) {

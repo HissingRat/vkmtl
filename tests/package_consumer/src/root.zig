@@ -6,6 +6,8 @@ test "external package exposes the canonical API without a GPU" {
         if (!@hasDecl(vkmtl, "resource")) @compileError("missing resource facade");
         if (!@hasDecl(vkmtl, "shader")) @compileError("missing shader facade");
         if (!@hasDecl(vkmtl, "Device")) @compileError("missing Device owner");
+        if (!@hasDecl(vkmtl, "HeadlessContext")) @compileError("missing HeadlessContext owner");
+        if (!@hasDecl(vkmtl.HeadlessContext, "Options")) @compileError("missing HeadlessContext.Options");
         if (!@hasDecl(vkmtl.resource, "TextureDescriptor")) {
             @compileError("missing canonical TextureDescriptor");
         }

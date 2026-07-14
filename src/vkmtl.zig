@@ -1,5 +1,6 @@
 const core = @import("core.zig");
 const runtime = @import("runtime/window_context.zig");
+const headless_runtime = @import("runtime/headless_context.zig");
 
 pub const resource = @import("api/resource.zig");
 pub const transfer = @import("api/transfer.zig");
@@ -30,6 +31,7 @@ pub const selectBackend = core.selectBackend;
 pub const enumerateAdapters = core.enumerateAdapters;
 pub const WindowContext = runtime.WindowContext;
 pub const WindowContextOptions = runtime.WindowContextOptions;
+pub const HeadlessContext = headless_runtime.HeadlessContext;
 pub const Buffer = runtime.Buffer;
 pub const MappedBufferRange = runtime.MappedBufferRange;
 pub const Texture = runtime.Texture;

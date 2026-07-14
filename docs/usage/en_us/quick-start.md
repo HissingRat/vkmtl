@@ -48,6 +48,29 @@ application, then pass vkmtl a `SurfaceDescriptor` and `PresentationDescriptor`.
 The repository examples use `zig_glfw` and keep the adapter code in
 `examples/common.zig`.
 
+## Create A Headless Context
+
+Compute, transfer, ray-tracing, resource, and texture-backed offscreen work can
+skip window setup entirely:
+
+```zig
+const vkmtl = @import("vkmtl");
+
+var context = try vkmtl.HeadlessContext.init(allocator, .{
+    .app_name = "my headless job",
+    .backend = .auto,
+});
+defer context.deinit();
+
+var device = context.device();
+var queue = context.queue();
+```
+
+This path creates no window, surface, swapchain, drawable, or presentation
+queue. Texture-view render attachments remain valid; current-drawable passes
+and present operations return a typed presentation error. Destroy resources
+before the context.
+
 ## Create A Window Context
 
 The current window convenience owner is `WindowContext`. It owns backend
@@ -127,9 +150,9 @@ const compute_stage = compiled_compute.stageDescriptor(context.selectedBackend()
 
 ## Create Resources
 
-Resources are explicit handles and must be destroyed before `WindowContext`.
-Debug builds track resource lifetimes and panic if handles are leaked at
-`WindowContext.deinit()`.
+Resources are explicit handles and must be destroyed before their
+`WindowContext` or `HeadlessContext`. Debug builds track resource lifetimes and
+panic if handles are leaked at context destruction.
 
 In a complete function, register `defer context.deinit()` before resource
 defers. Zig runs defers in last-in, first-out order, so resources are released
@@ -257,8 +280,9 @@ When it is clearer to think in total thread counts, use
 `dispatchThreads(...)`; vkmtl resolves the threadgroup count and applies the
 same device-limit checks.
 
-See `examples/transfer_readback` and `examples/compute_readback` for
-deterministic readback samples.
+See `examples/transfer_readback` and `examples/compute_readback` for genuinely
+headless deterministic readback samples. Neither example initializes or links
+GLFW; transfer readback also validates a texture-backed offscreen clear.
 
 ## Shader Artifacts
 
@@ -270,7 +294,8 @@ create a cache directory. Inspect SPIR-V, MSL, or reflection JSON under
 ## Current Limits
 
 - `Device`, `Queue`, and `Swapchain` are the creation, command, and
-  presentation owners. `WindowContext` does not forward their operations.
+  presentation owners. `WindowContext` does not forward their operations;
+  `HeadlessContext` intentionally exposes no `Swapchain`.
 - vkmtl does not decode images, load meshes, or render text. Applications should
   provide pixel data and higher-level asset systems.
 - GLFW is not part of vkmtl core. Use an external window adapter, like the

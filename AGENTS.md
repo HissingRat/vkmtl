@@ -69,9 +69,10 @@ In particular:
 - Breaking cleanup must follow the documented migration and release-gate
   process; it must not happen incidentally during backend work.
 - `zig build run-api-guard` enforces the exact root, `Device`, and
-  `WindowContext` allowlists. Any intentional change to those sets must update
-  the allocation decision, inventory, compatibility guidance when applicable,
-  and guard allowlist in the same change.
+  context-owner allowlists (`WindowContext` and `HeadlessContext`). Any
+  intentional change to those sets must update the allocation decision,
+  inventory, compatibility guidance when applicable, and guard allowlist in
+  the same change.
 - The package exports only the `vkmtl` module. Keep example support modules and
   repository tooling private to the repository build.
 - Consumer shaders are registered through the versioned `shader_manifest`
@@ -143,7 +144,8 @@ instead of baking backend-specific branches into user-facing code.
 
 Slang is the shader source language. Public examples should embed `.slang`
 files with `@embedFile(...)` and resolve them through the canonical `shader`
-facade with the runtime `Device` returned by `WindowContext.device()`.
+facade with the runtime `Device` returned by `WindowContext.device()` or
+`HeadlessContext.device()`.
 
 The shader compilation pipeline is:
 
@@ -226,7 +228,7 @@ Use validation that matches the edit.
 - Build or package metadata changes should run `zig build --fetch` or the
   closest relevant build command.
 - API and backend changes should add or update focused tests when possible.
-- Public root, `Device`, or `WindowContext` changes must run
+- Public root, `Device`, `WindowContext`, or `HeadlessContext` changes must run
   `zig build run-api-guard` in addition to the normal API validation.
 - Rendering behavior changes should keep at least one runnable example working.
 

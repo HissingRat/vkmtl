@@ -29,15 +29,35 @@ closed one by one as vkmtl moves from prototype to library.
 - Periods 42 through 44 are complete as implementation slices. Period 44's
   explicit readiness evaluator reports 9/9, `release ready: true`.
 - Period 1 Phase 9 and the staged pre-tag API migration are complete. The
-  frozen baseline is 68 root declarations, 34 public `Device` methods, and 10
-  public `WindowContext` methods, enforced by `zig build run-api-guard`.
+  released baseline was 68 root declarations, 34 public `Device` methods, and
+  10 public `WindowContext` methods. The additive headless update moves the
+  current guard to root 69 plus six `HeadlessContext` methods without changing
+  the `Device` or `WindowContext` allowlists.
 - The `v0.1.0` release review and publication are complete at tagged commit
   `96c5b08c34163a148f9811efff04a6f78936778a`. Later feature work uses the
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
   semantic-support ledger. Periods 46-51 are complete. Period 52 ray-tracing
-  breadth is the next mainline priority.
+  breadth is the next mainline priority after the completed additive
+  headless-runtime refactor.
+- The completed headless-runtime slice keeps `WindowContext` unchanged and
+  adds a real no-surface `HeadlessContext`; its allocation, ownership, backend,
+  and validation evidence are recorded in `docs/develop/headless-context.md`.
+
+## Headless Runtime Context
+
+- [x] Allocate one root `HeadlessContext` declaration with nested `Options`.
+- [x] Keep all ten `WindowContext` methods and their behavior unchanged.
+- [x] Exclude presentation-shaped native handles from the first headless API.
+- [x] Add real Metal device/queue initialization without AppKit presentation
+  objects.
+- [x] Add Vulkan loader/device initialization without a surface, swapchain
+  extension, or presentation queue requirement.
+- [x] Keep texture-view-backed offscreen render commands usable and reject
+  current-drawable/present operations before backend presentation work.
+- [x] Migrate deterministic compute and transfer readback examples off GLFW.
+- [x] Update public/API/semantic inventories and run all API/backend gates.
 
 ## Native Semantic Coverage Inventory
 

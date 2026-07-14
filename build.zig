@@ -266,12 +266,9 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
             .imports = &.{
                 .{ .name = "vkmtl", .module = vkmtl },
-                .{ .name = "zig_glfw", .module = zig_glfw },
-                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
             },
         }),
     });
-    transfer_readback.root_module.linkLibrary(glfw);
     b.installArtifact(transfer_readback);
 
     const transfer_readback_cmd = b.addRunArtifact(transfer_readback);
@@ -291,12 +288,9 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
             .imports = &.{
                 .{ .name = "vkmtl", .module = vkmtl },
-                .{ .name = "zig_glfw", .module = zig_glfw },
-                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
             },
         }),
     });
-    compute_readback.root_module.linkLibrary(glfw);
     b.installArtifact(compute_readback);
 
     const compute_readback_cmd = b.addRunArtifact(compute_readback);
@@ -654,6 +648,7 @@ pub fn build(b: *std.Build) void {
     const api_guard_root = api_guard_files.addCopyFile(b.path("tools/api_guard/main.zig"), "main.zig");
     _ = api_guard_files.addCopyFile(b.path("src/vkmtl.zig"), "src/vkmtl.zig");
     _ = api_guard_files.addCopyFile(b.path("src/runtime/window_context.zig"), "src/runtime/window_context.zig");
+    _ = api_guard_files.addCopyFile(b.path("src/runtime/headless_context.zig"), "src/runtime/headless_context.zig");
 
     const api_guard_module = b.createModule(.{
         .root_source_file = api_guard_root,

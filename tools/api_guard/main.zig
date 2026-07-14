@@ -2,6 +2,7 @@ const std = @import("std");
 
 const vkmtl_source = @embedFile("src/vkmtl.zig");
 const runtime_source = @embedFile("src/runtime/window_context.zig");
+const headless_runtime_source = @embedFile("src/runtime/headless_context.zig");
 
 const max_names = 256;
 const max_fields = 64;
@@ -38,6 +39,7 @@ const core_names = [_][]const u8{
     "enumerateAdapters",
     "WindowContext",
     "WindowContextOptions",
+    "HeadlessContext",
     "Buffer",
     "MappedBufferRange",
     "Texture",
@@ -135,10 +137,20 @@ const expected_window_context_methods = [_][]const u8{
     "swapchain",
 };
 
+const expected_headless_context_methods = [_][]const u8{
+    "init",
+    "deinit",
+    "selectedBackend",
+    "adapterInfo",
+    "device",
+    "queue",
+};
+
 // Complete root/facade-reachable runtime handle set. The source scan below
 // makes additions and removals intentional instead of silently widening it.
 const expected_runtime_handle_names = [_][]const u8{
     "WindowContext",
+    "HeadlessContext",
     "Device",
     "Queue",
     "Surface",
@@ -178,12 +190,13 @@ const expected_runtime_handle_names = [_][]const u8{
 
 comptime {
     if (facade_names.len != 13) @compileError("API guard facade allowlist must contain 13 names");
-    if (core_names.len != 27) @compileError("API guard core allowlist must contain 27 names");
+    if (core_names.len != 28) @compileError("API guard core allowlist must contain 28 names");
     if (root_alias_names.len != 28) @compileError("API guard root alias allowlist must contain 28 names");
-    if (expected_root_names.len != 68) @compileError("API guard root allowlist must contain 68 names");
+    if (expected_root_names.len != 69) @compileError("API guard root allowlist must contain 69 names");
     if (expected_device_methods.len != 34) @compileError("API guard Device allowlist must contain 34 names");
     if (expected_window_context_methods.len != 10) @compileError("API guard WindowContext allowlist must contain 10 names");
-    if (expected_runtime_handle_names.len != 36) @compileError("API guard runtime handle allowlist must contain 36 names");
+    if (expected_headless_context_methods.len != 6) @compileError("API guard HeadlessContext allowlist must contain 6 names");
+    if (expected_runtime_handle_names.len != 37) @compileError("API guard runtime handle allowlist must contain 37 names");
 }
 
 const ParseError = error{
@@ -270,10 +283,19 @@ pub fn main(_: std.process.Init) !void {
         std.debug.print("api guard: could not parse WindowContext in src/runtime/window_context.zig: {s}\n", .{@errorName(err)});
         return error.ApiGuardFailed;
     };
-    const runtime_handle_names = parseOpaqueRuntimeHandleNames(runtime_source) catch |err| {
+    const headless_context_methods = parseStructPublicMethods(headless_runtime_source, "HeadlessContext") catch |err| {
+        std.debug.print("api guard: could not parse HeadlessContext in src/runtime/headless_context.zig: {s}\n", .{@errorName(err)});
+        return error.ApiGuardFailed;
+    };
+    var runtime_handle_names = parseOpaqueRuntimeHandleNames(runtime_source) catch |err| {
         std.debug.print("api guard: could not discover opaque runtime handles in src/runtime/window_context.zig: {s}\n", .{@errorName(err)});
         return error.ApiGuardFailed;
     };
+    const headless_handle_names = parseOpaqueRuntimeHandleNames(headless_runtime_source) catch |err| {
+        std.debug.print("api guard: could not discover HeadlessContext handle in src/runtime/headless_context.zig: {s}\n", .{@errorName(err)});
+        return error.ApiGuardFailed;
+    };
+    for (headless_handle_names.slice()) |name| try runtime_handle_names.append(name);
 
     const root_ok = reportNameSet("root pub const", root_names.slice(), expected_root_names[0..]);
     const device_ok = reportNameSet("Device public method", device_methods.slice(), expected_device_methods[0..]);
@@ -282,26 +304,33 @@ pub fn main(_: std.process.Init) !void {
         window_context_methods.slice(),
         expected_window_context_methods[0..],
     );
+    const headless_context_ok = reportNameSet(
+        "HeadlessContext public method",
+        headless_context_methods.slice(),
+        expected_headless_context_methods[0..],
+    );
     var runtime_handles_ok = reportNameSet(
         "opaque runtime handle",
         runtime_handle_names.slice(),
         expected_runtime_handle_names[0..],
     );
     for (expected_runtime_handle_names) |handle_name| {
-        const fields = parseStructFields(runtime_source, handle_name) catch |err| {
+        const handle_source = if (std.mem.eql(u8, handle_name, "HeadlessContext")) headless_runtime_source else runtime_source;
+        const handle_source_name = if (std.mem.eql(u8, handle_name, "HeadlessContext")) "src/runtime/headless_context.zig" else "src/runtime/window_context.zig";
+        const fields = parseStructFields(handle_source, handle_name) catch |err| {
             std.debug.print(
-                "api guard: could not parse runtime handle {s} in src/runtime/window_context.zig: {s}\n",
-                .{ handle_name, @errorName(err) },
+                "api guard: could not parse runtime handle {s} in {s}: {s}\n",
+                .{ handle_name, handle_source_name, @errorName(err) },
             );
             runtime_handles_ok = false;
             continue;
         };
         runtime_handles_ok = reportRuntimeHandleLayout(handle_name, fields.slice()) and runtime_handles_ok;
     }
-    if (!root_ok or !device_ok or !window_context_ok or !runtime_handles_ok) return error.ApiGuardFailed;
+    if (!root_ok or !device_ok or !window_context_ok or !headless_context_ok or !runtime_handles_ok) return error.ApiGuardFailed;
 
     std.debug.print(
-        "API guard passed: root=68 (facades=13 core=27 aliases=28), Device methods=34, WindowContext methods=10, runtime handles=36\n",
+        "API guard passed: root=69 (facades=13 core=28 aliases=28), Device methods=34, WindowContext methods=10, HeadlessContext methods=6, runtime handles=37\n",
         .{},
     );
 }

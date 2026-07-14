@@ -14,6 +14,10 @@ The repository now uses backend modules for Vulkan and Metal behind public
 runtime wrappers. Examples live under `examples/` and use the vkmtl API instead
 of calling Vulkan or Metal directly.
 
+Windowed work uses `WindowContext`. Compute, transfer, ray tracing, resource
+work, and texture-backed offscreen rendering that do not need presentation can
+use `HeadlessContext`; it creates no window, surface, swapchain, or drawable.
+
 Shader authoring uses Slang. Applications embed Slang source and declare shader
 usage through `Device`; `zig build` precompiles matching SPIR-V, MSL, and
 reflection JSON into the executable. Runtime consumes those embedded blobs
@@ -33,6 +37,8 @@ hatches.
   tasks.
 - [Native semantic coverage](docs/develop/native-semantic-coverage-inventory.md):
   Metal/Vulkan lowering status, unsupported semantics, and evidence gaps.
+- [Headless context design](docs/develop/headless-context.md): no-window owner,
+  backend lowering, lifetime, and presentation boundary.
 - [API migration guide](docs/develop/api-migration-guide.md): updating callers
   from the prototype surface to the final pre-tag namespaces and owners.
 - [Core API zh_CN](docs/api/zh_cn/core.md): current public API surface in
@@ -110,6 +116,7 @@ zig build run-api-guard
 zig build run-triangle
 zig build run-offscreen-texture
 zig build run-rainbow-cube
+zig build run-transfer-readback
 zig build run-compute-readback
 zig build run-capability-dump
 zig build run-profiling-plan
@@ -124,7 +131,11 @@ backend debugging:
 
 ```sh
 zig build run-triangle -Dvulkan
+zig build run-compute-readback -Dvulkan
 ```
+
+The transfer and compute readback examples are genuinely headless and do not
+initialize or link GLFW.
 
 See [Configuration zh_CN](docs/usage/zh_cn/configuration.md) or
 [Configuration en_US](docs/usage/en_us/configuration.md) for backend overrides,

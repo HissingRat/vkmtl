@@ -59,6 +59,16 @@ pub fn init(
     };
 }
 
+pub fn initHeadless() !MetalClearScreen {
+    var handle: ?*metal.vkmtl_metal_clear_screen = null;
+    try check(metal.vkmtl_metal_clear_screen_create_headless(&handle));
+    return .{
+        .handle = handle orelse return Error.NoMetalDevice,
+        .extent = .{ .width = 0, .height = 0 },
+        .capture_active = false,
+    };
+}
+
 pub fn deinit(self: *MetalClearScreen) void {
     if (self.capture_active) {
         _ = metal.vkmtl_metal_clear_screen_end_capture(self.handle);
@@ -96,7 +106,12 @@ pub fn limits(self: *const MetalClearScreen) core.DeviceLimits {
 }
 
 pub fn features(self: *const MetalClearScreen) core.DeviceFeatures {
-    return usableFeaturesFromMetalCapabilities(self.queryCapabilities());
+    var result = usableFeaturesFromMetalCapabilities(self.queryCapabilities());
+    if (self.extent.isZero()) {
+        result.scheduled_presentation = false;
+        result.minimum_duration_presentation = false;
+    }
+    return result;
 }
 
 pub fn nativeFeatures(self: *const MetalClearScreen) core.DeviceFeatures {
@@ -118,11 +133,10 @@ pub fn memoryBudget(self: *const MetalClearScreen) ?MemoryBudget {
 }
 
 pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFormat) core.FormatCapabilities {
-    _ = self;
     var capabilities = core.defaultFormatCapabilities(format);
     capabilities.blit_source = false;
     capabilities.blit_destination = false;
-    capabilities.presentation = format == .bgra8_unorm;
+    capabilities.presentation = !self.extent.isZero() and format == .bgra8_unorm;
     capabilities.depth_resolve = false;
     capabilities.stencil_resolve = false;
     if (format == .depth32_float_stencil8) {
@@ -546,6 +560,12 @@ test "Metal format capabilities keep presentation and scaled blit truthful" {
     try std.testing.expect(!presentable.blit_source);
     try std.testing.expect(!presentable.blit_destination);
     try std.testing.expect(presentable.color_resolve);
+
+    const headless = MetalClearScreen{
+        .handle = undefined,
+        .extent = .{ .width = 0, .height = 0 },
+    };
+    try std.testing.expect(!headless.formatCapabilities(.bgra8_unorm).presentation);
 
     const srgb = screen.formatCapabilities(.bgra8_unorm_srgb);
     try std.testing.expect(!srgb.presentation);

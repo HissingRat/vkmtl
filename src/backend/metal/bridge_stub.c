@@ -122,6 +122,15 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_create_headless(
+    vkmtl_metal_clear_screen **out_clear_screen
+) {
+    if (out_clear_screen != NULL) {
+        *out_clear_screen = NULL;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen) {
     (void)clear_screen;
 }

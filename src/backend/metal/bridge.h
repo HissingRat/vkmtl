@@ -391,6 +391,9 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
     unsigned int width,
     unsigned int height
 );
+vkmtl_metal_status vkmtl_metal_clear_screen_create_headless(
+    vkmtl_metal_clear_screen **out_clear_screen
+);
 void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen);
 vkmtl_metal_status vkmtl_metal_clear_screen_resize(
     vkmtl_metal_clear_screen *clear_screen,

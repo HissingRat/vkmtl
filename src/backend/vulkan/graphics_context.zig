@@ -10,13 +10,11 @@ const enable_validation_layers = builtin.mode == .Debug;
 const enable_portability = builtin.os.tag == .macos;
 
 const required_layer_names = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
-const required_device_extensions = if (enable_portability)
-    [_][*:0]const u8{
-        vk.extensions.khr_swapchain.name,
-        vk.extensions.khr_portability_subset.name,
-    }
+const required_base_device_extensions = if (enable_portability)
+    [_][*:0]const u8{vk.extensions.khr_portability_subset.name}
 else
-    [_][*:0]const u8{vk.extensions.khr_swapchain.name};
+    [_][*:0]const u8{};
+const required_presentation_device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 const required_ray_tracing_device_extensions = [_][*:0]const u8{
     vk.extensions.khr_acceleration_structure.name,
     vk.extensions.khr_ray_tracing_pipeline.name,
@@ -36,6 +34,7 @@ const Device = vk.DeviceProxy;
 pub const CommandBuffer = vk.CommandBufferProxy;
 
 allocator: Allocator,
+loader: ?std.DynLib,
 vkb: BaseWrapper,
 instance: Instance,
 debug_messenger: vk.DebugUtilsMessengerEXT,
@@ -57,9 +56,29 @@ host_query_reset: bool,
 native_timestamp_queries: bool,
 
 pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: core.VulkanSurfaceProvider) !GraphicsContext {
+    return initInternal(allocator, app_name, surface_provider);
+}
+
+pub fn initHeadless(allocator: Allocator, app_name: [*:0]const u8) !GraphicsContext {
+    return initInternal(allocator, app_name, null);
+}
+
+fn initInternal(
+    allocator: Allocator,
+    app_name: [*:0]const u8,
+    surface_provider: ?core.VulkanSurfaceProvider,
+) !GraphicsContext {
     var self: GraphicsContext = undefined;
     self.allocator = allocator;
-    self.vkb = try loadBaseWrapper(surface_provider);
+    self.loader = null;
+    errdefer if (self.loader) |*loader| loader.close();
+    if (surface_provider) |provider| {
+        self.vkb = try loadBaseWrapper(provider);
+    } else {
+        const loaded = try loadHeadlessBaseWrapper();
+        self.loader = loaded.loader;
+        self.vkb = loaded.wrapper;
+    }
     try ensureBaseDispatchAvailable(self.vkb);
     self.debug_messenger = .null_handle;
     self.debug_utils_enabled = false;
@@ -77,11 +96,13 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
         try extension_names.append(allocator, vk.extensions.khr_get_physical_device_properties_2.name);
     }
 
-    var surface_exts_count: u32 = 0;
-    const surface_exts = surface_provider.get_required_instance_extensions(surface_provider.context, &surface_exts_count) orelse {
-        return error.MissingVulkanSurfaceExtensions;
-    };
-    try extension_names.appendSlice(allocator, surface_exts[0..surface_exts_count]);
+    if (surface_provider) |provider| {
+        var surface_exts_count: u32 = 0;
+        const surface_exts = provider.get_required_instance_extensions(provider.context, &surface_exts_count) orelse {
+            return error.MissingVulkanSurfaceExtensions;
+        };
+        try extension_names.appendSlice(allocator, surface_exts[0..surface_exts_count]);
+    }
 
     const enabled_layers: []const [*:0]const u8 = if (use_validation_layers) &required_layer_names else &.{};
     const instance = try self.vkb.createInstance(&.{
@@ -123,14 +144,21 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
         self.debug_utils_enabled = true;
     }
 
-    self.surface = try createSurface(self.instance, surface_provider);
-    errdefer self.instance.destroySurfaceKHR(self.surface, null);
+    self.surface = if (surface_provider) |provider|
+        try createSurface(self.instance, provider)
+    else
+        .null_handle;
+    errdefer if (self.surface != .null_handle) self.instance.destroySurfaceKHR(self.surface, null);
 
-    const candidate = try pickPhysicalDevice(self.instance, allocator, self.surface);
+    const candidate = try pickPhysicalDevice(
+        self.instance,
+        allocator,
+        if (self.surface == .null_handle) null else self.surface,
+    );
     self.pdev = candidate.pdev;
     self.props = candidate.props;
 
-    const dev = try initializeCandidate(self.instance, allocator, candidate);
+    const dev = try initializeCandidate(self.instance, allocator, candidate, self.surface != .null_handle);
 
     const vkd = try allocator.create(DeviceWrapper);
     errdefer allocator.destroy(vkd);
@@ -185,15 +213,16 @@ pub fn init(allocator: Allocator, app_name: [*:0]const u8, surface_provider: cor
     return self;
 }
 
-pub fn deinit(self: GraphicsContext) void {
+pub fn deinit(self: *GraphicsContext) void {
     self.dev.destroyDevice(null);
-    self.instance.destroySurfaceKHR(self.surface, null);
+    if (self.surface != .null_handle) self.instance.destroySurfaceKHR(self.surface, null);
     if (self.debug_messenger != .null_handle) {
         self.instance.destroyDebugUtilsMessengerEXT(self.debug_messenger, null);
     }
     self.instance.destroyInstance(null);
     self.allocator.destroy(self.dev.wrapper);
     self.allocator.destroy(self.instance.wrapper);
+    if (self.loader) |*loader| loader.close();
 }
 
 pub fn deviceName(self: *const GraphicsContext) []const u8 {
@@ -301,6 +330,7 @@ pub fn formatCapabilities(self: GraphicsContext, format: core.TextureFormat) cor
 }
 
 fn supportsPresentationFormat(self: GraphicsContext, format: vk.Format) bool {
+    if (self.surface == .null_handle) return false;
     const formats = self.instance.getPhysicalDeviceSurfaceFormatsAllocKHR(
         self.pdev,
         self.surface,
@@ -1038,7 +1068,12 @@ fn createSurface(instance: Instance, surface_provider: core.VulkanSurfaceProvide
     return @enumFromInt(surface_handle);
 }
 
-fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: DeviceCandidate) !vk.Device {
+fn initializeCandidate(
+    instance: Instance,
+    allocator: Allocator,
+    candidate: DeviceCandidate,
+    presentation_enabled: bool,
+) !vk.Device {
     const extensions = try queryExtensionSupport(instance, candidate.pdev, allocator);
     const enable_vertex_divisor = vertexAttributeDivisorFeatureSupported(instance, candidate.pdev, extensions);
     const ray_tracing_diagnostics = try queryRayTracingCapabilityDiagnostics(instance, candidate.pdev, allocator, null);
@@ -1052,7 +1087,10 @@ fn initializeCandidate(instance: Instance, allocator: Allocator, candidate: Devi
 
     var extension_names: std.ArrayList([*:0]const u8) = .empty;
     defer extension_names.deinit(allocator);
-    try extension_names.appendSlice(allocator, &required_device_extensions);
+    try extension_names.appendSlice(allocator, &required_base_device_extensions);
+    if (presentation_enabled) {
+        try extension_names.appendSlice(allocator, &required_presentation_device_extensions);
+    }
     if (enable_ray_tracing) {
         try extension_names.appendSlice(allocator, &required_ray_tracing_device_extensions);
     } else if (enable_buffer_device_address and
@@ -1177,7 +1215,7 @@ const QueueAllocation = struct {
     graphics_timestamp_valid_bits: u32,
 };
 
-fn pickPhysicalDevice(instance: Instance, allocator: Allocator, surface: vk.SurfaceKHR) !DeviceCandidate {
+fn pickPhysicalDevice(instance: Instance, allocator: Allocator, surface: ?vk.SurfaceKHR) !DeviceCandidate {
     const pdevs = try instance.enumeratePhysicalDevicesAlloc(allocator);
     defer allocator.free(pdevs);
 
@@ -1189,9 +1227,11 @@ fn pickPhysicalDevice(instance: Instance, allocator: Allocator, surface: vk.Surf
     return error.NoSuitableDevice;
 }
 
-fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator, surface: vk.SurfaceKHR) !?DeviceCandidate {
-    if (!try checkExtensionSupport(instance, pdev, allocator)) return null;
-    if (!try checkSurfaceSupport(instance, pdev, surface)) return null;
+fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator, surface: ?vk.SurfaceKHR) !?DeviceCandidate {
+    if (!try checkExtensionSupport(instance, pdev, allocator, surface != null)) return null;
+    if (surface) |surface_handle| {
+        if (!try checkSurfaceSupport(instance, pdev, surface_handle)) return null;
+    }
 
     if (try allocateQueues(instance, pdev, allocator, surface)) |allocation| {
         return .{
@@ -1205,7 +1245,7 @@ fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocat
     return null;
 }
 
-fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator, surface: vk.SurfaceKHR) !?QueueAllocation {
+fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator, surface: ?vk.SurfaceKHR) !?QueueAllocation {
     const families = try instance.getPhysicalDeviceQueueFamilyPropertiesAlloc(pdev, allocator);
     defer allocator.free(families);
 
@@ -1221,8 +1261,10 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
             graphics_family = family;
             graphics_timestamp_valid_bits = properties.timestamp_valid_bits;
         }
-        if (present_family == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(pdev, family, surface)) == .true) {
-            present_family = family;
+        if (surface) |surface_handle| {
+            if (present_family == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(pdev, family, surface_handle)) == .true) {
+                present_family = family;
+            }
         }
         if (compute_family == null and properties.queue_flags.compute_bit and !properties.queue_flags.graphics_bit) {
             compute_family = family;
@@ -1234,12 +1276,12 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
         }
     }
 
-    if (graphics_family != null and present_family != null) {
+    if (graphics_family != null and (surface == null or present_family != null)) {
         return .{
             .graphics_family = graphics_family.?,
             .compute_family = compute_family orelse graphics_family.?,
             .transfer_family = transfer_family orelse compute_family orelse graphics_family.?,
-            .present_family = present_family.?,
+            .present_family = present_family orelse graphics_family.?,
             .graphics_timestamp_valid_bits = graphics_timestamp_valid_bits,
         };
     }
@@ -1284,17 +1326,33 @@ fn checkSurfaceSupport(instance: Instance, pdev: vk.PhysicalDevice, surface: vk.
     return format_count > 0 and present_mode_count > 0;
 }
 
-fn checkExtensionSupport(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator) !bool {
+fn checkExtensionSupport(
+    instance: Instance,
+    pdev: vk.PhysicalDevice,
+    allocator: Allocator,
+    presentation_enabled: bool,
+) !bool {
     const props = try instance.enumerateDeviceExtensionPropertiesAlloc(pdev, null, allocator);
     defer allocator.free(props);
 
-    for (required_device_extensions) |required| {
+    for (required_base_device_extensions) |required| {
         for (props) |prop| {
             if (std.mem.eql(u8, std.mem.span(required), std.mem.sliceTo(&prop.extension_name, 0))) {
                 break;
             }
         } else {
             return false;
+        }
+    }
+    if (presentation_enabled) {
+        for (required_presentation_device_extensions) |required| {
+            for (props) |prop| {
+                if (std.mem.eql(u8, std.mem.span(required), std.mem.sliceTo(&prop.extension_name, 0))) {
+                    break;
+                }
+            } else {
+                return false;
+            }
         }
     }
     return true;
@@ -1340,6 +1398,59 @@ fn loadBaseWrapper(surface_provider: core.VulkanSurfaceProvider) !BaseWrapper {
         dispatch.vkEnumerateInstanceExtensionProperties = castProc(BaseWrapper.Dispatch, "vkEnumerateInstanceExtensionProperties", proc);
     }
     return .{ .dispatch = dispatch };
+}
+
+const HeadlessBaseWrapper = struct {
+    loader: std.DynLib,
+    wrapper: BaseWrapper,
+};
+
+fn loadHeadlessBaseWrapper() !HeadlessBaseWrapper {
+    var loader = try openVulkanLoader();
+    errdefer loader.close();
+
+    const get_instance_proc_addr = loader.lookup(
+        vk.PfnGetInstanceProcAddr,
+        "vkGetInstanceProcAddr",
+    ) orelse return error.VulkanUnavailable;
+
+    var dispatch: BaseWrapper.Dispatch = .{};
+    dispatch.vkGetInstanceProcAddr = get_instance_proc_addr;
+    dispatch.vkCreateInstance = @ptrCast(get_instance_proc_addr(
+        .null_handle,
+        "vkCreateInstance",
+    ) orelse return error.VulkanUnavailable);
+    dispatch.vkEnumerateInstanceLayerProperties = @ptrCast(get_instance_proc_addr(
+        .null_handle,
+        "vkEnumerateInstanceLayerProperties",
+    ) orelse return error.VulkanUnavailable);
+    if (get_instance_proc_addr(.null_handle, "vkEnumerateInstanceVersion")) |proc| {
+        dispatch.vkEnumerateInstanceVersion = @ptrCast(proc);
+    }
+    if (get_instance_proc_addr(.null_handle, "vkEnumerateInstanceExtensionProperties")) |proc| {
+        dispatch.vkEnumerateInstanceExtensionProperties = @ptrCast(proc);
+    }
+
+    return .{
+        .loader = loader,
+        .wrapper = .{ .dispatch = dispatch },
+    };
+}
+
+fn openVulkanLoader() !std.DynLib {
+    const primary = switch (builtin.os.tag) {
+        .windows => "vulkan-1.dll",
+        .macos => "libvulkan.1.dylib",
+        else => "libvulkan.so.1",
+    };
+    return std.DynLib.open(primary) catch {
+        const fallback = switch (builtin.os.tag) {
+            .windows => return error.VulkanUnavailable,
+            .macos => "libvulkan.dylib",
+            else => "libvulkan.so",
+        };
+        return std.DynLib.open(fallback) catch error.VulkanUnavailable;
+    };
 }
 
 fn castProc(comptime Dispatch: type, comptime field_name: []const u8, proc: *const anyopaque) @TypeOf(@field(@as(Dispatch, .{}), field_name)) {

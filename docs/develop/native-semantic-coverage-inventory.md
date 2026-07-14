@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 51 complete, 2026-07-14.
+Status: Period 51 complete plus additive headless runtime, 2026-07-14.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -28,6 +28,10 @@ closes scalable tables, reusable command lists, linked-function decisions, and
 driver artifacts. Period 51 closes eight advanced geometry/raster rows through
 executable mesh/tessellation subsets or precise unsupported decisions, leaving
 34 incomplete units routed exactly once.
+The additive headless slice creates real Metal/Vulkan device and queue owners
+without presentation objects. Metal has physical compute, transfer, and
+texture-backed offscreen evidence; Vulkan has implementation and forced-build
+evidence, while a physical loader/device rerun remains pending.
 It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
 
@@ -104,6 +108,7 @@ develops a different lowering or support state.
 | --- | --- | --- | --- | --- | --- |
 | DEV-01 | Backend selection, adapter/device discovery, capability report, and ordinary execution limits | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately, while queried resource/dispatch/threadgroup limits feed validation. |
 | DEV-02 | Command queue/buffer creation, commit, lifecycle callbacks, immediate presentation, and capability-gated timing | `command`, `presentation` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal for callback-once and minimum-duration presentation; Vulkan callbacks compose submit/queue completion and timed presentation remains feature-closed. |
+| DEV-03 | No-surface runtime initialization with device/queues, presentation exclusion, and texture-backed offscreen commands | root, `command`, `render` | `native-exact` | `native-exact` | Metal `gpu-pixels` covers headless compute, transfer, and offscreen clear/readback. Vulkan has focused tests and forced-build evidence; physical execution awaits a host with a Vulkan loader/device. Current-drawable commands fail before backend presentation work. |
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
 | RES-02 | 1D/2D/3D, array, cube, and multisample texture fundamentals | `resource` | `native-exact` | `native-exact` | `unit` plus representative `gpu-pixels`; full shape/format matrix remains unobserved. |
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |

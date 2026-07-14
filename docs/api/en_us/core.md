@@ -10,6 +10,11 @@ creation and submission belong to `Queue`, and presentation resize/clear
 belongs to `Swapchain`. `WindowContext` provides access to those owners but
 does not forward their operations.
 
+No-window work uses `HeadlessContext`. It owns backend device and queue state
+without a surface, swapchain, drawable, or presentation queue. Its `Device`
+and `Queue` views use the same resource, shader, pipeline, and command API as a
+windowed context.
+
 ## Backend Selection
 
 Applications choose a backend with `BackendPreference`:
@@ -20,6 +25,24 @@ Applications choose a backend with `BackendPreference`:
 
 The selected backend can be queried with `selectedBackend()` on contexts and
 runtime resource wrappers.
+
+Create a headless owner when presentation is not needed:
+
+```zig
+var context = try vkmtl.HeadlessContext.init(allocator, .{
+    .app_name = "my compute job",
+    .backend = .auto,
+});
+defer context.deinit();
+
+var device = context.device();
+var queue = context.queue();
+```
+
+`HeadlessContext.Options` also accepts `adapter_selection` and
+`debug_backend_override`. Current-drawable render passes and presentation are
+unavailable; texture-view-backed render passes remain supported. Destroy all
+resources and finish submitted work before `HeadlessContext.deinit()`.
 
 ## Surfaces And Presentation
 
@@ -59,7 +82,8 @@ frame-in-flight state, and submitted/completed frame serials.
 ## Resources
 
 The runtime `Device` is the resource creation entry point.
-`WindowContext.device()` returns a device view for the current context.
+`WindowContext.device()` and `HeadlessContext.device()` return a device view
+for their current owner.
 
 - `makeBuffer(BufferDescriptor)`
 - `makeTexture(TextureDescriptor)`

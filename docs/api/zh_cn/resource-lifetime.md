@@ -4,9 +4,10 @@ vkmtl 资源是显式资源。任何 runtime resource handle 都应该在销毁 
 
 ## 当前 Owner
 
-`WindowContext` 拥有后端 presentation 状态和 debug tracker。
-`WindowContext.device()` 返回 runtime `Device` view。资源通过 `Device` 创建，command buffer
-通过 `Queue` 创建，resize/clear 操作由 `Swapchain` 负责；`WindowContext` 不转发这些调用。
+`WindowContext` 拥有后端 presentation 状态和 debug tracker；`HeadlessContext` 持有同一套
+device/queue runtime 和 tracker，但没有 presentation state。两种 context 都返回 borrowed
+`Device` 和 `Queue` view。资源通过 `Device` 创建，command buffer 通过 `Queue` 创建；窗口专用
+resize/clear 操作由 `Swapchain` 负责，`WindowContext` 不转发这些调用。
 
 `Device` 创建并由 tracker 追踪的资源包括：
 
@@ -44,8 +45,8 @@ defer pipeline.deinit();
 Debug build 会追踪 live buffer、texture、texture view、sampler state、shader module、
 render pipeline state、bind group layout 和 bind group。
 
-如果 `WindowContext.deinit()` 时仍有资源存活，会 panic。资源 wrapper 也会防止自身 `deinit()`
-之后继续被使用。
+如果 `WindowContext.deinit()` 或 `HeadlessContext.deinit()` 时仍有资源存活，会 panic。资源
+wrapper 也会防止自身 `deinit()` 之后继续被使用。
 
 Period 2 开始，tracker 还会记录 command buffer `commit()` 产生的 submitted/completed work serial。
 如果资源在 work 尚未完成时释放，会登记为 deferred retirement；当前 Vulkan 和 Metal 后端仍会在

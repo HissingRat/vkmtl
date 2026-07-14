@@ -6,9 +6,11 @@ destroyed by calling `deinit()` before destroying its owner.
 ## Current Owner
 
 `WindowContext` owns backend presentation state and the debug tracker.
-`WindowContext.device()` returns a runtime `Device` view. Resource creation
-goes through `Device`, command buffers through `Queue`, and resize/clear
-operations through `Swapchain`; `WindowContext` does not forward those calls.
+`HeadlessContext` owns the same device/queue runtime and tracker without
+presentation state. Both contexts return borrowed runtime `Device` and `Queue`
+views. Resource creation goes through `Device`, command buffers through
+`Queue`, and window-only resize/clear operations through `Swapchain`;
+`WindowContext` does not forward those calls.
 
 Resources created through `Device` and tracked by the debug tracker include:
 
@@ -47,7 +49,8 @@ destroyed last.
 
 Debug builds track live buffers, textures, texture views, sampler states, shader
 modules, render pipeline states, bind group layouts, and bind groups.
-`WindowContext.deinit()` panics if any of those resources are still live.
+`WindowContext.deinit()` and `HeadlessContext.deinit()` panic if any of those
+resources are still live.
 
 Resource wrappers also guard against use after their own `deinit()`.
 

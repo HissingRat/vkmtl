@@ -34,6 +34,10 @@ also remain available at the root for quick-start code.
 
 Applications must gate optional work with usable features, limits, and format
 capabilities together. Platform names and backend assumptions are not gates.
+Capabilities that require an owner are reported for that owner:
+`HeadlessContext` keeps native device facts in `native_features`, but its usable
+scheduled-presentation fields, present-mode support, native-handle route, and
+format `presentation` flags are closed because it has no surface or drawable.
 
 ## Status Vocabulary
 
@@ -200,7 +204,8 @@ depth_copy stencil_copy color_resolve depth_resolve stencil_resolve
 
 Do not infer copy, blit, resolve, presentation, or depth/stencil behavior from
 format naming. Use the matching capability flag and the transfer alignment
-limits before encoding.
+limits before encoding. A headless device reports `presentation = false` even
+when the same native adapter can present through a `WindowContext`.
 
 ## Evidence And Diagnostics
 

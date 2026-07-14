@@ -25,9 +25,9 @@ vkmtl 会显式处理后端选择和构建期 shader 编译器。示例尽量暴
 
 ## Build-Time Override
 
-`zig build ... -Dvulkan` 会强制 `WindowContext` 请求 Vulkan，即使应用传的是 `.auto` 或 `.metal`。
-这是用于 Vulkan 后端路径测试的 override；如果无法为当前 surface 创建 Vulkan，会返回
-`VulkanUnavailable`。
+`zig build ... -Dvulkan` 会强制 `WindowContext` 和 `HeadlessContext` 请求 Vulkan，即使应用
+传的是 `.auto` 或 `.metal`。这是用于 Vulkan 后端路径测试的 override；如果无法为当前 surface
+创建 Vulkan，或者 headless run 无法加载 Vulkan loader/device，会返回 `VulkanUnavailable`。
 
 ## Core 选择规则
 
@@ -43,7 +43,7 @@ vkmtl 会显式处理后端选择和构建期 shader 编译器。示例尽量暴
 8. 没有后端可用时返回 `NoSupportedBackend`。
 
 强制选择不可用后端时返回 `VulkanUnavailable` 或 `MetalUnavailable`。
-adapter 名称不匹配时，`WindowContext.init` 会返回 `AdapterNotFound`。
+adapter 名称不匹配时，context 初始化会返回 `AdapterNotFound`。
 
 ## Runtime Surface 可用性
 
@@ -53,6 +53,12 @@ adapter 名称不匹配时，`WindowContext.init` 会返回 `AdapterNotFound`。
 - Darwin 上 descriptor 带兼容 native Cocoa window/layer pointer 时，Metal 可用。
 
 仓库示例通过外部 `zig_glfw` 和 `examples/common.zig` 同时提供两者；vkmtl core 不导入 GLFW。
+
+`HeadlessContext` 不应用 surface availability。Darwin 可以直接创建 Metal；Vulkan 仅在 loader
+可打开且存在可用 physical device 时可用。Headless Vulkan 不要求 `VK_KHR_swapchain` 或
+presentation queue。Windows 打开 `vulkan-1.dll`；macOS 依次尝试
+`libvulkan.1.dylib`、`libvulkan.dylib`；其他桌面 host 依次尝试
+`libvulkan.so.1`、`libvulkan.so`。
 
 ## 示例 Override
 
@@ -65,7 +71,7 @@ zig build run-triangle -Dvulkan
 ```
 
 `VKMTL_BACKEND` 是 example-level plumbing，对应 `debug_backend_override`。`-Dvulkan` 是
-build-time `WindowContext` override，优先级高于 `VKMTL_BACKEND` 和应用传入的 `.auto` / `.metal`。
+build-time context override，优先级高于 `VKMTL_BACKEND` 和应用传入的 `.auto` / `.metal`。
 
 ## macOS Vulkan Runtime
 
