@@ -12,14 +12,23 @@ const shader_source = @embedFile("shaders/offscreen_texture.slang");
 const offscreen_width = 512;
 const offscreen_height = 512;
 const presentation_regression_width = 5;
-const presentation_regression_height = 1;
+const presentation_regression_height = 2;
 
-const presentation_source_pixels = [presentation_regression_width][4]f16{
-    .{ 0.0, 0.0, 0.0, 1.0 },
-    .{ 0.18, 0.18, 0.18, 1.0 },
-    .{ 0.5, 0.5, 0.5, 1.0 },
-    .{ 1.0, 0.8, 0.0, 1.0 },
-    .{ 0.0, 0.0, 1.0, 1.0 },
+const presentation_source_pixels = [presentation_regression_height][presentation_regression_width][4]f16{
+    .{
+        .{ 0.0, 0.0, 0.0, 1.0 },
+        .{ 0.18, 0.18, 0.18, 1.0 },
+        .{ 0.5, 0.5, 0.5, 1.0 },
+        .{ 1.0, 0.8, 0.0, 1.0 },
+        .{ 0.0, 0.0, 1.0, 1.0 },
+    },
+    .{
+        .{ 1.0, 0.0, 1.0, 1.0 },
+        .{ 0.0, 1.0, 0.0, 1.0 },
+        .{ 0.8, 0.2, 0.4, 1.0 },
+        .{ 0.1, 0.3, 0.7, 1.0 },
+        .{ 1.0, 1.0, 1.0, 1.0 },
+    },
 };
 
 const ColorVertex = extern struct {
@@ -266,7 +275,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
                 &screen_vertex_buffer,
                 &screen_index_buffer,
             );
-            std.debug.print("render pixel regression ok backend={s} max_channel_delta={} presentation_max_channel_delta={}\n", .{
+            std.debug.print("render pixel regression ok backend={s} max_channel_delta={} presentation_max_channel_delta={} presentation_orientation=top_left\n", .{
                 @tagName(context.selectedBackend()),
                 max_channel_delta,
                 presentation_max_channel_delta,
@@ -651,20 +660,31 @@ fn validateReferencePresentationPixels(
     defer allocator.free(bytes);
     try readback.readBytes(0, bytes);
 
-    const expected_pixels = [_][4]u8{
-        .{ 0, 0, 0, 255 },
-        .{ 46, 46, 46, 255 },
-        .{ 128, 128, 128, 255 },
-        .{ 0, 204, 255, 255 },
-        .{ 255, 0, 0, 255 },
+    const expected_pixels = [presentation_regression_height][presentation_regression_width][4]u8{
+        .{
+            .{ 0, 0, 0, 255 },
+            .{ 46, 46, 46, 255 },
+            .{ 128, 128, 128, 255 },
+            .{ 0, 204, 255, 255 },
+            .{ 255, 0, 0, 255 },
+        },
+        .{
+            .{ 255, 0, 255, 255 },
+            .{ 0, 255, 0, 255 },
+            .{ 102, 51, 204, 255 },
+            .{ 179, 77, 26, 255 },
+            .{ 255, 255, 255, 255 },
+        },
     };
     var max_channel_delta: u8 = 0;
-    for (expected_pixels, 0..) |expected, x| {
-        max_channel_delta = @max(max_channel_delta, try validatePixel(
-            pixelSlice(bytes, bytes_per_row, x, 0),
-            expected,
-            1,
-        ));
+    for (expected_pixels, 0..) |row, y| {
+        for (row, 0..) |expected, x| {
+            max_channel_delta = @max(max_channel_delta, try validatePixel(
+                pixelSlice(bytes, bytes_per_row, x, y),
+                expected,
+                1,
+            ));
+        }
     }
     return max_channel_delta;
 }

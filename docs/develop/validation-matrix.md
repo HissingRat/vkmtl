@@ -81,7 +81,9 @@ Current cases:
   `bgra8_unorm_srgb` attachment performs the matching encode. Tone mapping is
   application policy. Metal has a three-frame API Validation run and an
   offscreen shared-display readback with a maximum one-byte channel delta; the
-  shared-display Vulkan path retains an explicit physical-rerun gap.
+  shared-display Vulkan path now submits and completes physically; its first
+  screenshot exposed a vertical composition flip, and the corrected
+  fragment-position UV path retains one visual rerun gap.
   Period 56 additionally locks request-versus-selected presentation state,
   deterministic and exact SDR selection, selected-only presentation
   capabilities, requested-versus-actual extent, same-request/recovery resize,
@@ -96,8 +98,10 @@ Current cases:
   Physical Metal validation covers automatic/sRGB/linear deterministic
   offscreen pixels plus actual selected-drawable bind/present smoke and
   three-frame sRGB/linear legacy raw-copy runs with
-  `trace_driver_submitted=true`; both Vulkan RT routes remain device-matrix
-  follow-up evidence.
+  `trace_driver_submitted=true`. Vulkan canonical and legacy routes both submit
+  and complete three frames; legacy visual orientation passes, while canonical
+  needs a post-fix orientation screenshot/readback. The supplied Vulkan stderr
+  does not positively prove that the validation layer was enabled.
 - `ray_tracing_completeness`: update/refit/compact resources, many-instance
   TLAS validation, native ray-query discovery, planning-only complex/callable
   SBT records, and RT stress plans stay capability-gated and deterministic.

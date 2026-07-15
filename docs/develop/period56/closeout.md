@@ -178,18 +178,29 @@ error. The existing `metal_table_entries=0/runtime_ready=false` diagnostic is
 for the separate function-table route and is not evidence against the submitted
 manual ray dispatch.
 
-## Remaining Physical Follow-Up
+## Vulkan Physical Record And Remaining Follow-Up
 
-The supported Vulkan RT machine must still run the finite Period 55
-`ray_traced_scene` texture-presentation path and the Period 56 legacy raw-copy
-probe. Forced Vulkan builds and earlier RT screenshots do not satisfy either
-run. The first Windows attempts on both routes selected Vulkan and the expected
+The first Windows attempts on both routes selected Vulkan and the expected
 presentation branch, then stopped in the vkmtl BLAS resource preflight before
 native submission. They exposed a Vulkan allocation bug: the combined
 update-plus-compaction size query had been treated as an upper bound even
 though native AS build-size results are not monotonic across flags. Allocation
 now reserves the component maximum across all four update/compaction
-combinations used by the current sizing templates. Descriptor-exact sizing for
-arbitrary multi-geometry arrays remains a separate follow-up; it did not cause
-these preflight failures. The two physical runs still need to be repeated
-before either evidence item closes.
+combinations used by the current sizing templates.
+
+The 2026-07-16 post-fix reruns then completed three frames on both routes with
+BLAS/TLAS built, `trace_driver_submitted=true`, `runtime_ready=true`, and no
+error, warning, or VUID in either supplied stderr log. The compatibility
+`legacy_drawable_raw_copy` screenshot has the established orientation and
+closes that physical route.
+
+Visual comparison found the canonical `texture_composition` screenshot to be
+the same scene vertically flipped. Its native execution markers are valid, but
+its visual route remains unaccepted until the fragment-position UV fix is
+rerun on Vulkan. The logs do not positively identify the device/driver or prove
+that the Khronos validation layer was enabled, so no named-device or
+validation-layer-clean claim is added. See `vulkan-physical-evidence.md`.
+
+Descriptor-exact sizing for arbitrary multi-geometry arrays remains a separate
+follow-up; it did not cause either the original preflight failure or the
+presentation flip.

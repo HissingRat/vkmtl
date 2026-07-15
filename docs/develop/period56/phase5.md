@@ -49,11 +49,10 @@ Forced Vulkan tests and builds must cover both portable selections, resolver
 order, exact mismatch rejection, resize state, and shader/native compilation.
 They are build and deterministic evidence only.
 
-A supported Vulkan RT machine must eventually run the finite
-`ray_traced_scene` texture-presentation path and the legacy raw-transfer probe.
-That physical Vulkan RT evidence remains explicitly pending at Period 56
-closeout unless the run actually completes. It must not be inferred from a
-forced build, historical Vulkan output, Metal pixels, or a non-RT Vulkan ICD.
+A supported Vulkan RT machine must run the finite `ray_traced_scene`
+texture-presentation path and the legacy raw-transfer probe. Execution markers
+alone do not accept a visually incorrect presentation result, and a quiet
+stderr does not prove that the validation layer was enabled.
 
 The finite legacy probe commands are:
 
@@ -79,9 +78,9 @@ The 2026-07-15 working-tree validation completed:
 - `zig build` and `zig build -Dvulkan`;
 - `scripts/ci/run_package_smoke.sh`, with 1/1 consumer tests passing.
 
-These commands prove portable validation and compilation. The physical Metal
-request-mode and legacy evidence is recorded separately below; neither replaces
-the outstanding Vulkan RT-machine runs.
+These commands prove portable validation and compilation. Physical Metal and
+Vulkan evidence is recorded separately below and never inferred from those
+build gates.
 
 ## Physical Metal Request-Mode Record
 
@@ -116,3 +115,18 @@ legacy_drawable_raw_copy`, `trace_driver_submitted=true`, and
 Validation error. The existing `metal_table_entries=0/runtime_ready=false`
 diagnostic describes the separate function-table route and is not promoted by
 this evidence.
+
+## Physical Vulkan Record
+
+The 2026-07-16 post-AS-sizing reruns selected the expected canonical and legacy
+paths. Both built BLAS/TLAS objects, submitted 518400 rays, reported
+`trace_driver_submitted=true` and `runtime_ready=true`, and completed three
+frames without an error, warning, or VUID in the supplied stderr.
+
+The legacy raw-copy screenshot has the established orientation and closes that
+physical compatibility route. The canonical screenshot exposed a full vertical
+flip in the fullscreen composition stage, so canonical visual acceptance stays
+open until the fragment-position UV fix is rerun on Vulkan. The logs contain no
+positive validation-layer-enabled marker and no device/driver identity; this
+record does not claim either. See `vulkan-physical-evidence.md` for the exact
+markers, screenshot comparison, and remaining evidence boundary.

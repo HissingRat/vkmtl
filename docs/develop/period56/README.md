@@ -2,7 +2,9 @@
 
 Status: complete. Phases 1-5, deterministic validation, the physical Metal
 request-mode offscreen-pixel plus selected-drawable smoke matrix, and both
-Metal legacy RT routes are recorded.
+Metal legacy RT routes are recorded. Vulkan legacy raw-copy execution and
+visual orientation are recorded; canonical execution succeeds but its
+post-orientation-fix visual rerun remains open.
 
 Goal: make the presentation format request observable and make the selected
 drawable format deterministic. `PresentationDescriptor.format` remains the
@@ -80,15 +82,14 @@ See `phase4.md`.
 
 - Lock deterministic resolver, resize, validation, and raw-transfer tests.
 - Record physical Metal pixel evidence and forced Vulkan build evidence.
-- Keep the Vulkan RT physical run pending until it executes on supported
-  hardware; do not infer it from forced builds.
+- Record supported-hardware Vulkan RT execution without inferring it from
+  forced builds, and keep visual acceptance separate from submission markers.
 
 See `phase5.md`.
 
 The implementation and validation record is summarized in `closeout.md`.
-Physical Vulkan RT validation of the canonical texture-presentation and legacy
-raw-copy routes remains a device-matrix follow-up, not a Period 56
-implementation blocker.
+`vulkan-physical-evidence.md` records the successful legacy route, the
+canonical vertical-flip finding, and the exact remaining canonical rerun.
 
 ## Non-Goals
 

@@ -1026,9 +1026,10 @@ one shared clamp-and-sRGB-EOTF fullscreen pass and lets the
 on invalid limits, early closure, or a persistent zero-sized framebuffer.
 Metal API Validation completed three physical frames, and the shared display
 pass has a separate Metal BGRA8 readback with at most one byte of channel
-error. The implementation, unit, and forced-build evidence cover Vulkan; a
-physical rerun of this new texture-presentation path remains explicitly
-pending on the Vulkan RT machine.
+error. Vulkan now completes the new texture-presentation route physically, but
+its first screenshot exposed a vertically flipped fullscreen composition. The
+fragment-position UV fix has build and Metal readback evidence; corrected
+Vulkan visual acceptance remains pending.
 
 See `docs/develop/period55/`.
 
@@ -1036,7 +1037,9 @@ See `docs/develop/period55/`.
 
 Status: complete. Phases 1-5, deterministic gates, physical Metal
 automatic/sRGB/linear offscreen pixels plus actual selected-drawable
-bind/present smoke, and both Metal legacy RT presentation formats are recorded.
+bind/present smoke, both Metal legacy RT presentation formats, and Vulkan
+legacy raw-copy execution/visual evidence are recorded. Canonical Vulkan
+execution succeeds; the corrected orientation needs one physical rerun.
 
 Goal: make `PresentationDescriptor.format` an observable request and expose the
 concrete native selection through the additive, presentation-owned
@@ -1088,8 +1091,10 @@ default, owner, method, or signature is removed or renamed. API/semantic
 guards, 675 unit tests, default and forced Vulkan builds, package smoke, and
 automatic/sRGB/linear Metal offscreen pixels, selected-drawable bind/present
 smoke, and both Metal legacy RT formats are recorded under API Validation.
-Vulkan RT physical runs remain explicit device-matrix follow-up and are not
-inferred from build coverage.
+Vulkan legacy raw copy completes physically with the established orientation.
+Canonical Vulkan also submits and completes three frames; its screenshot
+revealed the fullscreen Y flip now fixed in source, with the corrected visual
+rerun still explicit rather than inferred from build coverage.
 
 See `docs/develop/period56/`.
 

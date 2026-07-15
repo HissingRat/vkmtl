@@ -1,7 +1,6 @@
 struct PresentVertexOutput
 {
     float4 position : SV_Position;
-    float2 uv : TEXCOORD0;
 };
 
 [[vk::binding(0, 0)]]
@@ -36,22 +35,21 @@ PresentVertexOutput present_vs(uint vertex_id : SV_VertexID)
         float2( 3.0, -1.0),
         float2(-1.0,  3.0)
     };
-    float2 uvs[3] = {
-        float2(0.0, 1.0),
-        float2(2.0, 1.0),
-        float2(0.0, -1.0)
-    };
-
     PresentVertexOutput output;
     output.position = float4(positions[vertex_id], 0.0, 1.0);
-    output.uv = uvs[vertex_id];
     return output;
 }
 
 [shader("fragment")]
 float4 present_fs(PresentVertexOutput input) : SV_Target0
 {
-    float3 ray_color = scene_texture.Sample(scene_sampler, input.uv).rgb;
+    uint width;
+    uint height;
+    scene_texture.GetDimensions(width, height);
+    // Fragment position uses top-left framebuffer coordinates on both Metal
+    // and Vulkan. Deriving UVs here avoids their opposite clip-space Y maps.
+    float2 uv = input.position.xy / float2(max(width, 1), max(height, 1));
+    float3 ray_color = scene_texture.Sample(scene_sampler, uv).rgb;
     // The historical scene produces display-referred RGB. Decode it before
     // the sRGB attachment so that attachment reproduces the reference bytes.
     return float4(referenceDisplayLinear(ray_color), 1.0);

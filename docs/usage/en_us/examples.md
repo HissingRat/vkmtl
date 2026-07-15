@@ -499,8 +499,10 @@ buffer owns one native encoding segment.
 Metal API Validation has physically completed three frames of this new path.
 The historical Vulkan physical evidence above still proves the native RT
 backend, but it predates the Period 55 shared presentation path. The new Vulkan
-reference-preserving path has unit and forced-build evidence and still needs a
-physical RT-machine rerun.
+path now builds, submits, presents, and completes three physical frames. Its
+first canonical screenshot exposed a vertical fullscreen-composition flip;
+the fragment-position UV fix still needs one corrected Vulkan visual rerun.
+The legacy raw-copy screenshot has the established orientation.
 
 Set `VKMTL_RT_LEGACY_DRAWABLE=1` only to validate the compatibility route. With
 `VKMTL_RT_FRAME_LIMIT=3`, the example dispatches into a caller-owned linear
@@ -515,6 +517,11 @@ output-presentation path, now as part of the later procedural scene. The
 [Period32 Phase 6 validation record](../../develop/period32/phase6.md) names
 the observed Windows/NVIDIA hardware, command, build gates, and the local
 ignored screenshot evidence.
+
+The supplied post-AS-sizing-fix Vulkan stderr contains no error, warning, or
+VUID, but it does not positively state that `VK_LAYER_KHRONOS_validation` was
+enabled and does not include device/driver identity. It is recorded as physical
+execution, not as a validation-layer-clean named-device result.
 
 When the Vulkan runtime lacks a required extension, feature, limit, or device
 procedure, the example exits before native ray tracing setup and reports an

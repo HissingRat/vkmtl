@@ -21,9 +21,10 @@ closed one by one as vkmtl moves from prototype to library.
   pipeline matching, resize re-resolution, and legacy raw-copy semantics are
   implemented. Deterministic gates, physical Metal automatic/sRGB/linear
   offscreen pixels plus actual selected-drawable bind/present smoke, and both
-  Metal legacy RT presentation formats are recorded.
-  Vulkan RT texture-presentation and legacy-route runs remain explicit
-  device-matrix follow-up evidence.
+  Metal legacy RT presentation formats are recorded. Vulkan legacy raw-copy
+  execution and visual orientation now pass. Canonical Vulkan execution also
+  completes three frames, but its corrected top-left composition still needs
+  one physical screenshot/readback rerun.
 - Period 44 implementation and its nine release-evidence gates are complete.
   Hosted macOS, Linux, and Windows CI plus local physical Metal and Vulkan
   evidence are recorded.
@@ -3086,8 +3087,10 @@ contract before chunk implementation begins.
   SDR requests with API Validation enabled.
 - [x] Update API/native inventories, migration guidance, API/usage docs,
   matrices, roadmap, checklist, changelog, and Period 56 closeout.
-- [x] Keep Vulkan RT physical validation explicitly pending until it runs on a
-  supported machine; never promote forced-build or historical output evidence.
+- [x] Keep Vulkan RT physical validation explicit until it runs on a supported
+  machine; never promote forced-build or historical output evidence. The
+  legacy route now passes physically, while canonical visual acceptance waits
+  on the top-left-orientation fix rerun.
 
 ## First Backend-Independent Triangle Checklist
 

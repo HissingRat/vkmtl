@@ -33,11 +33,13 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `ray_tracing_metal_color_path`: optional physical application-owned
   composition plus both admitted legacy raw-copy formats:
   `MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=srgb zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=linear zig build run-ray-traced-scene`.
-- `ray_tracing_vulkan_color_path`: pending physical RT-machine application-owned
-  composition
-  `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan`;
-  the Period 56 legacy raw-copy probe remains a separate required physical
-  rerun.
+- `ray_tracing_vulkan_color_path`: physical RT-machine application-owned
+  composition plus legacy raw copy. Both submit and complete three frames; the
+  legacy screenshot passes orientation, while canonical visual acceptance must
+  rerun after the fragment-position UV fix:
+  `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan`
+  and
+  `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 zig build run-ray-traced-scene -Dvulkan`.
 
 The hosted package smoke runs `scripts/ci/run_package_smoke.sh`. Its independent
 Zig 0.16 package uses a local `../..` dependency, passes a consumer-owned Slang
@@ -350,14 +352,17 @@ reference black, gray, yellow, and blue BGRA8 values with a maximum one-byte
 channel delta.
 
 The Vulkan lowering, layout transition, and shaders have unit and forced-build
-evidence. The equivalent command remains a physical RT-machine evidence lane:
+evidence. The equivalent command now builds, submits, presents, and completes
+three frames on the physical RT machine:
 
 ```sh
 VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan
 ```
 
-Earlier physical Vulkan RT markers do not by themselves prove this shared
-reference-preserving display route.
+Its first screenshot exposed a vertical fullscreen-composition flip. The
+fragment-position UV correction has asymmetric Metal readback and forced-build
+evidence; the physical Vulkan command must be repeated for corrected visual
+acceptance. Earlier RT markers do not replace that rerun.
 
 ## Period 56 Presentation Selection And Legacy Raw-Copy Evidence
 
@@ -406,9 +411,12 @@ Both Metal legacy commands above printed `Metal API Validation Enabled`,
 `Presentation path: legacy_drawable_raw_copy`,
 `trace_driver_submitted=true`, and
 `ray traced scene finite run ok: backend=metal frames=3`, with no validation
-error. The Vulkan RT machine must still run both the canonical Period 55
-texture path and the Period 56 legacy route; forced compilation and earlier
-screenshots do not satisfy those rows.
+error. The Vulkan legacy command now reports the same path/submission/finite-run
+markers and visibly preserves the established orientation. The Vulkan
+canonical command also submits and completes, but its supplied screenshot
+revealed a vertical composition flip; it needs one post-fix screenshot/log
+rerun. The supplied Vulkan logs have no positive validation-layer marker, so
+they are not claimed as validation-layer-clean.
 
 Presentation selection performs no HDR mapping, tone mapping, gamma policy, or
 gamut conversion. The legacy transfer is raw byte copying, not a

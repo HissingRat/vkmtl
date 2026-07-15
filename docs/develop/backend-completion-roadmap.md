@@ -614,15 +614,17 @@ Tracked in `docs/develop/period55/`.
   shared historical display-RGB clamp and sRGB-EOTF pass to
   `bgra8_unorm_srgb`, whose matching OETF restores reference bytes.
 - [x] Lock deterministic color/resource validation and physical Metal
-  evidence while keeping the new Vulkan path's physical rerun explicit.
+  evidence while keeping Vulkan physical execution and visual acceptance
+  explicit.
 
 Expected result: backend ray generation has one composable caller-owned output
 contract with no implicit color-space conversion, and the example has one
 shared reference transform. The golden scalar mapping is
 `0.0/0.18/0.5/0.8/1.0 -> 0/46/128/204/255`. Metal has physical evidence;
 that evidence validates command execution, not captured reference bytes.
-Vulkan physical validation of this new route remains a device-matrix follow-up
-rather than an inferred claim.
+Vulkan now submits and completes this route physically. Its first screenshot
+exposed a vertical composition flip; the corrected fragment-position UV path
+still needs one visual device-matrix rerun rather than an inferred claim.
 
 ## Wave 37: Observable Presentation Format Selection
 
@@ -646,8 +648,9 @@ Tracked in `docs/develop/period56/`.
   pipeline bind/present smoke.
 - [x] Record Metal legacy caller-output probes for sRGB and linear selected
   drawables under API Validation.
-- [x] Keep both Vulkan RT-machine reruns explicit as device-matrix follow-up
-  rather than inferred forced-build evidence.
+- [x] Keep Vulkan RT-machine evidence explicit rather than inferred from forced
+  builds. Legacy raw copy now passes execution and orientation; corrected
+  canonical orientation needs one rerun.
 
 Expected result: callers can distinguish requested and selected presentation
 formats and build pipelines against the concrete drawable. The presentation

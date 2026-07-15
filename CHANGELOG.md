@@ -11,6 +11,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Fixed
 
+- Fixed the shared `ray_traced_scene` fullscreen composition appearing
+  vertically inverted on Vulkan. The presentation shader now derives 1:1 UVs
+  from top-left fragment coordinates instead of interpolated clip-space Y, and
+  the display readback regression uses asymmetric top and bottom rows.
 - Fixed Vulkan acceleration-structure allocation on drivers whose native build
   size for ordinary, update, or compaction flags is larger than the combined
   update-plus-compaction query. vkmtl now reserves the component maximum across

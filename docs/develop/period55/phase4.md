@@ -54,16 +54,19 @@ while `4a93d57`, which changed `CAMetalLayer.pixelFormat` from
 regression provenance only and is not Vulkan execution evidence.
 
 The Vulkan implementation and shader artifacts have unit and forced-build
-coverage. Historical physical Vulkan RT output remains valid evidence for the
-basic RT backend, but the Period 55 texture-presentation path has not yet been
-rerun on the Vulkan RT machine. The required follow-up is:
+coverage. The Period 55 texture-presentation path now builds, submits,
+presents, and completes three physical frames on the Vulkan RT machine. Its
+first screenshot exposed a vertically flipped fullscreen composition, so the
+required post-fix visual rerun remains:
 
 ```sh
 VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 \
   zig build run-ray-traced-scene -Dvulkan
 ```
 
-Only a successful physical run may promote that new-path evidence.
+Only a correctly oriented physical result may complete that new-path visual
+evidence. The legacy raw-copy route already passes physical execution and
+orientation.
 
 ## Documentation Closeout
 
