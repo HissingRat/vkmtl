@@ -7,8 +7,9 @@ Current cases:
 
 - `invalid_bind_group`: layout entry mismatch, missing/extra entries, duplicate
   entries, and resource kind mismatch.
-- `invalid_texture_format`: automatic or unsupported texture formats fail
-  before backend creation.
+- `invalid_texture_format`: automatic or unsupported ordinary texture formats
+  fail before backend creation; presentation requests admit only automatic and
+  the bounded linear/sRGB BGRA8 pair.
 - `invalid_barrier`: redundant or mismatched explicit barriers report command
   encoding errors.
 - `resource_destroyed_while_in_use`: resource tracker defers retirements until
@@ -26,7 +27,10 @@ Current cases:
   transfer is recorded; resource sharing does not weaken logical ownership.
 - `command_lifecycle_and_presentation`: lifecycle callbacks report scheduled
   then completed exactly once, and timed presentation validates nonzero timing,
-  independent capability gates, and explicit immediate fallback.
+  independent capability gates, and explicit immediate fallback. Failed commit
+  terminally deinitializes backend state, releases active/query borrows and work
+  serials, reports failed lifecycle, and makes Vulkan wait submitted work before
+  temporary-resource destruction.
 - `query_readback`: timestamp and occlusion query sets validate bound-pass
   identity, availability, type/range, one write per reset, resolve-buffer
   usage, backend failures, Boolean/counting feature gates, and readback/resolve
@@ -78,6 +82,22 @@ Current cases:
   application policy. Metal has a three-frame API Validation run and an
   offscreen shared-display readback with a maximum one-byte channel delta; the
   shared-display Vulkan path retains an explicit physical-rerun gap.
+  Period 56 additionally locks request-versus-selected presentation state,
+  deterministic and exact SDR selection, selected-only presentation
+  capabilities, requested-versus-actual extent, same-request/recovery resize,
+  clear/resize active-command gates, clear-pool isolation, terminal lifecycle
+  decisions, current-drawable pipeline mismatch before native bind/draw, and
+  graphics-only legacy caller-owned linear BGRA8 usage/shape/extent/raw-copy,
+  plus duplicate-present validation. Implementation inspection covers Metal
+  resize publication and pre-dispatch preflight ordering plus Vulkan
+  present-queue retirement before swapchain teardown; physical Metal API
+  Validation covers the Metal success paths. The resolver
+  and copy perform no HDR, tone-map, gamma, or gamut conversion.
+  Physical Metal validation covers automatic/sRGB/linear deterministic
+  offscreen pixels plus actual selected-drawable bind/present smoke and
+  three-frame sRGB/linear legacy raw-copy runs with
+  `trace_driver_submitted=true`; both Vulkan RT routes remain device-matrix
+  follow-up evidence.
 - `ray_tracing_completeness`: update/refit/compact resources, many-instance
   TLAS validation, native ray-query discovery, planning-only complex/callable
   SBT records, and RT stress plans stay capability-gated and deterministic.

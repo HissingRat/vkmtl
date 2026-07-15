@@ -21,18 +21,22 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `headless_deterministic`: `zig build run-transfer-readback && zig build run-compute-readback`; both use `HeadlessContext`, create no GLFW window/surface, and cover transfer, compute, and texture-backed offscreen readback. Metal has physical evidence; Vulkan requires a loader/device host for physical execution.
 - `presentation_feature_gates`: `VKMTL_PIXEL_REGRESSION=1 zig build run-bindless-textures && zig build run-multi-window && zig build run-external-texture && zig build run-streaming-texture`
 - `binding_variant_regression`: covered by `zig build test`; includes dynamic buffer array offsets, native resource tables, pipeline-layout compatibility, reusable indirect slots/ranges, resource-table pressure plans, root constant writes, specialization variant fingerprints, and driver-cache identity.
-- `sync_query_regression`: covered by `zig build test`; includes explicit barriers, runtime fences/events, native timeline/shared-event submission, physical queue selection, ownership transfer validation, lifecycle callback-once behavior, presentation fallback, Boolean/counting occlusion gates, precise Vulkan flags, and query readback/resolve validation.
+- `sync_query_regression`: covered by `zig build test`; includes explicit barriers, runtime fences/events, native timeline/shared-event submission, physical queue selection, ownership transfer validation, lifecycle callback-once and failed-commit retirement behavior, presentation fallback, Boolean/counting occlusion gates, precise Vulkan flags, and query readback/resolve validation.
 - `debug_marker_regression`: `zig build test && zig build run-profiling-plan`; includes borrowed label lifetime, UTF-8 and embedded-NUL validation, native/validation-only marker capabilities, capture gates, query-source semantics, profiling fallback, and issue-report snapshots.
 - `resource_utility_regression`: covered by `zig build test`; includes mipmap generation, unaligned fill fallback, backend copy alignment, mip/layer/3D-slice copies, depth/stencil aspects, scaled blit gates, MSAA copy rejection/resolve validation, subresource transitions, sampler border colors, native heap requirements/placement, heap aliasing/lifetime, native/fallback memory reports, memoryless validation, and transient diagnostics.
 - `platform_interop_regression`: covered by `zig build test`; includes surface registries, present-mode diagnostics, external wrappers, external synchronization validation, and native insertion gates.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation draw plans, and mesh/task dispatch plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`; Vulkan tessellation and both mesh paths are executable when their usable gates open, while Metal tessellation and task/object stages remain precisely closed.
-- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, Period 55 texture-output/finite-run validation, and deterministic reference-preserving EOTF/sRGB values.
-- `ray_tracing_metal_color_path`: optional physical
-  `MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene`.
-- `ray_tracing_vulkan_color_path`: pending physical RT-machine
-  `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan`.
+- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, Period 55 texture-output/finite-run validation, deterministic reference-preserving EOTF/sRGB values, and Period 56 request/selection, requested/actual extent, resize recovery and clear safety, current-drawable format matching, graphics-only legacy linear-BGRA raw-copy validation, and duplicate-present validation. Metal allocation/publication and drawable/staging preflight ordering are implementation-inspection plus physical API Validation evidence, not failure-injection unit tests.
+- `ray_tracing_metal_color_path`: optional physical application-owned
+  composition plus both admitted legacy raw-copy formats:
+  `MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=srgb zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=linear zig build run-ray-traced-scene`.
+- `ray_tracing_vulkan_color_path`: pending physical RT-machine application-owned
+  composition
+  `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan`;
+  the Period 56 legacy raw-copy probe remains a separate required physical
+  rerun.
 
 The hosted package smoke runs `scripts/ci/run_package_smoke.sh`. Its independent
 Zig 0.16 package uses a local `../..` dependency, passes a consumer-owned Slang
@@ -160,7 +164,7 @@ conservative until the relevant backend period lands.
 
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
-| Lifecycle callbacks | Composed from successful submit and queue completion | Native scheduled/completed handlers | Exactly once; callback thread identity and asynchronous return are not promised |
+| Lifecycle callbacks | Composed from successful submit and queue completion | Native scheduled/completed handlers | Exactly once on success; failed commit terminalizes backend state, releases borrows/serials, and reports failed, with Vulkan waiting submitted work before temporary destruction |
 | Timed drawable present | Typed unsupported; immediate fallback only when requested | Native scheduled-time and minimum-duration present | Each timing lane has an independent feature gate |
 | Hazard ownership | Explicit barriers plus tracked automatic state | Native automatic hazards plus tracked state | Default/tracked semantics only; explicit untracked ownership is unsupported |
 | Physical evidence | Unit and forced-Vulkan build | Transfer/readback plus render pixel regression | Vulkan physical rerun remains useful before broad adapter claims |
@@ -353,6 +357,61 @@ VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvul
 
 Earlier physical Vulkan RT markers do not by themselves prove this shared
 reference-preserving display route.
+
+## Period 56 Presentation Selection And Legacy Raw-Copy Evidence
+
+The deterministic lane validates that `PresentationDescriptor.format` remains
+the request and `Swapchain.selectedFormat()` is concrete. Metal maps the
+selected SDR BGRA8 format to the layer. Vulkan selects the exact BGRA8 plus
+standard SDR color-space pair independent of driver enumeration order, and no
+arbitrary first-format fallback remains. Current-drawable pipelines must match
+the selection exactly before native bind or draw.
+
+The descriptor extent remains requested state and `Swapchain.extent()` reports
+the actual native drawable extent. Vulkan tests cover surface-clamped extents,
+healthy zero-resize preservation, healthy same-request fast path, recovery-forced
+same-request recreation, changed-request native re-query, clear/resize
+active-command rejection before mutation, dedicated clear-pool isolation,
+failed-commit cleanup, terminal `SurfaceLost`, and presentation-generation
+invalidation. Implementation inspection confirms that Metal publishes resize
+only after depth allocation and preflights legacy drawable/extent/staging before
+compute; it also confirms that Vulkan teardown waits the presentation queue
+before destroying swapchain images and semaphores. Physical Metal API
+Validation covers the Metal success paths.
+
+The legacy drawable RT route requires a whole, single-sample
+`bgra8_unorm` caller output with shader-write and copy-source usage. Both
+backends dispatch into that object and copy bytes unchanged to the selected
+linear or sRGB BGRA8 drawable. The route is graphics-queue-only, and Metal
+preflights drawable format/extent and sRGB staging before compute. `ray_traced_scene` exposes this compatibility
+validation path without changing its default texture-plus-composition flow:
+
+```sh
+MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=srgb zig build run-ray-traced-scene
+MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=linear zig build run-ray-traced-scene
+VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 zig build run-ray-traced-scene -Dvulkan
+```
+
+The API/semantic guards, 675 tests, default build, forced Vulkan build, and
+external package smoke pass on the 2026-07-15 working tree. Physical Metal
+automatic, explicit sRGB, and explicit linear runs each reported deterministic
+offscreen `max_channel_delta=0 presentation_max_channel_delta=1` under API
+Validation, then encoded, bound, and presented the actual selected-drawable
+pipeline. No drawable pixel readback is claimed. The native linear capability
+probe reported requested and selected linear BGRA8, with only that format
+presentable.
+
+Both Metal legacy commands above printed `Metal API Validation Enabled`,
+`Presentation path: legacy_drawable_raw_copy`,
+`trace_driver_submitted=true`, and
+`ray traced scene finite run ok: backend=metal frames=3`, with no validation
+error. The Vulkan RT machine must still run both the canonical Period 55
+texture path and the Period 56 legacy route; forced compilation and earlier
+screenshots do not satisfy those rows.
+
+Presentation selection performs no HDR mapping, tone mapping, gamma policy, or
+gamut conversion. The legacy transfer is raw byte copying, not a
+transfer-function conversion.
 
 ## Period 37 Memory, Heaps, And Residency Expectations
 

@@ -68,7 +68,7 @@ In particular:
   compatibility aliases.
 - Breaking cleanup must follow the documented migration and release-gate
   process; it must not happen incidentally during backend work.
-- `zig build run-api-guard` enforces the exact root, `Device`, and
+- `zig build run-api-guard` enforces the exact root, `Device`, `Swapchain`, and
   context-owner allowlists (`WindowContext` and `HeadlessContext`). Any
   intentional change to those sets must update the allocation decision,
   inventory, compatibility guidance when applicable, and guard allowlist in
@@ -228,8 +228,9 @@ Use validation that matches the edit.
 - Build or package metadata changes should run `zig build --fetch` or the
   closest relevant build command.
 - API and backend changes should add or update focused tests when possible.
-- Public root, `Device`, `WindowContext`, or `HeadlessContext` changes must run
-  `zig build run-api-guard` in addition to the normal API validation.
+- Public root, `Device`, `Swapchain`, `WindowContext`, or `HeadlessContext`
+  changes must run `zig build run-api-guard` in addition to the normal API
+  validation.
 - Rendering behavior changes should keep at least one runnable example working.
 
 ## Style

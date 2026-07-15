@@ -96,6 +96,16 @@ Apple 平台上，`.auto` 会优先选择 Metal。其他桌面平台优先 Vulka
 drawable resize 和 clear。`WindowContext` 只保留 backend identity、native handle，以及
 这些 runtime owner 的访问入口。
 
+Presentation descriptor 保存请求的 format。用
+`swapchain.presentationDescriptor().format` 查看这个请求，用
+`swapchain.selectedFormat()` 获取具体 drawable format。Automatic selection 会先选
+`bgra8_unorm_srgb`，再选 `bgra8_unorm`；current-drawable pipeline 必须使用具体选择。
+
+Descriptor extent 同样是 request；drawable-sized 资源应使用 `swapchain.extent()` 返回的 actual
+native extent，Vulkan 可能对请求做 clamp。非零 Vulkan resize 前应 commit command buffer；
+`InvalidCommandBufferState` 不会改变当前 presentation。如果一次 recreate failure 导致后续工作
+返回 `SurfaceLost`，需要重建 `WindowContext`。
+
 ## 使用预编译 Slang Shader
 
 应用嵌入 Slang source，并通过 device 请求同名 shader。`zig build` 会预编译匹配的
@@ -120,11 +130,15 @@ var pipeline = try device.makeRenderPipelineState(.{
     .vertex = stages.vertex,
     .fragment = stages.fragment,
     .color_attachments = &.{
-        .{ .format = .bgra8_unorm },
+        .{ .format = swapchain.selectedFormat() },
     },
 });
 defer pipeline.deinit();
 ```
+
+成功 resize 后，复用依赖 format 的 pipeline 前应再次查询 `selectedFormat()`，drawable-sized
+资源使用 `swapchain.extent()`。vkmtl 在选择 drawable format 时不会执行 tone mapping、
+HDR/gamut conversion 或其他内容变换。
 
 Compute shader 使用 compute 专用 helper：
 

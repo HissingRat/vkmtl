@@ -63,10 +63,6 @@ const indices = [_]u16{
     20, 21, 22, 20, 22, 23,
 };
 
-const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
@@ -95,6 +91,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
 
     var vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(vertices[0..]),
@@ -218,11 +217,11 @@ pub fn main(_: std.process.Init.Minimal) !void {
             continue;
         }
 
-        const elapsed = @as(f32, @floatCast(glfw.timeSeconds() - start_seconds));
-        uniforms = makeUniforms(extent.width, extent.height, elapsed);
-        try uniform_buffer.replaceBytes(0, std.mem.asBytes(&uniforms));
-
         try swapchain.resize(extent);
+        const drawable_extent = swapchain.extent();
+        const elapsed = @as(f32, @floatCast(glfw.timeSeconds() - start_seconds));
+        uniforms = makeUniforms(drawable_extent.width, drawable_extent.height, elapsed);
+        try uniform_buffer.replaceBytes(0, std.mem.asBytes(&uniforms));
 
         var command_buffer = try queue.makeCommandBuffer();
         var encoder = try command_buffer.makeRenderCommandEncoder(.{

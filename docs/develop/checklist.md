@@ -17,6 +17,13 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Current Priority
 
+- Period 56 is complete. Presentation request/selection, exact drawable
+  pipeline matching, resize re-resolution, and legacy raw-copy semantics are
+  implemented. Deterministic gates, physical Metal automatic/sRGB/linear
+  offscreen pixels plus actual selected-drawable bind/present smoke, and both
+  Metal legacy RT presentation formats are recorded.
+  Vulkan RT texture-presentation and legacy-route runs remain explicit
+  device-matrix follow-up evidence.
 - Period 44 implementation and its nine release-evidence gates are complete.
   Hosted macOS, Linux, and Windows CI plus local physical Metal and Vulkan
   evidence are recorded.
@@ -38,7 +45,7 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-55 and the additive headless-runtime
+  semantic-support ledger. Periods 46-56 and the additive headless-runtime
   refactor are complete. The original exactly-once semantic gap routing now
   has zero incomplete rows; a future native-semantic breadth period requires a
   new baseline audit or an explicit unsupported-contract allocation. The
@@ -2992,6 +2999,95 @@ contract before chunk implementation begins.
   physical Metal command validation, the separate shared-pass BGRA8 readback,
   and format/diff gates. Keep the new Vulkan texture-presentation path's
   physical RT-machine rerun explicit as follow-up evidence.
+
+## Period 56 Phase 1 Checklist
+
+- [x] Freeze `PresentationDescriptor.format` as the request and
+  `Swapchain.selectedFormat()` as the concrete presentation-owned selection.
+- [x] Define deterministic `.automatic` preference as `bgra8_unorm_srgb`, then
+  `bgra8_unorm`, with a typed unsupported outcome when neither is available.
+- [x] Require an explicit admitted SDR request to match exactly or fail without
+  silent fallback.
+- [x] Approve the additive `Swapchain` query and typed outcomes for `v0.2.0`
+  without changing root, `Device`, context-owner, descriptor, or existing
+  method signatures.
+- [x] Keep HDR, tone mapping, gamma policy, and gamut conversion outside the
+  vkmtl presentation contract.
+
+## Period 56 Phase 2 Checklist
+
+- [x] Implement one deterministic resolver shared by Metal and Vulkan
+  semantics and independent of native enumeration order.
+- [x] Configure the Metal layer from the concrete selected SDR format.
+- [x] Select the exact Vulkan BGRA8 plus standard SDR color-space mapping and
+  remove the unobservable first-format fallback.
+- [x] Recreate Vulkan in dependency order: destroy framebuffer dependents before
+  old swap image views, then rebuild color/depth render-pass state when the
+  selected format changes.
+- [x] Store request and selection separately, including
+  `presentationDescriptor()` and `selectedFormat()` behavior.
+- [x] Preserve the request across resize and re-resolve the selection on every
+  successful non-zero native recreation.
+- [x] Keep `presentationDescriptor().extent` as the request and publish the
+  actual native extent through `Swapchain.extent()`.
+- [x] Reject non-zero Vulkan resize while any backend command buffer is
+  uncommitted, before presentation-resource destruction.
+- [x] Reject Vulkan clear under the same active-command gate and keep its
+  internal command buffers on a dedicated pool that never resets user pools.
+- [x] Keep a healthy same-request resize as a cheap no-op, force same-request
+  recovery after present/acquire suboptimal or out-of-date state, and allow a
+  changed request with identical resolved native state to avoid recreation.
+- [x] Mark Vulkan presentation lost after a destructive recreation failure and
+  reject later presentation/command creation with `SurfaceLost`.
+- [x] Wait graphics fences and the presentation queue before normal or poisoned
+  teardown destroys swapchain images, semaphores, or the swapchain handle.
+- [x] Terminalize and deinitialize a failed committed command buffer, releasing
+  active count, query borrows, and work serial; wait submitted Vulkan work
+  before destroying temporary command resources.
+- [x] Publish a Metal resize only after replacement depth allocation succeeds.
+
+## Period 56 Phase 3 Checklist
+
+- [x] Treat the current drawable's format as `Swapchain.selectedFormat()`, not
+  the descriptor request.
+- [x] Record render-pipeline color formats needed for portable validation.
+- [x] Require an exact pipeline/current-drawable format match before native
+  pipeline bind or draw on both backends without promising pre-acquisition
+  rejection.
+- [x] Make automatic selected-format changes after resize observable and reject
+  stale mismatched pipelines without silently recreating them.
+- [x] Keep offscreen and headless attachment behavior unchanged.
+
+## Period 56 Phase 4 Checklist
+
+- [x] Keep `dispatchRaysToDrawable(...)` source-compatible but document it as a
+  compatibility-only path.
+- [x] Make both backends bind the caller-provided output as the RT storage
+  destination; Metal must not ignore it in favor of the drawable.
+- [x] Validate copy usage, shape, extent, sample count, and `bgra8_unorm`
+  caller-output compatibility with either admitted selected format before
+  native work.
+- [x] Copy bytes to the drawable without hidden transfer-function, tone-map, or
+  gamut conversion, then preserve the legacy presentation side effect.
+- [x] Restrict the combined legacy dispatch/present command to graphics queues.
+- [x] Preflight Metal drawable availability, format/extent, and sRGB staging
+  allocation before compute encoding; keep linear free of staging allocation.
+- [x] Keep `dispatchRaysToTexture(...)` plus explicit composition canonical for
+  examples and new callers.
+
+## Period 56 Phase 5 Checklist
+
+- [x] Add deterministic resolver, request/selection, resize, exact pipeline,
+  requested/actual extent, Vulkan lifecycle, and legacy raw-transfer
+  regressions.
+- [x] Run API guard, 675/675 full tests, default and forced Vulkan builds,
+  package smoke, formatting, and diff gates.
+- [x] Record physical Metal pixel evidence for automatic and supported explicit
+  SDR requests with API Validation enabled.
+- [x] Update API/native inventories, migration guidance, API/usage docs,
+  matrices, roadmap, checklist, changelog, and Period 56 closeout.
+- [x] Keep Vulkan RT physical validation explicitly pending until it runs on a
+  supported machine; never promote forced-build or historical output evidence.
 
 ## First Backend-Independent Triangle Checklist
 

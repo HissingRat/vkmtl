@@ -46,7 +46,7 @@ which mode applies.
 | Voxel world | `zig build run-voxel-world` | Window; profile/frame-limit/autopilot envs provide bounded finite runs | Bounded visible-face chunk renderer with atlas materials, camera/culling, streaming, metrics, and `voxel_world_pressure_test=ok`. |
 | Transfer readback | `zig build run-transfer-readback` | Auto-exit | Exact copies pass and print `transfer readback ok`. |
 | Compute readback | `zig build run-compute-readback` | Auto-exit | Storage buffer/texture bytes match and print `compute readback ok`. |
-| Capability dump | `zig build run-capability-dump` | Auto-exit | Console report starts with backend/adapter and includes features, limits, formats, and diagnostics. |
+| Capability dump | `zig build run-capability-dump` | Auto-exit | Console reports requested/selected presentation formats, then backend/adapter, features, limits, formats, and diagnostics. |
 | Bindless textures | `zig build run-bindless-textures` | Windowed; set `VKMTL_PIXEL_REGRESSION=1` for one frame | Samples a 65-slot native table through a reusable indirect draw and reports persistent cache use, or prints a typed unsupported message. |
 | Multi-window | `zig build run-multi-window` | Two-window probe | Prints both surface records, then availability or the expected feature-gate line. |
 | External texture | `zig build run-external-texture` | Auto-exit probe | Prints capability/usage planning plus a real-handle requirement or explicit unsupported line. |
@@ -70,6 +70,15 @@ through `Device.makeBuffer`, creates a render pipeline through
 `Device.makeRenderPipelineState`, handles drawable resize through
 `Swapchain.resize(...)`, records commands with `CommandBuffer` /
 `RenderCommandEncoder`, and presents through the public command API.
+Its current-drawable pipeline uses `Swapchain.selectedFormat()` rather than the
+presentation request. The same rule applies to every windowed gallery pipeline;
+the capability dump prints both requested and selected formats.
+
+For presentation regressions, shared example glue accepts
+`VKMTL_PRESENTATION_FORMAT=automatic`, `srgb`, or `linear`. This is an
+example-only request override. An unknown value prints a warning and requests
+automatic selection; it does not change the library's exact explicit-request
+contract.
 
 Run it with:
 
@@ -480,7 +489,10 @@ color to `bgra8_unorm_srgb`; the attachment's sRGB OETF restores the reference
 display values. The example does not apply exposure or tone mapping. An
 application that wants true scene-linear HDR instead defines its radiometric
 units, exposure, and tone-mapping policy separately. The older drawable
-dispatch command remains available for compatibility. RT dispatch and the
+dispatch command remains available for compatibility. That legacy command now
+dispatches into the caller's whole, single-sample `bgra8_unorm` output and
+raw-copies the bytes to the selected linear or sRGB BGRA8 drawable; it performs
+no transfer-function, tone-map, or gamut conversion. RT dispatch and the
 fullscreen consumer use separate command buffers because each current command
 buffer owns one native encoding segment.
 
@@ -489,6 +501,12 @@ The historical Vulkan physical evidence above still proves the native RT
 backend, but it predates the Period 55 shared presentation path. The new Vulkan
 reference-preserving path has unit and forced-build evidence and still needs a
 physical RT-machine rerun.
+
+Set `VKMTL_RT_LEGACY_DRAWABLE=1` only to validate the compatibility route. With
+`VKMTL_RT_FRAME_LIMIT=3`, the example dispatches into a caller-owned linear
+BGRA8 target, raw-copies it to the selected drawable, and exits after three
+frames. Without that variable, the canonical texture-plus-composition route
+above remains active.
 
 The current procedural marker supersedes the original Period32
 `driver_pixels=visible_vulkan_rt_output` marker. It still proves the native

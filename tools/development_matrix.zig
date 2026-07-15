@@ -186,7 +186,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/ray_traced_scene",
         .run_step = "run-ray-traced-scene",
         .kind = .render,
-        .backend_expectation = "native RT writes a caller-owned linear texture and a shared color-managed pass presents it behind capability gates",
+        .backend_expectation = "native RT writes a caller-owned texture; the default application-owned composition path and optional legacy raw-copy probe present behind capability gates",
     },
 };
 
@@ -491,9 +491,9 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .host = .macos,
         .backend = .metal,
         .required = false,
-        .command = "MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene",
+        .command = "MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=srgb zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=linear zig build run-ray-traced-scene",
         .requires_runtime_configuration = true,
-        .expectation = "three color-managed Metal RT frames complete under API Validation and print the finite success marker",
+        .expectation = "the application-owned composition path and both admitted legacy raw-copy presentation formats complete three Metal RT frames under API Validation",
     },
     .{
         .name = "ray_tracing_vulkan_color_path",
@@ -502,7 +502,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .required = false,
         .command = "VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan",
         .requires_runtime_configuration = true,
-        .expectation = "a Vulkan RT device renders three frames through the shared color-managed path and prints the finite success marker",
+        .expectation = "a Vulkan RT device renders three frames through the application-owned composition path; the Period 56 legacy raw-copy probe remains a separate required physical rerun",
     },
     .{
         .name = "binding_variant_regression",
@@ -574,7 +574,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test",
-        .expectation = "ray tracing planning, native mappings, caller-owned output validation, per-dispatch Vulkan resources, finite-run, and color-reference regressions pass",
+        .expectation = "ray tracing planning, native mappings, caller-owned texture dispatch, deterministic presentation selection, legacy raw-copy validation, per-dispatch Vulkan resources, finite-run, and color-reference regressions pass",
     },
 };
 
@@ -1635,7 +1635,7 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .public_api = "vkmtl.CommandBuffer.dispatchRaysToTexture and vkmtl.ray_tracing.RayTracingTextureResources",
         .vulkan_status = .portable_runtime,
         .metal_status = .portable_runtime,
-        .validation = "both backends write a caller-owned linear texture, preserve per-dispatch state, and use one shared ACES/sRGB presentation contract",
+        .validation = "both backends write a caller-owned texture and preserve per-dispatch state; applications own display composition, while the legacy drawable route performs only a validated raw BGRA8 copy",
     },
     .{
         .feature = .ray_query_planning,
@@ -1832,7 +1832,7 @@ pub const validation_cases = [_]ValidationCase{
         .name = "ray_tracing_native_parity",
         .kind = .ray_tracing_native_parity,
         .test_location = "src/core.zig, src/runtime/window_context.zig, Vulkan dispatch invariants, and examples/ray_traced_scene focused tests",
-        .expectation = "ray tracing planning and advanced gaps stay explicit while Period 55 caller-owned dispatch, one-segment command state, finite-run, and color references remain deterministic",
+        .expectation = "ray tracing planning and advanced gaps stay explicit while Period 55 caller-owned dispatch and Period 56 request/selection, exact drawable validation, legacy raw copy, finite-run, and color references remain deterministic",
     },
     .{
         .name = "period44_device_evidence",

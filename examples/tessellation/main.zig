@@ -6,10 +6,6 @@ const common = @import("vkmtl_examples_common");
 const app_name = "vkmtl tessellation";
 const shader_source = @embedFile("shaders/tessellation.slang");
 
-const color_attachments = [_]vkmtl.render.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
@@ -40,6 +36,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     }
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const color_attachments = [_]vkmtl.render.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
 
     var compiled_shader = try vkmtl.shader.compileTessellationShader(
         &device,

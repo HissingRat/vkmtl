@@ -122,7 +122,8 @@ Texture RT output 还必须检查 `getFormatCaps(format).storage` 与 `.sampled`
 Period 55 reference 示例把 `rgba16_float` 用作更高精度的累积格式；format 本身不规定 color
 space。不能只因为 `storage_textures` 为 true 就创建它。Texture dispatch 会在 native encoding
 前校验 shader-read/write usage、single-sample 2D view 和 dispatch extent。Presentation 还要单独
-确认 selected surface path 支持 `bgra8_unorm_srgb`。
+确认具体 `Swapchain.selectedFormat()` 报告 `presentation`。Period 55 reference 示例显式请求
+`bgra8_unorm_srgb`；其他窗口 pipeline 应使用 selected format，不能假定请求一定被选中。
 
 ### Query 与 Driver Artifact
 
@@ -223,6 +224,12 @@ depth_copy stencil_copy color_resolve depth_resolve stencil_resolve
 不要从 format 名称推断 copy、blit、resolve、presentation 或 depth/stencil 行为。Encoding 前同时
 检查对应 capability flag 和 transfer alignment limit。即使同一 native adapter 可以通过
 `WindowContext` 呈现，headless device 也会报告 `presentation = false`。
+
+对窗口 context，`PresentationDescriptor.format` 是请求，`Swapchain.selectedFormat()` 是具体
+结果。Portable presentation set 只有 SDR `bgra8_unorm_srgb` 与 `bgra8_unorm`，automatic 按这个
+顺序选择。这个 context 上只有 selected format 的
+`getFormatCaps(format).presentation` 为 true。Format selection 不执行 HDR、tone mapping、gamma
+或 gamut conversion。
 
 Reference RT 路径必须确认 `rgba16_float` 同时支持 `sampled` 与 `storage`；只有 caller 需要
 readback/copy 时才额外要求 `copy_source`。示例在这个 texture 中保存 legacy display-referred

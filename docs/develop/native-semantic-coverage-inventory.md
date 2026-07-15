@@ -1,6 +1,7 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 55 complete, 2026-07-15.
+Status: Period 56 complete, 2026-07-15. Vulkan RT physical reruns remain
+device-matrix follow-up evidence.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -49,6 +50,30 @@ offscreen shared-display readback with at most one byte of channel error. The
 new shared-display Vulkan path has unit/forced-build evidence; its physical
 RT-machine rerun remains pending and is not inferred from the earlier visible
 Vulkan RT evidence.
+Period 56 makes presentation format resolution observable and deterministic.
+`PresentationDescriptor.format` remains the request, while
+`Swapchain.selectedFormat()` reports the concrete SDR BGRA8 selection. Metal
+configures the layer from that selection; Vulkan chooses the exact standard-SDR
+pair independent of enumeration order. Current-drawable pipelines require an
+exact selected-format match. The legacy drawable RT command now dispatches
+into the caller's linear BGRA8 output on both backends and performs only a raw
+byte transfer to the selected linear or sRGB drawable. None of these operations
+adds HDR, tone mapping, gamma, or gamut conversion. Unit, default-build, forced
+Vulkan, and package-consumer evidence is complete. Physical Metal
+automatic/sRGB/linear offscreen pixels plus selected-drawable bind/present
+smoke and both legacy raw-copy formats are recorded under API Validation.
+The descriptor extent remains the request while `Swapchain.extent()` reports
+the actual native drawable extent. Healthy same-request resize is cheap;
+present/acquire recovery forces rebuild, and changed requests re-query native
+state. Vulkan resize and clear reject uncommitted command buffers before
+mutation, clear owns a dedicated pool, and failed commits retire backend,
+query, and serial state before temporary resources are destroyed. Metal
+publishes resize only after depth allocation and preflights legacy drawable and
+staging failures before compute dispatch. Legacy presentation is
+graphics-queue-only. Destructive Vulkan recreation failure permanently loses
+presentation, preventing stale framebuffer/image-view use. Normal and poisoned
+Vulkan teardown wait graphics fences and the presentation queue before
+destroying swapchain images, semaphores, or the swapchain handle.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence; Vulkan has implementation and forced-build
@@ -128,7 +153,7 @@ develops a different lowering or support state.
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
 | DEV-01 | Backend selection, adapter/device discovery, capability report, and ordinary execution limits | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately, while queried resource/dispatch/threadgroup limits feed validation. |
-| DEV-02 | Command queue/buffer creation, commit, lifecycle callbacks, immediate presentation, and capability-gated timing | `command`, `presentation` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal for callback-once and minimum-duration presentation; Vulkan callbacks compose submit/queue completion and timed presentation remains feature-closed. |
+| DEV-02 | Command queue/buffer creation, commit, lifecycle callbacks, immediate presentation, and capability-gated timing | `command`, `presentation` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal for callback-once and minimum-duration presentation; Vulkan callbacks compose submit/queue completion and timed presentation remains feature-closed. Failed commits terminalize/deinitialize backend state, release active/query borrows, retire the work serial, and report failed lifecycle; Vulkan waits submitted work before temporary-resource destruction. |
 | DEV-03 | No-surface runtime initialization with device/queues, presentation exclusion, and texture-backed offscreen commands | root, `command`, `render` | `native-exact` | `native-exact` | Metal `gpu-pixels` covers headless compute, transfer, and offscreen clear/readback. Vulkan has focused tests and forced-build evidence; physical execution awaits a host with a Vulkan loader/device. Current-drawable commands fail before backend presentation work. |
 | DEV-04 | Selected-device stable identity and native peer-group membership diagnostics | `diagnostics` | `native-exact` | `native-exact` | Physical Metal reports registry and peer-group properties. Vulkan reports device UUID plus selected physical-device-group index/count/subset allocation; neither backend claims peer allocation or cross-device command execution. |
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
@@ -136,9 +161,10 @@ develops a different lowering or support state.
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |
 | RES-04 | Sampler filtering, addressing, LOD, comparison, anisotropy, normalized/unnormalized coordinates, and fixed border color | `resource` | `native-exact` | `native-exact` | `unit`; unnormalized coordinates use the documented shared constraint set and device gates still apply. |
 | RES-05 | Full-texture mipmap generation | `transfer` | `native-exact` | `native-exact` | `unit`; partial mip/layer ranges remain incomplete. |
-| RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit` plus Period 55 Metal `gpu-pixels`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. Period 55 admits sampled-plus-storage `rgba16_float` as the capability-gated accumulation format used by `ray_traced_scene` on both backends; the format does not impose a color-space or tone-mapping contract on generic caller-owned RT output. The Metal current drawable and Vulkan's preferred surface format are `bgra8_unorm_srgb`; Vulkan still falls back to a supported surface format when that preference is unavailable. Metal advertises presentation only for its actual layer format, otherwise uses a conservative capability table, and Vulkan queries format properties; unallocated native formats remain unsupported. |
+| RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit` plus Period 55 Metal `gpu-pixels`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. Period 55 admits sampled-plus-storage `rgba16_float` as the capability-gated accumulation format used by `ray_traced_scene` on both backends; the format does not impose a color-space or tone-mapping contract on generic caller-owned RT output. Period 56 bounds presentation to `bgra8_unorm_srgb` and `bgra8_unorm`; Metal advertises presentation only for its selected layer format, and Vulkan selects the exact standard-SDR pair or returns typed unsupported rather than choosing an arbitrary fallback. Other native formats remain capability-gated or unsupported. |
 | RES-07 | Capability-gated shader-visible buffer GPU address | `resource`, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke` on Apple M4 Pro plus Vulkan unit/inspection; callers declare `shader_device_address`, creation checks the usable feature, and zero/unavailable native addresses return typed errors. |
 | RES-08 | Automatic/shared/managed/private portable storage behavior and CPU/GPU visibility boundaries | `resource`, `transfer` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal plus Vulkan unit/inspection; Metal composes `didModifyRange` and `synchronizeResource`, Vulkan uses host-coherent managed buffers, and private CPU access is rejected. |
+| PRS-01 | Bounded SDR presentation request/selection, requested-versus-actual extent, exact current-drawable pipeline matching, terminal-safe resize, and legacy raw-copy compatibility | `presentation`, `render`, `ray_tracing` | `composed-exact` | `composed-exact` | Period 56 keeps request and selection separate, maps the selected BGRA8 format to the Metal layer or exact Vulkan surface pair, and rejects mismatched drawable pipelines before native bind/draw. Metal publishes resize only after depth allocation. Vulkan keeps healthy same-request resize cheap, forces recovery after present/acquire invalidation, re-queries changed requests, gates non-zero resize and clear on zero active command buffers, and gives clear a dedicated pool; destructive recreation failure permanently returns `SurfaceLost`. Legacy drawable RT is graphics-queue-only, dispatches into caller linear BGRA8, copies bytes unchanged, presents implicitly, and rejects duplicate present; Metal preflights drawable/extent/staging before compute. Deterministic/build/package evidence is complete. Physical Metal automatic/sRGB/linear runs retain the documented offscreen-readback boundary and selected-drawable smoke; both legacy formats submit three frames under API Validation. Vulkan RT physical texture/legacy runs remain follow-up. No HDR, tone mapping, gamma, or gamut conversion is part of the contract. |
 | SHD-01 | Build-time Slang compilation and embedded runtime shader resolution | `shader` | `composed-exact` | `composed-exact` | Hosted build and `gpu-pixels`; MSL and SPIR-V are produced before runtime. |
 | SHD-02 | Reflection-derived buffer/texture/sampler kinds, arrays, storage access, and vertex metadata | `shader`, `binding`, `render` | `composed-exact` | `composed-exact` | `unit` and representative rendering; schema 1 keeps advanced backend-only protocols outside the portable metadata. |
 | SHD-03 | Shader specialization constants/function constants by stable numeric ID | `shader` | `native-exact` | `native-exact` | `gpu-pixels` on Metal plus unit coverage for both mappings; Metal specializes vertex, fragment, and compute functions, while Vulkan uses specialization info. Generated names are diagnostic only. |
@@ -197,7 +223,7 @@ develops a different lowering or support state.
 | --- | --- | --- | --- | --- | --- |
 | GEO-01 | Tessellation pipeline and patch draw under the source-only artifact contract | `render` | `unsupported` | `native-exact` | Vulkan compiles schema-2 SPIR-V, enables tessellation, creates patch-list pipelines, and draws patches. The pinned Slang Metal target rejects hull/domain stages. |
 | GEO-02 | Resource-free mesh pipeline and dispatch; optional task/object stage separately gated | `render` | `native-exact` | `native-exact` | Physical Metal mesh rendering plus Vulkan forced-build/unit evidence. Pinned task/object compilation crashes, so usable task support stays false on both backends. |
-| RT-01 | Basic native acceleration structure, RT pipeline, caller-owned texture dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Period 55 writes a generic caller-owned accumulation texture on both backends and leaves Vulkan output ready for fragment sampling. The `ray_traced_scene` fullscreen pass applies the sRGB EOTF to its reference values before the `bgra8_unorm_srgb` attachment performs the matching encode, preserving the established display bytes without making that transform a vkmtl RT semantic. Metal API Validation completed three physical frames, and the shared pass has an offscreen Metal BGRA8 readback with at most one byte of channel error. Earlier visible physical Vulkan RT evidence remains valid, while the shared-display Vulkan path has unit/forced-build evidence and still needs a physical RT-machine rerun. Device and format capability gates apply. |
+| RT-01 | Basic native acceleration structure, RT pipeline, caller-owned texture dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Period 55 writes a generic caller-owned accumulation texture on both backends and leaves Vulkan output ready for fragment sampling. The `ray_traced_scene` fullscreen pass applies the sRGB EOTF to its reference values before the explicitly requested `bgra8_unorm_srgb` attachment performs the matching encode, preserving the established display bytes without making that transform a vkmtl RT semantic. Period 56 keeps this texture-plus-composition path canonical and makes legacy drawable dispatch use the caller's `bgra8_unorm` output followed by a raw byte transfer on both backends. Metal API Validation covers the canonical route plus three-frame legacy sRGB and linear runs with `trace_driver_submitted=true`; both Vulkan RT-machine reruns remain follow-up. Device and format capability gates apply. |
 | RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | Metal physical evidence includes a TLAS over two distinct BLAS sources; Vulkan supports the same source array. Non-default instance metadata is outside the executable contract. |
 | RT-03 | Triangle and AABB BLAS geometry input | `ray_tracing` | `native-exact` | `native-exact` | Physical Metal headless evidence builds both forms. Metal AS allocation takes the maximum of triangle/AABB and ordinary/update native sizes, while command validation uses the selected plan's exact scratch size. Vulkan procedural scene evidence already exercises AABB input. |
 | RT-04 | Custom intersection execution | `ray_tracing` | `unsupported` | `native-exact` | Vulkan procedural pixels are observed. Metal schema-2 artifacts have no linked intersection function or driver-bound table. |
@@ -226,14 +252,14 @@ their presence in the ledger does not admit public API or claim execution.
 | Source family | Current inventory state | Required action |
 | --- | --- | --- |
 | Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus native synchronization, physical queue, lifecycle, and timed Metal presentation work completed in Period 48. |
-| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; Period 55 exercises sampled-plus-storage `rgba16_float` as the `ray_traced_scene` accumulation target without assigning generic RT output a fixed color space. Unallocated native breadth stays explicit. |
+| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; Period 55 exercises sampled-plus-storage `rgba16_float` as the `ray_traced_scene` accumulation target without assigning generic RT output a fixed color space. Period 56 makes the selected SDR BGRA8 presentation format observable and exact without adding a content transform. Unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited | Period 49 executes native placement heaps and closes residency/sparse execution as unsupported under the current handle-free mapping contract. |
 | Argument buffers/tables and indirect command buffers | Audited | Period 50 executes resource tables and CPU-authored reusable command lists. Period 54 confirms the admitted Metal 4 table semantics are composed through that layer; raw table identity and GPU mutation remain unsupported. |
 | Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; Period 52 closes RT function tables under the same artifact boundary. |
 | Tessellation, object/mesh shaders, layered rendering, amplification | Audited | Period 51 executes Vulkan tessellation and mesh-only paths on both backends; task/object artifacts, advanced-stage bindings, and layered/amplified rendering are precisely unsupported under current contracts. |
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited | Period 51 closes these unsupported because the current pass/shader contracts cannot preserve their observable memory and ordering semantics. |
 | Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited | Period 46 completed native timestamp/Boolean visibility; Period 54 adds exact-count visibility and closes pass attachments, calibration, counter heaps, pipeline statistics, device-specific counters, and function logs unsupported under current result/lifetime shapes. |
-| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. Period 55 adds caller-owned texture dispatch plus the `ray_traced_scene` reference-preserving shared display path without reopening those advanced routes or assigning tone mapping to vkmtl. |
+| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. Period 55 adds caller-owned texture dispatch plus the `ray_traced_scene` reference-preserving shared display path. Period 56 makes the legacy drawable route honor the caller output and raw-copy bytes without reopening advanced routes or assigning color conversion to vkmtl. |
 | Fast resource loading / Metal I/O | Audited | Period 53 closes MTLIO and compressed-stream execution unsupported: synchronous file reads/staging do not preserve async status, cancellation, priority, queue ordering, or scratch/compression semantics. |
 | Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited | Resource-table and barrier effects compose exactly through existing contracts. Allocator/reusable-buffer/feedback, flexible-pipeline, compiler/archive/dataset, tensor, and ML object models are precisely unsupported. |
 | External sharing, IOSurface, shared-event handles, platform handles | Audited | Period 53 executes Metal raw resource and IOSurface imports. Export and external synchronization remain precisely unsupported; Period 48 covers only vkmtl-owned same-device native shared events. |
@@ -264,8 +290,11 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-55 are complete. The exactly-once gap-routing
-file is empty because all 111 audited Metal semantic units now have an
+The source audit and Periods 46-56 are complete. Metal
+automatic/sRGB/linear offscreen pixels plus selected-drawable smoke and both
+legacy formats are recorded for Period 56. Both Vulkan RT-machine runs remain
+follow-up evidence. The exactly-once gap-routing file is empty because all 111
+audited Metal semantic units now have an
 executable or precise unsupported outcome. New native-semantic implementation
 periods must be created from a new SDK/baseline audit or an explicit decision
 to allocate one of the currently unsupported contracts; no incomplete Period

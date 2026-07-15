@@ -9,10 +9,6 @@ const app_name = "vkmtl bindless textures";
 const shader_source = @embedFile("shaders/bindless_textures.slang");
 const table_size = 64;
 
-const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
@@ -40,6 +36,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
     const backend = device.selectedBackend();
     const model: vkmtl.binding.AdvancedBindingModel = switch (backend) {
         .vulkan => .descriptor_indexing,

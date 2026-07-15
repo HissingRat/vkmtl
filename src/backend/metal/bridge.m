@@ -616,6 +616,7 @@ vkmtl_metal_status vkmtl_metal_probe_copy_device_name(
 vkmtl_metal_status vkmtl_metal_clear_screen_create(
     vkmtl_metal_clear_screen **out_clear_screen,
     void *cocoa_window,
+    vkmtl_metal_texture_format format,
     unsigned int width,
     unsigned int height
 ) {
@@ -626,6 +627,18 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
 
     if (cocoa_window == NULL || width == 0 || height == 0) {
         return VKMTL_METAL_STATUS_INVALID_SURFACE;
+    }
+
+    MTLPixelFormat layer_pixel_format = MTLPixelFormatInvalid;
+    switch (format) {
+        case VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM:
+            layer_pixel_format = MTLPixelFormatBGRA8Unorm;
+            break;
+        case VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB:
+            layer_pixel_format = MTLPixelFormatBGRA8Unorm_sRGB;
+            break;
+        default:
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
     }
 
     @autoreleasepool {
@@ -659,7 +672,7 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
         }
 
         layer.device = device;
-        layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
+        layer.pixelFormat = layer_pixel_format;
         layer.framebufferOnly = NO;
         layer.opaque = YES;
         layer.contentsScale = [window backingScaleFactor];
@@ -780,6 +793,32 @@ void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen) {
     }
 }
 
+vkmtl_metal_status vkmtl_metal_clear_screen_get_presentation_format(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_texture_format *out_format
+) {
+    if (clear_screen == NULL || out_format == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_SURFACE;
+    }
+    *out_format = VKMTL_METAL_TEXTURE_FORMAT_INVALID;
+    if (clear_screen->layer == nil) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+
+    @autoreleasepool {
+        switch (clear_screen->layer.pixelFormat) {
+            case MTLPixelFormatBGRA8Unorm:
+                *out_format = VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM;
+                return VKMTL_METAL_STATUS_OK;
+            case MTLPixelFormatBGRA8Unorm_sRGB:
+                *out_format = VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB;
+                return VKMTL_METAL_STATUS_OK;
+            default:
+                return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_clear_screen_resize(
     vkmtl_metal_clear_screen *clear_screen,
     unsigned int width,
@@ -790,12 +829,12 @@ vkmtl_metal_status vkmtl_metal_clear_screen_resize(
     }
 
     @autoreleasepool {
-        clear_screen->layer.drawableSize = CGSizeMake(width, height);
         id<MTLTexture> depth_texture =
             vkmtl_new_depth_texture(clear_screen->device, width, height);
         if (depth_texture == nil) {
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
+        clear_screen->layer.drawableSize = CGSizeMake(width, height);
         [clear_screen->depth_texture release];
         clear_screen->depth_texture = depth_texture;
         clear_screen->width = width;
@@ -4943,6 +4982,7 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     vkmtl_metal_command_buffer *command_buffer,
     vkmtl_metal_ray_tracing_pipeline_state *pipeline,
     vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_texture_view *output_texture_view,
     unsigned int width,
     unsigned int height,
     const void *inline_data,
@@ -4958,6 +4998,9 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
         acceleration_structure == NULL ||
         acceleration_structure->acceleration_structure == nil ||
         acceleration_structure->built == 0 ||
+        output_texture_view == NULL ||
+        output_texture_view->texture == nil ||
+        output_texture_view->sample_count != 1 ||
         width == 0 ||
         height == 0) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
@@ -4967,22 +5010,55 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
         return VKMTL_METAL_STATUS_UNSUPPORTED;
     }
 
+    if (output_texture_view->texture.pixelFormat != MTLPixelFormatBGRA8Unorm ||
+        width > output_texture_view->texture.width ||
+        height > output_texture_view->texture.height) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    const MTLPixelFormat drawable_format = command_buffer->owner->layer.pixelFormat;
+    if (drawable_format != MTLPixelFormatBGRA8Unorm &&
+        drawable_format != MTLPixelFormatBGRA8Unorm_sRGB) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+
     @autoreleasepool {
         id<CAMetalDrawable> drawable = [command_buffer->owner->layer nextDrawable];
         if (drawable == nil || drawable.texture == nil) {
             return VKMTL_METAL_STATUS_NO_DRAWABLE;
         }
+        if (drawable.texture.pixelFormat != drawable_format ||
+            width > drawable.texture.width ||
+            height > drawable.texture.height) {
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+
+        NSUInteger bytes_per_row = 0;
+        NSUInteger staging_size = 0;
+        id<MTLBuffer> staging = nil;
+        if (drawable_format == MTLPixelFormatBGRA8Unorm_sRGB) {
+            bytes_per_row = (((NSUInteger)width * 4u) + 255u) & ~(NSUInteger)255u;
+            staging_size = bytes_per_row * (NSUInteger)height;
+            staging = [command_buffer->owner->device
+                newBufferWithLength:staging_size
+                            options:MTLResourceStorageModePrivate];
+            if (staging == nil) {
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
+        }
 
         id<MTLComputeCommandEncoder> encoder =
             [command_buffer->command_buffer computeCommandEncoder];
         if (encoder == nil) {
+            [staging release];
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
         [encoder setComputePipelineState:pipeline->pipeline];
-        [encoder setTexture:drawable.texture atIndex:0];
+        [encoder setTexture:output_texture_view->texture atIndex:0];
         if (![encoder respondsToSelector:@selector(setAccelerationStructure:atBufferIndex:)]) {
             [encoder endEncoding];
+            [staging release];
             return VKMTL_METAL_STATUS_UNSUPPORTED;
         }
         [encoder setAccelerationStructure:acceleration_structure->acceleration_structure atBufferIndex:0];
@@ -4996,6 +5072,45 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
         MTLSize threadgroup_size = MTLSizeMake(threadgroup_width, threadgroup_height, 1);
         [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
         [encoder endEncoding];
+
+        id<MTLBlitCommandEncoder> blit = [command_buffer->command_buffer blitCommandEncoder];
+        if (blit == nil) {
+            [staging release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        const MTLSize copy_size = MTLSizeMake(width, height, 1);
+        if (drawable_format == MTLPixelFormatBGRA8Unorm) {
+            [blit copyFromTexture:output_texture_view->texture
+                      sourceSlice:0
+                      sourceLevel:0
+                     sourceOrigin:MTLOriginMake(0, 0, 0)
+                       sourceSize:copy_size
+                        toTexture:drawable.texture
+                 destinationSlice:0
+                 destinationLevel:0
+                destinationOrigin:MTLOriginMake(0, 0, 0)];
+        } else {
+            [blit copyFromTexture:output_texture_view->texture
+                      sourceSlice:0
+                      sourceLevel:0
+                     sourceOrigin:MTLOriginMake(0, 0, 0)
+                       sourceSize:copy_size
+                         toBuffer:staging
+                destinationOffset:0
+           destinationBytesPerRow:bytes_per_row
+         destinationBytesPerImage:staging_size];
+            [blit copyFromBuffer:staging
+                    sourceOffset:0
+               sourceBytesPerRow:bytes_per_row
+             sourceBytesPerImage:staging_size
+                      sourceSize:copy_size
+                       toTexture:drawable.texture
+                destinationSlice:0
+                destinationLevel:0
+               destinationOrigin:MTLOriginMake(0, 0, 0)];
+        }
+        [blit endEncoding];
+        [staging release];
 
         [command_buffer->drawable release];
         command_buffer->drawable = [drawable retain];

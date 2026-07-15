@@ -624,6 +624,36 @@ that evidence validates command execution, not captured reference bytes.
 Vulkan physical validation of this new route remains a device-matrix follow-up
 rather than an inferred claim.
 
+## Wave 37: Observable Presentation Format Selection
+
+Tracked in `docs/develop/period56/`.
+
+- [x] Preserve `PresentationDescriptor.format` as the request and expose the
+  concrete selection through `Swapchain.selectedFormat()`.
+- [x] Select only the deterministic SDR BGRA8 pair on Metal and Vulkan, with
+  exact explicit requests and typed unsupported outcomes.
+- [x] Re-resolve selection after successful native resize and rebuild Vulkan
+  format-dependent presentation resources when it changes.
+- [x] Keep requested extent separate from actual native drawable extent.
+- [x] Gate Vulkan resize before old-resource destruction and make destructive
+  recreation failure terminal with `SurfaceLost`.
+- [x] Reject current-drawable pipeline mismatches before native bind or draw.
+- [x] Make legacy drawable RT dispatch honor the caller's linear BGRA8 output
+  and copy bytes unchanged to the selected drawable on both backends, with one
+  implicit present and typed duplicate-present rejection.
+- [x] Record physical Metal automatic, sRGB, and linear deterministic offscreen
+  pixels plus native selected-format readback and matching current-drawable
+  pipeline bind/present smoke.
+- [x] Record Metal legacy caller-output probes for sRGB and linear selected
+  drawables under API Validation.
+- [x] Keep both Vulkan RT-machine reruns explicit as device-matrix follow-up
+  rather than inferred forced-build evidence.
+
+Expected result: callers can distinguish requested and selected presentation
+formats and build pipelines against the concrete drawable. The presentation
+layer performs no HDR, tone mapping, gamma, or gamut conversion, and the legacy
+RT compatibility transfer performs only raw byte copying.
+
 ## Slice Checklist
 
 Before starting a backend-completion slice:

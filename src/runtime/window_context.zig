@@ -3279,14 +3279,48 @@ pub const RayTracingDrawableResources = struct {
         }
     }
 
-    fn validate(
+    fn validateDrawableDispatch(
         self: RayTracingDrawableResources,
         backend: core.Backend,
-    ) core.AdvancedFeatureError!void {
+        descriptor: core.RayDispatchDescriptor,
+        presentation_extent: core.Extent2D,
+        selected_format: core.TextureFormat,
+    ) (core.AdvancedFeatureError || core.CommandEncodingError || core.TextureError || RuntimeError)!void {
         try self.validateAccelerationStructure(backend);
         assertAlive(self.output.state().alive, .texture_view);
-        if (self.output.selectedBackend() != backend) {
-            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        const output_state = self.output.state();
+        if (self.output.selectedBackend() != backend) return RuntimeError.BackendMismatch;
+        if (!output_state.usage_value.shader_write or !output_state.usage_value.copy_source) {
+            return core.TextureError.UnsupportedTextureUsage;
+        }
+        if (output_state.dimension_value != .two_d or
+            output_state.base_mip_level_value != 0 or
+            output_state.mip_level_count_value != 1 or
+            output_state.base_array_layer_value != 0 or
+            output_state.array_layer_count_value != 1)
+        {
+            return core.TextureError.UnsupportedTextureViewDimension;
+        }
+        if (output_state.subresource_usage_tracker) |subresource_tracker| {
+            const texture = subresource_tracker.value.texture;
+            const texture_layer_count: u32 = if (texture.dimension == .three_d) 1 else texture.depth_or_array_layers;
+            if (texture.mip_level_count != 1 or texture_layer_count != 1) {
+                return core.TextureError.UnsupportedTextureViewDimension;
+            }
+        }
+        if (output_state.sample_count_value != 1) return core.TextureError.UnsupportedSampleCount;
+        if (descriptor.depth != 1 or
+            descriptor.width != output_state.width_value or
+            descriptor.height != output_state.height_value or
+            descriptor.width != presentation_extent.width or
+            descriptor.height != presentation_extent.height)
+        {
+            return core.TextureError.InvalidTextureExtent;
+        }
+        if (output_state.format_value != .bgra8_unorm or
+            !core.textureViewFormatsCompatible(output_state.format_value, selected_format))
+        {
+            return core.CommandEncodingError.PresentationFormatMismatch;
         }
     }
 
@@ -3728,6 +3762,19 @@ pub const ShaderModule = struct {
     }
 };
 
+const PipelineColorAttachmentFormats = struct {
+    values: [core.default_max_color_attachments]core.TextureFormat = @splat(.automatic),
+    count: u8 = 0,
+};
+
+fn copyPipelineColorAttachmentFormats(
+    attachments: []const core.RenderPipelineColorAttachmentDescriptor,
+) PipelineColorAttachmentFormats {
+    var result = PipelineColorAttachmentFormats{ .count = @intCast(attachments.len) };
+    for (attachments, 0..) |attachment, index| result.values[index] = attachment.format;
+    return result;
+}
+
 pub const RenderPipelineState = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
@@ -3755,6 +3802,8 @@ pub const RenderPipelineState = struct {
         tessellation: ?core.TessellationDescriptor = null,
         mesh_pipeline_hash: u64 = 0,
         mesh_limits: core.DeviceLimits = .{},
+        color_attachment_formats: [core.default_max_color_attachments]core.TextureFormat = @splat(.automatic),
+        color_attachment_count: u8 = 0,
         alive: bool = true,
         impl: Impl,
     };
@@ -3819,6 +3868,10 @@ pub const RenderPipelineState = struct {
 
     fn meshLimits(self: RenderPipelineState) core.DeviceLimits {
         return self.state().mesh_limits;
+    }
+
+    fn colorAttachmentFormats(self: RenderPipelineState) []const core.TextureFormat {
+        return self.state().color_attachment_formats[0..self.state().color_attachment_count];
     }
 
     pub fn setLabel(self: *RenderPipelineState, label_value: ?[]const u8) void {
@@ -5025,6 +5078,7 @@ pub const CommandBuffer = struct {
     const PrivateState = struct {
         backend: core.Backend,
         tracker: ?*ResourceTracker = null,
+        runtime_state: ?*RuntimeState = null,
         runtime_impl: ?*BackendRuntime = null,
         label_value: ?[]const u8 = null,
         alive: bool = true,
@@ -5054,6 +5108,11 @@ pub const CommandBuffer = struct {
         return @ptrCast(@alignCast(@constCast(&self._state)));
     }
 
+    fn recordImplicitDrawablePresentation(self: *CommandBuffer) core.CommandEncodingError!void {
+        try self.privateState().debug.presentDrawable();
+        self.privateState().uses_current_drawable_pass = true;
+    }
+
     const LifecycleThunkContext = struct {
         command_buffer: *CommandBuffer,
     };
@@ -5068,6 +5127,14 @@ pub const CommandBuffer = struct {
         if (self.privateState().lifecycle_callback) |callback| {
             callback(self.privateState().lifecycle_context, status);
         }
+    }
+
+    fn finishFailedCommit(self: *CommandBuffer, work_serial: u64) void {
+        const notify_failed = self.lifecycleStatus() != .failed;
+        if (self.privateState().tracker) |tracker| tracker.completeWork(work_serial);
+        self.releaseQuerySetResolveBorrows();
+        self.privateState().alive = false;
+        if (notify_failed) self.notifyLifecycle(.failed);
     }
 
     fn retainQuerySetForResolve(self: *CommandBuffer, query_set: *QuerySet) !void {
@@ -5123,6 +5190,10 @@ pub const CommandBuffer = struct {
             return RuntimeError.UnsupportedBackendForPresentation;
         }
         try descriptor.validateRuntime(self.privateState().backend);
+        const current_drawable_format: ?core.TextureFormat = if (descriptor.colorTargetUsesCurrentDrawable()) blk: {
+            const runtime_state = self.privateState().runtime_state orelse break :blk null;
+            break :blk runtime_state.selected_presentation_format;
+        } else null;
         if (descriptor.occlusion_query_set) |query_set| {
             assertObjectAlive(query_set.state().alive, "query_set");
             try expectSameBackend(self.privateState().backend, query_set.selectedBackend());
@@ -5158,6 +5229,7 @@ pub const CommandBuffer = struct {
             .backend = self.privateState().backend,
             .command_buffer = self,
             .label_value = descriptor.label,
+            .current_drawable_format = current_drawable_format,
             .debug = debug_encoder,
             .occlusion_query_set = descriptor.occlusion_query_set,
             .impl = encoder_impl,
@@ -5507,10 +5579,20 @@ pub const CommandBuffer = struct {
         assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
         assertAlive(shader_binding_table.state().alive, .shader_binding_table);
         try self.privateState().debug.requireEncodingSegment();
-        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try validateDrawablePresentationQueue(self.privateState().queue_kind_value);
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
         try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
-        try resources.validate(self.privateState().backend);
+        const runtime_state = self.privateState().runtime_state orelse return RuntimeError.UnsupportedBackendForPresentation;
+        const selected_format = runtime_state.selected_presentation_format orelse {
+            return RuntimeError.UnsupportedBackendForPresentation;
+        };
+        try resources.validateDrawableDispatch(
+            self.privateState().backend,
+            descriptor,
+            runtime_state.actual_presentation_extent,
+            selected_format,
+        );
+        try ensureTextureViewOwnedByQueue(self.privateState().queue_kind_value, resources.output);
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
         try self.privateState().debug.recordDirectCommand();
         var driver_submitted = false;
@@ -5530,7 +5612,6 @@ pub const CommandBuffer = struct {
                     .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                 };
                 try vulkan.traceRaysToDrawable(vulkan_pipeline, vulkan_as, vulkan_output, descriptor);
-                self.privateState().uses_current_drawable_pass = true;
                 driver_submitted = true;
             },
             .metal => |*metal| {
@@ -5545,13 +5626,19 @@ pub const CommandBuffer = struct {
                 };
                 switch (resources.output.state().impl) {
                     .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
-                    .metal => {},
+                    .metal => |*metal_output| try metal.traceRaysToDrawable(
+                        metal_pipeline,
+                        metal_as,
+                        metal_output,
+                        descriptor,
+                    ),
                 }
-                try metal.traceRaysToDrawable(metal_pipeline, metal_as, descriptor);
-                self.privateState().uses_current_drawable_pass = true;
                 driver_submitted = true;
             },
         };
+        if (driver_submitted) try self.recordImplicitDrawablePresentation();
+        _ = resources.output.recordUsage(.storage_texture_write);
+        _ = resources.output.recordUsage(.copy_source);
         shader_binding_table.recordDispatch(plan, self.privateState().impl != null, driver_submitted);
         return plan;
     }
@@ -5692,14 +5779,16 @@ pub const CommandBuffer = struct {
         }) {
             .vulkan => |*vulkan| {
                 vulkan.commit(lifecycleThunk, &lifecycle_context) catch |err| {
-                    if (self.lifecycleStatus() != .failed) self.notifyLifecycle(.failed);
+                    vulkan.deinit();
+                    self.finishFailedCommit(work_serial);
                     return err;
                 };
                 vulkan.deinit();
             },
             .metal => |*metal| {
                 metal.commit(lifecycleThunk, &lifecycle_context) catch |err| {
-                    if (self.lifecycleStatus() != .failed) self.notifyLifecycle(.failed);
+                    metal.deinit();
+                    self.finishFailedCommit(work_serial);
                     return err;
                 };
                 metal.deinit();
@@ -6567,6 +6656,7 @@ pub const RenderCommandEncoder = struct {
         active_tessellation: ?core.TessellationDescriptor = null,
         active_mesh_pipeline_hash: u64 = 0,
         active_mesh_limits: core.DeviceLimits = .{},
+        current_drawable_format: ?core.TextureFormat = null,
         occlusion_query_set: ?*QuerySet = null,
         impl: ?Impl = null,
     };
@@ -6588,6 +6678,12 @@ pub const RenderCommandEncoder = struct {
         assertObjectAlive(self.privateState().alive, "render_command_encoder");
         assertAlive(pipeline.state().alive, .render_pipeline_state);
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
+        if (self.privateState().current_drawable_format) |selected_format| {
+            const pipeline_formats = pipeline.colorAttachmentFormats();
+            if (pipeline_formats.len == 0 or pipeline_formats[0] != selected_format) {
+                return core.CommandEncodingError.PresentationFormatMismatch;
+            }
+        }
         try self.privateState().debug.setRenderPipelineState();
         self.privateState().active_root_constant_layout = pipeline.rootConstantLayout();
         self.privateState().active_resource_table_layout_base = pipeline.resourceTableLayoutBase();
@@ -7128,12 +7224,28 @@ const RuntimeState = struct {
     presentation_available: bool = true,
     surface_descriptor: core.SurfaceDescriptor,
     presentation_descriptor: core.PresentationDescriptor,
+    selected_presentation_format: ?core.TextureFormat = null,
+    actual_presentation_extent: core.Extent2D = .{ .width = 0, .height = 0 },
     adapter_info: core.AdapterInfo,
     capability_report: core.DeviceCapabilityReport,
     native_gpu_timestamp_queries: bool = false,
     owned_adapter_name: ?[]u8 = null,
     impl: BackendRuntime,
 };
+
+fn backendSelectedPresentationFormat(impl: *const BackendRuntime) ?core.TextureFormat {
+    return switch (impl.*) {
+        .vulkan => |*vulkan| vulkan.selectedPresentationFormat(),
+        .metal => |*metal| metal.selectedPresentationFormat(),
+    };
+}
+
+fn backendPresentationExtent(impl: *const BackendRuntime) ?core.Extent2D {
+    return switch (impl.*) {
+        .vulkan => |*vulkan| vulkan.presentationExtent(),
+        .metal => |*metal| metal.presentationExtent(),
+    };
+}
 
 fn runtimeState(pointer: *anyopaque) *RuntimeState {
     return @ptrCast(@alignCast(pointer));
@@ -7179,8 +7291,12 @@ pub const Swapchain = struct {
         return self.state().presentation_descriptor;
     }
 
+    pub fn selectedFormat(self: Swapchain) core.TextureFormat {
+        return self.state().selected_presentation_format.?;
+    }
+
     pub fn extent(self: Swapchain) core.Extent2D {
-        return self.state().presentation_descriptor.extent;
+        return self.state().actual_presentation_extent;
     }
 
     pub fn resize(self: *Swapchain, new_extent: core.Extent2D) !void {
@@ -7189,7 +7305,15 @@ pub const Swapchain = struct {
             .metal => |*metal| try metal.resize(new_extent),
         }
         if (!new_extent.isZero()) {
+            const selected_format = backendSelectedPresentationFormat(&self.state().impl) orelse {
+                return core.SurfaceError.UnsupportedPresentationFormat;
+            };
+            const actual_extent = backendPresentationExtent(&self.state().impl) orelse {
+                return core.SurfaceError.SurfaceLost;
+            };
             self.state().presentation_descriptor.extent = new_extent;
+            self.state().selected_presentation_format = selected_format;
+            self.state().actual_presentation_extent = actual_extent;
         }
     }
 
@@ -7255,6 +7379,7 @@ pub const Queue = struct {
         var command_buffer = CommandBuffer.init(.{
             .backend = self.runtime().backend,
             .tracker = self.runtime().tracker,
+            .runtime_state = self.runtime(),
             .runtime_impl = &self.runtime().impl,
             .presentation_available = self.runtime().presentation_available,
             .label_value = descriptor.label,
@@ -8221,6 +8346,7 @@ pub const Device = struct {
 
     pub fn makeRenderPipelineState(self: *Device, descriptor: core.RenderPipelineDescriptor) !RenderPipelineState {
         try descriptor.validate();
+        const color_attachment_formats = copyPipelineColorAttachmentFormats(descriptor.color_attachments);
         if (descriptor.bind_group_layouts.len + descriptor.resource_table_layouts.len > self.limits().max_bind_group_slots) {
             return core.CommandEncodingError.InvalidBindGroupIndex;
         }
@@ -8258,6 +8384,8 @@ pub const Device = struct {
             .root_constant_ranges = root_constant_ranges,
             .resource_table_layout_base = @intCast(descriptor.bind_group_layouts.len),
             .resource_table_layout_hashes = resource_table_layout_hashes,
+            .color_attachment_formats = color_attachment_formats.values,
+            .color_attachment_count = color_attachment_formats.count,
             .impl = impl,
         });
         pipeline.setLabel(descriptor.label);
@@ -8696,6 +8824,7 @@ pub fn makeTessellationRenderPipelineState(
 ) !RenderPipelineState {
     try descriptor.validate(device.features(), device.limits());
     const render = descriptor.render;
+    const color_attachment_formats = copyPipelineColorAttachmentFormats(render.color_attachments);
     if (render.bind_group_layouts.len + render.resource_table_layouts.len > device.limits().max_bind_group_slots) {
         return core.CommandEncodingError.InvalidBindGroupIndex;
     }
@@ -8746,6 +8875,8 @@ pub fn makeTessellationRenderPipelineState(
         .resource_table_layout_hashes = resource_table_layout_hashes,
         .kind = .tessellation,
         .tessellation = descriptor.tessellation,
+        .color_attachment_formats = color_attachment_formats.values,
+        .color_attachment_count = color_attachment_formats.count,
         .impl = impl,
     });
     pipeline.setLabel(render.label);
@@ -8757,6 +8888,7 @@ pub fn makeMeshRenderPipelineState(
     descriptor: core.MeshRenderPipelineDescriptor,
 ) !RenderPipelineState {
     try descriptor.validate(device.features(), device.limits());
+    const color_attachment_formats = copyPipelineColorAttachmentFormats(descriptor.color_attachments);
     if (descriptor.bind_group_layouts.len + descriptor.resource_table_layouts.len > device.limits().max_bind_group_slots) {
         return core.CommandEncodingError.InvalidBindGroupIndex;
     }
@@ -8803,6 +8935,8 @@ pub fn makeMeshRenderPipelineState(
         .kind = .mesh,
         .mesh_pipeline_hash = hashMeshPipelineDescriptor(device.state().backend, descriptor.pipeline),
         .mesh_limits = device.limits(),
+        .color_attachment_formats = color_attachment_formats.values,
+        .color_attachment_count = color_attachment_formats.count,
         .impl = impl,
     });
     pipeline.setLabel(descriptor.label);
@@ -9164,6 +9298,7 @@ pub const WindowContext = struct {
     }
 
     pub fn init(allocator: std.mem.Allocator, options: WindowContextOptions) !WindowContext {
+        try core.validatePresentationFormatRequest(options.presentation.format);
         const tracker = try allocator.create(ResourceTracker);
         errdefer allocator.destroy(tracker);
         tracker.* = .{};
@@ -9196,6 +9331,12 @@ pub const WindowContext = struct {
             },
         };
         errdefer deinitBackendRuntime(&impl);
+        const selected_presentation_format = backendSelectedPresentationFormat(&impl) orelse {
+            return core.SurfaceError.UnsupportedPresentationFormat;
+        };
+        const actual_presentation_extent = backendPresentationExtent(&impl) orelse {
+            return core.SurfaceError.SurfaceLost;
+        };
 
         const adapter_info = try resolveAdapterInfo(allocator, &impl);
         errdefer adapter_info.deinit(allocator);
@@ -9215,6 +9356,8 @@ pub const WindowContext = struct {
             .presentation_available = true,
             .surface_descriptor = options.surface,
             .presentation_descriptor = options.presentation,
+            .selected_presentation_format = selected_presentation_format,
+            .actual_presentation_extent = actual_presentation_extent,
             .adapter_info = adapter_info.info,
             .capability_report = capability_report,
             .native_gpu_timestamp_queries = native_gpu_timestamp_queries,
@@ -9402,6 +9545,10 @@ fn ensureTextureOwnedByQueue(queue: core.QueueKind, texture: *const Texture) cor
 
 fn ensureTextureViewOwnedByQueue(queue: core.QueueKind, texture_view: *const TextureView) core.CommandEncodingError!void {
     if (texture_view.ownerQueue() != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+}
+
+fn validateDrawablePresentationQueue(queue: core.QueueKind) core.CommandEncodingError!void {
+    if (queue != .graphics) return core.CommandEncodingError.InvalidQueueCapability;
 }
 
 fn validateRenderPassOwnership(queue: core.QueueKind, descriptor: RenderPassDescriptor) core.CommandEncodingError!void {
@@ -11198,6 +11345,143 @@ test "ray texture dispatch resources require a writable 2D output extent" {
     try resources.validateAccelerationStructure(.metal);
 }
 
+test "legacy drawable ray dispatch requires a linear BGRA output compatible with the selected presentation format" {
+    var tracker = ResourceTracker{};
+    var acceleration_structure = AccelerationStructure.init(.{
+        .backend = .metal,
+        .tracker = &tracker,
+        .descriptor_value = .{
+            .kind = .bottom_level,
+            .primitive_count = 1,
+        },
+        .sizes_value = .{
+            .result_size = 1024,
+            .scratch_size = 256,
+        },
+        .native_handle = .{
+            .backend = .metal,
+            .kind = .bottom_level,
+            .result_size = 1024,
+            .scratch_alignment = 256,
+        },
+        .built_value = true,
+    });
+    var output = TextureView.init(.{
+        .backend = .metal,
+        .tracker = &tracker,
+        .format_value = .bgra8_unorm,
+        .dimension_value = .two_d,
+        .usage_value = .{
+            .shader_write = true,
+            .copy_source = true,
+        },
+        .storage_mode_value = .private,
+        .sample_count_value = 1,
+        .width_value = 64,
+        .height_value = 32,
+        .impl = .{ .metal = undefined },
+    });
+    const resources = RayTracingDrawableResources{
+        .acceleration_structure = &acceleration_structure,
+        .output = &output,
+    };
+    const dispatch = core.RayDispatchDescriptor{ .width = 64, .height = 32 };
+    const presentation_extent = core.Extent2D{ .width = 64, .height = 32 };
+
+    try resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb);
+    try resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm);
+
+    output.state().format_value = .bgra8_unorm_srgb;
+    try std.testing.expectError(
+        core.CommandEncodingError.PresentationFormatMismatch,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().format_value = .rgba8_unorm;
+    try std.testing.expectError(
+        core.CommandEncodingError.PresentationFormatMismatch,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().format_value = .bgra8_unorm;
+
+    output.state().usage_value.copy_source = false;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureUsage,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().usage_value.copy_source = true;
+    output.state().usage_value.shader_write = false;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureUsage,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().usage_value.shader_write = true;
+
+    try std.testing.expectError(
+        core.TextureError.InvalidTextureExtent,
+        resources.validateDrawableDispatch(
+            .metal,
+            .{ .width = 63, .height = 32 },
+            presentation_extent,
+            .bgra8_unorm_srgb,
+        ),
+    );
+    try std.testing.expectError(
+        core.TextureError.InvalidTextureExtent,
+        resources.validateDrawableDispatch(
+            .metal,
+            dispatch,
+            .{ .width = 64, .height = 31 },
+            .bgra8_unorm_srgb,
+        ),
+    );
+    try std.testing.expectError(
+        core.TextureError.InvalidTextureExtent,
+        resources.validateDrawableDispatch(
+            .metal,
+            .{ .width = 64, .height = 32, .depth = 2 },
+            presentation_extent,
+            .bgra8_unorm_srgb,
+        ),
+    );
+
+    output.state().dimension_value = .two_d_array;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureViewDimension,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().dimension_value = .two_d;
+    output.state().base_mip_level_value = 1;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureViewDimension,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().base_mip_level_value = 0;
+    output.state().sample_count_value = 4;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedSampleCount,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+    output.state().sample_count_value = 1;
+
+    const multi_subresource_tracker = try SharedTextureUsageTracker.init(std.testing.allocator, .{
+        .format = .bgra8_unorm,
+        .width = 64,
+        .height = 32,
+        .mip_level_count = 2,
+        .usage = .{
+            .shader_write = true,
+            .copy_source = true,
+        },
+    });
+    defer multi_subresource_tracker.release();
+    output.state().subresource_usage_tracker = multi_subresource_tracker;
+    defer output.state().subresource_usage_tracker = null;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureViewDimension,
+        resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb),
+    );
+}
+
 test "runtime device plans Metal ray tracing mapping from native capabilities" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = undefined;
@@ -12151,6 +12435,40 @@ test "command buffer lifecycle callback reports scheduled then completed once" {
     try std.testing.expectEqual(core.CommandBufferLifecycleStatus.completed, command_buffer.lifecycleStatus());
 }
 
+test "failed command buffer completion is terminal and retires tracked work" {
+    var tracker = ResourceTracker{};
+    var probe = LifecycleCallbackProbe{};
+    var query_values = [_]u64{0};
+    var query_availability = [_]bool{false};
+    var query_set = QuerySet.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = std.testing.allocator,
+        .descriptor_value = .{ .query_type = .timestamp, .count = 1 },
+        .values = query_values[0..],
+        .available = query_availability[0..],
+    });
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .lifecycle_callback = recordLifecycleCallback,
+        .lifecycle_context = &probe,
+        .impl = null,
+    });
+    const work_serial = tracker.submitWork();
+    try command_buffer.retainQuerySetForResolve(&query_set);
+
+    command_buffer.finishFailedCommit(work_serial);
+
+    try std.testing.expectEqual(core.CommandBufferLifecycleStatus.failed, command_buffer.lifecycleStatus());
+    try std.testing.expect(!command_buffer.privateState().alive);
+    try std.testing.expectEqual(work_serial, tracker.completed_work_serial);
+    try std.testing.expectEqual(@as(usize, 1), probe.count);
+    try std.testing.expectEqual(core.CommandBufferLifecycleStatus.failed, probe.statuses[0]);
+    try std.testing.expectEqual(@as(usize, 0), query_set.state().pending_command_borrows);
+    try std.testing.expectEqual(@as(usize, 0), command_buffer.privateState().borrowed_query_sets.items.len);
+}
+
 test "window context exposes device and queue views" {
     var tracker = ResourceTracker{};
     var context_state = RuntimeState{
@@ -12166,6 +12484,7 @@ test "window context exposes device and queue views" {
         .presentation_descriptor = .{
             .extent = .{ .width = 640, .height = 480 },
         },
+        .actual_presentation_extent = .{ .width = 800, .height = 600 },
         .adapter_info = .{
             .backend = .vulkan,
             .name = "test vulkan adapter",
@@ -12212,10 +12531,40 @@ test "window context exposes device and queue views" {
     try std.testing.expectEqual(core.Backend.vulkan, context.adapterInfo().backend);
     try std.testing.expectEqualStrings("test vulkan adapter", device.adapterInfo().name);
     try std.testing.expectEqual(core.SurfaceProvider.external, surface_view.provider().?);
-    try std.testing.expectEqual(@as(u32, 640), swapchain_view.extent().width);
+    try std.testing.expectEqual(@as(u32, 800), swapchain_view.extent().width);
+    try std.testing.expectEqual(@as(u32, 600), swapchain_view.extent().height);
+    try std.testing.expectEqual(@as(u32, 640), swapchain_view.presentationDescriptor().extent.width);
     try std.testing.expectEqual(@as(u32, 480), swapchain_view.presentationDescriptor().extent.height);
     try std.testing.expect(presentModeSupport(device).fifo);
     try std.testing.expectEqual(core.PresentMode.fifo, resolvePresentMode(device, .immediate).selected);
+}
+
+test "swapchain preserves requested and selected presentation formats separately" {
+    var tracker = ResourceTracker{};
+    var context_state = RuntimeState{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .surface_descriptor = .{},
+        .presentation_descriptor = .{
+            .extent = .{ .width = 640, .height = 480 },
+            .format = .automatic,
+        },
+        .selected_presentation_format = .bgra8_unorm_srgb,
+        .actual_presentation_extent = .{ .width = 640, .height = 480 },
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+        .impl = undefined,
+    };
+    var context = WindowContext{ ._state = &context_state };
+    const swapchain = context.swapchain();
+
+    try std.testing.expectEqual(core.TextureFormat.automatic, swapchain.presentationDescriptor().format);
+    try std.testing.expectEqual(core.TextureFormat.bgra8_unorm_srgb, swapchain.selectedFormat());
+    try std.testing.expect(swapchain.presentationDescriptor().format != swapchain.selectedFormat());
 }
 
 test "runtime device creates multi surface collections" {
@@ -13650,6 +13999,85 @@ test "headless command buffer rejects current drawable render passes" {
         RuntimeError.UnsupportedBackendForPresentation,
         command_buffer.presentDrawable(),
     );
+}
+
+test "legacy drawable implicit presentation rejects an explicit duplicate" {
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .metal,
+    });
+    try command_buffer.privateState().debug.recordDirectCommand();
+    try command_buffer.recordImplicitDrawablePresentation();
+
+    try std.testing.expect(command_buffer.privateState().uses_current_drawable_pass);
+    try std.testing.expect(command_buffer.privateState().debug.presented);
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidCommandBufferState,
+        command_buffer.presentDrawable(),
+    );
+}
+
+test "legacy drawable presentation requires the graphics queue" {
+    try validateDrawablePresentationQueue(.graphics);
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidQueueCapability,
+        validateDrawablePresentationQueue(.compute),
+    );
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidQueueCapability,
+        validateDrawablePresentationQueue(.transfer),
+    );
+}
+
+test "current drawable pipeline format mismatch stops before encoder lowering" {
+    var tracker = ResourceTracker{};
+    var runtime_state = RuntimeState{
+        .allocator = std.testing.allocator,
+        .tracker = &tracker,
+        .backend = .metal,
+        .surface_descriptor = .{},
+        .presentation_descriptor = .{
+            .extent = .{ .width = 64, .height = 32 },
+            .format = .automatic,
+        },
+        .selected_presentation_format = .bgra8_unorm_srgb,
+        .adapter_info = .{
+            .backend = .metal,
+            .name = "test metal adapter",
+        },
+        .capability_report = core.defaultDeviceCapabilityReport(.metal),
+        .impl = undefined,
+    };
+    var command_buffer = CommandBuffer.init(.{
+        .backend = .metal,
+        .runtime_state = &runtime_state,
+        .impl = null,
+    });
+    const color_attachments = [_]RenderPassColorAttachmentDescriptor{.{}};
+    var encoder = try command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = color_attachments[0..],
+    });
+    try std.testing.expectEqual(
+        core.TextureFormat.bgra8_unorm_srgb,
+        encoder.privateState().current_drawable_format.?,
+    );
+
+    var pipeline = RenderPipelineState.init(.{
+        .backend = .metal,
+        .tracker = &tracker,
+        .impl = .{ .metal = undefined },
+    });
+    pipeline.state().color_attachment_formats[0] = .bgra8_unorm;
+    pipeline.state().color_attachment_count = 1;
+
+    try std.testing.expectError(
+        core.CommandEncodingError.PresentationFormatMismatch,
+        encoder.setRenderPipelineState(&pipeline),
+    );
+    try std.testing.expect(!encoder.privateState().debug.pipeline_set);
+
+    pipeline.state().color_attachment_formats[0] = .bgra8_unorm_srgb;
+    try encoder.setRenderPipelineState(&pipeline);
+    try std.testing.expect(encoder.privateState().debug.pipeline_set);
 }
 
 test "runtime render encoder validates bind group binding" {

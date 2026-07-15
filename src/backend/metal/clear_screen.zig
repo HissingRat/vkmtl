@@ -18,6 +18,7 @@ const MetalClearScreen = @This();
 
 handle: *metal.vkmtl_metal_clear_screen,
 extent: core.Extent2D,
+selected_presentation_format: ?core.TextureFormat = null,
 capture_active: bool = false,
 
 pub const AdapterInfoResult = struct {
@@ -43,18 +44,29 @@ pub fn init(
     const source = surface.source orelse return core.SurfaceError.MissingSurfaceSource;
     const cocoa_window = source.display orelse return Error.InvalidSurface;
     if (presentation.extent.isZero()) return core.SurfaceError.InvalidSurfaceExtent;
+    const selected_format = try resolvePresentationFormat(presentation.format);
 
     var handle: ?*metal.vkmtl_metal_clear_screen = null;
     try check(metal.vkmtl_metal_clear_screen_create(
         &handle,
         cocoa_window,
+        MetalTexture.textureFormat(selected_format),
         presentation.extent.width,
         presentation.extent.height,
     ));
+    const clear_screen = handle orelse return Error.InvalidSurface;
+    errdefer metal.vkmtl_metal_clear_screen_destroy(clear_screen);
+
+    var native_format: metal.vkmtl_metal_texture_format = metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID;
+    if (metal.vkmtl_metal_clear_screen_get_presentation_format(clear_screen, &native_format) != metal.VKMTL_METAL_STATUS_OK) {
+        return core.SurfaceError.UnsupportedPresentationFormat;
+    }
+    const actual_format = try confirmPresentationFormat(selected_format, native_format);
 
     return .{
-        .handle = handle orelse return Error.InvalidSurface,
+        .handle = clear_screen,
         .extent = presentation.extent,
+        .selected_presentation_format = actual_format,
         .capture_active = false,
     };
 }
@@ -65,6 +77,7 @@ pub fn initHeadless() !MetalClearScreen {
     return .{
         .handle = handle orelse return Error.NoMetalDevice,
         .extent = .{ .width = 0, .height = 0 },
+        .selected_presentation_format = null,
         .capture_active = false,
     };
 }
@@ -155,10 +168,10 @@ pub fn memoryBudget(self: *const MetalClearScreen) ?MemoryBudget {
 
 pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFormat) core.FormatCapabilities {
     var capabilities = core.defaultFormatCapabilities(format);
-    if (format == .rgba16_float) capabilities.storage = true;
+    if (format == .rgba16_float or format == .bgra8_unorm) capabilities.storage = true;
     capabilities.blit_source = false;
     capabilities.blit_destination = false;
-    capabilities.presentation = !self.extent.isZero() and format == .bgra8_unorm_srgb;
+    capabilities.presentation = if (self.selected_presentation_format) |selected| selected == format else false;
     capabilities.depth_resolve = false;
     capabilities.stencil_resolve = false;
     if (format == .depth32_float_stencil8) {
@@ -168,6 +181,15 @@ pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFor
         capabilities.stencil_copy = false;
     }
     return capabilities;
+}
+
+pub fn selectedPresentationFormat(self: *const MetalClearScreen) ?core.TextureFormat {
+    return self.selected_presentation_format;
+}
+
+pub fn presentationExtent(self: *const MetalClearScreen) ?core.Extent2D {
+    if (self.selected_presentation_format == null) return null;
+    return self.extent;
 }
 
 pub fn nativeHandles(self: *const MetalClearScreen) !core.NativeHandles {
@@ -324,6 +346,31 @@ fn check(status: metal.vkmtl_metal_status) Error!void {
         metal.VKMTL_METAL_STATUS_COMMAND_FAILED => Error.CommandFailed,
         else => Error.UnexpectedMetalStatus,
     };
+}
+
+fn resolvePresentationFormat(requested: core.TextureFormat) core.SurfaceError!core.TextureFormat {
+    return switch (requested) {
+        .automatic, .bgra8_unorm_srgb => .bgra8_unorm_srgb,
+        .bgra8_unorm => .bgra8_unorm,
+        else => core.SurfaceError.UnsupportedPresentationFormat,
+    };
+}
+
+fn presentationFormatFromNative(format: metal.vkmtl_metal_texture_format) core.SurfaceError!core.TextureFormat {
+    return switch (format) {
+        metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM => .bgra8_unorm,
+        metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB => .bgra8_unorm_srgb,
+        else => core.SurfaceError.UnsupportedPresentationFormat,
+    };
+}
+
+fn confirmPresentationFormat(
+    resolved: core.TextureFormat,
+    native: metal.vkmtl_metal_texture_format,
+) core.SurfaceError!core.TextureFormat {
+    const actual = try presentationFormatFromNative(native);
+    if (actual != resolved) return core.SurfaceError.UnsupportedPresentationFormat;
+    return actual;
 }
 
 fn queryCapabilities(self: *const MetalClearScreen) metal.vkmtl_metal_device_capabilities {
@@ -599,41 +646,100 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expectEqual(@as(u32, 65_535), queried_limits.max_mesh_threadgroups_per_grid_x);
 }
 
-test "Metal format capabilities match the default sRGB drawable and scaled blit support" {
-    const screen = MetalClearScreen{
+test "Metal presentation resolver honors automatic and explicit BGRA8 requests" {
+    try std.testing.expectEqual(
+        core.TextureFormat.bgra8_unorm_srgb,
+        try resolvePresentationFormat(.automatic),
+    );
+    try std.testing.expectEqual(
+        core.TextureFormat.bgra8_unorm_srgb,
+        try resolvePresentationFormat(.bgra8_unorm_srgb),
+    );
+    try std.testing.expectEqual(
+        core.TextureFormat.bgra8_unorm,
+        try resolvePresentationFormat(.bgra8_unorm),
+    );
+    try std.testing.expectError(
+        core.SurfaceError.UnsupportedPresentationFormat,
+        resolvePresentationFormat(.rgba16_float),
+    );
+}
+
+test "Metal native presentation formats map back to the selected portable format" {
+    try std.testing.expectEqual(
+        core.TextureFormat.bgra8_unorm,
+        try presentationFormatFromNative(metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM),
+    );
+    try std.testing.expectEqual(
+        core.TextureFormat.bgra8_unorm_srgb,
+        try presentationFormatFromNative(metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM_SRGB),
+    );
+    try std.testing.expectError(
+        core.SurfaceError.UnsupportedPresentationFormat,
+        presentationFormatFromNative(metal.VKMTL_METAL_TEXTURE_FORMAT_INVALID),
+    );
+    try std.testing.expectError(
+        core.SurfaceError.UnsupportedPresentationFormat,
+        presentationFormatFromNative(metal.VKMTL_METAL_TEXTURE_FORMAT_RGBA8_UNORM),
+    );
+    try std.testing.expectError(
+        core.SurfaceError.UnsupportedPresentationFormat,
+        confirmPresentationFormat(
+            .bgra8_unorm_srgb,
+            metal.VKMTL_METAL_TEXTURE_FORMAT_BGRA8_UNORM,
+        ),
+    );
+}
+
+test "Metal format capabilities expose only the selected drawable format" {
+    const srgb_screen = MetalClearScreen{
         .handle = undefined,
         .extent = .{ .width = 1, .height = 1 },
+        .selected_presentation_format = .bgra8_unorm_srgb,
     };
-    const presentable = screen.formatCapabilities(.bgra8_unorm_srgb);
+    try std.testing.expectEqual(core.TextureFormat.bgra8_unorm_srgb, srgb_screen.selectedPresentationFormat().?);
+    const presentable = srgb_screen.formatCapabilities(.bgra8_unorm_srgb);
     try std.testing.expect(presentable.presentation);
     try std.testing.expect(!presentable.blit_source);
     try std.testing.expect(!presentable.blit_destination);
     try std.testing.expect(presentable.color_resolve);
+    try std.testing.expect(!srgb_screen.formatCapabilities(.bgra8_unorm).presentation);
 
     const headless = MetalClearScreen{
         .handle = undefined,
         .extent = .{ .width = 0, .height = 0 },
+        .selected_presentation_format = null,
     };
+    try std.testing.expectEqual(@as(?core.TextureFormat, null), headless.selectedPresentationFormat());
     try std.testing.expect(!headless.formatCapabilities(.bgra8_unorm_srgb).presentation);
+    try std.testing.expect(!headless.formatCapabilities(.bgra8_unorm).presentation);
 
-    const linear = screen.formatCapabilities(.bgra8_unorm);
-    try std.testing.expect(!linear.presentation);
-    const depth = screen.formatCapabilities(.depth32_float);
+    const linear_screen = MetalClearScreen{
+        .handle = undefined,
+        .extent = .{ .width = 1, .height = 1 },
+        .selected_presentation_format = .bgra8_unorm,
+    };
+    const linear = linear_screen.formatCapabilities(.bgra8_unorm);
+    try std.testing.expect(linear.presentation);
+    try std.testing.expect(linear.storage);
+    try std.testing.expect(!linear_screen.formatCapabilities(.bgra8_unorm_srgb).presentation);
+
+    const depth = srgb_screen.formatCapabilities(.depth32_float);
     try std.testing.expect(depth.depth_copy);
     try std.testing.expect(!depth.depth_resolve);
-    const depth_stencil = screen.formatCapabilities(.depth32_float_stencil8);
+    const depth_stencil = srgb_screen.formatCapabilities(.depth32_float_stencil8);
     try std.testing.expect(!depth_stencil.copy_source);
     try std.testing.expect(!depth_stencil.stencil_copy);
 
-    const half_float = screen.formatCapabilities(.rgba16_float);
+    const half_float = srgb_screen.formatCapabilities(.rgba16_float);
     try std.testing.expect(half_float.sampled);
     try std.testing.expect(half_float.filterable);
     try std.testing.expect(half_float.color_attachment);
     try std.testing.expect(half_float.storage);
-    const integer = screen.formatCapabilities(.r32_uint);
+    const integer = srgb_screen.formatCapabilities(.r32_uint);
     try std.testing.expect(integer.storage);
     try std.testing.expect(!integer.filterable);
-    const stencil = screen.formatCapabilities(.stencil8);
+    const stencil = srgb_screen.formatCapabilities(.stencil8);
     try std.testing.expect(stencil.depth_stencil_attachment);
     try std.testing.expect(!stencil.stencil_copy);
 }

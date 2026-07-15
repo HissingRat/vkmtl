@@ -19,10 +19,6 @@ const large_sphere_segments: u32 = 72;
 const procedural_sphere_count: u32 = 10;
 const scene_object_count: u32 = 10;
 
-const present_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 const RtVertex = extern struct {
     x: f32,
     y: f32,
@@ -52,6 +48,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         std.debug.print("ray traced scene finite run configuration failed: VKMTL_RT_FRAME_LIMIT: {s}\n", .{@errorName(err)});
         return err;
     };
+    const legacy_drawable_path = legacyDrawablePathFromEnv();
 
     try glfw.init();
     defer glfw.terminate();
@@ -67,12 +64,14 @@ pub fn main(_: std.process.Init.Minimal) !void {
     defer _ = debug_allocator.deinit();
     const allocator = debug_allocator.allocator();
 
+    var presentation = common.presentationDescriptor(window, .fifo);
+    if (!legacy_drawable_path) presentation.format = .bgra8_unorm_srgb;
     var context = try vkmtl.WindowContext.init(allocator, .{
         .app_name = app_name,
         .backend = .auto,
         .debug_backend_override = backendOverrideFromEnv(),
         .surface = common.surfaceDescriptor(window),
-        .presentation = common.presentationDescriptor(window, .fifo),
+        .presentation = presentation,
     });
     defer context.deinit();
     std.debug.print("Using backend: {}\n", .{context.selectedBackend()});
@@ -80,19 +79,29 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const drawable_format = swapchain.selectedFormat();
+    std.debug.print("Presentation path: {s}\n", .{if (legacy_drawable_path) "legacy_drawable_raw_copy" else "texture_composition"});
     const capability_report = device.capabilityReport();
     if (device.selectedBackend() == .vulkan and !capability_report.ray_tracing.supported) {
         printRayTracingUnsupported(capability_report.ray_tracing);
         return;
     }
-    const scene_format_caps = device.getFormatCaps(.rgba16_float);
-    if (!scene_format_caps.storage or !scene_format_caps.sampled) {
-        std.debug.print("ray tracing display unsupported: rgba16_float requires storage and sampled support\n", .{});
-        return;
+    if (legacy_drawable_path) {
+        const legacy_format_caps = device.getFormatCaps(.bgra8_unorm);
+        if (!legacy_format_caps.storage or !legacy_format_caps.copy_source) {
+            std.debug.print("legacy ray tracing display unsupported: bgra8_unorm requires storage and copy-source support\n", .{});
+            return;
+        }
+    } else {
+        const scene_format_caps = device.getFormatCaps(.rgba16_float);
+        if (!scene_format_caps.storage or !scene_format_caps.sampled) {
+            std.debug.print("ray tracing display unsupported: rgba16_float requires storage and sampled support\n", .{});
+            return;
+        }
     }
-    const drawable_format_caps = device.getFormatCaps(.bgra8_unorm_srgb);
+    const drawable_format_caps = device.getFormatCaps(drawable_format);
     if (!drawable_format_caps.presentation) {
-        std.debug.print("ray tracing display unsupported: bgra8_unorm_srgb presentation unavailable\n", .{});
+        std.debug.print("ray tracing display unsupported: {s} presentation unavailable\n", .{@tagName(drawable_format)});
         return;
     }
 
@@ -217,7 +226,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         return err;
     };
 
-    var display = try DisplayPipeline.init(allocator, &device);
+    var display = try DisplayPipeline.init(allocator, &device, drawable_format);
     defer display.deinit();
 
     if (device.selectedBackend() == .vulkan) {
@@ -327,10 +336,10 @@ pub fn main(_: std.process.Init.Minimal) !void {
             return err;
         };
 
-        var output_target: ?*DisplayTarget = null;
+        var output_target: ?FrameTarget = null;
         var output_extent = vkmtl.Extent2D{ .width = 0, .height = 0 };
         defer {
-            if (output_target) |target| target.destroy();
+            if (output_target) |*target| target.destroy();
         }
 
         var reported_visible_pixels = false;
@@ -348,28 +357,34 @@ pub fn main(_: std.process.Init.Minimal) !void {
             zero_extent_watchdog.reset();
 
             try swapchain.resize(extent);
+            const drawable_extent = swapchain.extent();
             const scene_time_seconds = currentSceneTime(scene_time_start);
 
-            if (output_target == null or output_extent.width != extent.width or output_extent.height != extent.height) {
-                if (output_target) |target| target.destroy();
+            if (output_target == null or output_extent.width != drawable_extent.width or output_extent.height != drawable_extent.height) {
+                if (output_target) |*target| target.destroy();
                 output_target = null;
-                output_target = try DisplayTarget.create(allocator, &device, &display, extent);
-                output_extent = extent;
+                output_target = try FrameTarget.create(
+                    allocator,
+                    &device,
+                    &display,
+                    drawable_extent,
+                    legacy_drawable_path,
+                );
+                output_extent = drawable_extent;
             }
 
-            if (output_target) |target| {
+            if (output_target) |*target| {
                 const scene_data = makeSceneData(scene_time_seconds);
                 const scene_data_bytes = std.mem.asBytes(&scene_data);
-                const dispatch_plan = traceAndPresent(
+                const dispatch_plan = target.traceAndPresent(
                     &queue,
                     &pipeline_state,
                     &shader_binding_table,
                     &top_level_acceleration_structure,
-                    target,
                     &display,
                     .{
-                        .width = extent.width,
-                        .height = extent.height,
+                        .width = drawable_extent.width,
+                        .height = drawable_extent.height,
                         .inline_data = scene_data_bytes[0..],
                         .inline_data_binding = 2,
                     },
@@ -417,10 +432,10 @@ pub fn main(_: std.process.Init.Minimal) !void {
 
     if (device.selectedBackend() == .metal) {
         const scene_time_start = glfw.timeSeconds();
-        var output_target: ?*DisplayTarget = null;
+        var output_target: ?FrameTarget = null;
         var output_extent = vkmtl.Extent2D{ .width = 0, .height = 0 };
         defer {
-            if (output_target) |target| target.destroy();
+            if (output_target) |*target| target.destroy();
         }
 
         var reported_visible_pixels = false;
@@ -438,27 +453,33 @@ pub fn main(_: std.process.Init.Minimal) !void {
             zero_extent_watchdog.reset();
 
             try swapchain.resize(extent);
-            if (output_target == null or output_extent.width != extent.width or output_extent.height != extent.height) {
-                if (output_target) |target| target.destroy();
+            const drawable_extent = swapchain.extent();
+            if (output_target == null or output_extent.width != drawable_extent.width or output_extent.height != drawable_extent.height) {
+                if (output_target) |*target| target.destroy();
                 output_target = null;
-                output_target = try DisplayTarget.create(allocator, &device, &display, extent);
-                output_extent = extent;
+                output_target = try FrameTarget.create(
+                    allocator,
+                    &device,
+                    &display,
+                    drawable_extent,
+                    legacy_drawable_path,
+                );
+                output_extent = drawable_extent;
             }
 
-            if (output_target) |target| {
+            if (output_target) |*target| {
                 const scene_time_seconds = currentSceneTime(scene_time_start);
                 const scene_data = makeSceneData(scene_time_seconds);
                 const scene_data_bytes = std.mem.asBytes(&scene_data);
-                const dispatch_plan = traceAndPresent(
+                const dispatch_plan = target.traceAndPresent(
                     &queue,
                     &pipeline_state,
                     &shader_binding_table,
                     &acceleration_structure,
-                    target,
                     &display,
                     .{
-                        .width = extent.width,
-                        .height = extent.height,
+                        .width = drawable_extent.width,
+                        .height = drawable_extent.height,
                         .inline_data = scene_data_bytes[0..],
                         .inline_data_binding = 2,
                     },
@@ -512,7 +533,11 @@ const DisplayPipeline = struct {
     sampler: vkmtl.SamplerState,
     pipeline: vkmtl.RenderPipelineState,
 
-    fn init(allocator: std.mem.Allocator, device: *vkmtl.Device) !DisplayPipeline {
+    fn init(
+        allocator: std.mem.Allocator,
+        device: *vkmtl.Device,
+        drawable_format: vkmtl.TextureFormat,
+    ) !DisplayPipeline {
         var compiled_shader = try device.compileRenderShader("ray_traced_scene_present", present_shader_source, .{
             .vertex_entry = "present_vs",
             .fragment_entry = "present_fs",
@@ -539,6 +564,9 @@ const DisplayPipeline = struct {
         const bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
             bind_group_layout.descriptor(),
         };
+        const present_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+            .{ .format = drawable_format },
+        };
         var pipeline = try device.makeRenderPipelineState(.{
             .label = "ray traced scene display transform",
             .vertex = stages.vertex,
@@ -562,6 +590,62 @@ const DisplayPipeline = struct {
         self.sampler.deinit();
         self.bind_group_layout.deinit();
         self.compiled_shader.deinit();
+    }
+};
+
+const FrameTarget = union(enum) {
+    composed: *DisplayTarget,
+    legacy_drawable: *LegacyDrawableTarget,
+
+    fn create(
+        allocator: std.mem.Allocator,
+        device: *vkmtl.Device,
+        display: *DisplayPipeline,
+        extent: vkmtl.Extent2D,
+        legacy_drawable_path: bool,
+    ) !FrameTarget {
+        if (legacy_drawable_path) {
+            return .{ .legacy_drawable = try LegacyDrawableTarget.create(allocator, device, extent) };
+        }
+        return .{ .composed = try DisplayTarget.create(allocator, device, display, extent) };
+    }
+
+    fn destroy(self: *FrameTarget) void {
+        switch (self.*) {
+            .composed => |target| target.destroy(),
+            .legacy_drawable => |target| target.destroy(),
+        }
+        self.* = undefined;
+    }
+
+    fn traceAndPresent(
+        self: *FrameTarget,
+        queue: *vkmtl.Queue,
+        pipeline: *vkmtl.ray_tracing.RayTracingPipelineState,
+        shader_binding_table: *vkmtl.ray_tracing.ShaderBindingTable,
+        acceleration_structure: *vkmtl.ray_tracing.AccelerationStructure,
+        display: *DisplayPipeline,
+        descriptor: vkmtl.ray_tracing.RayDispatchDescriptor,
+    ) !vkmtl.ray_tracing.RayDispatchPlan {
+        return switch (self.*) {
+            .composed => |target| traceAndPresentComposed(
+                queue,
+                pipeline,
+                shader_binding_table,
+                acceleration_structure,
+                target,
+                display,
+                descriptor,
+            ),
+            .legacy_drawable => |target| traceAndPresentLegacyDrawable(
+                queue,
+                pipeline,
+                shader_binding_table,
+                acceleration_structure,
+                target,
+                descriptor,
+            ),
+        };
     }
 };
 
@@ -621,7 +705,44 @@ const DisplayTarget = struct {
     }
 };
 
-fn traceAndPresent(
+const LegacyDrawableTarget = struct {
+    allocator: std.mem.Allocator,
+    texture: vkmtl.Texture,
+    view: vkmtl.TextureView,
+
+    fn create(
+        allocator: std.mem.Allocator,
+        device: *vkmtl.Device,
+        extent: vkmtl.Extent2D,
+    ) !*LegacyDrawableTarget {
+        const target = try allocator.create(LegacyDrawableTarget);
+        errdefer allocator.destroy(target);
+        target.allocator = allocator;
+        target.texture = try device.makeTexture(.{
+            .label = "legacy ray traced drawable output",
+            .format = .bgra8_unorm,
+            .width = extent.width,
+            .height = extent.height,
+            .usage = .{
+                .copy_source = true,
+                .shader_write = true,
+            },
+            .storage_mode = .private,
+        });
+        errdefer target.texture.deinit();
+        target.view = try target.texture.makeTextureView(.{});
+        return target;
+    }
+
+    fn destroy(self: *LegacyDrawableTarget) void {
+        const allocator = self.allocator;
+        self.view.deinit();
+        self.texture.deinit();
+        allocator.destroy(self);
+    }
+};
+
+fn traceAndPresentComposed(
     queue: *vkmtl.Queue,
     pipeline: *vkmtl.ray_tracing.RayTracingPipelineState,
     shader_binding_table: *vkmtl.ray_tracing.ShaderBindingTable,
@@ -660,6 +781,28 @@ fn traceAndPresent(
     return plan;
 }
 
+fn traceAndPresentLegacyDrawable(
+    queue: *vkmtl.Queue,
+    pipeline: *vkmtl.ray_tracing.RayTracingPipelineState,
+    shader_binding_table: *vkmtl.ray_tracing.ShaderBindingTable,
+    acceleration_structure: *vkmtl.ray_tracing.AccelerationStructure,
+    target: *LegacyDrawableTarget,
+    descriptor: vkmtl.ray_tracing.RayDispatchDescriptor,
+) !vkmtl.ray_tracing.RayDispatchPlan {
+    var command_buffer = try queue.makeCommandBuffer();
+    const plan = try command_buffer.dispatchRaysToDrawable(
+        pipeline,
+        shader_binding_table,
+        descriptor,
+        .{
+            .acceleration_structure = acceleration_structure,
+            .output = &target.view,
+        },
+    );
+    try command_buffer.commit();
+    return plan;
+}
+
 fn currentSceneTime(start_seconds: f64) f32 {
     return native_scene_time + @as(f32, @floatCast(glfw.timeSeconds() - start_seconds));
 }
@@ -667,6 +810,15 @@ fn currentSceneTime(start_seconds: f64) f32 {
 fn frameLimitFromEnv() finite_run.FrameLimitError!?u64 {
     const value = getenv("VKMTL_RT_FRAME_LIMIT");
     return finite_run.parseFrameLimit(if (value) |text| std.mem.span(text) else null);
+}
+
+fn legacyDrawablePathFromEnv() bool {
+    const value = std.mem.span(getenv("VKMTL_RT_LEGACY_DRAWABLE") orelse return false);
+    if (std.ascii.eqlIgnoreCase(value, "1") or std.ascii.eqlIgnoreCase(value, "true")) return true;
+    if (std.ascii.eqlIgnoreCase(value, "0") or std.ascii.eqlIgnoreCase(value, "false")) return false;
+
+    std.debug.print("Ignoring unsupported VKMTL_RT_LEGACY_DRAWABLE value: {s}\n", .{value});
+    return false;
 }
 
 fn requireFiniteFramebuffer(

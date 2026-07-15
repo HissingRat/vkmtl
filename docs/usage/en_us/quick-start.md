@@ -106,6 +106,18 @@ creation and submission, while `Swapchain` owns drawable resize and clear
 operations. `WindowContext` is limited to backend identity, native-handle
 access, and access to those runtime owners.
 
+The presentation descriptor stores the requested format. Use
+`swapchain.presentationDescriptor().format` to inspect that request and
+`swapchain.selectedFormat()` for the concrete drawable format. Automatic
+selection prefers `bgra8_unorm_srgb`, then `bgra8_unorm`; current-drawable
+pipelines must use the concrete selection.
+
+The descriptor's extent is also the request. Use `swapchain.extent()` for the
+actual native drawable extent, which Vulkan may clamp. Commit command buffers
+before a non-zero Vulkan resize; `InvalidCommandBufferState` leaves the current
+presentation unchanged. A recreation failure that returns `SurfaceLost` on
+later work requires rebuilding `WindowContext`.
+
 ## Use Precompiled Slang Shaders
 
 Applications embed Slang source and request the matching shader through the
@@ -131,11 +143,16 @@ var pipeline = try device.makeRenderPipelineState(.{
     .vertex = stages.vertex,
     .fragment = stages.fragment,
     .color_attachments = &.{
-        .{ .format = .bgra8_unorm },
+        .{ .format = swapchain.selectedFormat() },
     },
 });
 defer pipeline.deinit();
 ```
+
+After a successful resize, query `selectedFormat()` again before reusing a
+format-dependent pipeline and use `swapchain.extent()` for drawable-sized
+resources. vkmtl does not perform tone mapping, HDR or gamut conversion, or any
+other content transform when selecting the drawable format.
 
 Compute shaders use the compute-specific helper:
 

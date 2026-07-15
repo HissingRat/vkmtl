@@ -133,7 +133,9 @@ higher-precision accumulation format; the format does not establish a color
 space. It must not be created merely because `storage_textures` is true.
 Texture dispatch validates shader-read/write usage, a single-sample 2D view,
 and dispatch extent before native encoding. Presentation separately requires
-the selected surface path to support `bgra8_unorm_srgb`.
+the concrete `Swapchain.selectedFormat()` to report `presentation`. The Period
+55 reference example explicitly requests `bgra8_unorm_srgb`; other windowed
+pipelines use the selected format rather than assuming that request was chosen.
 
 ### Queries And Driver Artifacts
 
@@ -243,6 +245,13 @@ Do not infer copy, blit, resolve, presentation, or depth/stencil behavior from
 format naming. Use the matching capability flag and the transfer alignment
 limits before encoding. A headless device reports `presentation = false` even
 when the same native adapter can present through a `WindowContext`.
+
+For a windowed context, `PresentationDescriptor.format` is the request and
+`Swapchain.selectedFormat()` is the concrete result. The portable presentation
+set is the SDR pair `bgra8_unorm_srgb` and `bgra8_unorm`; automatic selection
+prefers them in that order. `getFormatCaps(format).presentation` is true only
+for the selected format on that context. Selection does not perform HDR, tone
+mapping, gamma, or gamut conversion.
 
 For the reference RT path, require both `sampled` and `storage` on
 `rgba16_float`; `copy_source` is additionally required only when the caller

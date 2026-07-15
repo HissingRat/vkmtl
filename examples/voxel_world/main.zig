@@ -17,10 +17,6 @@ const atlas_height: usize = atlas_tile_size;
 const maximum_rebuilds_per_frame: usize = 2;
 const maximum_upload_bytes_per_frame: usize = 8 * 1024 * 1024;
 
-const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 const Uniforms = extern struct {
     view_projection_rows: [4][4]f32,
     light_direction_and_ambient: [4]f32,
@@ -322,6 +318,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
 
     var camera = scene.Camera{};
     var uniforms = makeUniforms(camera, 1280, 720);
@@ -446,11 +445,12 @@ pub fn main(_: std.process.Init.Minimal) !void {
             continue;
         }
         try swapchain.resize(extent);
+        const drawable_extent = swapchain.extent();
 
-        uniforms = makeUniforms(camera, extent.width, extent.height);
+        uniforms = makeUniforms(camera, drawable_extent.width, drawable_extent.height);
         try uniform_buffer.replaceBytes(0, std.mem.asBytes(&uniforms));
 
-        const aspect = @as(f32, @floatFromInt(extent.width)) / @as(f32, @floatFromInt(extent.height));
+        const aspect = @as(f32, @floatFromInt(drawable_extent.width)) / @as(f32, @floatFromInt(drawable_extent.height));
         var visible_chunks: usize = 0;
         var culled_chunks: usize = 0;
         var draw_calls: usize = 0;

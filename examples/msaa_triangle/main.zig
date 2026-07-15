@@ -41,10 +41,6 @@ const msaa_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
     .{ .format = .rgba8_unorm },
 };
 
-const screen_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
@@ -73,6 +69,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const screen_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
 
     var color_vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(color_vertices[0..]),
@@ -200,6 +199,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         screen_stages.fragment,
         screen_vertex_descriptor.descriptor,
         pipeline_bind_group_layouts[0..],
+        screen_color_attachments[0..],
     ));
     defer screen_pipeline.deinit();
 
@@ -293,6 +293,7 @@ fn screenPipelineDescriptor(
     fragment_stage: vkmtl.ProgrammableStageDescriptor,
     vertex_descriptor: vkmtl.VertexDescriptor,
     bind_group_layouts: []const vkmtl.BindGroupLayoutDescriptor,
+    color_attachments: []const vkmtl.RenderPipelineColorAttachmentDescriptor,
 ) vkmtl.RenderPipelineDescriptor {
     return .{
         .vertex = vertex_stage,
@@ -300,7 +301,7 @@ fn screenPipelineDescriptor(
         .vertex_descriptor = vertex_descriptor,
         .bind_group_layouts = bind_group_layouts,
         .primitive_topology = .triangle,
-        .color_attachments = screen_color_attachments[0..],
+        .color_attachments = color_attachments,
     };
 }
 

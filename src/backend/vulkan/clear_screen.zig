@@ -26,11 +26,33 @@ depth_render_pass: vk.RenderPass,
 color_framebuffers: []vk.Framebuffer,
 depth_framebuffers: []vk.Framebuffer,
 depth_resources: ?DepthResources,
+clear_pool: vk.CommandPool,
 pool: vk.CommandPool,
 compute_pool: vk.CommandPool,
 transfer_pool: vk.CommandPool,
 cmdbufs: []vk.CommandBuffer,
 clear_color: core.ClearColorLike,
+presentation_lifecycle: PresentationLifecycle = .{},
+active_command_buffer_count: usize = 0,
+
+const PresentationLifecycle = struct {
+    lost: bool = false,
+    generation: u64 = 1,
+
+    fn ensureAvailable(self: PresentationLifecycle) core.SurfaceError!void {
+        if (self.lost) return core.SurfaceError.SurfaceLost;
+    }
+
+    fn recordSuccessfulResize(self: *PresentationLifecycle) void {
+        self.generation +%= 1;
+    }
+
+    fn poison(self: *PresentationLifecycle) void {
+        if (self.lost) return;
+        self.lost = true;
+        self.generation +%= 1;
+    }
+};
 
 pub const AdapterInfoResult = struct {
     info: core.AdapterInfo,
@@ -53,7 +75,7 @@ pub fn init(
     gc.* = try GraphicsContext.init(allocator, app_name, surface_provider);
     errdefer gc.deinit();
 
-    var swapchain = try Swapchain.init(gc, allocator, extent);
+    var swapchain = try Swapchain.init(gc, allocator, extent, presentation.format);
     errdefer swapchain.deinit();
 
     const color_render_pass = try createColorRenderPass(gc, swapchain);
@@ -62,7 +84,7 @@ pub fn init(
     const depth_render_pass = try createDepthRenderPass(gc, swapchain);
     errdefer gc.dev.destroyRenderPass(depth_render_pass, null);
 
-    var depth_resources = try DepthResources.init(gc, extent);
+    var depth_resources = try DepthResources.init(gc, swapchain.extent);
     errdefer depth_resources.deinit(gc);
 
     const color_framebuffers = try createColorFramebuffers(gc, allocator, color_render_pass, swapchain);
@@ -71,6 +93,10 @@ pub fn init(
     const depth_framebuffers = try createDepthFramebuffers(gc, allocator, depth_render_pass, swapchain, depth_resources.view);
     errdefer destroyFramebuffers(gc, allocator, depth_framebuffers);
 
+    const clear_pool = try gc.dev.createCommandPool(&.{
+        .queue_family_index = gc.graphics_queue.family,
+    }, null);
+    errdefer gc.dev.destroyCommandPool(clear_pool, null);
     const pool = try gc.dev.createCommandPool(&.{
         .queue_family_index = gc.graphics_queue.family,
     }, null);
@@ -93,6 +119,7 @@ pub fn init(
         .color_framebuffers = color_framebuffers,
         .depth_framebuffers = depth_framebuffers,
         .depth_resources = depth_resources,
+        .clear_pool = clear_pool,
         .pool = pool,
         .compute_pool = compute_pool,
         .transfer_pool = transfer_pool,
@@ -135,6 +162,7 @@ pub fn initHeadless(
         .color_framebuffers = &.{},
         .depth_framebuffers = &.{},
         .depth_resources = null,
+        .clear_pool = .null_handle,
         .pool = pool,
         .compute_pool = compute_pool,
         .transfer_pool = transfer_pool,
@@ -168,7 +196,25 @@ pub fn rayTracingDiagnostics(self: *const VulkanClearScreen) core.RayTracingCapa
 }
 
 pub fn formatCapabilities(self: *const VulkanClearScreen, format: core.TextureFormat) core.FormatCapabilities {
-    return self.gc.formatCapabilities(format);
+    var capabilities = self.gc.formatCapabilities(format);
+    capabilities.presentation = if (self.swapchain) |swapchain|
+        format == swapchain.selectedPresentationFormat()
+    else
+        false;
+    return capabilities;
+}
+
+pub fn selectedPresentationFormat(self: *const VulkanClearScreen) ?core.TextureFormat {
+    return if (self.swapchain) |swapchain| swapchain.selectedPresentationFormat() else null;
+}
+
+pub fn presentationExtent(self: *const VulkanClearScreen) ?core.Extent2D {
+    if (self.presentation_lifecycle.lost) return null;
+    const swapchain = self.swapchain orelse return null;
+    return .{
+        .width = swapchain.extent.width,
+        .height = swapchain.extent.height,
+    };
 }
 
 pub fn nativeHandles(self: *const VulkanClearScreen) core.NativeHandles {
@@ -185,44 +231,98 @@ pub fn nativeHandles(self: *const VulkanClearScreen) core.NativeHandles {
 }
 
 pub fn deinit(self: *VulkanClearScreen) void {
-    if (self.cmdbufs.len != 0) {
-        self.gc.dev.freeCommandBuffers(self.pool, self.cmdbufs);
-        self.allocator.free(self.cmdbufs);
-        self.cmdbufs = &.{};
+    self.destroyPresentationResources();
+    if (self.clear_pool != .null_handle) {
+        self.gc.dev.destroyCommandPool(self.clear_pool, null);
+        self.clear_pool = .null_handle;
     }
     self.gc.dev.destroyCommandPool(self.pool, null);
     self.gc.dev.destroyCommandPool(self.compute_pool, null);
     self.gc.dev.destroyCommandPool(self.transfer_pool, null);
-    destroyFramebuffers(self.gc, self.allocator, self.depth_framebuffers);
-    destroyFramebuffers(self.gc, self.allocator, self.color_framebuffers);
-    if (self.depth_resources) |*depth_resources| depth_resources.deinit(self.gc);
-    if (self.depth_render_pass != .null_handle) self.gc.dev.destroyRenderPass(self.depth_render_pass, null);
-    if (self.color_render_pass != .null_handle) self.gc.dev.destroyRenderPass(self.color_render_pass, null);
-    if (self.swapchain) |*swapchain| swapchain.deinit();
     self.gc.deinit();
     self.allocator.destroy(self.gc);
 }
 
-pub fn resize(self: *VulkanClearScreen, extent: core.Extent2D) !void {
-    if (extent.isZero()) return;
-    const swapchain = if (self.swapchain) |*value| value else return error.UnsupportedBackendForPresentation;
-    if (swapchain.extent.width == extent.width and swapchain.extent.height == extent.height) return;
-
-    try swapchain.recreate(vkExtent(extent));
-
-    self.gc.dev.freeCommandBuffers(self.pool, self.cmdbufs);
-    self.allocator.free(self.cmdbufs);
-    self.cmdbufs = &.{};
-
-    destroyFramebuffers(self.gc, self.allocator, self.depth_framebuffers);
-    destroyFramebuffers(self.gc, self.allocator, self.color_framebuffers);
+fn destroyResizeDependents(self: *VulkanClearScreen) void {
+    if (self.cmdbufs.len != 0) {
+        self.gc.dev.freeCommandBuffers(self.clear_pool, self.cmdbufs);
+        self.allocator.free(self.cmdbufs);
+        self.cmdbufs = &.{};
+    }
+    if (self.depth_framebuffers.len != 0) {
+        destroyFramebuffers(self.gc, self.allocator, self.depth_framebuffers);
+        self.depth_framebuffers = &.{};
+    }
+    if (self.color_framebuffers.len != 0) {
+        destroyFramebuffers(self.gc, self.allocator, self.color_framebuffers);
+        self.color_framebuffers = &.{};
+    }
     if (self.depth_resources) |*depth_resources| depth_resources.deinit(self.gc);
     self.depth_resources = null;
+}
+
+fn destroyPresentationResources(self: *VulkanClearScreen) void {
+    if (self.swapchain) |*swapchain| swapchain.waitForAllFences() catch {};
+    self.destroyResizeDependents();
+    if (self.depth_render_pass != .null_handle) {
+        self.gc.dev.destroyRenderPass(self.depth_render_pass, null);
+        self.depth_render_pass = .null_handle;
+    }
+    if (self.color_render_pass != .null_handle) {
+        self.gc.dev.destroyRenderPass(self.color_render_pass, null);
+        self.color_render_pass = .null_handle;
+    }
+    if (self.swapchain) |*swapchain| swapchain.deinit();
+    self.swapchain = null;
+}
+
+fn poisonPresentation(self: *VulkanClearScreen) void {
+    self.presentation_lifecycle.poison();
+    self.destroyPresentationResources();
+}
+
+fn ensureNoActiveCommandBuffers(active_count: usize) core.CommandEncodingError!void {
+    if (active_count != 0) return core.CommandEncodingError.InvalidCommandBufferState;
+}
+
+pub fn resize(self: *VulkanClearScreen, extent: core.Extent2D) !void {
+    try self.presentation_lifecycle.ensureAvailable();
+    if (extent.isZero()) return;
+    try ensureNoActiveCommandBuffers(self.active_command_buffer_count);
+    const swapchain = if (self.swapchain) |*value| value else return error.UnsupportedBackendForPresentation;
+    const requested_extent = vkExtent(extent);
+    if (!try swapchain.recreationNeeded(requested_extent)) {
+        swapchain.recordRequestedExtent(requested_extent);
+        return;
+    }
+
+    self.resizePresentation(extent) catch |err| {
+        self.poisonPresentation();
+        return err;
+    };
+    self.presentation_lifecycle.recordSuccessfulResize();
+}
+
+fn resizePresentation(self: *VulkanClearScreen, extent: core.Extent2D) !void {
+    const swapchain = if (self.swapchain) |*value| value else return error.UnsupportedBackendForPresentation;
+
+    try swapchain.waitForAllFences();
+    self.destroyResizeDependents();
+
+    const previous_format = swapchain.selectedPresentationFormat();
+    try swapchain.recreate(vkExtent(extent));
+    if (presentationRenderPassNeedsRebuild(previous_format, swapchain.selectedPresentationFormat())) {
+        self.gc.dev.destroyRenderPass(self.depth_render_pass, null);
+        self.depth_render_pass = .null_handle;
+        self.gc.dev.destroyRenderPass(self.color_render_pass, null);
+        self.color_render_pass = .null_handle;
+
+        self.color_render_pass = try createColorRenderPass(self.gc, swapchain.*);
+        self.depth_render_pass = try createDepthRenderPass(self.gc, swapchain.*);
+    }
 
     self.depth_resources = try DepthResources.init(self.gc, swapchain.extent);
-    errdefer if (self.depth_resources) |*depth_resources| depth_resources.deinit(self.gc);
     self.color_framebuffers = try createColorFramebuffers(self.gc, self.allocator, self.color_render_pass, swapchain.*);
-    errdefer destroyFramebuffers(self.gc, self.allocator, self.color_framebuffers);
     self.depth_framebuffers = try createDepthFramebuffers(
         self.gc,
         self.allocator,
@@ -234,7 +334,16 @@ pub fn resize(self: *VulkanClearScreen, extent: core.Extent2D) !void {
     self.cmdbufs = try self.createCommandBuffers();
 }
 
+fn presentationRenderPassNeedsRebuild(
+    previous: core.TextureFormat,
+    selected: core.TextureFormat,
+) bool {
+    return previous != selected;
+}
+
 pub fn clear(self: *VulkanClearScreen, color: core.ClearColorLike) !void {
+    try self.presentation_lifecycle.ensureAvailable();
+    try ensureNoActiveCommandBuffers(self.active_command_buffer_count);
     const swapchain = if (self.swapchain) |*value| value else return error.UnsupportedBackendForPresentation;
     self.clear_color = color;
     try self.recordCommandBuffers();
@@ -305,6 +414,7 @@ pub fn makeRayTracingPipelineState(self: *VulkanClearScreen, descriptor: core.Ra
 }
 
 pub fn makeCommandBuffer(self: *VulkanClearScreen, queue_kind: core.QueueKind) !VulkanCommand.CommandBuffer {
+    try self.presentation_lifecycle.ensureAvailable();
     const pool = switch (queue_kind) {
         .graphics => self.pool,
         .compute => self.compute_pool,
@@ -320,6 +430,8 @@ pub fn makeCommandBuffer(self: *VulkanClearScreen, queue_kind: core.QueueKind) !
         self.depth_render_pass,
         self.color_framebuffers,
         self.depth_framebuffers,
+        &self.presentation_lifecycle.generation,
+        &self.active_command_buffer_count,
     );
 }
 
@@ -336,15 +448,16 @@ pub fn makeSamplerState(self: *VulkanClearScreen, descriptor: core.SamplerDescri
 }
 
 fn createCommandBuffers(self: *VulkanClearScreen) ![]vk.CommandBuffer {
+    std.debug.assert(self.clear_pool != .null_handle);
     const cmdbufs = try self.allocator.alloc(vk.CommandBuffer, self.color_framebuffers.len);
     errdefer self.allocator.free(cmdbufs);
 
     try self.gc.dev.allocateCommandBuffers(&.{
-        .command_pool = self.pool,
+        .command_pool = self.clear_pool,
         .level = .primary,
         .command_buffer_count = @intCast(cmdbufs.len),
     }, cmdbufs.ptr);
-    errdefer self.gc.dev.freeCommandBuffers(self.pool, cmdbufs);
+    errdefer self.gc.dev.freeCommandBuffers(self.clear_pool, cmdbufs);
 
     return cmdbufs;
 }
@@ -352,7 +465,7 @@ fn createCommandBuffers(self: *VulkanClearScreen) ![]vk.CommandBuffer {
 fn recordCommandBuffers(self: *VulkanClearScreen) !void {
     const swapchain = if (self.swapchain) |*value| value else return error.UnsupportedBackendForPresentation;
     try swapchain.waitForAllFences();
-    try self.gc.dev.resetCommandPool(self.pool, .{});
+    try self.gc.dev.resetCommandPool(self.clear_pool, .{});
 
     const clear_value = vk.ClearValue{
         .color = .{ .float_32 = .{
@@ -587,4 +700,47 @@ fn vkExtent(extent: core.Extent2D) vk.Extent2D {
         .width = extent.width,
         .height = extent.height,
     };
+}
+
+test "Vulkan presentation render passes rebuild only when selection changes" {
+    try std.testing.expect(!presentationRenderPassNeedsRebuild(
+        .bgra8_unorm_srgb,
+        .bgra8_unorm_srgb,
+    ));
+    try std.testing.expect(!presentationRenderPassNeedsRebuild(
+        .bgra8_unorm,
+        .bgra8_unorm,
+    ));
+    try std.testing.expect(presentationRenderPassNeedsRebuild(
+        .bgra8_unorm_srgb,
+        .bgra8_unorm,
+    ));
+    try std.testing.expect(presentationRenderPassNeedsRebuild(
+        .bgra8_unorm,
+        .bgra8_unorm_srgb,
+    ));
+}
+
+test "Vulkan presentation lifecycle poisons once and rejects later work" {
+    var lifecycle = PresentationLifecycle{};
+    try lifecycle.ensureAvailable();
+    const initial_generation = lifecycle.generation;
+
+    lifecycle.recordSuccessfulResize();
+    try std.testing.expectEqual(initial_generation +% 1, lifecycle.generation);
+    try lifecycle.ensureAvailable();
+
+    lifecycle.poison();
+    const poisoned_generation = lifecycle.generation;
+    try std.testing.expectError(core.SurfaceError.SurfaceLost, lifecycle.ensureAvailable());
+    lifecycle.poison();
+    try std.testing.expectEqual(poisoned_generation, lifecycle.generation);
+}
+
+test "Vulkan presentation mutation gate rejects active backend command buffers" {
+    try ensureNoActiveCommandBuffers(0);
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidCommandBufferState,
+        ensureNoActiveCommandBuffers(1),
+    );
 }

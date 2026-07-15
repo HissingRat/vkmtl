@@ -1032,6 +1032,67 @@ pending on the Vulkan RT machine.
 
 See `docs/develop/period55/`.
 
+## Period 56: Presentation Format Request And Selection
+
+Status: complete. Phases 1-5, deterministic gates, physical Metal
+automatic/sRGB/linear offscreen pixels plus actual selected-drawable
+bind/present smoke, and both Metal legacy RT presentation formats are recorded.
+
+Goal: make `PresentationDescriptor.format` an observable request and expose the
+concrete native selection through the additive, presentation-owned
+`Swapchain.selectedFormat()` query. `Swapchain.presentationDescriptor()` keeps
+returning the request. Automatic selection deterministically prefers
+`bgra8_unorm_srgb` and then `bgra8_unorm`; an explicit request must be selected
+exactly or fail without silent fallback.
+
+The implementation retains request and selection separately, resolves
+selection on actual non-zero creation/recreation, and requires exact
+render-pipeline/current-drawable format equality before native pipeline bind or
+draw. Vulkan recreation destroys framebuffer dependents before old image views
+and rebuilds format-dependent render-pass state when selection changes.
+`presentationDescriptor().extent` remains the request, while
+`Swapchain.extent()` publishes the actual native drawable extent.
+
+A healthy same-request Vulkan resize is a cheap no-op. Present/acquire
+`SUBOPTIMAL` or `OUT_OF_DATE` state forces the next resize to recover even for
+the same request; a changed request re-queries native state and avoids native
+recreation when the resolved configuration is unchanged. Metal publishes a new
+drawable extent only after replacement depth allocation succeeds.
+
+Vulkan rejects non-zero resize and clear while an uncommitted backend command
+buffer could still reference presentation resources, without changing native
+state. Clear uses a dedicated internal command pool and never resets a user
+pool. Once native recreation or dependent rebuilding begins, any failure tears
+down presentation state permanently; later resize, clear, or new command-buffer
+creation returns `SurfaceLost`, and the caller recreates `WindowContext`.
+Normal and poisoned teardown wait both graphics fences and the presentation
+queue before destroying swapchain images, semaphores, or the swapchain handle.
+Failed runtime commits deinitialize and terminalize their backend command
+buffer, release active/query/serial tracking, and on Vulkan wait any submitted
+queue before destroying temporary resources.
+This period admits only the existing SDR BGRA8 pair. vkmtl does not add HDR,
+tone mapping, gamma policy, or gamut conversion; applications own their content
+transform.
+
+`dispatchRaysToDrawable(...)` remains source-compatible but compatibility-only.
+Both backends now use the caller output as the RT storage destination, then
+perform only a validated raw transfer from `bgra8_unorm` to a selected linear
+or sRGB BGRA8 drawable with no hidden conversion. The combined legacy command
+is graphics-queue-only; Metal preflights drawable availability, format/extent,
+and any sRGB staging allocation before compute encoding. Linear Metal uses no
+staging allocation. `dispatchRaysToTexture(...)` plus explicit composition
+remains canonical.
+
+The declaration change is additive and targets `v0.2.0`; no existing field,
+default, owner, method, or signature is removed or renamed. API/semantic
+guards, 675 unit tests, default and forced Vulkan builds, package smoke, and
+automatic/sRGB/linear Metal offscreen pixels, selected-drawable bind/present
+smoke, and both Metal legacy RT formats are recorded under API Validation.
+Vulkan RT physical runs remain explicit device-matrix follow-up and are not
+inferred from build coverage.
+
+See `docs/develop/period56/`.
+
 ## v0.1.0 Compatibility Release
 
 Status: complete. The annotated tag points to

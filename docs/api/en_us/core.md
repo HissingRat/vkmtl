@@ -63,6 +63,65 @@ Starting in Period 2, `WindowContext.surface()` and
 window/provider descriptor information. `Swapchain` owns presentation-chain
 resize, and the current clear-screen helper lives at `Swapchain.clear(...)`.
 
+`PresentationDescriptor.format` is the application request. The admitted SDR
+requests are `.automatic`, `.bgra8_unorm_srgb`, and `.bgra8_unorm`.
+`.automatic` deterministically prefers sRGB and then linear BGRA8; either
+explicit request must be selected exactly or initialization/recreation returns
+`UnsupportedPresentationFormat`. `Swapchain.presentationDescriptor()` keeps
+returning the request, while `Swapchain.selectedFormat()` returns the concrete
+selected format and never `.automatic`:
+
+```zig
+var swapchain = context.swapchain();
+const drawable_format = swapchain.selectedFormat();
+
+var pipeline = try device.makeRenderPipelineState(.{
+    .vertex = stages.vertex,
+    .fragment = stages.fragment,
+    .color_attachments = &.{
+        .{ .format = drawable_format },
+    },
+});
+```
+
+A pipeline used with the current drawable must match that selected format
+exactly. A mismatch returns `PresentationFormatMismatch` before native pipeline
+bind or draw. Successful non-zero resize preserves the request and publishes
+the current concrete selection. A resize that re-queries or recreates native
+presentation state resolves from the preserved request; query
+`selectedFormat()` again before reusing a format-dependent pipeline. A healthy
+same-request Vulkan resize is a no-query no-op. Offscreen attachments and
+`HeadlessContext` do not consult presentation selection.
+
+`Swapchain.presentationDescriptor().extent` is likewise the requested extent,
+while `Swapchain.extent()` is the current actual native drawable extent.
+Vulkan surface `currentExtent` or clamping may make them differ. A healthy
+zero-size resize preserves the last successful request, actual extent, and
+selected format.
+
+A healthy Vulkan resize with the same requested extent is a cheap no-op.
+Present/acquire `SUBOPTIMAL` or `OUT_OF_DATE` marks recovery required, so the
+next resize rebuilds even for that same request. A changed request re-queries
+native state and may avoid recreation when the resolved native configuration
+is unchanged. Metal publishes its new drawable extent only after replacement
+depth allocation succeeds.
+
+On Vulkan, every non-zero resize and `Swapchain.clear(...)` requires all backend
+command buffers from the window context to be committed. Otherwise it returns
+`InvalidCommandBufferState` before changing native presentation state. Clear
+uses a dedicated internal command pool and never resets caller command pools.
+If native
+swapchain recreation or dependent rebuilding begins and then fails, the
+presentation runtime is permanently lost: the failing call returns its
+original error, and later resize (including zero), clear, or new command-buffer
+creation returns `SurfaceLost`. Recreate `WindowContext` after that terminal
+failure.
+
+The resolver selects and validates an SDR attachment format only. vkmtl does
+not perform HDR conversion, exposure, tone mapping, gamma correction,
+EOTF/OETF, or gamut conversion. Applications own the values written to the
+selected attachment.
+
 `vkmtl.presentation.SurfaceCollection` is the first multi-surface management shape. It can track
 multiple neutral surface presentation states for one selected backend and uses
 generation handles for resize/remove validation. It does not create multiple
@@ -533,7 +592,21 @@ single native encoding segment: commit it before creating the command buffer
 that samples or otherwise consumes the result. A second encoder or direct
 command returns `InvalidCommandBufferState`.
 `dispatchRaysToDrawable(...)` remains available as a legacy presentation
-command.
+command. It requires a whole, single-sample `bgra8_unorm` caller output with
+shader-write and copy-source usage and the exact presentation extent. Both
+backends dispatch into that object, then raw-copy its bytes to the selected
+linear or sRGB BGRA8 drawable before presenting. The copy applies no sampling,
+filtering, transfer-function conversion, tone mapping, or gamut conversion.
+New code should use the texture command and an explicit composition pass. The
+repository example keeps that canonical route by default; setting
+`VKMTL_RT_LEGACY_DRAWABLE=1` selects its finite compatibility validation path.
+The legacy command presents implicitly; calling an explicit
+`presentDrawable(...)` afterward on the same command buffer returns
+`InvalidCommandBufferState`.
+The combined legacy dispatch/present operation requires a graphics queue;
+compute and transfer queues return `InvalidQueueCapability` before native work.
+Metal acquires and validates the drawable and allocates any sRGB raw-copy
+staging buffer before compute dispatch; its linear route allocates no staging.
 
 `dispatchRaysToTexture(...)` does not assign a color space to the output or
 perform a color conversion. The shader and application define what the stored
@@ -767,6 +840,11 @@ descriptor. `CommandBuffer.state()` reports the portable lifecycle state.
 failed. A configured callback receives scheduled and completed exactly once on
 the current synchronous commit path; callback thread identity and reentrant use
 are not promised.
+If backend commit fails, that one-shot command buffer is terminally consumed:
+its backend object is deinitialized, active-command and query-resolve borrows
+are released, its work serial is retired, and lifecycle status becomes
+`failed`. Vulkan waits any queue to which work was submitted before destroying
+temporary command resources.
 Command buffers are still one-shot after `commit()`; pooled or reusable command
 buffers are represented by descriptor fields and rejected by feature gates until
 native reset/pooling is implemented. Before commit, the current portable

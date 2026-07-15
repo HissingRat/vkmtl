@@ -37,8 +37,8 @@ rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
 rg -c '^[ ]*pub fn ' src/runtime/headless_context.zig
 ```
 
-The current results are 452 in `window_context.zig` and six in
-`headless_context.zig`. The former is 17 module-level operations and 435
+The current results are 453 in `window_context.zig` and six in
+`headless_context.zig`. The former is 17 module-level operations and 436
 methods; six module-level declarations are private cross-file context-owner
 plumbing and are not reachable through `vkmtl`. Facade operations may be
 `pub const` aliases or direct `pub fn` declarations and are counted separately
@@ -369,6 +369,7 @@ The current major runtime owner counts are:
 | `Device` | 34 | creation, compilation, common queries, and queue access |
 | `WindowContext` | 10 | lifecycle, identity, native-view, and owner access only |
 | `HeadlessContext` | 6 | no-presentation lifecycle, identity, device, and queue access |
+| `Swapchain` | 6 | selected backend, requested and selected presentation state, resize, and clear |
 | `RenderCommandEncoder` | 31 | natural render command owner |
 | `ComputeCommandEncoder` | 21 | natural compute command owner |
 | `BlitCommandEncoder` | 21 | natural transfer command owner |
@@ -863,6 +864,60 @@ change `FormatCapabilities` meaning. The additive alias and method target
 `v0.2.0`; no field, error, default, ownership rule, or existing method is
 removed or renamed.
 
+## Period 56 v0.2.0 Presentation Selection Update
+
+Period 56 leaves the guarded root 69, `Device` 34, `WindowContext` 10,
+`HeadlessContext` six, `CommandBuffer` 22, and 37 runtime-handle name/layout
+sets unchanged. `Swapchain` gains the one canonical method
+`selectedFormat()`, bringing that owner to six public methods and the total
+public functions in `window_context.zig` to 453. The API guard now locks the
+exact `Swapchain` method set:
+
+```text
+selectedBackend
+presentationDescriptor
+selectedFormat
+extent
+resize
+clear
+```
+
+`PresentationDescriptor.format` remains the application request and keeps its
+`.automatic` default. `Swapchain.presentationDescriptor()` continues to return
+that request; `Swapchain.selectedFormat()` returns the concrete selected
+`bgra8_unorm_srgb` or `bgra8_unorm` format and never `.automatic`. Successful
+non-zero resize preserves the request and publishes the current concrete
+selection. Native resolution runs for initialization and when resize must query
+or recreate; a healthy same-request Vulkan resize is a no-query no-op.
+
+`Swapchain.presentationDescriptor().extent` likewise remains the requested
+extent. The existing `Swapchain.extent()` method now returns the current actual
+native drawable extent; Vulkan surface constraints may make it differ from the
+request. Healthy zero-size resize preserves the last successful request,
+actual extent, and selected format.
+
+`SurfaceError` gains `UnsupportedPresentationFormat`, and
+`CommandEncodingError` gains `PresentationFormatMismatch`. The former closes
+requests outside the bounded SDR set and unavailable exact requests; the latter
+rejects a current-drawable pipeline or legacy drawable RT output that cannot
+preserve the selected format contract. Exhaustive switches over those error
+sets need corresponding arms.
+
+Vulkan non-zero resize now returns the existing
+`InvalidCommandBufferState` before state mutation when an uncommitted backend
+command buffer exists. A failure after native recreation/rebuilding begins
+permanently loses presentation; the original failure is returned once, and
+later resize, clear, or new command-buffer creation returns the existing
+`SurfaceLost`. Legacy drawable RT dispatch owns implicit presentation, so an
+explicit duplicate present returns `InvalidCommandBufferState`.
+
+The method and error additions, exact no-fallback enforcement for an explicit
+request, actual-extent meaning, and terminal Vulkan resize behavior target
+`v0.2.0`. No existing declaration, descriptor field, default, owner, signature,
+or lifetime rule is removed or renamed. The
+presentation resolver and legacy raw-copy route add no HDR, tone-mapping,
+gamma, or gamut-conversion API.
+
 ## Compatibility Impact
 
 This is an intentional pre-tag breaking migration:
@@ -897,7 +952,7 @@ breaking cutover. Existing `WindowContext` callers require no migration.
 zig build run-api-guard
 # API guard passed: root=69 (facades=13 core=28 aliases=28),
 # Device methods=34, WindowContext methods=10, HeadlessContext methods=6,
-# runtime handles=37
+# Swapchain methods=6, runtime handles=37
 
 awk '
   /^pub const Device = struct \{/ { active=1; next }
@@ -919,6 +974,13 @@ awk '
   active && /^    pub fn / { count++ }
   END { print count }
 ' src/runtime/headless_context.zig
+# 6
+
+awk '
+  /^pub const Swapchain = struct \{/ { active=1; next }
+  active && /^    pub fn / { count++ }
+  active && /^};$/ { print count; exit }
+' src/runtime/window_context.zig
 # 6
 
 for file in src/api/*.zig src/api/native/*.zig; do

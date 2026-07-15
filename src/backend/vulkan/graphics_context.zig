@@ -29,6 +29,16 @@ pub const preferred_presentation_surface_format = vk.SurfaceFormatKHR{
     .color_space = .srgb_nonlinear_khr,
 };
 
+pub const linear_presentation_surface_format = vk.SurfaceFormatKHR{
+    .format = .b8g8r8a8_unorm,
+    .color_space = .srgb_nonlinear_khr,
+};
+
+pub const PresentationSurfaceFormatSelection = struct {
+    surface_format: vk.SurfaceFormatKHR,
+    portable_format: core.TextureFormat,
+};
+
 const BaseWrapper = vk.BaseWrapper;
 const InstanceWrapper = vk.InstanceWrapper;
 const DeviceWrapper = vk.DeviceWrapper;
@@ -381,35 +391,63 @@ fn supportsPresentationFormat(self: GraphicsContext, format: vk.Format) bool {
     return surfaceFormatsSupportPresentation(formats, format);
 }
 
-pub fn selectPresentationSurfaceFormat(formats: []const vk.SurfaceFormatKHR) ?vk.SurfaceFormatKHR {
+pub fn selectPresentationSurfaceFormat(
+    formats: []const vk.SurfaceFormatKHR,
+    requested: core.TextureFormat,
+) ?PresentationSurfaceFormatSelection {
     if (formats.len == 0) return null;
-    for (formats) |surface_format| {
-        if (surface_format.format == .undefined) return .{
-            .format = preferred_presentation_surface_format.format,
-            .color_space = surface_format.color_space,
+
+    const requested_surface_format = switch (requested) {
+        .automatic => null,
+        .bgra8_unorm_srgb => preferred_presentation_surface_format,
+        .bgra8_unorm => linear_presentation_surface_format,
+        else => return null,
+    };
+
+    const undefined_sdr = formats.len == 1 and
+        formats[0].format == .undefined and
+        formats[0].color_space == .srgb_nonlinear_khr;
+
+    if (requested_surface_format) |surface_format| {
+        if (undefined_sdr or containsPresentationSurfaceFormat(formats, surface_format)) {
+            return .{
+                .surface_format = surface_format,
+                .portable_format = requested,
+            };
+        }
+        return null;
+    }
+
+    if (undefined_sdr or containsPresentationSurfaceFormat(formats, preferred_presentation_surface_format)) {
+        return .{
+            .surface_format = preferred_presentation_surface_format,
+            .portable_format = .bgra8_unorm_srgb,
         };
     }
-    for (formats) |surface_format| {
-        if (std.meta.eql(surface_format, preferred_presentation_surface_format)) {
-            return preferred_presentation_surface_format;
-        }
+    if (containsPresentationSurfaceFormat(formats, linear_presentation_surface_format)) {
+        return .{
+            .surface_format = linear_presentation_surface_format,
+            .portable_format = .bgra8_unorm,
+        };
     }
-    return formats[0];
+    return null;
 }
 
 fn surfaceFormatsSupportPresentation(formats: []const vk.SurfaceFormatKHR, format: vk.Format) bool {
-    if (formats.len == 1 and formats[0].format == .undefined) {
-        if (format == preferred_presentation_surface_format.format) {
-            return formats[0].color_space == preferred_presentation_surface_format.color_space;
-        }
-        return true;
-    }
+    const portable_format: core.TextureFormat = switch (format) {
+        .b8g8r8a8_srgb => .bgra8_unorm_srgb,
+        .b8g8r8a8_unorm => .bgra8_unorm,
+        else => return false,
+    };
+    return selectPresentationSurfaceFormat(formats, portable_format) != null;
+}
+
+fn containsPresentationSurfaceFormat(
+    formats: []const vk.SurfaceFormatKHR,
+    expected: vk.SurfaceFormatKHR,
+) bool {
     for (formats) |surface_format| {
-        if (format == preferred_presentation_surface_format.format) {
-            if (std.meta.eql(surface_format, preferred_presentation_surface_format)) return true;
-        } else if (surface_format.format == format) {
-            return true;
-        }
+        if (std.meta.eql(surface_format, expected)) return true;
     }
     return false;
 }
@@ -1715,7 +1753,7 @@ test "Vulkan format feature mapping keeps copy and attachment caps separate" {
     try std.testing.expect(blit_only.blit_destination);
 }
 
-test "Vulkan presentation format selection keeps the preferred sRGB pair exact" {
+test "Vulkan presentation format selection is deterministic and exact" {
     const wrong_color_space = [_]vk.SurfaceFormatKHR{.{
         .format = .b8g8r8a8_srgb,
         .color_space = .display_p3_nonlinear_ext,
@@ -1731,6 +1769,36 @@ test "Vulkan presentation format selection keeps the preferred sRGB pair exact" 
         .b8g8r8a8_srgb,
     ));
 
+    const reversed_candidates = [_]vk.SurfaceFormatKHR{
+        linear_presentation_surface_format,
+        preferred_presentation_surface_format,
+    };
+    try std.testing.expectEqualDeep(
+        PresentationSurfaceFormatSelection{
+            .surface_format = preferred_presentation_surface_format,
+            .portable_format = .bgra8_unorm_srgb,
+        },
+        selectPresentationSurfaceFormat(&reversed_candidates, .automatic).?,
+    );
+    try std.testing.expectEqualDeep(
+        PresentationSurfaceFormatSelection{
+            .surface_format = linear_presentation_surface_format,
+            .portable_format = .bgra8_unorm,
+        },
+        selectPresentationSurfaceFormat(&reversed_candidates, .bgra8_unorm).?,
+    );
+
+    const linear_only = [_]vk.SurfaceFormatKHR{linear_presentation_surface_format};
+    try std.testing.expectEqualDeep(
+        PresentationSurfaceFormatSelection{
+            .surface_format = linear_presentation_surface_format,
+            .portable_format = .bgra8_unorm,
+        },
+        selectPresentationSurfaceFormat(&linear_only, .automatic).?,
+    );
+    try std.testing.expect(selectPresentationSurfaceFormat(&linear_only, .bgra8_unorm_srgb) == null);
+    try std.testing.expect(selectPresentationSurfaceFormat(&linear_only, .rgba8_unorm) == null);
+
     const undefined_sentinel = [_]vk.SurfaceFormatKHR{.{
         .format = .undefined,
         .color_space = .display_p3_nonlinear_ext,
@@ -1739,13 +1807,7 @@ test "Vulkan presentation format selection keeps the preferred sRGB pair exact" 
         &undefined_sentinel,
         .b8g8r8a8_srgb,
     ));
-    try std.testing.expectEqualDeep(
-        vk.SurfaceFormatKHR{
-            .format = preferred_presentation_surface_format.format,
-            .color_space = .display_p3_nonlinear_ext,
-        },
-        selectPresentationSurfaceFormat(&undefined_sentinel).?,
-    );
+    try std.testing.expect(selectPresentationSurfaceFormat(&undefined_sentinel, .automatic) == null);
 
     const srgb_undefined_sentinel = [_]vk.SurfaceFormatKHR{.{
         .format = .undefined,
@@ -1756,8 +1818,18 @@ test "Vulkan presentation format selection keeps the preferred sRGB pair exact" 
         .b8g8r8a8_srgb,
     ));
     try std.testing.expectEqualDeep(
-        preferred_presentation_surface_format,
-        selectPresentationSurfaceFormat(&srgb_undefined_sentinel).?,
+        PresentationSurfaceFormatSelection{
+            .surface_format = preferred_presentation_surface_format,
+            .portable_format = .bgra8_unorm_srgb,
+        },
+        selectPresentationSurfaceFormat(&srgb_undefined_sentinel, .automatic).?,
+    );
+    try std.testing.expectEqualDeep(
+        PresentationSurfaceFormatSelection{
+            .surface_format = linear_presentation_surface_format,
+            .portable_format = .bgra8_unorm,
+        },
+        selectPresentationSurfaceFormat(&srgb_undefined_sentinel, .bgra8_unorm).?,
     );
 }
 

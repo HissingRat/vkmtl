@@ -57,7 +57,7 @@ const offscreen_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescri
     .{ .format = .rgba8_unorm },
 };
 
-const screen_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+const reference_presentation_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
     .{ .format = .bgra8_unorm_srgb },
 };
 
@@ -89,6 +89,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const screen_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
 
     var color_vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(color_vertices[0..]),
@@ -203,6 +206,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
         screen_stages.fragment,
         screen_vertex_descriptor.descriptor,
         pipeline_bind_group_layouts[0..],
+        screen_color_attachments[0..],
     ));
     defer screen_pipeline.deinit();
 
@@ -255,6 +259,13 @@ pub fn main(_: std.process.Init.Minimal) !void {
                 &device,
                 &queue,
             );
+            try renderScreenToDrawable(
+                &queue,
+                &screen_pipeline,
+                &bind_group,
+                &screen_vertex_buffer,
+                &screen_index_buffer,
+            );
             std.debug.print("render pixel regression ok backend={s} max_channel_delta={} presentation_max_channel_delta={}\n", .{
                 @tagName(context.selectedBackend()),
                 max_channel_delta,
@@ -263,36 +274,52 @@ pub fn main(_: std.process.Init.Minimal) !void {
             return;
         }
 
-        var screen_command_buffer = try queue.makeCommandBuffer();
-        var screen_encoder = try screen_command_buffer.makeRenderCommandEncoder(.{
-            .color_attachments = &.{.{
-                .clear_color = .{
-                    .red = 0.015,
-                    .green = 0.018,
-                    .blue = 0.023,
-                    .alpha = 1.0,
-                },
-            }},
-        });
-        try screen_encoder.setRenderPipelineState(&screen_pipeline);
-        try screen_encoder.setBindGroup(&bind_group, .{ .index = 0 });
-        try screen_encoder.setVertexBuffer(&screen_vertex_buffer, .{ .index = 0 });
-        try screen_encoder.setIndexBuffer(&screen_index_buffer);
-        try screen_encoder.drawIndexedPrimitives(.{
-            .primitive_type = .triangle,
-            .index_type = .uint16,
-            .index_count = @intCast(screen_indices.len),
-        });
-        try screen_encoder.endEncoding();
-        try screen_command_buffer.presentDrawableWithDescriptor(.{
-            .timing = .after_minimum_duration,
-            .value_ns = 1_000_000,
-            .allow_immediate_fallback = true,
-        });
-        try screen_command_buffer.commit();
+        try renderScreenToDrawable(
+            &queue,
+            &screen_pipeline,
+            &bind_group,
+            &screen_vertex_buffer,
+            &screen_index_buffer,
+        );
 
         glfw.pollEvents();
     }
+}
+
+fn renderScreenToDrawable(
+    queue: *vkmtl.Queue,
+    pipeline: *vkmtl.RenderPipelineState,
+    bind_group: *vkmtl.binding.BindGroup,
+    vertex_buffer: *vkmtl.Buffer,
+    index_buffer: *vkmtl.Buffer,
+) !void {
+    var command_buffer = try queue.makeCommandBuffer();
+    var encoder = try command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = &.{.{
+            .clear_color = .{
+                .red = 0.015,
+                .green = 0.018,
+                .blue = 0.023,
+                .alpha = 1.0,
+            },
+        }},
+    });
+    try encoder.setRenderPipelineState(pipeline);
+    try encoder.setBindGroup(bind_group, .{ .index = 0 });
+    try encoder.setVertexBuffer(vertex_buffer, .{ .index = 0 });
+    try encoder.setIndexBuffer(index_buffer);
+    try encoder.drawIndexedPrimitives(.{
+        .primitive_type = .triangle,
+        .index_type = .uint16,
+        .index_count = @intCast(screen_indices.len),
+    });
+    try encoder.endEncoding();
+    try command_buffer.presentDrawableWithDescriptor(.{
+        .timing = .after_minimum_duration,
+        .value_ns = 1_000_000,
+        .allow_immediate_fallback = true,
+    });
+    try command_buffer.commit();
 }
 
 const QueryRegression = struct {
@@ -572,7 +599,7 @@ fn validateReferencePresentationPixels(
         .fragment = stages.fragment,
         .bind_group_layouts = bind_group_layouts[0..],
         .primitive_topology = .triangle,
-        .color_attachments = screen_color_attachments[0..],
+        .color_attachments = reference_presentation_color_attachments[0..],
     });
     defer pipeline.deinit();
 
@@ -693,6 +720,7 @@ fn screenPipelineDescriptor(
     fragment_stage: vkmtl.ProgrammableStageDescriptor,
     vertex_descriptor: vkmtl.VertexDescriptor,
     bind_group_layouts: []const vkmtl.BindGroupLayoutDescriptor,
+    color_attachments: []const vkmtl.RenderPipelineColorAttachmentDescriptor,
 ) vkmtl.RenderPipelineDescriptor {
     return .{
         .vertex = vertex_stage,
@@ -700,7 +728,7 @@ fn screenPipelineDescriptor(
         .vertex_descriptor = vertex_descriptor,
         .bind_group_layouts = bind_group_layouts,
         .primitive_topology = .triangle,
-        .color_attachments = screen_color_attachments[0..],
+        .color_attachments = color_attachments,
     };
 }
 

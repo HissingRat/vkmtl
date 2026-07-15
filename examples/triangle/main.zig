@@ -19,10 +19,6 @@ const vertices = [_]Vertex{
     .{ .position = .{ -0.5, 0.5 }, .color = .{ 0.20, 0.35, 1.0 } },
 };
 
-const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
-    .{ .format = .bgra8_unorm_srgb },
-};
-
 pub fn main(_: std.process.Init.Minimal) !void {
     try glfw.init();
     defer glfw.terminate();
@@ -51,6 +47,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
     var device = context.device();
     var queue = context.queue();
     var swapchain = context.swapchain();
+    const color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+        .{ .format = swapchain.selectedFormat() },
+    };
 
     var vertex_buffer = try device.makeBuffer(.{
         .bytes = std.mem.sliceAsBytes(vertices[0..]),

@@ -11,6 +11,15 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added `Swapchain.selectedFormat()` as the concrete presentation-owned query;
+  `Swapchain.presentationDescriptor().format` continues to expose the original
+  request.
+- Added the example-only `VKMTL_PRESENTATION_FORMAT=automatic|srgb|linear`
+  override so presentation selection and pixels can be reproduced without
+  changing application code.
+- Added a repeatable legacy drawable RT validation path to
+  `ray_traced_scene`: set `VKMTL_RT_LEGACY_DRAWABLE=1` to dispatch into a
+  caller-owned linear BGRA8 texture and exercise the compatibility raw copy.
 - Added the exact `ray_tracing.RayTracingTextureResources` alias and
   `CommandBuffer.dispatchRaysToTexture(...)` for native Metal/Vulkan ray
   dispatch into caller-owned textures without drawable acquisition or
@@ -100,6 +109,42 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Presentation format selection is now bounded and deterministic on both
+  backends. `.automatic` prefers `bgra8_unorm_srgb`, then `bgra8_unorm`; either
+  explicit SDR request must match exactly or returns
+  `UnsupportedPresentationFormat`. Vulkan no longer selects an arbitrary first
+  surface format, and Metal configures the layer from the concrete selection.
+- Current-drawable pipelines must match `Swapchain.selectedFormat()` exactly;
+  mismatches return `PresentationFormatMismatch` before native pipeline bind or
+  draw. Windowed examples and quick-start code now build drawable pipelines
+  from that selected format.
+- `Swapchain.presentationDescriptor().extent` remains the request, while
+  `Swapchain.extent()` now reports the actual native drawable extent. Healthy
+  zero-size resize preserves the last successful request, actual extent, and
+  selected format. Healthy same-request Vulkan resize remains a cheap no-op;
+  present/acquire suboptimal or out-of-date state forces recovery, while a
+  changed request with the same resolved native configuration avoids rebuild.
+  Metal publishes a new drawable extent only after depth allocation succeeds.
+- Vulkan rejects non-zero resize and clear while any backend command buffer is
+  uncommitted. Clear records through a dedicated pool and never resets caller
+  command pools. A failure after destructive recreation begins permanently
+  loses presentation; later resize, clear, and new command-buffer creation
+  return `SurfaceLost` instead of touching partially rebuilt resources.
+- A failed runtime commit now terminalizes and deinitializes its backend command
+  buffer, releases active-command/query borrows and work serial tracking, and
+  reports lifecycle status `failed`. Vulkan waits any submitted queue before
+  destroying command-buffer-owned temporary resources.
+- Legacy `dispatchRaysToDrawable(...)` now uses the caller's whole,
+  single-sample `bgra8_unorm` shader-write/copy-source output on both backends,
+  then copies bytes unchanged to the selected linear or sRGB BGRA8 drawable.
+  The compatibility path performs no HDR, tone mapping, transfer-function, or
+  gamut conversion; texture dispatch plus explicit composition remains the
+  canonical path.
+  The legacy command presents implicitly, and an explicit duplicate present on
+  the same command buffer returns `InvalidCommandBufferState`.
+  The combined command requires a graphics queue. Metal preflights drawable
+  availability, selected format/extent, and sRGB staging allocation before
+  compute dispatch; the linear route allocates no staging buffer.
 - Restored the established `ray_traced_scene` display values after the Metal
   drawable moved to `bgra8_unorm_srgb`: the shared pass now decodes the
   example's display-referred RGB before the attachment re-encodes it. A Metal
@@ -187,6 +232,14 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 56 adds one `Swapchain` method plus
+  `UnsupportedPresentationFormat` and `PresentationFormatMismatch`, targeting
+  `v0.2.0`. Root, `Device`, context-owner, `CommandBuffer`, and runtime-handle
+  sets are unchanged. Exact explicit-request enforcement is also a `v0.2.0`
+  semantic change. Actual-extent, resize/recovery, clear safety, failed-commit
+  cleanup, and graphics-only legacy presentation meanings also target `v0.2.0`;
+  no existing field, default, owner, method, or signature is removed or
+  renamed.
 - Period 55 adds one exact ray-tracing facade alias and one `CommandBuffer`
   method, targeting `v0.2.0`. The root, `Device`, context-owner, and runtime-
   handle sets are unchanged; `RayTracingDrawableResources` and

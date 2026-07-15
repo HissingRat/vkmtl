@@ -15,6 +15,82 @@ drawable, presentation method, or presentation-shaped native-handle view.
 
 Existing `WindowContext` source and behavior are unchanged.
 
+## Period 56 v0.2.0 Presentation Selection Update
+
+`PresentationDescriptor.format` remains the application request. The default
+`.automatic` request now deterministically prefers `bgra8_unorm_srgb`, then
+`bgra8_unorm`. An explicit request for either admitted SDR format is exact; an
+unavailable exact request or any other format returns
+`UnsupportedPresentationFormat` instead of silently selecting another native
+format.
+
+Existing code can continue to inspect the request with
+`Swapchain.presentationDescriptor()`. Code that creates a pipeline for the
+current drawable must use the additive concrete query:
+
+```zig
+var swapchain = context.swapchain();
+const drawable_format = swapchain.selectedFormat();
+
+var pipeline = try device.makeRenderPipelineState(.{
+    .vertex = stages.vertex,
+    .fragment = stages.fragment,
+    .color_attachments = &.{
+        .{ .format = drawable_format },
+    },
+});
+```
+
+After a successful resize, query `selectedFormat()` again before reusing a
+format-dependent pipeline. A stale or otherwise mismatched current-drawable
+pipeline returns `PresentationFormatMismatch`; vkmtl does not silently rewrite
+or recreate it. Offscreen and headless render targets are unchanged.
+
+The descriptor extent remains the request. Use `Swapchain.extent()` for the
+actual native drawable extent; Vulkan surface constraints may make it differ
+from `presentationDescriptor().extent`. A healthy zero-size resize preserves
+the last successful request, actual extent, and selected format.
+
+A healthy Vulkan resize with the same requested extent remains a cheap no-op.
+Present/acquire `SUBOPTIMAL` or `OUT_OF_DATE` marks recovery required, so a
+later same-request resize rebuilds. A changed request re-queries native state
+but can avoid recreation when the resolved configuration is unchanged. Metal
+publishes a new drawable extent only after replacement depth allocation
+succeeds.
+
+Vulkan callers must commit every backend command buffer before a non-zero
+resize or `Swapchain.clear(...)`. An active buffer makes either operation
+return `InvalidCommandBufferState` without changing native presentation. Clear
+uses a dedicated internal command pool and never resets a caller pool. Once
+native recreation or dependent rebuilding
+starts, any failure permanently loses that presentation runtime; later resize
+(including zero), clear, and new command-buffer creation return `SurfaceLost`.
+Recreate `WindowContext` rather than retrying the lost swapchain.
+
+`dispatchRaysToDrawable(...)` remains source-compatible but is a legacy
+compatibility path. Its caller output must now be a whole, single-sample
+`bgra8_unorm` 2D texture with shader-write and copy-source usage and the exact
+presentation extent. Both backends dispatch into that object, then copy its
+bytes unchanged to the selected linear or sRGB BGRA8 drawable. New code should
+use `dispatchRaysToTexture(...)` and an explicit composition pass.
+The legacy call includes implicit presentation; an explicit duplicate present
+on the same command buffer returns `InvalidCommandBufferState`.
+The combined legacy dispatch/present call is graphics-queue-only; compute and
+transfer queues return `InvalidQueueCapability` before native work. Metal
+preflights drawable availability, selected format/extent, and any sRGB staging
+allocation before compute dispatch; linear uses no staging allocation.
+
+A backend commit error terminally consumes that one-shot command buffer. vkmtl
+deinitializes the backend object, releases active-command and query-resolve
+borrows, retires the submitted work serial, and reports lifecycle status
+`failed`. Vulkan waits any queue that received work before destroying temporary
+command resources.
+
+Neither presentation selection nor the legacy raw copy performs HDR mapping,
+exposure, tone mapping, EOTF/OETF, gamma correction, or gamut conversion. The
+application owns all content transforms. Exhaustive `SurfaceError` and
+`CommandEncodingError` switches need the two new error arms.
+
 ## Period 55 v0.2.0 Texture Ray Dispatch Update
 
 Existing ray-tracing callers need no source change.

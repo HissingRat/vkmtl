@@ -2218,6 +2218,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.NoSupportedBackend,
         error.UnsupportedSurfaceProvider,
         error.UnsupportedBackendForPresentation,
+        error.UnsupportedPresentationFormat,
         error.UnsupportedSampleCount,
         error.UnsupportedTextureUsage,
         error.UnsupportedTextureUploadFormat,
@@ -2318,6 +2319,7 @@ pub fn classifyError(err: anyerror) ErrorCategory {
         error.InvalidDepthBias,
         error.InvalidStencilMask,
         error.InvalidColorAttachmentFormat,
+        error.PresentationFormatMismatch,
         error.MissingColorAttachment,
         error.InvalidDepthStencilFormat,
         error.InvalidCommandBufferState,
@@ -6643,6 +6645,7 @@ pub const CommandEncodingError = error{
     InvalidStencilClearValue,
     DepthStateRenderPassMismatch,
     SampleCountRenderPassMismatch,
+    PresentationFormatMismatch,
     InvalidVertexCount,
     InvalidIndexCount,
     InvalidInstanceCount,
@@ -10085,6 +10088,13 @@ pub const PresentationDescriptor = struct {
     }
 };
 
+pub fn validatePresentationFormatRequest(format: TextureFormat) SurfaceError!void {
+    switch (format) {
+        .automatic, .bgra8_unorm, .bgra8_unorm_srgb => {},
+        else => return SurfaceError.UnsupportedPresentationFormat,
+    }
+}
+
 pub const PresentModeResolution = struct {
     requested: PresentMode,
     selected: PresentMode,
@@ -10367,6 +10377,7 @@ pub const SurfaceError = error{
     InvalidSurfaceExtent,
     InvalidSurfaceHandle,
     InvalidSurfaceFrameState,
+    UnsupportedPresentationFormat,
     SurfaceLost,
 };
 
@@ -10387,6 +10398,7 @@ pub const Surface = struct {
 
     pub fn configure(self: *Surface, descriptor: PresentationDescriptor) SurfaceError!void {
         if (self.state == .lost) return SurfaceError.SurfaceLost;
+        try validatePresentationFormatRequest(descriptor.format);
         if (descriptor.extent.isZero()) {
             if (descriptor.resize_policy == .suspend_when_zero) {
                 self.state = .suspended;
@@ -11222,6 +11234,28 @@ test "surface presentation handles configured and suspended extents" {
     }));
 }
 
+test "presentation format requests admit only the bounded SDR set" {
+    try validatePresentationFormatRequest(.automatic);
+    try validatePresentationFormatRequest(.bgra8_unorm_srgb);
+    try validatePresentationFormatRequest(.bgra8_unorm);
+    try std.testing.expectError(
+        SurfaceError.UnsupportedPresentationFormat,
+        validatePresentationFormatRequest(.rgba8_unorm),
+    );
+    try std.testing.expectError(
+        SurfaceError.UnsupportedPresentationFormat,
+        validatePresentationFormatRequest(.rgba16_float),
+    );
+    try std.testing.expectEqual(
+        ErrorCategory.unsupported_feature,
+        classifyError(SurfaceError.UnsupportedPresentationFormat),
+    );
+    try std.testing.expectEqual(
+        ErrorCategory.validation,
+        classifyError(CommandEncodingError.PresentationFormatMismatch),
+    );
+}
+
 test "present mode support resolves backend fallbacks and vsync intent" {
     const fifo_only = PresentModeSupport{};
     try std.testing.expectEqual(PresentMode.fifo, fifo_only.resolve(.mailbox));
@@ -11341,7 +11375,7 @@ test "surface collection isolates presentation resource state per surface" {
         },
     }, .{
         .extent = .{ .width = 640, .height = 480 },
-        .format = .rgba8_unorm,
+        .format = .bgra8_unorm,
         .present_mode = .fifo,
     });
     const handle_b = try collection.add(.{

@@ -29,6 +29,11 @@ pub fn main() !void {
     defer context.deinit();
 
     var device = context.device();
+    const swapchain = context.swapchain();
+    std.debug.print("presentation format: requested={s}, selected={s}\n", .{
+        @tagName(swapchain.presentationDescriptor().format),
+        @tagName(swapchain.selectedFormat()),
+    });
     dumpAdapter(device.adapterInfo());
     dumpReport(device.capabilityReport());
     try dumpMemoryBudget(device);

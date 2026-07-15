@@ -1,5 +1,8 @@
+const std = @import("std");
 const glfw = @import("zig_glfw");
 const vkmtl = @import("vkmtl");
+
+extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
 pub fn surfaceDescriptor(window: glfw.Window) vkmtl.SurfaceDescriptor {
     return .{
@@ -15,8 +18,19 @@ pub fn surfaceDescriptor(window: glfw.Window) vkmtl.SurfaceDescriptor {
 pub fn presentationDescriptor(window: glfw.Window, present_mode: vkmtl.PresentMode) vkmtl.PresentationDescriptor {
     return .{
         .extent = framebufferExtent(window),
+        .format = presentationFormatFromEnv(),
         .present_mode = present_mode,
     };
+}
+
+fn presentationFormatFromEnv() vkmtl.TextureFormat {
+    const value = std.mem.span(getenv("VKMTL_PRESENTATION_FORMAT") orelse return .automatic);
+    if (std.ascii.eqlIgnoreCase(value, "automatic")) return .automatic;
+    if (std.ascii.eqlIgnoreCase(value, "srgb")) return .bgra8_unorm_srgb;
+    if (std.ascii.eqlIgnoreCase(value, "linear")) return .bgra8_unorm;
+
+    std.debug.print("Ignoring unsupported VKMTL_PRESENTATION_FORMAT value: {s}\n", .{value});
+    return .automatic;
 }
 
 pub fn framebufferExtent(window: glfw.Window) vkmtl.Extent2D {

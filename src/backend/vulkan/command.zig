@@ -58,6 +58,19 @@ pub const RenderPassDescriptor = struct {
     }
 };
 
+fn renderPassUsesCurrentDrawable(descriptor: RenderPassDescriptor) bool {
+    const first = descriptor.colorAttachmentSlice()[0];
+    return switch (first.target) {
+        .current_drawable => true,
+        .texture_view => false,
+    };
+}
+
+fn presentationGenerationMatches(current: ?*const u64, captured: u64) bool {
+    const generation = current orelse return false;
+    return generation.* == captured;
+}
+
 pub const CommandBuffer = struct {
     gc: *const GraphicsContext,
     queue: GraphicsContext.Queue,
@@ -67,6 +80,9 @@ pub const CommandBuffer = struct {
     depth_render_pass: vk.RenderPass,
     color_framebuffers: []const vk.Framebuffer,
     depth_framebuffers: []const vk.Framebuffer,
+    presentation_generation: ?*const u64,
+    captured_presentation_generation: u64,
+    active_command_buffer_count: ?*usize,
     cmdbuf: vk.CommandBuffer,
     present_requested: bool = false,
     uses_current_drawable: bool = false,
@@ -86,6 +102,8 @@ pub const CommandBuffer = struct {
         depth_render_pass: vk.RenderPass,
         color_framebuffers: []const vk.Framebuffer,
         depth_framebuffers: []const vk.Framebuffer,
+        presentation_generation: ?*const u64,
+        active_command_buffer_count: ?*usize,
     ) !CommandBuffer {
         var cmdbuf: vk.CommandBuffer = undefined;
         try gc.dev.allocateCommandBuffers(&.{
@@ -94,6 +112,7 @@ pub const CommandBuffer = struct {
             .command_buffer_count = 1,
         }, @ptrCast(&cmdbuf));
 
+        if (active_command_buffer_count) |count| count.* +%= 1;
         return .{
             .gc = gc,
             .queue = gc.queueForKind(queue_kind),
@@ -103,6 +122,9 @@ pub const CommandBuffer = struct {
             .depth_render_pass = depth_render_pass,
             .color_framebuffers = color_framebuffers,
             .depth_framebuffers = depth_framebuffers,
+            .presentation_generation = presentation_generation,
+            .captured_presentation_generation = if (presentation_generation) |generation| generation.* else 0,
+            .active_command_buffer_count = active_command_buffer_count,
             .cmdbuf = cmdbuf,
         };
     }
@@ -118,6 +140,10 @@ pub const CommandBuffer = struct {
         self.timeline_signals.deinit(self.gc.allocator);
         self.gc.dev.freeCommandBuffers(self.pool, &.{self.cmdbuf});
         self.cmdbuf = .null_handle;
+        if (self.active_command_buffer_count) |count| {
+            std.debug.assert(count.* != 0);
+            count.* -= 1;
+        }
     }
 
     pub fn setLabel(self: *CommandBuffer, label_value: ?[]const u8) void {
@@ -142,6 +168,7 @@ pub const CommandBuffer = struct {
         self: *CommandBuffer,
         descriptor: RenderPassDescriptor,
     ) !RenderCommandEncoder {
+        if (renderPassUsesCurrentDrawable(descriptor)) try self.requireCurrentPresentationGeneration();
         try self.waitForOutstandingWork();
 
         const cmdbuf = self.cmdbuf;
@@ -450,7 +477,8 @@ pub const CommandBuffer = struct {
         top_level: *const VulkanAccelerationStructure,
         output: *const VulkanTextureView,
         dispatch: core.RayDispatchDescriptor,
-    ) core.AdvancedFeatureError!void {
+    ) (core.AdvancedFeatureError || core.CommandEncodingError)!void {
+        try self.requireCurrentPresentationGeneration();
         self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         const swapchain = self.swapchain orelse return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         self.temporary_ray_dispatch_resources.ensureUnusedCapacity(self.gc.allocator, 1) catch {
@@ -513,8 +541,8 @@ pub const CommandBuffer = struct {
             },
             .dst_offset = .{ .x = 0, .y = 0, .z = 0 },
             .extent = .{
-                .width = @min(output.width, swapchain.extent.width),
-                .height = @min(output.height, swapchain.extent.height),
+                .width = swapchain.extent.width,
+                .height = swapchain.extent.height,
                 .depth = 1,
             },
         };
@@ -545,6 +573,7 @@ pub const CommandBuffer = struct {
     }
 
     pub fn presentDrawable(self: *CommandBuffer) !void {
+        try self.requireCurrentPresentationGeneration();
         if (!self.uses_current_drawable) return error.PresentRequiresCurrentDrawable;
         self.present_requested = true;
     }
@@ -570,8 +599,16 @@ pub const CommandBuffer = struct {
         defer self.destroyTemporaryRenderPassResources();
         defer self.destroyTemporaryBlitResources();
         defer self.destroyTemporaryRayDispatchResources();
+        var submitted_queue: ?vk.Queue = null;
+        defer {
+            if (submitted_queue) |queue| {
+                self.gc.dev.queueWaitIdle(queue) catch {};
+            }
+        }
+        if (self.uses_current_drawable) try self.requireCurrentPresentationGeneration();
         if (self.present_requested) {
             const swapchain = self.swapchain orelse return error.UnsupportedBackendForPresentation;
+            submitted_queue = self.gc.graphics_queue.handle;
             _ = try swapchain.present(self.cmdbuf, self.timeline_waits.items, self.timeline_signals.items);
         } else {
             const wait_semaphores = try self.gc.allocator.alloc(vk.Semaphore, self.timeline_waits.items.len);
@@ -599,6 +636,7 @@ pub const CommandBuffer = struct {
                 .signal_semaphore_value_count = @intCast(signal_values.len),
                 .p_signal_semaphore_values = if (signal_values.len == 0) null else signal_values.ptr,
             };
+            submitted_queue = self.queue.handle;
             try self.gc.dev.queueSubmit(self.queue.handle, &.{.{
                 .p_next = if (wait_values.len != 0 or signal_values.len != 0) &timeline_info else null,
                 .wait_semaphore_count = @intCast(wait_semaphores.len),
@@ -611,7 +649,9 @@ pub const CommandBuffer = struct {
             }}, .null_handle);
         }
         if (callback) |notify| notify(callback_context, .scheduled);
-        try self.gc.dev.queueWaitIdle(self.queue.handle);
+        const completion_queue = submitted_queue orelse unreachable;
+        try self.gc.dev.queueWaitIdle(completion_queue);
+        submitted_queue = null;
         if (callback) |notify| notify(callback_context, .completed);
     }
 
@@ -623,6 +663,7 @@ pub const CommandBuffer = struct {
             .texture_view => false,
         };
         if (uses_current_drawable) {
+            try self.requireCurrentPresentationGeneration();
             const swapchain = self.swapchain orelse return error.UnsupportedBackendForPresentation;
             if (color_attachments.len != 1) return error.InvalidRenderPassAttachment;
             if (first_color_attachment.resolve_target != null) return error.InvalidRenderPassAttachment;
@@ -786,7 +827,19 @@ pub const CommandBuffer = struct {
     }
 
     fn waitForOutstandingWork(self: *CommandBuffer) !void {
+        if (self.presentation_generation != null) try self.requireCurrentPresentationGeneration();
         if (self.swapchain) |swapchain| try swapchain.waitForAllFences();
+    }
+
+    fn presentationGenerationIsCurrent(self: *const CommandBuffer) bool {
+        return presentationGenerationMatches(
+            self.presentation_generation,
+            self.captured_presentation_generation,
+        );
+    }
+
+    fn requireCurrentPresentationGeneration(self: *const CommandBuffer) core.CommandEncodingError!void {
+        if (!self.presentationGenerationIsCurrent()) return core.CommandEncodingError.InvalidCommandBufferState;
     }
 
     fn destroyTemporaryRenderPassResources(self: *CommandBuffer) void {
@@ -2176,4 +2229,12 @@ test "Vulkan fill buffer fallback selection covers unaligned ranges" {
     try std.testing.expectEqual(@as(u64, 15), diagnostics.staging_bytes);
     try std.testing.expectEqual(@as(u64, 3), diagnostics.totalFills());
     try std.testing.expectEqual(@as(u64, 31), diagnostics.totalBytes());
+}
+
+test "Vulkan presentation generation invalidates drawable command state" {
+    var generation: u64 = 9;
+    try std.testing.expect(presentationGenerationMatches(&generation, 9));
+    generation = 10;
+    try std.testing.expect(!presentationGenerationMatches(&generation, 9));
+    try std.testing.expect(!presentationGenerationMatches(null, 0));
 }

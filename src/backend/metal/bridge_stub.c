@@ -110,10 +110,12 @@ vkmtl_metal_status vkmtl_metal_probe_copy_device_name(
 vkmtl_metal_status vkmtl_metal_clear_screen_create(
     vkmtl_metal_clear_screen **out_clear_screen,
     void *cocoa_window,
+    vkmtl_metal_texture_format format,
     unsigned int width,
     unsigned int height
 ) {
     (void)cocoa_window;
+    (void)format;
     (void)width;
     (void)height;
     if (out_clear_screen != NULL) {
@@ -133,6 +135,17 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create_headless(
 
 void vkmtl_metal_clear_screen_destroy(vkmtl_metal_clear_screen *clear_screen) {
     (void)clear_screen;
+}
+
+vkmtl_metal_status vkmtl_metal_clear_screen_get_presentation_format(
+    const vkmtl_metal_clear_screen *clear_screen,
+    vkmtl_metal_texture_format *out_format
+) {
+    (void)clear_screen;
+    if (out_format != NULL) {
+        *out_format = VKMTL_METAL_TEXTURE_FORMAT_INVALID;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
 vkmtl_metal_status vkmtl_metal_clear_screen_copy_device_topology(
@@ -2026,6 +2039,7 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     vkmtl_metal_command_buffer *command_buffer,
     vkmtl_metal_ray_tracing_pipeline_state *pipeline,
     vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_texture_view *output_texture_view,
     unsigned int width,
     unsigned int height,
     const void *inline_data,
@@ -2035,6 +2049,7 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     (void)command_buffer;
     (void)pipeline;
     (void)acceleration_structure;
+    (void)output_texture_view;
     (void)width;
     (void)height;
     (void)inline_data;
