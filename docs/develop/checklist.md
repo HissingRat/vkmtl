@@ -38,7 +38,7 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-54 and the additive headless-runtime
+  semantic-support ledger. Periods 46-55 and the additive headless-runtime
   refactor are complete. The original exactly-once semantic gap routing now
   has zero incomplete rows; a future native-semantic breadth period requires a
   new baseline audit or an explicit unsupported-contract allocation. The
@@ -2946,8 +2946,9 @@ contract before chunk implementation begins.
 
 ## Period 55 Phase 1 Checklist
 
-- [x] Define the ray-tracing color contract as linear scene output followed by
-  one display transform and one hardware sRGB encode.
+- [x] Define ray dispatch as caller-owned accumulation output with no implicit
+  color-space conversion, and define the example's reference display transform
+  separately.
 - [x] Allocate texture-only ray dispatch to
   `ray_tracing.RayTracingTextureResources` and
   `CommandBuffer.dispatchRaysToTexture(...)` without growing root, `Device`,
@@ -2955,7 +2956,7 @@ contract before chunk implementation begins.
 - [x] Preserve `RayTracingDrawableResources` and
   `dispatchRaysToDrawable(...)` as source-compatible legacy presentation APIs.
 - [x] Require the selected device to report sampled and storage support for the
-  linear intermediate format before creating it.
+  `rgba16_float` accumulation format before creating it.
 
 ## Period 55 Phase 2 Checklist
 
@@ -2970,25 +2971,27 @@ contract before chunk implementation begins.
 
 ## Period 55 Phase 3 Checklist
 
-- [x] Add a manifest-backed fullscreen display shader with fixed exposure and
-  tone-mapping semantics.
-- [x] Render the same linear `rgba16_float` RT output through the public render
-  path on Metal and Vulkan.
-- [x] Keep the final attachment `bgra8_unorm_srgb` and avoid manual sRGB
-  encoding in the shader.
+- [x] Add a manifest-backed fullscreen display shader that clamps the example's
+  historical display-referred RGB and applies the standard sRGB EOTF.
+- [x] Render the same caller-owned `rgba16_float` RT accumulation texture
+  through the public render path on Metal and Vulkan.
+- [x] Keep the final attachment `bgra8_unorm_srgb` so its matching OETF restores
+  reference bytes without a shader-side second encode.
 - [x] Recreate resize-dependent bind groups, views, and textures in safe
   lifetime order.
 
 ## Period 55 Phase 4 Checklist
 
-- [x] Add deterministic CPU color-transform and RT resource-contract tests.
+- [x] Add deterministic CPU EOTF and RT resource-contract tests, including
+  `0.0/0.18/0.5/0.8/1.0 -> 0/46/128/204/255`.
 - [x] Make the finite-run marker strict for invalid limits, early closure, and
   persistent zero-sized framebuffers.
 - [x] Update API inventory, migration guidance, semantic inventory, matrices,
   usage docs, changelog, roadmap, and Period 55 closeout.
 - [x] Run API/semantic guards, tests, default/Vulkan builds, package smoke,
-  physical Metal validation, and format/diff gates; keep the new Vulkan color
-  path's physical RT-machine rerun explicit as follow-up evidence.
+  physical Metal command validation, the separate shared-pass BGRA8 readback,
+  and format/diff gates. Keep the new Vulkan texture-presentation path's
+  physical RT-machine rerun explicit as follow-up evidence.
 
 ## First Backend-Independent Triangle Checklist
 

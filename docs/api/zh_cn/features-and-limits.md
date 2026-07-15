@@ -119,10 +119,10 @@ ray-query shader 路径还不存在。`acceleration_structure_compaction` 也不
 post-build compacted-size discovery。
 
 Texture RT output 还必须检查 `getFormatCaps(format).storage` 与 `.sampled`。
-Period 55 reference path 使用 `rgba16_float`；不能只因为 `storage_textures` 为 true 就创建它。
-Texture dispatch 会在 native encoding 前校验 shader-read/write usage、single-sample 2D view 和
-dispatch extent。Presentation 还要单独确认 selected surface path 支持
-`bgra8_unorm_srgb`。
+Period 55 reference 示例把 `rgba16_float` 用作更高精度的累积格式；format 本身不规定 color
+space。不能只因为 `storage_textures` 为 true 就创建它。Texture dispatch 会在 native encoding
+前校验 shader-read/write usage、single-sample 2D view 和 dispatch extent。Presentation 还要单独
+确认 selected surface path 支持 `bgra8_unorm_srgb`。
 
 ### Query 与 Driver Artifact
 
@@ -224,11 +224,13 @@ depth_copy stencil_copy color_resolve depth_resolve stencil_resolve
 检查对应 capability flag 和 transfer alignment limit。即使同一 native adapter 可以通过
 `WindowContext` 呈现，headless device 也会报告 `presentation = false`。
 
-Color-managed RT 路径必须确认 `rgba16_float` 同时支持 `sampled` 与 `storage`；只有 caller
-需要 readback/copy 时才额外要求 `copy_source`。`bgra8_unorm_srgb` 是最终 display target，
-不是 scene-linear storage texture。Format support 仍以当前 device/backend query 为准。当前
-texture-dispatch contract 还要求 output view 覆盖完整的 single-mip、single-layer texture；format
-capability 不会放宽这条 command-specific shape 限制。
+Reference RT 路径必须确认 `rgba16_float` 同时支持 `sampled` 与 `storage`；只有 caller 需要
+readback/copy 时才额外要求 `copy_source`。示例在这个 texture 中保存 legacy display-referred
+RGB，在共享 pass 中执行 sRGB EOTF，并以 `bgra8_unorm_srgb` 作为最终 display target，由其 OETF
+恢复参考值。其他应用可以把同一 format 用于真正的 scene-linear HDR，并自行提供 exposure 与
+tone mapping。Format support 仍以当前 device/backend query 为准，format 名称不会替应用选择其中
+任何一种 color contract。当前 texture-dispatch contract 还要求 output view 覆盖完整的
+single-mip、single-layer texture；format capability 不会放宽这条 command-specific shape 限制。
 
 ## Evidence 与 Diagnostics
 

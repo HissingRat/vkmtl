@@ -54,7 +54,7 @@ which mode applies.
 | Streaming texture | `zig build run-streaming-texture` | Auto-exit probe | Prints residency success or `streaming texture unsupported: ...`. |
 | Tessellation | `zig build run-tessellation` | Window | Renders native Vulkan patches, or exits with a typed unsupported line. |
 | Mesh shader | `zig build run-mesh-shader` | Window | Renders one native Metal/Vulkan mesh grid, or exits with a typed unsupported line. |
-| Ray-traced scene | `zig build run-ray-traced-scene` | Window when supported; `VKMTL_RT_FRAME_LIMIT` enables a finite run | Native RT writes scene-linear `rgba16_float`; one shared ACES-fitted fullscreen pass presents it and prints the backend-specific `driver_pixels=visible_...` marker, or an actionable unsupported diagnostic. |
+| Ray-traced scene | `zig build run-ray-traced-scene` | Window when supported; `VKMTL_RT_FRAME_LIMIT` enables a finite run | Native RT stores accumulated legacy display-referred RGB in `rgba16_float`; a shared fullscreen pass preserves that reference output and prints the backend-specific `driver_pixels=visible_...` marker, or an actionable unsupported diagnostic. |
 
 The repository does not commit screenshot image assets. Visual evidence is
 recorded in the Period 32 Vulkan RT validation notes and the Period 44 9/9
@@ -471,18 +471,23 @@ not imply completion of unrelated native-pressure lanes.
 
 Period 55 changes the canonical display flow without changing the scene or
 backend RT markers. `CommandBuffer.dispatchRaysToTexture(...)` writes a
-caller-owned, capability-gated `rgba16_float` scene-linear texture. A second
-public render command samples it, applies fixed exposure `1.0` and the shared
-ACES-fitted curve, then returns display-linear color to
-`bgra8_unorm_srgb`; the attachment performs the only sRGB encode. The older
-drawable dispatch command remains available for compatibility. RT dispatch
-and the fullscreen consumer use separate command buffers because each current
-command buffer owns one native encoding segment.
+caller-owned, capability-gated `rgba16_float` texture. The command does not
+assign a color space or transform the values written by the ray-generation
+shader. This example keeps its established display-referred RGB while using
+the floating-point texture for higher-precision accumulation. A second public
+render command applies the sRGB EOTF to those values and returns display-linear
+color to `bgra8_unorm_srgb`; the attachment's sRGB OETF restores the reference
+display values. The example does not apply exposure or tone mapping. An
+application that wants true scene-linear HDR instead defines its radiometric
+units, exposure, and tone-mapping policy separately. The older drawable
+dispatch command remains available for compatibility. RT dispatch and the
+fullscreen consumer use separate command buffers because each current command
+buffer owns one native encoding segment.
 
 Metal API Validation has physically completed three frames of this new path.
 The historical Vulkan physical evidence above still proves the native RT
-backend, but it predates the Period 55 display transform. The new Vulkan
-color-managed path has unit and forced-build evidence and still needs a
+backend, but it predates the Period 55 shared presentation path. The new Vulkan
+reference-preserving path has unit and forced-build evidence and still needs a
 physical RT-machine rerun.
 
 The current procedural marker supersedes the original Period32

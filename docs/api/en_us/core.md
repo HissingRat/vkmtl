@@ -535,11 +535,18 @@ command returns `InvalidCommandBufferState`.
 `dispatchRaysToDrawable(...)` remains available as a legacy presentation
 command.
 
-For portable RT display, use a sampled-plus-storage-capable
-`rgba16_float` scene-linear intermediate, apply exposure and tone mapping in a
-normal public render pass, and write display-linear values to
-`bgra8_unorm_srgb`. The final attachment owns the single sRGB transfer encode;
-do not add a shader-side gamma or sRGB OETF.
+`dispatchRaysToTexture(...)` does not assign a color space to the output or
+perform a color conversion. The shader and application define what the stored
+numbers mean; choosing `rgba16_float` does not by itself make them scene-linear
+or HDR radiance.
+
+The repository ray-traced-scene example uses `rgba16_float` for
+higher-precision accumulation while retaining its legacy display-referred RGB
+values. Its shared fullscreen pass applies the sRGB EOTF and writes the result
+to `bgra8_unorm_srgb`, whose attachment OETF restores the reference display
+values. Applications may instead define a true scene-linear HDR contract and
+apply their own exposure and tone mapping before writing display-linear values
+to an sRGB attachment; that policy is outside the texture-dispatch API.
 
 Period 30 adds backend-private runtime records to those objects: acceleration
 structure handles/build records, ray tracing pipeline metadata, SBT records,

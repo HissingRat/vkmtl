@@ -182,6 +182,12 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the vkmtl triangle example");
     run_step.dependOn(&triangle_cmd.step);
 
+    const ray_traced_scene_present_source = b.createModule(.{
+        .root_source_file = b.path("examples/ray_traced_scene/present_shader_source.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const offscreen_texture = b.addExecutable(.{
         .name = "vkmtl-offscreen-texture",
         .root_module = b.createModule(.{
@@ -193,6 +199,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "vkmtl", .module = vkmtl },
                 .{ .name = "zig_glfw", .module = zig_glfw },
                 .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+                .{ .name = "ray_traced_scene_present_source", .module = ray_traced_scene_present_source },
             },
         }),
     });
@@ -376,7 +383,7 @@ pub fn build(b: *std.Build) void {
     pixel_render_cmd.setEnvironmentVariable("VKMTL_QUERY_REGRESSION", "1");
     configureVulkanRuntimeForRun(b, pixel_render_cmd, target.result.os.tag, vulkan_runtime);
 
-    const pixel_regression_step = b.step("run-pixel-regression", "Run deterministic transfer, compute, and render pixel readback checks");
+    const pixel_regression_step = b.step("run-pixel-regression", "Run deterministic transfer, compute, render, and display pixel readback checks");
     pixel_regression_step.dependOn(&pixel_render_cmd.step);
 
     const capability_dump = b.addExecutable(.{

@@ -69,10 +69,15 @@ Current cases:
   records remain distinct. Period 55 additionally validates caller-owned RT
   output usage/whole-texture shape/extent, per-dispatch Vulkan descriptor
   ownership, the one-native-segment command rule, strict finite-run failure
-  states, and fixed ACES/sRGB CPU reference values; the executable command owns
-  the storage-write-to-sampled postcondition. Metal has a three-frame API
-  Validation run; the new Vulkan color-managed path retains an explicit
-  physical-rerun gap.
+  states, and CPU/GPU reference-preserving `0/0.18/0.5/0.8/1.0` to
+  `0/46/128/204/255` golden values. The executable command writes the generic
+  caller-owned accumulation output and establishes the storage-write-to-sampled
+  postcondition;
+  `ray_traced_scene` separately applies the sRGB EOTF before the
+  `bgra8_unorm_srgb` attachment performs the matching encode. Tone mapping is
+  application policy. Metal has a three-frame API Validation run and an
+  offscreen shared-display readback with a maximum one-byte channel delta; the
+  shared-display Vulkan path retains an explicit physical-rerun gap.
 - `ray_tracing_completeness`: update/refit/compact resources, many-instance
   TLAS validation, native ray-query discovery, planning-only complex/callable
   SBT records, and RT stress plans stay capability-gated and deterministic.

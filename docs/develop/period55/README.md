@@ -1,11 +1,13 @@
-# Period 55: Color-Managed Ray-Tracing Presentation
+# Period 55: Explicit Ray-Tracing Texture Presentation
 
 Status: complete.
 
-Goal: make ray-traced scene color mean the same thing on Metal and Vulkan.
-Native ray dispatch produces a caller-owned linear texture. A normal public
-render pass applies the documented display transform and writes linear values
-to an sRGB drawable, so the attachment performs exactly one sRGB encode.
+Goal: separate native ray dispatch from presentation without assigning a color
+space to caller-owned output. Native ray dispatch produces a caller-owned
+`rgba16_float` accumulation texture. The example's normal public render pass
+clamps its historical display-referred RGB, applies the sRGB EOTF, and writes
+display-linear values to an sRGB drawable; the attachment OETF restores the
+reference bytes.
 
 ## Phase Plan
 
@@ -31,10 +33,11 @@ See `phase2.md`.
 ### Phase 3: Shared Display Transform
 
 - Use a manifest-backed fullscreen Slang shader on both backends.
-- Store scene-linear HDR in `rgba16_float`.
-- Apply fixed exposure and an ACES-fitted tone map.
-- Return display-linear color to a `bgra8_unorm_srgb` attachment without a
-  shader-side gamma transform.
+- Keep `rgba16_float` as a caller-owned accumulation texture with no implicit
+  color-space conversion in dispatch.
+- Clamp the example's historical display-referred RGB and apply the sRGB EOTF.
+- Return display-linear color to a `bgra8_unorm_srgb` attachment so its OETF
+  reproduces the reference bytes.
 
 See `phase3.md`.
 
@@ -49,10 +52,14 @@ See `phase4.md` and `closeout.md`.
 ## Outcome
 
 Both backend lowerings now write the caller's texture and the example presents
-that texture through the same public render pipeline. Metal API Validation
-completed a finite three-frame run. Vulkan has implementation, unit, and
-forced-build evidence for the new path; its physical RT-machine color rerun is
-still explicit follow-up evidence rather than an inferred pass.
+that texture through the same public render pipeline. The scalar golden
+mapping is `0.0/0.18/0.5/0.8/1.0 -> 0/46/128/204/255`. Metal API Validation
+completed a finite three-frame run for the command architecture. The Metal
+pixel-regression lane also rendered the shared pass into an offscreen sRGB
+attachment and read back black, `0.18`, `0.5`, yellow, and blue with a maximum
+one-byte channel delta. Vulkan has implementation, unit, and forced-build
+evidence for the new path; its physical RT-machine presentation rerun is still
+explicit follow-up evidence rather than an inferred pass.
 
 ## Compatibility
 

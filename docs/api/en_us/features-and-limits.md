@@ -128,11 +128,12 @@ Post-build compacted-size discovery is not implied by
 `acceleration_structure_compaction`.
 
 Texture RT output additionally requires `getFormatCaps(format).storage` and
-`.sampled`. The Period 55 reference path uses `rgba16_float`; it must not be
-created merely because `storage_textures` is true. Texture dispatch validates
-shader-read/write usage, a single-sample 2D view, and dispatch extent before
-native encoding. Presentation separately requires the selected surface path to
-support `bgra8_unorm_srgb`.
+`.sampled`. The Period 55 reference example uses `rgba16_float` as a
+higher-precision accumulation format; the format does not establish a color
+space. It must not be created merely because `storage_textures` is true.
+Texture dispatch validates shader-read/write usage, a single-sample 2D view,
+and dispatch extent before native encoding. Presentation separately requires
+the selected surface path to support `bgra8_unorm_srgb`.
 
 ### Queries And Driver Artifacts
 
@@ -243,13 +244,17 @@ format naming. Use the matching capability flag and the transfer alignment
 limits before encoding. A headless device reports `presentation = false` even
 when the same native adapter can present through a `WindowContext`.
 
-For the color-managed RT path, require both `sampled` and `storage` on
+For the reference RT path, require both `sampled` and `storage` on
 `rgba16_float`; `copy_source` is additionally required only when the caller
-requests readback or copies. `bgra8_unorm_srgb` is the final display target,
-not the scene-linear storage texture. Format support remains device- and
-backend-query-dependent. The current texture-dispatch contract also requires a
-whole single-mip, single-layer output view; a format capability does not relax
-that command-specific shape restriction.
+requests readback or copies. The example stores legacy display-referred RGB in
+that texture, applies the sRGB EOTF in its shared pass, and uses
+`bgra8_unorm_srgb` as the final display target whose OETF restores the reference
+values. A different application may use the same format for true scene-linear
+HDR and supply its own exposure and tone mapping. Format support remains
+device- and backend-query-dependent, and the format name does not choose either
+color contract. The current texture-dispatch contract also requires a whole
+single-mip, single-layer output view; a format capability does not relax that
+command-specific shape restriction.
 
 ## Evidence And Diagnostics
 

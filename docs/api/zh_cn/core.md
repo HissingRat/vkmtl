@@ -447,10 +447,15 @@ segment，因此必须先 commit，再创建用于 sample/compose 的 command bu
 direct command 会返回 `InvalidCommandBufferState`。`dispatchRaysToDrawable(...)` 继续作为 legacy
 presentation command 保留。
 
-可移植 RT 显示应使用同时支持 sampled 与 storage 的 `rgba16_float` scene-linear
-intermediate，在普通 public render pass 中执行 exposure/tone mapping，再把 display-linear 值写入
-`bgra8_unorm_srgb`。最终 attachment 负责唯一一次 sRGB transfer encode；shader 不应再做 gamma
-或 sRGB OETF。
+`dispatchRaysToTexture(...)` 不会给 output 指定 color space，也不会执行 color conversion。
+Shader 与应用负责定义存储数值的含义；选择 `rgba16_float` 本身不表示这些数值是 scene-linear
+或 HDR radiance。
+
+仓库的 ray-traced-scene 示例使用 `rgba16_float` 提高累积精度，同时保留 legacy
+display-referred RGB。共享 fullscreen pass 对这些值执行 sRGB EOTF，并把结果写入
+`bgra8_unorm_srgb`；attachment 的 OETF 会恢复参考 display value。应用也可以自行定义真正的
+scene-linear HDR contract，并在向 sRGB attachment 写入 display-linear 值之前执行自己的 exposure
+与 tone mapping；这些策略不属于 texture-dispatch API。
 
 Period 30 给这些对象补上 backend-private runtime record：acceleration structure handle/build
 record、ray tracing pipeline metadata、SBT record、dispatch record、Metal table metadata、

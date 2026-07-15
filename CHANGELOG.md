@@ -15,10 +15,12 @@ reserved for the next minor release and are documented with migration guidance.
   `CommandBuffer.dispatchRaysToTexture(...)` for native Metal/Vulkan ray
   dispatch into caller-owned textures without drawable acquisition or
   presentation side effects.
-- Added a shared color-managed `ray_traced_scene` display path: capability-
-  gated scene-linear `rgba16_float`, fixed exposure `1.0`, an ACES-fitted
-  fullscreen transform, and one hardware encode through
-  `bgra8_unorm_srgb`.
+- Added an explicit `ray_traced_scene` texture-presentation path: ray dispatch
+  writes a caller-owned `rgba16_float` accumulation texture, while the shared
+  fullscreen pass clamps the example's historical display-referred RGB and
+  applies the sRGB EOTF before the final `bgra8_unorm_srgb` attachment restores
+  the reference bytes through its OETF. Golden scalar samples
+  `0.0/0.18/0.5/0.8/1.0` produce `0/46/128/204/255`.
 - Completed the bounded Period 19 voxel renderer pressure test with visible-face
   CPU chunk meshing, generated atlas materials, reflection-derived layouts,
   camera and chunk culling, bounded streaming/rebuild work, pressure metrics,
@@ -98,6 +100,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Restored the established `ray_traced_scene` display values after the Metal
+  drawable moved to `bgra8_unorm_srgb`: the shared pass now decodes the
+  example's display-referred RGB before the attachment re-encodes it. A Metal
+  GPU readback regression locks black, `0.18`, `0.5`, saturated yellow, and
+  saturated blue within one byte of their reference BGRA8 values.
 - Direct AS/RT encoding now rejects a second native encoding segment with
   `InvalidCommandBufferState`, and Vulkan RT dispatch owns descriptor/inline
   data per dispatch through completion. Texture RT output is restricted to a

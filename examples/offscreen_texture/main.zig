@@ -2,6 +2,7 @@ const std = @import("std");
 const vkmtl = @import("vkmtl");
 const glfw = @import("zig_glfw");
 const common = @import("vkmtl_examples_common");
+const reference_present_shader_source = @import("ray_traced_scene_present_source").source;
 
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
@@ -10,6 +11,16 @@ const shader_source = @embedFile("shaders/offscreen_texture.slang");
 
 const offscreen_width = 512;
 const offscreen_height = 512;
+const presentation_regression_width = 5;
+const presentation_regression_height = 1;
+
+const presentation_source_pixels = [presentation_regression_width][4]f16{
+    .{ 0.0, 0.0, 0.0, 1.0 },
+    .{ 0.18, 0.18, 0.18, 1.0 },
+    .{ 0.5, 0.5, 0.5, 1.0 },
+    .{ 1.0, 0.8, 0.0, 1.0 },
+    .{ 0.0, 0.0, 1.0, 1.0 },
+};
 
 const ColorVertex = extern struct {
     position: [2]f32,
@@ -239,9 +250,15 @@ pub fn main(_: std.process.Init.Minimal) !void {
                 &queue,
                 &offscreen_texture,
             );
-            std.debug.print("render pixel regression ok backend={s} max_channel_delta={}\n", .{
+            const presentation_max_channel_delta = try validateReferencePresentationPixels(
+                allocator,
+                &device,
+                &queue,
+            );
+            std.debug.print("render pixel regression ok backend={s} max_channel_delta={} presentation_max_channel_delta={}\n", .{
                 @tagName(context.selectedBackend()),
                 max_channel_delta,
+                presentation_max_channel_delta,
             });
             return;
         }
@@ -463,6 +480,165 @@ fn validateOffscreenPixels(
         .{ 143, 116, 118, 255 },
         12,
     ));
+    return max_channel_delta;
+}
+
+fn validateReferencePresentationPixels(
+    allocator: std.mem.Allocator,
+    device: *vkmtl.Device,
+    queue: *vkmtl.Queue,
+) !u8 {
+    var source_texture = try device.makeTexture(.{
+        .label = "reference presentation source",
+        .format = .rgba16_float,
+        .width = presentation_regression_width,
+        .height = presentation_regression_height,
+        .usage = .{ .shader_read = true },
+        .storage_mode = .shared,
+    });
+    defer source_texture.deinit();
+    try source_texture.replaceAll2D(.{
+        .bytes = std.mem.sliceAsBytes(presentation_source_pixels[0..]),
+    });
+
+    var source_view = try source_texture.makeTextureView(.{});
+    defer source_view.deinit();
+
+    var target_texture = try device.makeTexture(.{
+        .label = "reference presentation sRGB target",
+        .format = .bgra8_unorm_srgb,
+        .width = presentation_regression_width,
+        .height = presentation_regression_height,
+        .usage = .{
+            .copy_source = true,
+            .render_attachment = true,
+        },
+        .storage_mode = .private,
+    });
+    defer target_texture.deinit();
+
+    var target_view = try target_texture.makeTextureView(.{});
+    defer target_view.deinit();
+
+    var compiled_shader = try device.compileRenderShader(
+        "ray_traced_scene_present",
+        reference_present_shader_source,
+        .{
+            .vertex_entry = "present_vs",
+            .fragment_entry = "present_fs",
+        },
+    );
+    defer compiled_shader.deinit();
+
+    const stages = compiled_shader.stageDescriptors(device.selectedBackend());
+    var derived_layouts = try vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(
+        allocator,
+        stages.vertex,
+        stages.fragment,
+    );
+    defer derived_layouts.deinit();
+    if (derived_layouts.descriptors().len != 1) return error.MissingDerivedBindGroupLayout;
+
+    var bind_group_layout = try device.makeBindGroupLayout(derived_layouts.descriptors()[0]);
+    defer bind_group_layout.deinit();
+    var sampler = try device.makeSamplerState(.{
+        .min_filter = .nearest,
+        .mag_filter = .nearest,
+    });
+    defer sampler.deinit();
+
+    const bind_group_entries = [_]vkmtl.BindGroupEntry{
+        .{
+            .binding = 0,
+            .resource = .{ .sampled_texture = &source_view },
+        },
+        .{
+            .binding = 1,
+            .resource = .{ .sampler = &sampler },
+        },
+    };
+    var bind_group = try device.makeBindGroup(.{
+        .layout = &bind_group_layout,
+        .entries = bind_group_entries[0..],
+    });
+    defer bind_group.deinit();
+
+    const bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
+        bind_group_layout.descriptor(),
+    };
+    var pipeline = try device.makeRenderPipelineState(.{
+        .label = "reference presentation regression",
+        .vertex = stages.vertex,
+        .fragment = stages.fragment,
+        .bind_group_layouts = bind_group_layouts[0..],
+        .primitive_topology = .triangle,
+        .color_attachments = screen_color_attachments[0..],
+    });
+    defer pipeline.deinit();
+
+    var render_commands = try queue.makeCommandBuffer();
+    var render_encoder = try render_commands.makeRenderCommandEncoder(.{
+        .color_attachments = &.{.{
+            .target = .{ .texture_view = &target_view },
+            .clear_color = .{ .alpha = 1.0 },
+        }},
+    });
+    try render_encoder.setRenderPipelineState(&pipeline);
+    try render_encoder.setBindGroup(&bind_group, .{ .index = 0 });
+    try render_encoder.drawPrimitives(.{
+        .primitive_type = .triangle,
+        .vertex_count = 3,
+    });
+    try render_encoder.endEncoding();
+    try render_commands.commit();
+
+    const tight_bytes_per_row = presentation_regression_width * 4;
+    const row_alignment: usize = @max(
+        1,
+        @as(usize, device.limits().buffer_texture_copy_row_pitch_alignment),
+    );
+    const bytes_per_row = std.mem.alignForward(usize, tight_bytes_per_row, row_alignment);
+    const readback_len = bytes_per_row * presentation_regression_height;
+
+    var readback = try device.makeBuffer(.{
+        .label = "reference presentation readback",
+        .length = readback_len,
+        .usage = .{ .copy_destination = true },
+        .storage_mode = .shared,
+    });
+    defer readback.deinit();
+
+    var copy_commands = try queue.makeCommandBuffer();
+    var blit = try copy_commands.makeBlitCommandEncoder();
+    try blit.copyTextureToBuffer(&target_texture, &readback, .{
+        .source_region = .{ .size = .{
+            .width = presentation_regression_width,
+            .height = presentation_regression_height,
+        } },
+        .destination = .{ .bytes_per_row = bytes_per_row },
+    });
+    try blit.endEncoding();
+    try copy_commands.commit();
+
+    const bytes = try allocator.alloc(u8, readback_len);
+    defer allocator.free(bytes);
+    try readback.readBytes(0, bytes);
+
+    const expected_pixels = [_][4]u8{
+        .{ 0, 0, 0, 255 },
+        .{ 46, 46, 46, 255 },
+        .{ 128, 128, 128, 255 },
+        .{ 0, 204, 255, 255 },
+        .{ 255, 0, 0, 255 },
+    };
+    var max_channel_delta: u8 = 0;
+    for (expected_pixels, 0..) |expected, x| {
+        max_channel_delta = @max(max_channel_delta, try validatePixel(
+            pixelSlice(bytes, bytes_per_row, x, 0),
+            expected,
+            1,
+        ));
+    }
     return max_channel_delta;
 }
 

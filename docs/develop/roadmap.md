@@ -1003,14 +1003,15 @@ statistics, calibration, advanced reflection, and function logs are precisely
 unsupported under the current ownership and result shapes. See
 `docs/develop/period54/`.
 
-## Period 55: Color-Managed Ray-Tracing Presentation
+## Period 55: Explicit Ray-Tracing Texture Presentation
 
 Status: complete.
 
-Goal: give Metal and Vulkan the same ray-tracing color contract: native ray
-dispatch writes a caller-owned linear scene texture, a public fullscreen render
-pass applies one documented exposure/tone-map transform, and an sRGB drawable
-performs the only display transfer encoding. Preserve the existing drawable
+Goal: separate native ray dispatch from presentation without assigning a color
+space to caller-owned output. Native ray dispatch writes a caller-owned
+`rgba16_float` accumulation texture; the example's public fullscreen pass
+clamps its historical display-referred RGB and applies the sRGB EOTF before an
+sRGB drawable performs the matching OETF. Preserve the existing drawable
 dispatch API for compatibility while making texture dispatch the composable,
 headless-capable canonical path.
 
@@ -1018,13 +1019,16 @@ The additive texture command now writes a caller-owned `rgba16_float` target
 on Metal and Vulkan, with exact usage/whole-texture-shape/extent validation and
 a Vulkan RT-write to fragment-sampled transition. Vulkan descriptor and inline
 data are per dispatch, and the portable command state rejects an unsafe second
-native encoding segment. The example samples that linear target through one
-shared fixed-exposure ACES-fitted fullscreen pass and lets the
-`bgra8_unorm_srgb` attachment perform the only sRGB encode. Its finite-run
-marker also fails on invalid limits, early closure, or a persistent zero-sized
-framebuffer. Metal API Validation completed three physical frames. The
-implementation, unit, and forced-build evidence cover Vulkan; a physical rerun
-of this new color-managed path remains explicitly pending on the RT machine.
+native encoding segment. The example samples that accumulation texture through
+one shared clamp-and-sRGB-EOTF fullscreen pass and lets the
+`bgra8_unorm_srgb` attachment apply the matching OETF. The golden mapping is
+`0.0/0.18/0.5/0.8/1.0 -> 0/46/128/204/255`. Its finite-run marker also fails
+on invalid limits, early closure, or a persistent zero-sized framebuffer.
+Metal API Validation completed three physical frames, and the shared display
+pass has a separate Metal BGRA8 readback with at most one byte of channel
+error. The implementation, unit, and forced-build evidence cover Vulkan; a
+physical rerun of this new texture-presentation path remains explicitly
+pending on the Vulkan RT machine.
 
 See `docs/develop/period55/`.
 

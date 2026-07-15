@@ -2,7 +2,6 @@ const std = @import("std");
 const vkmtl = @import("vkmtl");
 const glfw = @import("zig_glfw");
 const common = @import("vkmtl_examples_common");
-const color = @import("color.zig");
 const finite_run = @import("finite_run.zig");
 
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
@@ -23,10 +22,6 @@ const scene_object_count: u32 = 10;
 const present_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
     .{ .format = .bgra8_unorm_srgb },
 };
-
-comptime {
-    if (color.exposure != 1.0) @compileError("ray traced display shader exposure must match color.zig");
-}
 
 const RtVertex = extern struct {
     x: f32,
@@ -379,7 +374,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
                         .inline_data_binding = 2,
                     },
                 ) catch |err| {
-                    std.debug.print("ray traced scene Vulkan color-managed frame failed: {s}\n", .{@errorName(err)});
+                    std.debug.print("ray traced scene Vulkan presentation frame failed: {s}\n", .{@errorName(err)});
                     return err;
                 };
 
@@ -468,7 +463,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
                         .inline_data_binding = 2,
                     },
                 ) catch |err| {
-                    std.debug.print("ray traced scene Metal color-managed frame failed: {s}\n", .{@errorName(err)});
+                    std.debug.print("ray traced scene Metal presentation frame failed: {s}\n", .{@errorName(err)});
                     return err;
                 };
 
@@ -586,7 +581,7 @@ const DisplayTarget = struct {
         errdefer allocator.destroy(target);
         target.allocator = allocator;
         target.texture = try device.makeTexture(.{
-            .label = "ray traced scene linear HDR output",
+            .label = "ray traced scene accumulation output",
             .format = .rgba16_float,
             .width = extent.width,
             .height = extent.height,

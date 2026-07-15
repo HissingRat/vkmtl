@@ -33,12 +33,12 @@ _ = try commands.dispatchRaysToTexture(
     dispatch_descriptor,
     .{
         .acceleration_structure = &top_level_as,
-        .output = &linear_output_view,
+        .output = &rt_output_view,
     },
 );
 try commands.commit();
 
-// A later public render pass may sample linear_output_view and present it.
+// A later public render pass may sample rt_output_view and present it.
 ```
 
 The output view must be a live, same-backend, two-dimensional, single-sample
@@ -51,12 +51,18 @@ sampled-texture consumption. It consumes that
 command buffer's native encoding segment, so commit it before creating the
 consumer command buffer shown by the comment above.
 
-For color-managed presentation, write scene-linear values to a capability-
-gated `rgba16_float` texture, apply exposure and tone mapping in a public
-fullscreen pass, and return display-linear values to
-`bgra8_unorm_srgb`. Do not apply a shader-side sRGB transfer; the attachment
-performs the single display encode. This is a preferred migration path, not a
-removal or semantic change to the legacy drawable command.
+The texture command does not assign a color space or conversion to the output;
+the shader and application define the meaning of its values. The repository
+example uses a capability-gated `rgba16_float` texture for higher-precision
+accumulation while preserving legacy display-referred RGB. Its public
+fullscreen pass applies the sRGB EOTF, then writes display-linear values to
+`bgra8_unorm_srgb`; the attachment OETF restores the reference display values.
+
+Applications that want true scene-linear HDR may define that contract instead
+and supply their own exposure and tone mapping before the final sRGB
+attachment. That application policy is separate from migration to
+`dispatchRaysToTexture(...)`, and the migration does not remove or change the
+legacy drawable command.
 
 ## Period 54 v0.2.0 Exact Occlusion Update
 

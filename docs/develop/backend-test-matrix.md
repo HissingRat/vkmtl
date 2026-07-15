@@ -28,7 +28,7 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
 - `production_hardening_regression`: `zig build test && zig build run-stability-plan -- --iterations 120`; includes object-cache diagnostics, runtime cache planning, pipeline artifact compatibility planning, runtime diagnostics, capture names, stability plans, and Vulkan fallback diagnostics.
 - `advanced_resource_geometry_regression`: covered by `zig build test`; includes sparse/tiled resource planning, residency commit/churn plans, tessellation draw plans, and mesh/task dispatch plans.
 - `advanced_geometry_feature_gates`: `zig build run-tessellation && zig build run-mesh-shader`; Vulkan tessellation and both mesh paths are executable when their usable gates open, while Metal tessellation and task/object stages remain precisely closed.
-- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, Period 55 texture-output/finite-run validation, and deterministic ACES/sRGB reference values.
+- `ray_tracing_native_parity_regression`: covered by `zig build test`; includes ray tracing planning, AS maintenance, TLAS metadata, ray query, complex SBT layout, RT stress planning, Metal mapping, native advanced closure, Period 55 texture-output/finite-run validation, and deterministic reference-preserving EOTF/sRGB values.
 - `ray_tracing_metal_color_path`: optional physical
   `MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene`.
 - `ray_tracing_vulkan_color_path`: pending physical RT-machine
@@ -306,7 +306,7 @@ conservative until the relevant backend period lands.
 | Native advanced examples | Period 32 target: Vulkan ray traced scene window | Period 31 implemented: Metal ray traced scene window | Period31/32 make first ray traced scenes pixel-producing; Period33/34 own the full mesh/procedural scene examples |
 | Full native RT mesh scene | Mesh build-input path implemented and superseded by Period34 procedural scene for the Vulkan example | Visible Metal full mesh scene | Period33 uses user mesh buffers for `ray_traced_scene`; Vulkan mesh validation happened before the Period34 procedural replacement |
 | Procedural RT geometry and custom intersection | AABB build-input lowering, intersection SPIR-V, procedural hit groups/SBT, and physical `ray_traced_scene` marker | Native AABB BLAS input; custom intersection/function table unsupported | Period 52 separates ordinary AABB geometry from custom-intersection execution |
-| Color-managed caller-owned output | Native RT writes `rgba16_float`, then transitions to fragment sampling for the shared fullscreen pass | Native RT compute binds the caller's `rgba16_float` texture without acquiring a drawable | Period 55 `RayTracingTextureResources` and `CommandBuffer.dispatchRaysToTexture(...)`; shared exposure-1 ACES-fitted pass targets `bgra8_unorm_srgb` |
+| Caller-owned accumulation output | Native RT writes the caller's `rgba16_float` accumulation texture, then transitions it to fragment sampling for the shared fullscreen pass | Native RT compute binds the caller's `rgba16_float` accumulation texture without acquiring a drawable | Period 55 `RayTracingTextureResources` and `CommandBuffer.dispatchRaysToTexture(...)` provide generic caller-owned output. The `ray_traced_scene` pass applies the sRGB EOTF to its reference values and targets `bgra8_unorm_srgb`, whose matching encode preserves the reference bytes; tone mapping remains application policy. |
 
 ## Period 39 Ray Tracing Completeness Expectations
 
@@ -320,20 +320,29 @@ conservative until the relevant backend period lands.
 | RT stress planning | Deterministic stress plan | Deterministic stress plan without ray query | `vkmtl.ray_tracing.planRayTracingStress(device, descriptor)` |
 | Native GPU stress evidence | Exact RT-machine rerun recorded | Physical 32-iteration maintenance/AABB/multi-source run | `run-ray-tracing-maintenance` |
 
-## Period 55 Color-Managed RT Evidence
+## Period 55 Caller-Owned RT Output And Shared Display Evidence
 
 The focused unit lane validates output usage, view shape, queue ownership,
 depth, dispatch extent, whole-texture subresource shape, one native encoding
 segment, per-dispatch Vulkan descriptor ownership, finite-run failure states,
-non-finite color handling, and the scene-linear `0/0.18/0.5/1.0` to sRGB-byte
-`0/141/206/232` references. The command contract additionally rejects
-multisample output and records the storage-write-to-sampled postcondition.
+non-finite color handling, and the CPU/GPU reference-preserving
+`0/0.18/0.5/0.8/1.0` to display-byte `0/46/128/204/255` golden values. The
+`ray_traced_scene` display shader applies the sRGB EOTF before the
+`bgra8_unorm_srgb` attachment performs the matching encode. The command
+contract itself remains generic: it additionally rejects multisample output
+and records the storage-write-to-sampled postcondition without assigning a
+color space or tone-mapping policy to the caller-owned accumulation texture.
 
 Metal has a three-frame physical API Validation run:
 
 ```sh
 MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene
 ```
+
+`VKMTL_BACKEND=metal zig build run-pixel-regression` also renders the shared
+display shader into an offscreen `bgra8_unorm_srgb` target and reads back the
+reference black, gray, yellow, and blue BGRA8 values with a maximum one-byte
+channel delta.
 
 The Vulkan lowering, layout transition, and shaders have unit and forced-build
 evidence. The equivalent command remains a physical RT-machine evidence lane:
@@ -342,8 +351,8 @@ evidence. The equivalent command remains a physical RT-machine evidence lane:
 VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan
 ```
 
-Earlier physical Vulkan RT markers do not by themselves prove this new color-
-managed presentation route.
+Earlier physical Vulkan RT markers do not by themselves prove this shared
+reference-preserving display route.
 
 ## Period 37 Memory, Heaps, And Residency Expectations
 

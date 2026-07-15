@@ -13,8 +13,10 @@ Status: complete.
 - Metal binds the caller's output texture and does not acquire a drawable.
 - Vulkan performs the RT write and ends in sampled-image layout for the public
   fragment consumer.
-- `ray_traced_scene` uses a capability-gated `rgba16_float` linear target and a
-  shared exposure-1 ACES-fitted fullscreen pass to `bgra8_unorm_srgb`.
+- `ray_traced_scene` uses a capability-gated, caller-owned `rgba16_float`
+  accumulation texture and a shared fullscreen pass that clamps its historical
+  display-referred RGB and applies the sRGB EOTF before
+  `bgra8_unorm_srgb` performs the matching OETF.
 
 ## API And Compatibility
 
@@ -33,11 +35,12 @@ is forced to migrate.
 
 ## Color Contract
 
-Ray generation produces scene-linear color. Presentation multiplies by fixed
-exposure `1.0`, applies the documented ACES-fitted curve, clamps to display
-linear, and relies on the final sRGB attachment for the only transfer encode.
-The deterministic sRGB byte references for scene-linear
-`0.0/0.18/0.5/1.0` are `0/141/206/232`.
+Ray generation writes caller-defined numeric values to the accumulation
+texture; dispatch does not assign them a color space. For the historical
+`ray_traced_scene` output, presentation sanitizes and clamps display-referred
+RGB, applies the standard sRGB EOTF, and relies on the final sRGB attachment's
+matching OETF to restore the reference bytes. The deterministic scalar mapping
+is `0.0/0.18/0.5/0.8/1.0 -> 0/46/128/204/255`.
 
 ## Evidence
 
@@ -49,13 +52,17 @@ The deterministic sRGB byte references for scene-linear
   retained by the command buffer through synchronous completion.
 - CPU tests lock the display transform, non-finite handling, and reference
   bytes.
+- The Metal pixel-regression lane renders the shared transform to an offscreen
+  `bgra8_unorm_srgb` attachment and reads back black, `0.18`, `0.5`, yellow,
+  and blue with a maximum one-byte channel delta.
 - Finite-run tests prevent invalid limits, early-close false positives, and
   unbounded zero-sized-framebuffer waits.
 - Metal API Validation completed a three-frame finite
-  `run-ray-traced-scene` execution.
+  `run-ray-traced-scene` execution, establishing command and architecture
+  validity in addition to the separate byte-level display-pass regression.
 - Vulkan has implementation, unit, shader-artifact, and forced-build evidence.
-  A physical run of the new color-managed path remains pending on a Vulkan RT
-  machine and is not inferred from earlier Vulkan RT output.
+  A physical run of the new texture-presentation path remains pending on a
+  Vulkan RT machine and is not inferred from earlier Vulkan RT output.
 
 The legacy drawable route is retained only for compatibility. New rendering,
 offscreen, and future headless composition should use texture dispatch.

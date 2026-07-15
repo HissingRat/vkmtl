@@ -4,11 +4,20 @@ Status: complete.
 
 ## Deterministic Regressions
 
-The CPU reference implements the same exposure-1 ACES-fitted curve as the
-display shader. Scene-linear inputs `0.0`, `0.18`, `0.5`, and `1.0` map through
-one sRGB attachment transfer to reference bytes `0`, `141`, `206`, and `232`.
+The CPU reference implements the same clamp and standard sRGB EOTF as the
+display shader. Historical display-referred inputs
+`0.0`, `0.18`, `0.5`, `0.8`, and `1.0` map through the matching final sRGB
+attachment OETF to reference bytes `0`, `46`, `128`, `204`, and `255`.
 Focused tests also cover negative, NaN, and infinity sanitization plus stable
-display-linear points.
+decode points.
+
+The Metal GPU regression renders a five-pixel `rgba16_float` source containing
+black, `0.18`, `0.5`, yellow, and blue through the same manifest-backed
+display shader into an offscreen `bgra8_unorm_srgb` target, copies the stored
+BGRA8 bytes to a buffer, and accepts at most one byte of channel error. This
+catches an omitted EOTF, a repeated OETF, a target-format change, and
+channel-order regressions without depending on a display profile or animated
+screenshot.
 
 Focused runtime tests cover the valid resource contract, queue ownership,
 missing shader-read or shader-write usage, non-2D views, dispatch depth, and
@@ -36,10 +45,18 @@ The run reached the existing visible Metal RT marker and
 `ray traced scene finite run ok: backend=metal frames=3` without acquiring a
 drawable inside texture dispatch.
 
+This physical run establishes native command validity and the separated
+producer/consumer architecture; the offscreen Metal readback above supplies
+the byte-level transform evidence. A separate Metal A/B places the brightness
+regression before Period 55: `ab1c06b` retained the darker reference result,
+while `4a93d57`, which changed `CAMetalLayer.pixelFormat` from
+`BGRA8Unorm` to `BGRA8Unorm_sRGB`, became bright. That A/B establishes Metal
+regression provenance only and is not Vulkan execution evidence.
+
 The Vulkan implementation and shader artifacts have unit and forced-build
 coverage. Historical physical Vulkan RT output remains valid evidence for the
-basic RT backend, but the Period 55 color-managed path has not yet been rerun
-on the Vulkan RT machine. The required follow-up is:
+basic RT backend, but the Period 55 texture-presentation path has not yet been
+rerun on the Vulkan RT machine. The required follow-up is:
 
 ```sh
 VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 \
@@ -52,5 +69,6 @@ Only a successful physical run may promote that new-path evidence.
 
 The public inventory, migration guide, native inventory, source ledger,
 roadmap, checklist, backend/validation matrices, changelog, and English and
-Chinese API/usage documents now describe the texture command, linear color
-contract, compatibility boundary, and physical-evidence limit consistently.
+Chinese API/usage documents now describe the texture command, caller-owned
+accumulation values, reference display transform, compatibility boundary, and
+physical-evidence limit consistently.

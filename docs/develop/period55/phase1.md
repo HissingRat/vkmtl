@@ -4,17 +4,20 @@ Status: complete.
 
 ## Color Contract
 
-Ray-generation shaders write scene-linear floating-point color to a
-caller-owned texture. The portable display composition applies, in order:
+Ray-generation shaders write numeric floating-point values to a caller-owned
+`rgba16_float` accumulation texture. Dispatch does not assign those values a
+color space or perform an implicit color conversion. The example's reference
+display composition applies, in order:
 
-1. exposure multiplication in linear space;
-2. the documented ACES-fitted tone map per RGB channel;
-3. clamping to the display-linear `[0, 1]` range;
-4. one hardware sRGB encode by the final color attachment.
+1. sanitizing non-finite values and clamping the historical display-referred
+   RGB to `[0, 1]`;
+2. the standard sRGB EOTF, producing display-linear RGB;
+3. the matching sRGB OETF in the final color attachment.
 
-The display shader must not apply an sRGB OETF or a `1 / 2.2` power. Doing so
-would double-encode Metal and Vulkan sRGB drawables. Negative and non-finite
-scene values are sanitized before tone mapping.
+The shared pass performs no photographic or filmic remapping, generic gamma
+power, or second OETF. The final attachment conversion therefore restores the
+example's historical reference bytes. Scalar samples
+`0.0/0.18/0.5/0.8/1.0` map to `0/46/128/204/255`.
 
 ## API Allocation
 
