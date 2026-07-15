@@ -5561,7 +5561,8 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
 vkmtl_metal_status vkmtl_metal_render_command_encoder_begin_occlusion_query(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_query_set *query_set,
-    unsigned int query_index
+    unsigned int query_index,
+    unsigned int counting
 ) {
     if (encoder == NULL || encoder->encoder == nil || encoder->ended != 0 ||
         query_set == NULL ||
@@ -5577,7 +5578,9 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_begin_occlusion_query(
 
     @autoreleasepool {
         [encoder->encoder
-            setVisibilityResultMode:MTLVisibilityResultModeBoolean
+            setVisibilityResultMode:counting != 0
+                ? MTLVisibilityResultModeCounting
+                : MTLVisibilityResultModeBoolean
                               offset:(NSUInteger)query_index * sizeof(uint64_t)];
         encoder->visibility_slots[query_index] = 1;
         encoder->active_visibility_index = query_index;

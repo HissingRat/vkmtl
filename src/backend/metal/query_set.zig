@@ -9,6 +9,7 @@ const MetalQuerySet = @This();
 handle: *metal.vkmtl_metal_query_set,
 query_type: core.QueryType,
 count: u32,
+occlusion_mode: core.OcclusionQueryMode,
 
 pub fn init(owner: *MetalClearScreen, descriptor: core.QuerySetDescriptor) !MetalQuerySet {
     const native_type = try nativeQueryType(descriptor.query_type);
@@ -22,6 +23,7 @@ pub fn init(owner: *MetalClearScreen, descriptor: core.QuerySetDescriptor) !Meta
         .handle = handle orelse return core.QueryError.QueryBackendFailure,
         .query_type = descriptor.query_type,
         .count = descriptor.count,
+        .occlusion_mode = descriptor.occlusion_mode,
     };
     result.setLabel(descriptor.label);
     return result;

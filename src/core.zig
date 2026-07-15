@@ -113,6 +113,7 @@ pub const DeviceFeatures = struct {
     indirect_draw: bool = false,
     multi_draw: bool = false,
     occlusion_queries: bool = false,
+    occlusion_counting_queries: bool = false,
     timestamp_queries: bool = false,
     pipeline_statistics_queries: bool = false,
     render_pipelines: bool = true,
@@ -5718,6 +5719,11 @@ pub const QueryType = enum {
     pipeline_statistics,
 };
 
+pub const OcclusionQueryMode = enum {
+    boolean,
+    counting,
+};
+
 pub const PipelineStatisticFlags = struct {
     vertex_invocations: bool = false,
     fragment_invocations: bool = false,
@@ -5839,14 +5845,24 @@ pub const QuerySetDescriptor = struct {
     label: ?[]const u8 = null,
     query_type: QueryType,
     count: u32,
+    occlusion_mode: OcclusionQueryMode = .boolean,
     pipeline_statistics: PipelineStatisticFlags = .{},
 
     pub fn validate(self: QuerySetDescriptor, features: DeviceFeatures) QueryError!void {
         if (self.count == 0) return QueryError.InvalidQueryCount;
         switch (self.query_type) {
-            .occlusion => if (!features.occlusion_queries) return QueryError.UnsupportedOcclusionQueries,
-            .timestamp => if (!features.timestamp_queries) return QueryError.UnsupportedTimestampQueries,
+            .occlusion => {
+                if (!features.occlusion_queries) return QueryError.UnsupportedOcclusionQueries;
+                if (self.occlusion_mode == .counting and !features.occlusion_counting_queries) {
+                    return QueryError.UnsupportedOcclusionCountingQueries;
+                }
+            },
+            .timestamp => {
+                if (self.occlusion_mode != .boolean) return QueryError.QueryTypeMismatch;
+                if (!features.timestamp_queries) return QueryError.UnsupportedTimestampQueries;
+            },
             .pipeline_statistics => {
+                if (self.occlusion_mode != .boolean) return QueryError.QueryTypeMismatch;
                 if (!features.pipeline_statistics_queries) return QueryError.UnsupportedPipelineStatisticsQueries;
                 if (self.pipeline_statistics.isEmpty()) return QueryError.MissingPipelineStatistics;
             },
@@ -5910,6 +5926,7 @@ pub const QueryError = error{
     QueryBackendFailure,
     MissingPipelineStatistics,
     UnsupportedOcclusionQueries,
+    UnsupportedOcclusionCountingQueries,
     UnsupportedTimestampQueries,
     UnsupportedGpuTimestamps,
     UnsupportedPipelineStatisticsQueries,
@@ -13346,6 +13363,24 @@ test "query descriptors validate feature gates and ranges" {
     };
     try occlusion_set.validate(.{ .occlusion_queries = true });
     try std.testing.expectError(QueryError.UnsupportedOcclusionQueries, occlusion_set.validate(.{}));
+    const counting_set = QuerySetDescriptor{
+        .query_type = .occlusion,
+        .count = 4,
+        .occlusion_mode = .counting,
+    };
+    try counting_set.validate(.{
+        .occlusion_queries = true,
+        .occlusion_counting_queries = true,
+    });
+    try std.testing.expectError(
+        QueryError.UnsupportedOcclusionCountingQueries,
+        counting_set.validate(.{ .occlusion_queries = true }),
+    );
+    try std.testing.expectError(QueryError.QueryTypeMismatch, (QuerySetDescriptor{
+        .query_type = .timestamp,
+        .count = 1,
+        .occlusion_mode = .counting,
+    }).validate(.{ .timestamp_queries = true }));
     try std.testing.expectError(QueryError.InvalidQueryCount, (QuerySetDescriptor{
         .query_type = .timestamp,
         .count = 0,

@@ -168,6 +168,7 @@ fn dumpFeatureSet(features: vkmtl.diagnostics.DeviceFeatures) void {
     std.debug.print("  compute threadgroup memory: {}\n", .{features.compute_threadgroup_memory});
     std.debug.print("  bind groups: {}\n", .{features.bind_groups});
     std.debug.print("  occlusion queries: {}\n", .{features.occlusion_queries});
+    std.debug.print("  occlusion counting queries: {}\n", .{features.occlusion_counting_queries});
     std.debug.print("  timestamp queries: {}\n", .{features.timestamp_queries});
     std.debug.print("  pipeline statistics queries: {}\n", .{features.pipeline_statistics_queries});
     std.debug.print("  timeline fences: {}\n", .{features.timeline_fences});

@@ -922,6 +922,7 @@ pub const RenderCommandEncoder = struct {
             self.handle,
             query_set.handle,
             query_index,
+            @intFromBool(query_set.occlusion_mode == .counting),
         ));
     }
 

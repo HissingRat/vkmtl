@@ -10,6 +10,7 @@ gc: *const GraphicsContext,
 pool: vk.QueryPool,
 query_type: core.QueryType,
 count: u32,
+occlusion_mode: core.OcclusionQueryMode,
 
 pub fn init(gc: *const GraphicsContext, descriptor: core.QuerySetDescriptor) !VulkanQuerySet {
     const query_type: vk.QueryType = switch (descriptor.query_type) {
@@ -28,6 +29,7 @@ pub fn init(gc: *const GraphicsContext, descriptor: core.QuerySetDescriptor) !Vu
         .pool = pool,
         .query_type = descriptor.query_type,
         .count = descriptor.count,
+        .occlusion_mode = descriptor.occlusion_mode,
     };
 }
 
@@ -46,7 +48,11 @@ pub fn reset(self: *VulkanQuerySet) void {
 }
 
 pub fn beginOcclusion(self: *VulkanQuerySet, command_buffer: vk.CommandBuffer, index: u32) void {
-    self.gc.dev.cmdBeginQuery(command_buffer, self.pool, index, .{});
+    self.gc.dev.cmdBeginQuery(command_buffer, self.pool, index, occlusionControlFlags(self.occlusion_mode));
+}
+
+fn occlusionControlFlags(mode: core.OcclusionQueryMode) vk.QueryControlFlags {
+    return .{ .precise_bit = mode == .counting };
 }
 
 pub fn endOcclusion(self: *VulkanQuerySet, command_buffer: vk.CommandBuffer, index: u32) void {
@@ -105,4 +111,6 @@ pub fn resolve(
 test "Vulkan query kind contract keeps pipeline statistics closed" {
     try std.testing.expectEqual(vk.QueryType.occlusion, @as(vk.QueryType, .occlusion));
     try std.testing.expectEqual(vk.QueryType.timestamp, @as(vk.QueryType, .timestamp));
+    try std.testing.expect(!occlusionControlFlags(.boolean).precise_bit);
+    try std.testing.expect(occlusionControlFlags(.counting).precise_bit);
 }

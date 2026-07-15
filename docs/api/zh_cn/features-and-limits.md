@@ -121,17 +121,20 @@ post-build compacted-size discovery。
 ### Query 与 Driver Artifact
 
 ```text
-occlusion_queries timestamp_queries pipeline_statistics_queries
+occlusion_queries occlusion_counting_queries
+timestamp_queries pipeline_statistics_queries
 driver_pipeline_cache metal_binary_archive
 ```
 
 只有 selected backend 能分配并 reset native result storage 时，`occlusion_queries`
 才可用。Vulkan 要求启用 host-query reset；Metal 使用 pass-bound visibility buffer。
-Portable result 是 zero/nonzero visibility，不是精确 sample count。`timestamp_queries`
+默认 portable result 是 zero/nonzero visibility。设备报告
+`occlusion_counting_queries` 时可以请求 `OcclusionQueryMode.counting`：Metal 使用
+counting visibility，Vulkan 需要 query 并启用 precise occlusion。`timestamp_queries`
 仍可通过 logical ordering fallback 使用。`native_features` 报告底层 queue/counter 的
 timestamp 事实；只有 vkmtl 的 allocation/reset/encoder 路径也完整可用时，
 `QuerySet.resultSource()` 才是 `native_gpu`，否则仍是 logical。Pipeline statistics
-保持 false。
+保持 false，因为 scalar query shape 无法表达 typed variable counter result。
 
 ### Transfer、Presentation、Interop 与 Native Access
 

@@ -10,9 +10,10 @@ Phase 9. `public-api-rules.md` remains the authoritative policy, and
 The approved Phase 0 root, namespace, native-name, and owner decisions are in
 `api-migration-map.md`.
 
-Period 44 has completed all nine release-evidence gates, and the supported
-Vulkan ray tracing validation carry-over is closed. The next mainline is API
-convergence rather than another backend feature period.
+At this roadmap's completion, Period 44 had closed all nine release-evidence
+gates and the next mainline was API convergence. That convergence and the
+later Period 45-54 backend-semantic slices are now complete; this document
+remains the historical migration plan rather than the active backend roadmap.
 
 ## Objective
 

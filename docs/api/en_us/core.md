@@ -813,6 +813,10 @@ begin/end must use that exact borrowed set:
 var visibility = try device.makeQuerySet(.{
     .query_type = .occlusion,
     .count = 2,
+    .occlusion_mode = if (device.features().occlusion_counting_queries)
+        .counting
+    else
+        .boolean,
 });
 defer visibility.deinit();
 
@@ -825,14 +829,16 @@ try render_encoder.beginOcclusionQuery(&visibility, 0);
 try render_encoder.endOcclusionQuery(&visibility);
 ```
 
-Occlusion values are Boolean visibility: zero means no samples passed and any
-nonzero value means visible. The magnitude is not a portable sample count.
+The default `.boolean` mode reports zero when no samples passed and nonzero
+when visible. `.counting` reports the exact rasterized sample count and requires
+`device.features().occlusion_counting_queries`.
 Each slot can be written once between resets. The set must remain alive until
 the synchronously completing command-buffer commit returns, and a resolve
 destination must have `copy_destination` usage. Query ranges, result alignment,
 same-device ownership, association, and availability are validated. Native
-backend failures are distinct from `QueryNotReady`; pipeline statistics remain
-typed unsupported.
+backend failures are distinct from `QueryNotReady`; requesting unsupported
+counting returns `UnsupportedOcclusionCountingQueries`. Pipeline statistics
+remain typed unsupported because their variable result shape is not allocated.
 
 Commit the producer before recording a separate resolve command buffer. The
 current resolve path preflights native readiness and returns `QueryNotReady`

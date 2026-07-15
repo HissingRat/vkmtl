@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 53 complete, 2026-07-14.
+Status: Period 54 complete, 2026-07-15.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -33,6 +33,11 @@ executes same-device Metal raw-buffer/raw-texture and single-plane IOSurface
 imports, reports selected-device topology on both backends, and closes external
 synchronization, native insertion, Metal I/O/compression, and cross-device
 execution precisely unsupported under the current contracts.
+Period 54 closes the final 20 source-ledger routes: exact occlusion counting
+executes on both backends, resource tables and explicit barriers preserve the
+admitted Metal 4 observable semantics through existing compatibility layers,
+and the remaining allocator/pipeline/dataset/tensor/ML/counter contracts are
+precisely unsupported rather than exposed through a broad feature flag.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence; Vulkan has implementation and forced-build
@@ -140,10 +145,11 @@ develops a different lowering or support state.
 | REN-07 | Depth/stencil resolve and texture-view format reinterpretation | `render`, `resource` | `incomplete` | `incomplete` | Compatible linear/sRGB texture views and component swizzles are native-exact in Period 47; depth/stencil resolve remains typed unsupported. |
 | BND-01 | Ordinary render/compute bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative render/compute `gpu-pixels`. |
 | BND-02 | Root/small constants | `binding` | `native-exact` | `native-exact` | `unit`; Metal bytes and Vulkan push-constant lowering are backend-specific. |
-| BND-03 | Bindless tables, descriptor indexing, and argument buffers | `binding` | `native-exact` | `native-exact` | Metal `gpu-smoke` covers a 65-slot argument buffer; Vulkan descriptor-indexing feature enablement, set allocation/update/binding, and compatible pipeline layouts have unit/forced-build evidence. |
+| BND-03 | Bindless tables, descriptor indexing, and argument/Metal 4 compatible tables | `binding` | `composed-exact` | `native-exact` | Metal `gpu-smoke` covers a 65-slot argument buffer plus explicit resource-use residency; Vulkan descriptor-indexing feature enablement, set allocation/update/binding, and compatible pipeline layouts have unit/forced-build evidence. Raw Metal 4 table identity is not promised. |
 | CMP-01 | Compute pipeline, direct dispatch, and ceil-composed logical-thread dispatch | `compute` | `native-exact` | `native-exact` | `gpu-pixels` through deterministic compute readback; shaders own out-of-logical-grid bounds checks after ceil composition. |
 | CMP-02 | Indirect compute dispatch and CPU-authored reusable dispatch lists | `compute`, `command` | `composed-exact` | `composed-exact` | `unit`; ordinary buffer-indirect dispatch is native, reusable slots use Metal ICB when available and exact direct dispatch expansion otherwise. GPU-authored mutation is excluded. |
 | CMP-03 | 32-bit integer storage-buffer/threadgroup atomics and threadgroup memory within queried limits | `compute` | `native-exact` | `native-exact` | `gpu-pixels` on Metal proves deterministic atomic/shared-memory output; Vulkan has unit/compile evidence and core semantic inspection. Storage-texture and wider atomic families are not promised. |
+| CMP-04 | Typed tensor resources and machine-learning pipeline/encoder execution | `missing-contract` | `unsupported` | `unsupported` | No portable tensor type/layout/view ownership, ML graph/pipeline, reflection, dispatch, or exact Vulkan mapping contract exists. Ordinary compute is not treated as equivalent ML execution. |
 | XFR-01 | Buffer/texture copies across current color mip/layer/slice ranges | `transfer` | `composed-exact` | `native-exact` | `gpu-pixels`; Metal may loop over slices. |
 | XFR-02 | Unaligned buffer fill | `transfer` | `native-exact` | `composed-exact` | `unit`; Vulkan uses a staging-copy fallback. |
 | XFR-03 | Scaled texture blit | `transfer` | `unsupported` | `native-exact` | Metal returns typed `UnsupportedTextureBlit`; Vulkan is format-capability-gated. |
@@ -158,17 +164,21 @@ develops a different lowering or support state.
 | SYN-03 | Native monotonic host and GPU-submit synchronization | `sync` | `native-exact` | `native-exact` | `gpu-pixels` on Metal plus unit/forced-Vulkan build; Metal uses shared events and Vulkan uses timeline semaphores. Metal-only shared events and Vulkan timeline support remain capability-gated; external handles are excluded. |
 | SYN-04 | Queue selection with explicit graphics fallback | `command`, `sync` | `composed-exact` | `composed-exact` | `unit` plus Metal `gpu-pixels`; fallback is explicit and physical work queues are selected only when the usable capability opens. |
 | SYN-05 | Physical work queues, cross-queue dependencies, and exclusive portable ownership | `command`, `sync` | `composed-exact` | `composed-exact` | Metal `gpu-pixels` exercised a separate transfer queue. Vulkan queries work families, uses timeline dependencies and concurrent resource sharing, and preserves vkmtl logical ownership; physical Vulkan rerun remains useful evidence. |
+| CMD-01 | Separate reusable command allocator, resettable whole command buffers, commit options, feedback, and explicit residency lists | `missing-contract` | `unsupported` | `unsupported` | Current command buffers are one-shot and have no allocator/reset/reuse, residency-list, commit-option, or asynchronous feedback-result owner. |
 | QRY-01 | Logical timestamp sequence and CPU/marker profiling fallback | `diagnostics` | `emulated-exact` | `emulated-exact` | `unit`; explicitly not GPU time. |
 | QRY-02 | Capability-gated native GPU timestamp ticks, CPU readback, and GPU resolve | `diagnostics` | `native-exact` | `native-exact` | `unit`; Metal requires the common timestamp set plus draw/dispatch/blit sampling, Vulkan requires host reset plus graphics-queue timestamp bits. Tick-to-duration calibration remains outside this row. |
 | QRY-03 | Boolean occlusion visibility, where zero is occluded and nonzero is visible | `diagnostics`, render encoder | `composed-exact` | `native-exact` | `gpu-smoke` on Metal plus unit/inspection for both mappings; Metal uses pass scratch plus canonical copy, Vulkan uses non-precise query pools. Vulkan physical rerun remains useful evidence, not a capability prerequisite. |
-| QRY-04 | Pipeline statistics and multi-counter result shapes | `diagnostics` | `incomplete` | `incomplete` | `unit`; the current one-`u64`-per-query contract cannot represent variable multi-counter results, so the feature remains closed. |
+| QRY-04 | Pipeline statistics and multi-counter result shapes | `diagnostics` | `unsupported` | `unsupported` | `unit`; the current one-`u64`-per-query contract cannot represent typed variable multi-counter results, calibration, availability, and overflow, so the feature is explicitly closed. |
+| QRY-05 | Exact rasterized sample counts | `diagnostics`, render encoder | `native-exact` | `native-exact` | Metal counting visibility and Vulkan precise occlusion queries share the same one-`u64` exact-count contract; device capability gates apply. |
 | MEM-01 | Native placement heaps, heap-backed buffers/textures, exact requirements, and alias planning | `resource`, `diagnostics` | `native-exact` | `native-exact` | `gpu-pixels` on Metal plus unit/forced-Vulkan build; resources bind at validated reserved offsets and must be destroyed before the heap. Alias offset reuse remains caller-lifetime-controlled. |
 | MEM-02 | Transient attachment lifetime semantic | `render` | `composed-exact` | `composed-exact` | The API treats transient as a lifetime/performance hint; a hardware memoryless guarantee is not currently exposed. |
 | MEM-03 | Hardware memoryless attachment guarantee | `resource`, `render` | `native-exact` | `unsupported` | Metal native creation probe plus physical memoryless MSAA resolve. Vulkan lazily allocated memory cannot promise no physical backing; `transient` remains a separate hint. |
 | MEM-04 | Native memory budget and pressure telemetry | `diagnostics` | `native-exact` | `native-exact` | Metal `gpu-smoke` reports recommended working set/current allocation; Vulkan uses queried `VK_EXT_memory_budget` device-local heaps and otherwise reports fallback. |
 | MEM-05 | Native sparse/tiled resources, residency sets, and page binding | `resource`, `native` | `unsupported` | `unsupported` | Plans and churn maps remain deterministic, but current descriptors do not identify native resources. Usable sparse/residency features stay closed. |
 | PRD-01 | Persistent driver render/compute pipeline artifacts | `diagnostics`, pipeline descriptors | `native-exact` | `native-exact` | Metal `gpu-smoke` consumes/populates/serializes `MTLBinaryArchive`; Vulkan consumes/persists `VkPipelineCache` with deterministic identity and stale-data recovery. |
-| PRD-02 | Runtime native object and resource-view pooling | `missing-contract` | `incomplete` | `incomplete` | No lifetime-safe portable pool owner exists; Metal 4 resource/view pools remain routed to Period 54. |
+| PRD-02 | Runtime native object and resource-view pooling | `missing-contract` | `unsupported` | `unsupported` | No lifetime-safe portable pool owner, eviction policy, or child-view invalidation contract exists. |
+| PRD-03 | Metal 4 flexible pipelines, compiler/archive binary functions, and pipeline dataset serialization | `missing-contract` | `unsupported` | `unsupported` | The source-backed precompile contract has no runtime compiler task, binary link unit, flexible pipeline object graph, or cross-backend dataset schema. Ordinary driver caches remain PRD-01. |
+| SHD-04 | Function logs plus tensor/payload/table/advanced-threadgroup reflection | `missing-contract` | `unsupported` | `unsupported` | Function-log callback/container lifetime and advanced binding owners are absent; the supported portable reflection subset remains SHD-02. |
 
 ### Advanced Geometry, Ray Tracing, Interop, And Diagnostics
 
@@ -207,14 +217,14 @@ their presence in the ledger does not admit public API or claim execution.
 | Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus native synchronization, physical queue, lifecycle, and timed Metal presentation work completed in Period 48. |
 | Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited | Period 49 executes native placement heaps and closes residency/sparse execution as unsupported under the current handle-free mapping contract. |
-| Argument buffers/tables and indirect command buffers | Audited | Period 50 executes classic argument-buffer/descriptor-indexing tables and CPU-authored reusable command lists. GPU mutation is explicitly unsupported; Metal 4 argument tables stay in Period 54. |
+| Argument buffers/tables and indirect command buffers | Audited | Period 50 executes resource tables and CPU-authored reusable command lists. Period 54 confirms the admitted Metal 4 table semantics are composed through that layer; raw table identity and GPU mutation remain unsupported. |
 | Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; Period 52 closes RT function tables under the same artifact boundary. |
 | Tessellation, object/mesh shaders, layered rendering, amplification | Audited | Period 51 executes Vulkan tessellation and mesh-only paths on both backends; task/object artifacts, advanced-stage bindings, and layered/amplified rendering are precisely unsupported under current contracts. |
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited | Period 51 closes these unsupported because the current pass/shader contracts cannot preserve their observable memory and ordering semantics. |
-| Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited/incomplete | Period 46 completed native timestamp/Boolean visibility subsets; Period 54 owns calibrated and device-specific counter breadth. |
+| Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited | Period 46 completed native timestamp/Boolean visibility; Period 54 adds exact-count visibility and closes pass attachments, calibration, counter heaps, pipeline statistics, device-specific counters, and function logs unsupported under current result/lifetime shapes. |
 | Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. |
 | Fast resource loading / Metal I/O | Audited | Period 53 closes MTLIO and compressed-stream execution unsupported: synchronous file reads/staging do not preserve async status, cancellation, priority, queue ordering, or scratch/compression semantics. |
-| Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited/incomplete | Period 54 owns the new command/pipeline model. |
+| Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited | Resource-table and barrier effects compose exactly through existing contracts. Allocator/reusable-buffer/feedback, flexible-pipeline, compiler/archive/dataset, tensor, and ML object models are precisely unsupported. |
 | External sharing, IOSurface, shared-event handles, platform handles | Audited | Period 53 executes Metal raw resource and IOSurface imports. Export and external synchronization remain precisely unsupported; Period 48 covers only vkmtl-owned same-device native shared events. |
 | MetalKit, MetalFX, Metal Performance Shaders | Out of current scope | These adjacent frameworks are excluded from the Metal core baseline until explicitly admitted. |
 
@@ -243,7 +253,8 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-53 are complete. The updated exactly-once gap
-routing leaves Period 54 as the next and final routed slice.
-`period45/gap-backlog.md` records the remaining dependency order and
-acceptance boundaries.
+The source audit and Periods 46-54 are complete. The exactly-once gap-routing
+file is empty because all 111 audited Metal semantic units now have an
+executable or precise unsupported outcome. New implementation periods must be
+created from a new SDK/baseline audit or an explicit decision to allocate one
+of the currently unsupported contracts; no incomplete Period 45 route remains.

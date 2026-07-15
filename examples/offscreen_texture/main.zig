@@ -293,6 +293,7 @@ const QueryRegression = struct {
                 .label = "offscreen visibility regression",
                 .query_type = .occlusion,
                 .count = 2,
+                .occlusion_mode = if (device.features().occlusion_counting_queries) .counting else .boolean,
             });
         }
         if (device.nativeFeatures().timestamp_queries) {
@@ -354,7 +355,11 @@ const QueryRegression = struct {
             const values = try validateQueryReadbackAndResolve(device, queue, visibility);
             if (values[0] == 0) return error.ExpectedVisibleOcclusionResult;
             if (values[1] != 0) return error.ExpectedEmptyOcclusionResult;
-            std.debug.print("native occlusion regression ok visible={} empty={}\n", .{ values[0], values[1] });
+            std.debug.print("native occlusion regression ok mode={s} visible={} empty={}\n", .{
+                @tagName(visibility.descriptor().occlusion_mode),
+                values[0],
+                values[1],
+            });
         }
         if (self.timestamps) |*timestamps| {
             const values = try validateQueryReadbackAndResolve(device, queue, timestamps);

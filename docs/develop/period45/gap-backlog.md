@@ -1,15 +1,15 @@
 # Period 45 Native Semantic Gap Backlog
 
-Status: accepted routing baseline.
+Status: routing complete after Period 54.
 
-The Metal semantic ledger contains 99 stable semantic units. At Period 45
-closeout, 77 have at least one incomplete backend outcome. Every incomplete ID
-is assigned exactly once in `gap-routing.tsv`.
+The Metal semantic ledger contained 99 units at the Period 45 baseline. Later
+splits refined it to 111 units. At Period 45 closeout, 77 original rows had at
+least one incomplete backend outcome and were assigned exactly once.
 
-Periods 46-53 refined broad query, common-workload, synchronization, memory,
+Periods 46-54 refined broad query, common-workload, synchronization, memory,
 binding, indirect-command, artifact, advanced-raster, ray-tracing, interop,
-I/O, and topology rows. The current ledger retains an exact-once route for
-every remaining incomplete ID.
+I/O, topology, Metal 4, tensor/ML, and counter rows. The current ledger has no
+incomplete row and `gap-routing.tsv` therefore contains no active route.
 
 The periods below are implementation slices, not promises to add all source
 concepts to the public API. Each period must apply the public API admission
@@ -166,22 +166,24 @@ synchronization/I/O/insertion state is documented rather than approximated.
 
 ## Period 54: Metal 4 Command Model, Pipeline Datasets, Tensor, And ML
 
+Status: complete.
+
 Priority: newest specialized Metal framework surface.
 
-- Command allocators, reusable command buffers, argument tables, and explicit
-  barriers.
-- Flexible Metal 4 pipelines, compiler tasks, archives, binary functions, and
-  pipeline dataset serialization.
-- Tensor resources and machine-learning pipeline/encoder semantics.
-- Exact occlusion sample counts and pass-boundary sample attachments.
-- Non-timestamp/device-specific counters, pipeline statistics result shapes,
-  timestamp calibration, and shader/function log state.
+- [x] Compose admitted argument-table and explicit-barrier effects through the
+  existing resource-table and sync contracts.
+- [x] Execute exact occlusion sample counts on Metal and Vulkan.
+- [x] Close command allocator/reuse/feedback, flexible pipelines,
+  compiler/archive/datasets, view pools, tensor/ML, pass attachments,
+  calibration, multi-counter statistics, advanced reflection, and logs with
+  precise unsupported outcomes.
 
-Acceptance: each semantic receives an exact Vulkan composition or an explicit
-unsupported result; no broad Metal 4 feature flag substitutes for per-semantic
-gates.
+Acceptance: complete. Every routed semantic has an exact composition,
+capability-gated native execution, or an explicit unsupported result. No broad
+Metal 4 feature flag substitutes for per-semantic gates.
 
 ## Next Slice
 
-Periods 52-53 are complete. Remaining incomplete semantic units are routed
-exactly once to Period 54, which is the next slice.
+Periods 46-54 are complete and the exactly-once route file has no remaining
+incomplete semantic ID. The next slice requires a new source baseline or an
+explicit unsupported-contract allocation rather than inheriting stale routes.

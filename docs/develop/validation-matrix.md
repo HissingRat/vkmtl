@@ -29,8 +29,10 @@ Current cases:
   independent capability gates, and explicit immediate fallback.
 - `query_readback`: timestamp and occlusion query sets validate bound-pass
   identity, availability, type/range, one write per reset, resolve-buffer
-  usage, backend failures, and readback/resolve agreement. Physical smoke also
-  verifies visible/nonzero, empty/zero, and reset/reuse behavior.
+  usage, backend failures, Boolean/counting feature gates, and readback/resolve
+  agreement. Physical Metal smoke verifies exact visible sample counts,
+  empty/zero, and reset/reuse behavior; Vulkan precise mode has feature-enable
+  and command-flag unit/forced-build coverage.
 - `debug_marker_contract`: borrowed object-label and call-only marker lifetime,
   UTF-8/NUL validation, exact capture names, stack balance, and
   command-buffer/encoder marker scope remain deterministic before native work;

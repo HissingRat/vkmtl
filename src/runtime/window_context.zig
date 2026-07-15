@@ -12532,14 +12532,17 @@ test "runtime occlusion queries require pass binding and reset before slot reuse
     var backend_runtime: BackendRuntime = undefined;
     var report = core.defaultDeviceCapabilityReport(.vulkan);
     report.features.occlusion_queries = true;
+    report.features.occlusion_counting_queries = true;
     var device_state = testRuntimeState(std.testing.allocator, &tracker, .vulkan, &backend_runtime, "query validation adapter", report);
     var device = Device{ ._state = &device_state };
 
     var visibility = try device.makeQuerySet(.{
         .query_type = .occlusion,
         .count = 1,
+        .occlusion_mode = .counting,
     });
     defer visibility.deinit();
+    try std.testing.expectEqual(core.OcclusionQueryMode.counting, visibility.descriptor().occlusion_mode);
 
     var command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,

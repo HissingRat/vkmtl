@@ -45,6 +45,7 @@ pub const MemoryBudgetDescriptor = core.MemoryBudgetDescriptor;
 pub const MemoryBudgetReport = core.MemoryBudgetReport;
 pub const MemoryBudgetError = core.MemoryBudgetError;
 pub const QueryType = core.QueryType;
+pub const OcclusionQueryMode = core.OcclusionQueryMode;
 pub const PipelineStatisticFlags = core.PipelineStatisticFlags;
 pub const QuerySetDescriptor = core.QuerySetDescriptor;
 pub const ProfilerMarkerDescriptor = core.ProfilerMarkerDescriptor;

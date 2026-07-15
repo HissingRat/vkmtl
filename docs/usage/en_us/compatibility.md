@@ -106,31 +106,25 @@ or typed-unsupported path is not an executable feature claim.
 
 ## Sync And Query Defaults
 
-vkmtl keeps the ordinary command path portable: resource usage tracking, binary
-fences, events, timestamp queries, and capability-gated occlusion queries are
-available through backend-neutral runtime objects. Timestamp values are either
-logical ordering values or raw native GPU ticks; inspect `resultSource()`, and
-do not compute duration because calibration is not yet public. Occlusion uses
-zero/nonzero visibility and requires the render pass to bind the set. Explicit
-barriers and queue ownership transfers
-are advanced escape hatches; Vulkan lowers the barrier path natively, while
-Metal uses validation/no-op markers where encoder boundaries already define
-ordering. Timeline fences, shared events, and logical queue planning now have
-portable descriptor and validation entry points. Native timeline/shared-event
-submit, native dedicated queues, native queue-family ownership transfers, exact
-occlusion sample counts, and pipeline statistics queries remain
-capability-gated until their backend lowering is complete.
+vkmtl keeps the ordinary command path portable: resource usage tracking,
+fences, events, timestamps, and occlusion queries use backend-neutral runtime
+objects. Timestamp values are logical ordering values or raw native GPU ticks;
+inspect `resultSource()` and do not compute duration because calibration is not
+public. Occlusion defaults to zero/nonzero visibility and requires the pass to
+bind the set; exact counts require `occlusion_counting_queries`. Vulkan lowers
+explicit barriers natively, while Metal composes encoder ordering with tracked
+hazards. Timeline/shared-event submission, physical queue selection, ownership
+validation, and exact occlusion counting execute when their gates open.
+Pipeline statistics, pass-boundary/device-specific counters, and timestamp
+calibration are explicitly unsupported under the scalar query contract.
 
 ## Advanced Features
 
-Advanced features stay behind feature gates. Some binding and ray tracing
-paths have executable runtime objects and command entry points, while sparse
-resources, native external import, tessellation, mesh shaders, and native
-driver-cache persistence still require later backend work.
-
-Heap, memory-budget, transient-allocation, and sparse-residency APIs currently
-provide portable planning and diagnostics. Native heap-backed buffer/texture
-creation and native sparse/tiled page binding remain backend work.
+Advanced features stay behind feature gates. Resource tables, driver caches,
+heaps, Vulkan tessellation, mesh-only pipelines, ordinary RT maintenance, and
+same-device Metal imports have executable paths. Sparse residency, Vulkan
+external import, Metal 4 allocator/pipeline/dataset objects, tensor/ML, and
+multi-counter statistics remain explicitly unsupported.
 
 Descriptor indexing maps toward Vulkan descriptor indexing. Argument buffers map
 toward Metal argument buffers. Both are represented by

@@ -130,18 +130,22 @@ Post-build compacted-size discovery is not implied by
 ### Queries And Driver Artifacts
 
 ```text
-occlusion_queries timestamp_queries pipeline_statistics_queries
+occlusion_queries occlusion_counting_queries
+timestamp_queries pipeline_statistics_queries
 driver_pipeline_cache metal_binary_archive
 ```
 
 `occlusion_queries` is usable only when the selected backend can allocate and
 reset its native result storage. Vulkan requires enabled host-query reset;
-Metal uses pass-bound visibility buffers. Results are portable Boolean
-visibility (zero/nonzero), not exact sample counts. `timestamp_queries` remains
+Metal uses pass-bound visibility buffers. The default result is portable
+Boolean visibility (zero/nonzero). `occlusion_counting_queries` admits
+`OcclusionQueryMode.counting`: Metal uses counting visibility and Vulkan
+requires queried and enabled precise occlusion. `timestamp_queries` remains
 usable through a logical ordering fallback. `native_features` reports the
 underlying queue/counter timestamp fact, while `QuerySet.resultSource()` becomes
 `native_gpu` only when vkmtl's complete allocation/reset/encoder path is also
-usable; otherwise it remains logical. Pipeline statistics remain false.
+usable; otherwise it remains logical. Pipeline statistics remain false because
+the scalar query shape cannot represent typed variable counter results.
 
 ### Transfer, Presentation, Interop, And Native Access
 

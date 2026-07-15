@@ -672,6 +672,10 @@ begin/end 必须使用同一个 borrowed set：
 var visibility = try device.makeQuerySet(.{
     .query_type = .occlusion,
     .count = 2,
+    .occlusion_mode = if (device.features().occlusion_counting_queries)
+        .counting
+    else
+        .boolean,
 });
 defer visibility.deinit();
 
@@ -684,12 +688,14 @@ try render_encoder.beginOcclusionQuery(&visibility, 0);
 try render_encoder.endOcclusionQuery(&visibility);
 ```
 
-Occlusion value 是 Boolean visibility：zero 表示没有 sample 通过，任意 nonzero 表示
-visible，数值大小不是 portable sample count。每个 slot 在 reset 之间只能写一次。
+默认 `.boolean` 模式中 zero 表示没有 sample 通过，任意 nonzero 表示 visible。
+`.counting` 返回精确 rasterized sample count，并要求
+`device.features().occlusion_counting_queries`。每个 slot 在 reset 之间只能写一次。
 QuerySet 必须活到同步完成的 command-buffer commit 返回；resolve destination 必须声明
 `copy_destination` usage。vkmtl 会校验 range、alignment、同 device ownership、pass
-association 和 availability。Native backend failure 不会伪装成 `QueryNotReady`；pipeline
-statistics 仍保持 typed unsupported。
+association 和 availability。Native backend failure 不会伪装成 `QueryNotReady`；不支持的
+counting 请求返回 `UnsupportedOcclusionCountingQueries`。Pipeline statistics 因 variable
+result shape 尚未分配而保持 typed unsupported。
 
 必须先 commit producer，再录制单独的 resolve command buffer。当前 resolve path 会先检查
 native readiness；尚未提交的 work 会返回 `QueryNotReady`，而不是录制无法满足的 wait。

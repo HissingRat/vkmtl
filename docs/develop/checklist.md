@@ -38,8 +38,10 @@ closed one by one as vkmtl moves from prototype to library.
   canonical facades and public API admission and release rules.
 - Period 45 established
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
-  semantic-support ledger. Periods 46-53 and the additive headless-runtime
-  refactor are complete. Period 54 is the next mainline priority.
+  semantic-support ledger. Periods 46-54 and the additive headless-runtime
+  refactor are complete. The original exactly-once semantic gap routing now
+  has zero incomplete rows; a future mainline requires a new baseline audit or
+  an explicit unsupported-contract allocation.
 - The completed headless-runtime slice keeps `WindowContext` unchanged and
   adds a real no-surface `HeadlessContext`; its allocation, ownership, backend,
   and validation evidence are recorded in `docs/develop/headless-context.md`.
@@ -2890,6 +2892,47 @@ obvious render and binding blockers.
   examples, matrices, roadmap, and closeout.
 - [x] Run API guard, tests, default/Vulkan builds, package smoke, physical
   Metal evidence, format/diff gates, and commit.
+
+## Period 54 Phase 1 Checklist
+
+- [x] Split all 20 routed semantic units into executable compositions,
+  executable additions, or precise unsupported outcomes.
+- [x] Keep the root, common owner, and runtime-handle allowlists unchanged.
+- [x] Allocate exact counting visibility under `diagnostics` with a separate
+  capability gate and default-preserving descriptor field.
+
+## Period 54 Phase 2 Checklist
+
+- [x] Lower exact counting visibility to Metal counting mode.
+- [x] Query and enable Vulkan precise occlusion before using the precise flag.
+- [x] Preserve query readback/resolve, pass binding, reset/reuse, and lifetime
+  validation for both Boolean and counting modes.
+
+## Period 54 Phase 3 Checklist
+
+- [x] Close the admitted Metal 4 argument-table semantic through the existing
+  resource-table compatibility layer and explicit residency declarations.
+- [x] Close Metal 4 explicit barrier effects through the existing tracked
+  Metal ordering and native Vulkan barrier contract.
+- [x] Keep raw Metal 4 object identity outside those portable claims.
+
+## Period 54 Phase 4 Checklist
+
+- [x] Close Metal 4 allocators/reusable buffers/feedback and flexible
+  render/compute pipeline/encoder ownership precisely unsupported.
+- [x] Close compiler/archive/dataset, resource/view pools, tensor/ML,
+  advanced reflection, function logs, counter heaps, pass attachments,
+  calibration, and multi-counter statistics precisely unsupported.
+- [x] Leave no broad Metal 4/tensor/ML/counter feature bit or placeholder
+  execution path.
+
+## Period 54 Phase 5 Checklist
+
+- [x] Extend the physical Metal query regression with exact sample counts.
+- [x] Update API/native inventories, source ledger, routing, roadmap, usage,
+  compatibility, changelog, and closeout docs.
+- [x] Run API/semantic guards, tests, default/Vulkan builds, package smoke,
+  physical Metal evidence, format/diff gates, and commit.
 
 ## First Backend-Independent Triangle Checklist
 

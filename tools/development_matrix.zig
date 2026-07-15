@@ -832,6 +832,7 @@ pub const SyncQueryFeature = enum {
     queue_ownership_transfer,
     timestamp_queries,
     occlusion_queries,
+    occlusion_counting_queries,
     pipeline_statistics_queries,
 };
 
@@ -951,13 +952,22 @@ pub const sync_query_matrix = [_]SyncQueryMatrixEntry{
         .validation = "pass-bound query sets produce zero/nonzero native visibility, reject repeated slots until reset, and keep readback/resolve consistent",
     },
     .{
+        .feature = .occlusion_counting_queries,
+        .public_api = "vkmtl.diagnostics.QuerySet with OcclusionQueryMode.counting",
+        .portable_default = false,
+        .escape_hatch = false,
+        .vulkan_status = .native_lowering,
+        .metal_status = .native_lowering,
+        .validation = "Metal counting visibility and queried/enabled Vulkan precise occlusion return exact u64 sample counts through existing readback and resolve paths",
+    },
+    .{
         .feature = .pipeline_statistics_queries,
         .public_api = "vkmtl.diagnostics.QuerySet with pipeline_statistics",
         .portable_default = false,
         .escape_hatch = true,
         .vulkan_status = .capability_gated,
         .metal_status = .capability_gated,
-        .validation = "pipeline statistics queries remain typed unsupported until backend lowering is complete",
+        .validation = "pipeline statistics remain typed unsupported because the scalar query contract cannot represent variable typed counters, availability, overflow, and calibration",
     },
 };
 
@@ -1742,7 +1752,7 @@ pub const validation_cases = [_]ValidationCase{
         .name = "query_readback",
         .kind = .query_readback,
         .test_location = "src/runtime/window_context.zig runtime query sets support encoder writes and readback",
-        .expectation = "query sets validate bound-pass identity, availability, one-write-per-reset slots, copy usage, type/range gates, native readback/resolve agreement, and truthful timestamp sources",
+        .expectation = "query sets validate bound-pass identity, Boolean/counting gates, availability, one-write-per-reset slots, copy usage, type/range gates, native readback/resolve agreement, and truthful timestamp sources",
     },
     .{
         .name = "debug_marker_contract",

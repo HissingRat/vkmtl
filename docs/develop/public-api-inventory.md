@@ -1,7 +1,7 @@
 # Public API Inventory
 
 Status: `v0.1.x` compatibility baseline plus additive headless owner, refreshed
-on 2026-07-14.
+on 2026-07-15.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
@@ -181,7 +181,7 @@ aliases and with types used by other domains.
 | `api/render.zig` | 67 | 8 | pipeline, pass, draw, tessellation, and mesh rendering |
 | `api/sync.zig` | 31 | 1 | usage transitions, barriers, fences, events, queues, synchronization capabilities |
 | `api/presentation.zig` | 21 | 4 | surfaces, present modes, timed drawable presentation, frame pacing, surface collections |
-| `api/diagnostics.zig` | 84 | 17 | capabilities, cache/stability plans, profiling, capture, reports, memory budgets, device topology |
+| `api/diagnostics.zig` | 85 | 17 | capabilities, queries, cache/stability plans, profiling, capture, reports, memory budgets, device topology |
 | `api/command.zig` | 23 | 3 | command lifecycle callbacks, reusable indirect command lists, encoders, labels, queue capability and selection planning |
 | `api/shader.zig` | 39 | 4 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
@@ -197,7 +197,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 533 declarations and 94 callable
+Across the 13 top-level facades, this is 534 declarations and 94 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -808,6 +808,27 @@ On Metal, same-device raw buffers/textures and single-plane IOSurfaces can now
 produce ordinary imported resources. Vulkan factories remain typed unsupported
 until the descriptors can preserve exact allocation/image metadata. Topology is
 diagnostic only and does not promise cross-device allocation or submission.
+
+## Period 54 v0.2.0 Exact Occlusion And Semantic Closeout
+
+Period 54 leaves the guarded root, `Device`, `WindowContext`,
+`HeadlessContext`, and runtime-handle/method allowlists unchanged. The
+diagnostics facade gains `OcclusionQueryMode`, bringing it to 85 declarations
+and leaving its 17 operations unchanged.
+
+`QuerySetDescriptor` gains defaulted `occlusion_mode = .boolean`.
+`.counting` requests exact rasterized sample counts and requires the new
+`DeviceFeatures.occlusion_counting_queries` gate, bringing that feature struct
+to 93 fields. Metal lowers counting to native counting visibility; Vulkan
+requires queried and enabled precise occlusion. `QueryError` gains
+`UnsupportedOcclusionCountingQueries`.
+
+These additions target `v0.2.0`. Existing query literals and Boolean
+zero/nonzero behavior are unchanged. Metal 4 allocator/pipeline/dataset,
+resource-view pool, tensor/ML, function-log, pass-boundary counter, calibrated
+timestamp, and multi-counter statistic contracts receive no public
+declarations because their complete ownership/result semantics are not
+allocated.
 
 ## Compatibility Impact
 

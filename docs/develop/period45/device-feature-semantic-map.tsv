@@ -44,6 +44,7 @@ draw_base_instance	REN-03
 indirect_draw	REN-04
 multi_draw	REN-04
 occlusion_queries	QRY-03
+occlusion_counting_queries	QRY-05
 timestamp_queries	QRY-01,QRY-02
 pipeline_statistics_queries	QRY-04
 render_pipelines	REN-01

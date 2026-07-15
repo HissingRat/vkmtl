@@ -531,6 +531,7 @@ fn queryNativeFeatures(
     const extensions = try queryExtensionSupport(instance, pdev, allocator);
 
     result.occlusion_queries = true;
+    result.occlusion_counting_queries = native.occlusion_query_precise == .true;
     result.timestamp_queries = timestamp_query_capability;
     result.sampler_anisotropy = native.sampler_anisotropy == .true;
     result.independent_blend = native.independent_blend == .true;
@@ -594,6 +595,7 @@ fn queryUsableFeatures(
     result.independent_blend = native_features.independent_blend;
     result.tessellation = native_features.tessellation;
     result.occlusion_queries = native_features.occlusion_queries and host_query_reset;
+    result.occlusion_counting_queries = native_features.occlusion_counting_queries and host_query_reset;
     result.wireframe_fill_mode = native_features.wireframe_fill_mode;
     result.vertex_instance_step_rate = native_features.vertex_instance_step_rate;
     result.multi_draw = false;
@@ -1173,6 +1175,7 @@ fn initializeCandidate(
         .depth_bias_clamp = native_features.depth_bias_clamp,
         .independent_blend = native_features.independent_blend,
         .tessellation_shader = native_features.tessellation_shader,
+        .occlusion_query_precise = native_features.occlusion_query_precise,
     };
     var vertex_divisor_features = vk.PhysicalDeviceVertexAttributeDivisorFeaturesEXT{
         .vertex_attribute_instance_rate_divisor = if (enable_vertex_divisor) .true else .false,
@@ -1602,6 +1605,7 @@ test "Vulkan usable features expose only completed ray tracing lowering" {
         .native_handles = true,
         .debug_labels = true,
         .occlusion_queries = true,
+        .occlusion_counting_queries = true,
         .buffer_gpu_address = true,
         .compute_atomics = true,
         .compute_threadgroup_memory = true,
@@ -1632,6 +1636,7 @@ test "Vulkan usable features expose only completed ray tracing lowering" {
     try std.testing.expect(!usable.ray_tracing_callable_shaders);
     try std.testing.expect(usable.driver_pipeline_cache);
     try std.testing.expect(usable.occlusion_queries);
+    try std.testing.expect(usable.occlusion_counting_queries);
     try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(usable.compute_atomics);
     try std.testing.expect(usable.compute_threadgroup_memory);
@@ -1639,6 +1644,7 @@ test "Vulkan usable features expose only completed ray tracing lowering" {
     try std.testing.expect(usable.heaps);
     try std.testing.expect(usable.memory_budget);
     try std.testing.expect(!queryUsableFeatures(native, false, true).occlusion_queries);
+    try std.testing.expect(!queryUsableFeatures(native, false, true).occlusion_counting_queries);
     try std.testing.expect(native.occlusion_queries);
     try std.testing.expect(usable.native_handles);
     try std.testing.expect(usable.debug_labels);

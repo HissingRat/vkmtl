@@ -1130,7 +1130,8 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_depth_bias(
 vkmtl_metal_status vkmtl_metal_render_command_encoder_begin_occlusion_query(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_query_set *query_set,
-    unsigned int query_index
+    unsigned int query_index,
+    unsigned int counting
 );
 vkmtl_metal_status vkmtl_metal_render_command_encoder_end_occlusion_query(
     vkmtl_metal_render_command_encoder *encoder,

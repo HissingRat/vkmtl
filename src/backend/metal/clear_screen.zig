@@ -368,6 +368,7 @@ fn zeroCapabilities() metal.vkmtl_metal_device_capabilities {
 fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.metal);
     result.occlusion_queries = true;
+    result.occlusion_counting_queries = true;
     result.timestamp_queries = capabilities.timestamp_queries != 0;
     result.shader_specialization = capabilities.function_constants != 0;
     result.debug_markers = true;
@@ -410,6 +411,7 @@ fn nativeFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_ca
 fn usableFeaturesFromMetalCapabilities(capabilities: metal.vkmtl_metal_device_capabilities) core.DeviceFeatures {
     var result = core.defaultDeviceFeatures(.metal);
     result.occlusion_queries = true;
+    result.occlusion_counting_queries = true;
     result.shader_specialization = capabilities.function_constants != 0;
     result.debug_markers = true;
     result.sampler_anisotropy = true;
@@ -544,6 +546,7 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.ray_tracing);
     try std.testing.expect(native.metal_binary_archive);
     try std.testing.expect(native.occlusion_queries);
+    try std.testing.expect(native.occlusion_counting_queries);
     try std.testing.expect(native.timestamp_queries);
     try std.testing.expect(native.shader_specialization);
     try std.testing.expect(native.buffer_gpu_address);
@@ -559,6 +562,7 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expect(native.mesh_shaders);
     try std.testing.expect(native.task_shaders);
     try std.testing.expect(usable.occlusion_queries);
+    try std.testing.expect(usable.occlusion_counting_queries);
     try std.testing.expect(usable.shader_specialization);
     try std.testing.expect(usable.buffer_gpu_address);
     try std.testing.expect(usable.compute_atomics);

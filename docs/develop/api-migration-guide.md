@@ -15,6 +15,35 @@ drawable, presentation method, or presentation-shaped native-handle view.
 
 Existing `WindowContext` source and behavior are unchanged.
 
+## Period 54 v0.2.0 Exact Occlusion Update
+
+Existing query literals retain `.boolean` visibility because
+`QuerySetDescriptor.occlusion_mode` defaults to `.boolean`. To request an exact
+rasterized sample count:
+
+```zig
+if (device.features().occlusion_counting_queries) {
+    var samples = try device.makeQuerySet(.{
+        .query_type = .occlusion,
+        .occlusion_mode = .counting,
+        .count = 2,
+    });
+    defer samples.deinit();
+}
+```
+
+Metal uses counting visibility and Vulkan requires queried and enabled precise
+occlusion. Requesting `.counting` without the feature returns
+`UnsupportedOcclusionCountingQueries`. Exhaustive `QueryError` switches need
+that new arm. Pipeline statistics and other variable counter families remain
+unsupported rather than returning placeholder scalar values.
+
+Metal 4 argument-table and explicit-barrier effects reuse the existing
+resource-table and sync contracts; no new Metal 4 owner or native identity is
+public. Allocator/reusable-buffer/feedback, flexible-pipeline,
+compiler/archive/dataset, view-pool, tensor/ML, pass-boundary/multi-counter,
+calibration, advanced-reflection, and function-log declarations are not added.
+
 ## Period 53 v0.2.0 External Import And Topology Update
 
 Existing callers need no source change. External descriptors gained defaulted

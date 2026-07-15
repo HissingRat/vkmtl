@@ -534,19 +534,72 @@ backends execute shader specialization without expanding the flat API root.
 
 Tracked in `docs/develop/period47/`.
 
-- [ ] Split the 15 routed broad Metal rows into precise portable and deferred
+- [x] Split the 15 routed broad Metal rows into precise portable and deferred
   semantics before changing capability claims.
-- [ ] Expand ordinary limits, formats, views, samplers, resource modes, and
+- [x] Expand ordinary limits, formats, views, samplers, resource modes, and
   capability-gated buffer addresses.
-- [ ] Close common MRT, attachment, binding, and dynamic raster-state paths.
-- [ ] Close common compute dispatch, barrier, atomic, threadgroup-memory, and
+- [x] Close common MRT, attachment, binding, and dynamic raster-state paths.
+- [x] Close common compute dispatch, barrier, atomic, threadgroup-memory, and
   reflection paths.
-- [ ] Resolve managed synchronization and bind focused backend/physical
+- [x] Resolve managed synchronization and bind focused backend/physical
   evidence to the closeout.
 
 Expected result: ordinary rendering and compute applications gain broader
 native coverage without pulling heaps, function tables, advanced raster state,
 native synchronization, or Metal 4 concepts into the common API prematurely.
+
+## Wave 29: Native Synchronization, Queues, And Presentation Timing
+
+Tracked in `docs/develop/period48/`. Complete: native timeline/shared-event
+submission, physical queue selection, lifecycle callbacks, and capability-
+gated Metal presentation timing have executable evidence.
+
+## Wave 30: Native Heaps, Residency, Sparse Resources, And Memoryless
+
+Tracked in `docs/develop/period49/`. Complete: native placement heaps,
+memory-budget telemetry, and Metal memoryless attachments execute; sparse and
+residency-set execution are precisely unsupported under the handle-free map.
+
+## Wave 31: Binding Tables, Indirect Commands, And Pipeline Persistence
+
+Tracked in `docs/develop/period50/`. Complete: resource tables, CPU-authored
+reusable command lists, Metal binary archives, and Vulkan pipeline caches have
+backend lowering and evidence.
+
+## Wave 32: Advanced Rasterization And Geometry
+
+Tracked in `docs/develop/period51/`. Complete: Vulkan tessellation and
+Metal/Vulkan mesh-only paths execute; the remaining advanced raster contracts
+are precisely unsupported.
+
+## Wave 33: Ray Tracing Breadth
+
+Tracked in `docs/develop/period52/`. Complete: ordinary AS maintenance, AABB
+geometry, and multi-source TLAS execute; the unallocated function-table,
+inline-query, callable, motion, and Metal 4 RT contracts are closed.
+
+## Wave 34: External Interop, Metal I/O, And Device Topology
+
+Tracked in `docs/develop/period53/`. Complete: same-device Metal resources and
+IOSurface textures import into ordinary execution, and both backends report
+device topology. The incomplete synchronization/I/O/insertion/cross-device
+contracts are explicitly unsupported.
+
+## Wave 35: Metal 4, Pipeline Datasets, Tensor/ML, And Counters
+
+Tracked in `docs/develop/period54/`.
+
+- [x] Compose admitted Metal 4 argument-table and explicit-barrier effects
+  through existing portable owners.
+- [x] Execute exact occlusion sample counts through Metal counting visibility
+  and Vulkan precise occlusion.
+- [x] Close allocator/reuse/feedback, flexible pipelines,
+  compiler/archive/datasets, pools, tensor/ML, logs, calibration, and variable
+  counter/statistic shapes precisely unsupported.
+- [x] Reduce the Period 45 exactly-once gap routing to zero incomplete units.
+
+Expected result: all 111 audited Metal semantic units have executable or
+precise unsupported outcomes, without a broad Metal 4 feature flag.
 
 ## Slice Checklist
 

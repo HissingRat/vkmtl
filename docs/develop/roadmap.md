@@ -972,11 +972,20 @@ under the current contracts. See `docs/develop/period53/`.
 
 ## Period 54: Metal 4 Command Model, Pipeline Datasets, Tensor, And ML
 
-Status: planned from the Period 45 semantic audit.
+Status: complete.
 
 Goal: evaluate and implement the newest Metal framework command allocation,
 argument table, compiler/archive/dataset, tensor, and ML semantics with exact
 Vulkan compositions or explicit unsupported outcomes.
+
+Exact-count visibility now executes through Metal counting visibility and
+Vulkan precise occlusion queries. The admitted Metal 4 argument-table and
+explicit-barrier effects compose through the existing resource-table and sync
+contracts. Allocator/reusable-buffer/feedback, flexible pipelines,
+compiler/archive/datasets, view pools, tensor/ML, pass-boundary/multi-counter
+statistics, calibration, advanced reflection, and function logs are precisely
+unsupported under the current ownership and result shapes. See
+`docs/develop/period54/`.
 
 ## v0.1.0 Compatibility Release
 
@@ -1024,10 +1033,10 @@ See `docs/develop/period32+/target.md`.
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Periods
-  46-53 plus the additive headless runtime are complete implementation slices.
-  Period 54 is the active mainline target and remains routed from the gap
-  ledger; it must not be reordered around its stated dependencies without
-  updating the inventory and backlog.
+  46-54 plus the additive headless runtime are complete implementation slices.
+  The Period 45 source ledger now has zero incomplete routes. A future
+  mainline begins with a new native baseline audit or an explicit decision to
+  allocate one of the precisely unsupported contracts.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the
   deterministic capability contract and unit coverage because the host had no

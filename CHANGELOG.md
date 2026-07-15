@@ -11,6 +11,9 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added capability-gated exact occlusion sample counts through
+  `diagnostics.OcclusionQueryMode.counting`, native Metal counting visibility,
+  and Vulkan precise occlusion queries.
 - Added executable same-device Metal `MTLBuffer` and single-mip/single-sample
   2D/2D-array `MTLTexture` imports plus single-plane IOSurface texture imports,
   exposed as ordinary borrowed vkmtl resources through their external owners.
@@ -82,6 +85,13 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Metal 4 argument-table and explicit-barrier effects are covered through the
+  existing resource-table and synchronization compatibility layers. Distinct
+  allocator/reusable-command/feedback, flexible-pipeline,
+  compiler/archive/dataset, resource-view-pool, tensor/ML, pass-boundary and
+  multi-counter/statistics, calibration, advanced-reflection, and function-log
+  contracts are explicitly unsupported rather than exposed through a broad
+  Metal 4 feature flag.
 - External synchronization, native command insertion, Metal I/O/compression,
   and cross-device execution are explicitly unsupported where the current
   contracts cannot preserve their observable native semantics.
@@ -124,9 +134,10 @@ reserved for the next minor release and are documented with migration guidance.
   device's queried resource limits before native object creation.
 - Private textures now reject CPU `replaceRegion` uploads consistently before
   backend access; use transfer commands for private storage.
-- Occlusion query results now have portable Boolean visibility semantics: zero
-  means no samples passed and any nonzero value means visible; the magnitude is
-  not a portable sample count.
+- Occlusion query results default to portable Boolean visibility: zero means
+  no samples passed and any nonzero value means visible. Callers may request
+  `.counting` for an exact sample count when
+  `occlusion_counting_queries` is reported.
 - Timestamp query sets report `native_gpu` only when the selected backend has a
   complete native encoder path. Values remain backend-native ticks and do not
   claim duration conversion; logical fallback sets still report
