@@ -77,7 +77,17 @@ Current cases:
   pixel readback, bounded soak, and release evidence gates remain distinct;
   all nine explicit release gates are observed, while physical Linux GPU and
   advanced-native pressure lanes remain outside the claim.
+- `voxel_world_pressure_test`: mesher and camera unit tests cover the bounded
+  CPU contract; shader precompile/reflection covers the common 32-byte vertex
+  stream and uniform/atlas/sampler layout; finite smoke/default/stress runs
+  validate 9/81/289 resident limits, two rebuilds and 8 MiB of uploads per
+  frame, streaming metrics, and `voxel_world_pressure_test=ok`. Metal API
+  Validation execution is physically observed on an Apple M4 Pro. Vulkan has
+  artifact and forced-build coverage, but no physical voxel execution is
+  claimed.
 
 Unit-test metadata remains authoritative for portable validation. Period 44
 adds separate physical GPU evidence workflows so source/build coverage is not
-confused with executed Metal/Vulkan behavior.
+confused with executed Metal/Vulkan behavior. Period 19 follows that same
+boundary for the voxel workload: only the Metal execution is currently
+observed.

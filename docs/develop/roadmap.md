@@ -389,7 +389,7 @@ See `docs/develop/period18/`.
 
 ## Period 19: Voxel World Pressure Test
 
-Status: active. Phase 1 is complete; Phase 2 is next.
+Status: completed on 2026-07-15.
 
 Goal: build a Minecraft-like block world prototype under `examples/` as the
 final pressure test for the core render, resource, shader, binding, transfer,
@@ -404,9 +404,21 @@ and presentation stack.
 - Phase 7: pressure-test report
 
 The period was reactivated after Periods 46-54 closed the original backend and
-semantic-routing blockers. Phase 1 fixes the bounded workload, portable
-non-sparse resource path, metrics, controls, and API-allocation rule and adds a
-public-API-only runnable window scaffold.
+semantic-routing blockers. All seven phases are complete. The public-API-only
+renderer now covers visible-face meshing, atlas sampling, reflection, camera
+uniforms, CPU culling, bounded streaming, indexed rendering, depth, lighting,
+and pressure diagnostics without allocating new public API.
+
+Physical Metal smoke/default/stress runs pass with Metal API Validation. The
+stress run reaches the bounded 289-chunk resident set, draws 121 chunks, culls
+168, rebuilds 289, and drains its queue. The primary finding is that the
+physical Metal `commit()` path waits for GPU completion and no portable
+application-owned in-flight contract exists; asynchronous submission and
+resource ownership require a future explicit design period. Forced Vulkan
+builds and precompiled artifacts pass, but physical Vulkan execution is not
+claimed. The Metal current drawable now matches the sRGB window-pipeline
+convention; observable requested/selected presentation-format resolution is a
+separate maintenance follow-up.
 
 See `docs/develop/period19/`.
 
@@ -1073,9 +1085,10 @@ See `docs/develop/period32+/target.md`.
   queues, memory, residency, resource-table scale, pipeline persistence, ray
   tracing completeness, advanced geometry, external interop, edge semantics,
   profiling, capture, debug markers, CI, and device-matrix validation.
-- Period 19 is now the active voxel pressure-test target. The backend
-  completion gate has been satisfied; Phase 1 is complete and Phase 2 owns the
-  first static chunk mesher and visible geometry.
+- Period 19 is complete. Its bounded voxel renderer validated the existing
+  public surface on physical Metal and routed synchronous command submission
+  to a future async/in-flight ownership design. Physical Vulkan execution is
+  still an evidence gap and is not inferred from the passing forced build.
 - Period 11 remains the long-term capability-query baseline for advanced
   backend work.
 - Periods 20 through 30 are backend completion and parity periods, not a

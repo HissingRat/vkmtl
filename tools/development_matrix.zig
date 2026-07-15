@@ -102,8 +102,8 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/voxel_world",
         .run_step = "run-voxel-world",
         .kind = .render,
-        .deterministic_output = "voxel_world_phase1_scaffold=ok",
-        .backend_expectation = "portable voxel workload scaffold before chunk rendering phases",
+        .deterministic_output = "voxel_world_pressure_test=ok",
+        .backend_expectation = "bounded visible-face chunk rendering, atlas binding, camera culling, streaming, and metrics on Vulkan or Metal",
     },
     .{
         .name = "transfer_readback",
@@ -476,6 +476,15 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .required = true,
         .command = "zig build run-transfer-readback && zig build run-compute-readback",
         .expectation = "deterministic transfer and compute readback examples complete without visual inspection",
+    },
+    .{
+        .name = "voxel_world_pressure_test",
+        .host = .macos,
+        .backend = .metal,
+        .required = false,
+        .command = "MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=smoke VKMTL_VOXEL_FRAME_LIMIT=24 VKMTL_VOXEL_AUTOPILOT=1 VKMTL_BACKEND=metal zig build run-voxel-world && MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=default VKMTL_VOXEL_FRAME_LIMIT=48 VKMTL_BACKEND=metal zig build run-voxel-world && MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=stress VKMTL_VOXEL_FRAME_LIMIT=160 VKMTL_BACKEND=metal zig build run-voxel-world",
+        .requires_runtime_configuration = true,
+        .expectation = "bounded smoke, default, and stress chunk workloads complete under Metal API Validation and print voxel_world_pressure_test=ok",
     },
     .{
         .name = "binding_variant_regression",
@@ -1690,6 +1699,7 @@ pub const ValidationCaseKind = enum {
     advanced_resource_geometry,
     ray_tracing_native_parity,
     period44_device_evidence,
+    voxel_world_pressure_test,
 };
 
 pub const ValidationCase = struct {
@@ -1803,6 +1813,12 @@ pub const validation_cases = [_]ValidationCase{
         .kind = .period44_device_evidence,
         .test_location = "tools/development_matrix.zig, examples/offscreen_texture/main.zig, tools/gpu_soak/main.zig, and Period 44 workflows/scripts",
         .expectation = "hosted builds, physical smoke, pixel readback, soak, and release gates stay distinct; all nine explicit gates are observed",
+    },
+    .{
+        .name = "voxel_world_pressure_test",
+        .kind = .voxel_world_pressure_test,
+        .test_location = "examples/voxel_world mesher/camera tests, finite profile runs, and Period 19 physical Metal evidence",
+        .expectation = "smoke/default/stress stay within 9/81/289 resident bounds, expose streaming and frame metrics, and end with voxel_world_pressure_test=ok",
     },
 };
 

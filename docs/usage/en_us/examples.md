@@ -43,7 +43,7 @@ which mode applies.
 | Offscreen texture | `zig build run-offscreen-texture` | Window | Offscreen triangle sampled onto the presented quad; pixel mode prints `render pixel regression ok backend=... max_channel_delta=...`. |
 | MSAA triangle | `zig build run-msaa-triangle` | Window | Multisampled triangle resolved and sampled into the drawable. |
 | Rainbow cube | `zig build run-rainbow-cube` | Window | Rotating textured cube with depth and indexed drawing. |
-| Voxel world | `zig build run-voxel-world` | Window; set `VKMTL_VOXEL_FRAME_LIMIT=N` for finite smoke | Phase 1 sky-colored public-API scaffold; chunk rendering begins in Period 19 Phase 2. |
+| Voxel world | `zig build run-voxel-world` | Window; profile/frame-limit/autopilot envs provide bounded finite runs | Bounded visible-face chunk renderer with atlas materials, camera/culling, streaming, metrics, and `voxel_world_pressure_test=ok`. |
 | Transfer readback | `zig build run-transfer-readback` | Auto-exit | Exact copies pass and print `transfer readback ok`. |
 | Compute readback | `zig build run-compute-readback` | Auto-exit | Storage buffer/texture bytes match and print `compute readback ok`. |
 | Capability dump | `zig build run-capability-dump` | Auto-exit | Console report starts with backend/adapter and includes features, limits, formats, and diagnostics. |
@@ -206,23 +206,37 @@ examples/rainbow_cube/shaders/rainbow_cube.slang
 
 ## Voxel World Pressure Test
 
-`examples/voxel_world` is the bounded Minecraft-like renderer pressure test.
-Period 19 Phase 1 currently supplies a public-API-only window/presentation
-scaffold and fixes the `16 x 64 x 16` chunk, smoke/default/stress profiles,
-portable non-sparse resource path, diagnostics, and eventual controls. Phase 2
-adds the first visible-face chunk mesh and real Slang pipeline.
+`examples/voxel_world` is the completed bounded Minecraft-like renderer
+pressure test. It uses deterministic `16 x 64 x 16` chunks, visible-face CPU
+meshing with cross-chunk neighbor checks, per-chunk vertex/index buffers, a
+generated atlas, reflection-derived layouts, camera uniforms, depth/back-face
+culling, CPU chunk culling, and bounded rebuild/upload work. It imports no
+backend-private API.
 
-Run it interactively or as a finite-frame scaffold smoke:
+The `smoke`, `default`, and `stress` profiles use radii 1, 4, and 8, bounding
+resident grids to 9, 81, and 289 chunks respectively. Select a profile with
+`VKMTL_VOXEL_PROFILE`; the default is `default`. `VKMTL_VOXEL_FRAME_LIMIT=N`
+provides an exact finite run and `VKMTL_VOXEL_AUTOPILOT=1` moves the camera and
+requests periodic rebuilds.
+
+Run it interactively or as a deterministic-control finite pressure run:
 
 ```sh
 zig build run-voxel-world
-VKMTL_VOXEL_FRAME_LIMIT=2 VKMTL_BACKEND=metal zig build run-voxel-world
+VKMTL_VOXEL_PROFILE=smoke VKMTL_VOXEL_FRAME_LIMIT=24 VKMTL_VOXEL_AUTOPILOT=1 VKMTL_BACKEND=metal zig build run-voxel-world
 zig build run-voxel-world -Dvulkan
 ```
 
-The finite smoke prints `voxel_world_phase1_scaffold=ok`. The current visual
-output is intentionally only a sky-colored drawable; it is not yet a claim of
-voxel geometry execution.
+Controls are `W/A/S/D` for horizontal movement, `Q/E` for vertical movement,
+mouse or arrow keys for look, Shift for faster movement, `R` to rebuild the
+current chunk, and Escape to exit. The exit report includes resident,
+visible/culled and pending chunks; draws/vertices/indices; rebuilds, retirements,
+uploads and allocations; CPU mesh/encode/commit time; and frame p50/p95/max.
+
+Finite success prints `voxel_world_pressure_test=ok`. Metal API Validation runs
+on an Apple M4 Pro completed smoke/default/stress at their 9/81/289 resident
+bounds. The Vulkan artifacts and forced build pass, but physical Vulkan voxel
+execution is not claimed here.
 
 ## Transfer Readback
 

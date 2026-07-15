@@ -46,9 +46,11 @@ closed one by one as vkmtl moves from prototype to library.
 - The completed headless-runtime slice keeps `WindowContext` unchanged and
   adds a real no-surface `HeadlessContext`; its allocation, ownership, backend,
   and validation evidence are recorded in `docs/develop/headless-context.md`.
-- Period 19 is reactivated now that the original backend-completion gate is
-  satisfied. Its Phase 1 bounded workload and public-API-only scaffold are
-  complete; Phase 2 static chunk meshing is the current implementation slice.
+- Period 19 is complete. Its seven-phase voxel pressure test uses the closed
+  public surface, passes physical Metal validation at smoke/default/stress
+  scale, and routes synchronous command submission to a future explicit
+  async/in-flight ownership period. Physical Vulkan execution remains an open
+  evidence item rather than an inferred build result.
 
 ## Headless Runtime Context
 
@@ -1252,49 +1254,51 @@ contract before chunk implementation begins.
 
 - [x] Define chunk mesh scope before implementation.
 - [x] Define block IDs, chunk dimensions, vertex format, and index format.
-- [ ] Generate CPU chunk meshes with visible faces only.
-- [ ] Upload vertex and index buffers through public vkmtl APIs.
-- [ ] Add simple meshing tests.
+- [x] Generate CPU chunk meshes with visible faces only.
+- [x] Upload vertex and index buffers through public vkmtl APIs.
+- [x] Add simple meshing tests.
 
 ## Period 19 Phase 3 Checklist
 
-- [ ] Define texture atlas scope before implementation.
-- [ ] Add or generate a small block texture atlas.
-- [ ] Map block IDs to atlas regions.
-- [ ] Bind atlas texture and sampler through public vkmtl APIs.
-- [ ] Validate visibly different block faces.
+- [x] Define texture atlas scope before implementation.
+- [x] Add or generate a small block texture atlas.
+- [x] Map block IDs to atlas regions.
+- [x] Bind atlas texture and sampler through public vkmtl APIs.
+- [x] Validate visibly different block faces.
 
 ## Period 19 Phase 4 Checklist
 
-- [ ] Define camera/input/culling scope before implementation.
-- [ ] Add fly camera controls through an external input layer.
-- [ ] Upload view/projection uniforms per frame.
-- [ ] Add distance or frustum culling for chunks.
-- [ ] Validate camera motion and culling correctness.
+- [x] Define camera/input/culling scope before implementation.
+- [x] Add fly camera controls through an external input layer.
+- [x] Upload view/projection uniforms per frame.
+- [x] Add distance or frustum culling for chunks.
+- [x] Validate camera motion and culling correctness.
 
 ## Period 19 Phase 5 Checklist
 
-- [ ] Define chunk streaming/rebuild scope before implementation.
-- [ ] Maintain a chunk grid around the camera.
-- [ ] Generate chunks as the camera moves.
-- [ ] Rebuild changed chunk meshes without stalling unrelated work where possible.
-- [ ] Add diagnostics for rebuild and upload counts.
+- [x] Define chunk streaming/rebuild scope before implementation.
+- [x] Maintain a chunk grid around the camera.
+- [x] Generate chunks as the camera moves.
+- [x] Rebuild changed chunk meshes within the bounded synchronous submission path.
+- [x] Add diagnostics for rebuild and upload counts.
 
 ## Period 19 Phase 6 Checklist
 
-- [ ] Define lighting/visibility polish scope before implementation.
-- [ ] Add simple directional lighting, vertex lighting, or baked ambient occlusion.
-- [ ] Keep transparent block rules optional and tightly scoped.
-- [ ] Preserve stable depth testing and face visibility.
-- [ ] Validate visual readability.
+- [x] Define lighting/visibility polish scope before implementation.
+- [x] Add simple directional lighting, vertex lighting, or baked ambient occlusion.
+- [x] Keep transparent block rules optional and tightly scoped.
+- [x] Preserve stable depth testing and face visibility.
+- [x] Validate visual readability.
 
 ## Period 19 Phase 7 Checklist
 
-- [ ] Define pressure-test report scope before implementation.
-- [ ] Record CPU mesh generation cost, upload behavior, draw counts, and frame pacing observations.
-- [ ] Identify vkmtl API friction found while building the example.
-- [ ] Identify backend bottlenecks exposed by chunk streaming.
-- [ ] Decide which findings become future periods or maintenance tasks.
+- [x] Define pressure-test report scope before implementation.
+- [x] Record CPU mesh generation cost, upload behavior, draw counts, and frame pacing observations.
+- [x] Identify vkmtl API friction found while building the example.
+- [x] Identify backend bottlenecks exposed by chunk streaming.
+- [x] Route async submission/in-flight ownership to a future explicit period.
+- [x] Fix the Metal default drawable format and route explicit requested versus
+  selected presentation-format resolution to follow-up maintenance.
 
 ## Period 20 Phase 1 Checklist
 

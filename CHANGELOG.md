@@ -11,9 +11,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
-- Reactivated the bounded Period 19 voxel renderer pressure test and added the
-  public-API-only `examples/voxel_world` window scaffold, `run-voxel-world`
-  build step, and finite-frame smoke marker.
+- Completed the bounded Period 19 voxel renderer pressure test with visible-face
+  CPU chunk meshing, generated atlas materials, reflection-derived layouts,
+  camera and chunk culling, bounded streaming/rebuild work, pressure metrics,
+  smoke/default/stress profiles, autopilot, and the finite-run
+  `voxel_world_pressure_test=ok` marker through public vkmtl APIs.
 - Added capability-gated exact occlusion sample counts through
   `diagnostics.OcclusionQueryMode.counting`, native Metal counting visibility,
   and Vulkan precise occlusion queries.
@@ -88,6 +90,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Aligned the Metal window drawable with the existing portable window-pipeline
+  convention by using `bgra8_unorm_srgb`; Metal format capabilities now report
+  presentation only for that actual layer format, matching Vulkan's preferred
+  surface format.
 - Metal 4 argument-table and explicit-barrier effects are covered through the
   existing resource-table and synchronization compatibility layers. Distinct
   allocator/reusable-command/feedback, flexible-pipeline,

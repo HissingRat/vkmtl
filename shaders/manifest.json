@@ -14,6 +14,12 @@
       "fragment_entry": "fs_main"
     },
     {
+      "name": "voxel_world",
+      "source": "../examples/voxel_world/shaders/voxel_world.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
+    },
+    {
       "name": "msaa_triangle_msaa",
       "source": "../examples/msaa_triangle/shaders/msaa_triangle.slang",
       "vertex_entry": "msaa_vs",

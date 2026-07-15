@@ -659,7 +659,7 @@ vkmtl_metal_status vkmtl_metal_clear_screen_create(
         }
 
         layer.device = device;
-        layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+        layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
         layer.framebufferOnly = NO;
         layer.opaque = YES;
         layer.contentsScale = [window backingScaleFactor];

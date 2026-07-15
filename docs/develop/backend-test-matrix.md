@@ -39,6 +39,20 @@ GPU.
 
 ## Optional Rows
 
+- `voxel_world_pressure_test`: bounded physical GPU pressure validation. The
+  recorded Metal commands are:
+
+```sh
+MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=smoke VKMTL_VOXEL_FRAME_LIMIT=24 VKMTL_VOXEL_AUTOPILOT=1 VKMTL_BACKEND=metal zig build run-voxel-world
+MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=default VKMTL_VOXEL_FRAME_LIMIT=48 VKMTL_BACKEND=metal zig build run-voxel-world
+MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=stress VKMTL_VOXEL_FRAME_LIMIT=160 VKMTL_BACKEND=metal zig build run-voxel-world
+```
+
+  Each run must print `voxel_world_pressure_test=ok`, drain its pending rebuild
+  queue, and remain within its 9/81/289 resident bound. The equivalent Vulkan
+  commands remain a physical-device evidence lane; a forced Vulkan build alone
+  does not satisfy it.
+
 - `macos_moltenvk_forced`:
 
 ```sh
@@ -72,6 +86,29 @@ caller provides the corresponding evidence flag; its default result is not
 ready.
 
 The current report is `docs/develop/period44/parity-report.md`.
+
+## Period 19 Voxel Pressure Expectations
+
+| Work | Vulkan | Metal | Validation |
+| --- | --- | --- | --- |
+| Visible-face CPU meshing | Portable workload | Portable workload | Empty, single-block, adjacent-block, solid-shell, deterministic terrain, and cross-chunk-boundary tests |
+| Atlas and reflected layouts | SPIR-V plus reflection | MSL plus reflection | One 32-byte vertex stream and group-0 uniform/texture/sampler bindings |
+| Depth, culling, indexed draws | Executable path | Executable path | Common render loop uses depth32, back-face culling, CPU chunk culling, and `u32` indices |
+| Streaming budgets | Two rebuilds and 8 MiB per frame | Two rebuilds and 8 MiB per frame | Profiles bound resident chunks to 9/81/289 and report queue/resource growth |
+| Physical pressure evidence | Not yet recorded | Observed on Apple M4 Pro with Metal API Validation | Smoke/default/stress markers observed; no physical Vulkan claim |
+
+The final Metal runs drained pending work and reported the following bounded
+results:
+
+| Profile / frames | Resident | Visible / culled | Rebuilt / retired | Uploaded bytes | Mesh total | Encode / commit per frame | Frame p50 / p95 / max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| smoke / 24 | 9 | 9 / 0 | 13 / 4 | 1,164,320 | 27.317 ms | 0.158 / 0.734 ms | 0.494 / 5.900 / 10.287 ms |
+| default / 48 | 81 | 49 / 32 | 81 / 0 | 7,233,376 | 169.620 ms | 0.162 / 0.943 ms | 5.209 / 5.938 / 10.681 ms |
+| stress / 160 | 289 | 121 / 168 | 289 / 0 | 25,884,992 | 597.104 ms | 0.209 / 1.068 ms | 5.434 / 6.036 / 10.031 ms |
+
+These numbers are named-host observations, not portable performance gates. The
+portable gates are correct rendering, bounded resource/queue growth, and a
+successful finite-run marker.
 
 ## Capability Expectations
 

@@ -157,7 +157,7 @@ pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFor
     var capabilities = core.defaultFormatCapabilities(format);
     capabilities.blit_source = false;
     capabilities.blit_destination = false;
-    capabilities.presentation = !self.extent.isZero() and format == .bgra8_unorm;
+    capabilities.presentation = !self.extent.isZero() and format == .bgra8_unorm_srgb;
     capabilities.depth_resolve = false;
     capabilities.stencil_resolve = false;
     if (format == .depth32_float_stencil8) {
@@ -598,12 +598,12 @@ test "Metal native capabilities map argument buffers and ray tracing conservativ
     try std.testing.expectEqual(@as(u32, 65_535), queried_limits.max_mesh_threadgroups_per_grid_x);
 }
 
-test "Metal format capabilities keep presentation and scaled blit truthful" {
+test "Metal format capabilities match the default sRGB drawable and scaled blit support" {
     const screen = MetalClearScreen{
         .handle = undefined,
         .extent = .{ .width = 1, .height = 1 },
     };
-    const presentable = screen.formatCapabilities(.bgra8_unorm);
+    const presentable = screen.formatCapabilities(.bgra8_unorm_srgb);
     try std.testing.expect(presentable.presentation);
     try std.testing.expect(!presentable.blit_source);
     try std.testing.expect(!presentable.blit_destination);
@@ -613,10 +613,10 @@ test "Metal format capabilities keep presentation and scaled blit truthful" {
         .handle = undefined,
         .extent = .{ .width = 0, .height = 0 },
     };
-    try std.testing.expect(!headless.formatCapabilities(.bgra8_unorm).presentation);
+    try std.testing.expect(!headless.formatCapabilities(.bgra8_unorm_srgb).presentation);
 
-    const srgb = screen.formatCapabilities(.bgra8_unorm_srgb);
-    try std.testing.expect(!srgb.presentation);
+    const linear = screen.formatCapabilities(.bgra8_unorm);
+    try std.testing.expect(!linear.presentation);
     const depth = screen.formatCapabilities(.depth32_float);
     try std.testing.expect(depth.depth_copy);
     try std.testing.expect(!depth.depth_resolve);
