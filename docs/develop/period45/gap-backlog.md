@@ -135,8 +135,10 @@ Status: complete.
 
 Priority: complete the already executable RT vertical slice.
 
-- [x] Execute ordinary triangle/AABB/instance geometry plus
-  update/refit/compaction commands and exact build/update size queries.
+- [x] Execute ordinary single-geometry triangle/AABB/instance paths plus
+  update/refit/compaction commands and their native build/update size queries.
+  Descriptor-exact Vulkan sizing for arbitrary multi-geometry arrays remains
+  separate follow-up work.
 - [x] Close compacted-size query, function/intersection tables, Vulkan ray
   query execution, callable/complex SBT execution, motion/curves, and Metal 4
   AS descriptors precisely.

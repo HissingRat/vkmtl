@@ -183,4 +183,13 @@ manual ray dispatch.
 The supported Vulkan RT machine must still run the finite Period 55
 `ray_traced_scene` texture-presentation path and the Period 56 legacy raw-copy
 probe. Forced Vulkan builds and earlier RT screenshots do not satisfy either
-run.
+run. The first Windows attempts on both routes selected Vulkan and the expected
+presentation branch, then stopped in the vkmtl BLAS resource preflight before
+native submission. They exposed a Vulkan allocation bug: the combined
+update-plus-compaction size query had been treated as an upper bound even
+though native AS build-size results are not monotonic across flags. Allocation
+now reserves the component maximum across all four update/compaction
+combinations used by the current sizing templates. Descriptor-exact sizing for
+arbitrary multi-geometry arrays remains a separate follow-up; it did not cause
+these preflight failures. The two physical runs still need to be repeated
+before either evidence item closes.

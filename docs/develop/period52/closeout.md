@@ -5,7 +5,9 @@ Status: complete.
 ## Executable Outcomes
 
 - Native Vulkan and Metal build-update, update/refit, and compact-copy command
-  lowering with exact build/update sizes and resource validation.
+  lowering with native-query-backed sizes for the admitted single-geometry
+  paths and resource validation. Descriptor-exact Vulkan sizing for arbitrary
+  multi-geometry arrays remains outside this completed slice.
 - Native Metal triangle and AABB BLAS input sized safely before resources are
   attached.
 - Native Metal TLAS construction from multiple distinct BLAS sources.

@@ -9,6 +9,14 @@ reserved for the next minor release and are documented with migration guidance.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Vulkan acceleration-structure allocation on drivers whose native build
+  size for ordinary, update, or compaction flags is larger than the combined
+  update-plus-compaction query. vkmtl now reserves the component maximum across
+  all four update/compaction combinations instead of assuming those query
+  results are monotonic.
+
 ### Added
 
 - Added `Swapchain.selectedFormat()` as the concrete presentation-owned query;

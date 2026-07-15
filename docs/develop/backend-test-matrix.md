@@ -318,7 +318,7 @@ conservative until the relevant backend period lands.
 | Feature | Vulkan | Metal | Public Status |
 | --- | --- | --- | --- |
 | AS maintenance | Native update/refit/compact-copy commands | Native update/refit/compact-copy commands | Period 52 `CommandBuffer.encodeAccelerationStructureMaintenance(...)` |
-| Compact size query | Typed unsupported | Typed unsupported | Build/update sizes are exact; no asynchronous post-build compact-size owner |
+| Compact size query | Typed unsupported | Typed unsupported | Build/update sizes are native-query-backed for the admitted single-geometry paths; no asynchronous post-build compact-size owner |
 | Many-instance TLAS metadata | Multiple distinct BLAS sources executable; non-default metadata planning | Multiple distinct BLAS sources executable; non-default metadata planning | Period 52 source arrays plus existing layout plan |
 | Ray query | Native availability query; execution typed unsupported | Typed unsupported | `planRayQuery` remains diagnostic; usable feature false |
 | Complex SBT and callable records | Planning only; execution typed unsupported | Planning only; execution typed unsupported | Schema 2 has no callable artifact/record payload/native callable region |

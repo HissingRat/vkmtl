@@ -65,13 +65,13 @@ pub fn init(
     gc: *const GraphicsContext,
     descriptor: core.AccelerationStructureDescriptor,
 ) core.AdvancedFeatureError!VulkanAccelerationStructure {
-    // Geometry/build flags arrive later with command resources. Reserve the
-    // update/compaction-capable upper bound so additive build flags cannot
-    // outgrow the opaque AS storage allocated here.
-    const sizes = queryBuildSizes(gc, descriptor, .{
-        .allow_update = true,
-        .allow_compaction = true,
-    }) catch return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
+    // Update/compaction flags arrive later with command resources. Vulkan does
+    // not require build-size queries to be monotonic across those combinations,
+    // so reserve the component maximum instead of treating the combination
+    // with both bits set as an upper bound.
+    const sizes = queryStorageBuildSizes(gc, descriptor) catch {
+        return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
+    };
     var storage = createBuffer(
         gc,
         sizes.result_size,
@@ -385,6 +385,24 @@ pub fn queryBuildSizes(
     return maxBuildSizes(triangle_sizes, aabb_sizes);
 }
 
+const storage_update_compaction_variants = [_]core.AccelerationStructureBuildFlags{
+    .{},
+    .{ .allow_update = true },
+    .{ .allow_compaction = true },
+    .{ .allow_update = true, .allow_compaction = true },
+};
+
+fn queryStorageBuildSizes(
+    gc: *const GraphicsContext,
+    descriptor: core.AccelerationStructureDescriptor,
+) !core.AccelerationStructureBuildSizes {
+    var candidates: [storage_update_compaction_variants.len]core.AccelerationStructureBuildSizes = undefined;
+    for (storage_update_compaction_variants, 0..) |flags, index| {
+        candidates[index] = try queryBuildSizes(gc, descriptor, flags);
+    }
+    return maximumBuildSizes(candidates[0..]);
+}
+
 fn queryBuildSizesForGeometry(
     gc: *const GraphicsContext,
     descriptor: core.AccelerationStructureDescriptor,
@@ -431,6 +449,59 @@ fn maxBuildSizes(
         .scratch_size = @max(lhs.scratch_size, rhs.scratch_size),
         .update_scratch_size = @max(lhs.update_scratch_size, rhs.update_scratch_size),
     };
+}
+
+fn maximumBuildSizes(
+    candidates: []const core.AccelerationStructureBuildSizes,
+) core.AccelerationStructureBuildSizes {
+    std.debug.assert(candidates.len != 0);
+    var sizes = candidates[0];
+    for (candidates[1..]) |candidate| {
+        sizes = maxBuildSizes(sizes, candidate);
+    }
+    return sizes;
+}
+
+test "Vulkan AS storage sizing preserves non-monotonic query maxima" {
+    const candidates = [_]core.AccelerationStructureBuildSizes{
+        .{
+            .result_size = 4096,
+            .scratch_size = 1024,
+            .update_scratch_size = 0,
+        },
+        .{
+            .result_size = 3072,
+            .scratch_size = 2048,
+            .update_scratch_size = 1536,
+        },
+        .{
+            .result_size = 3584,
+            .scratch_size = 1536,
+            .update_scratch_size = 2048,
+        },
+        .{
+            .result_size = 2048,
+            .scratch_size = 512,
+            .update_scratch_size = 1024,
+        },
+    };
+
+    const sizes = maximumBuildSizes(candidates[0..]);
+    try std.testing.expectEqual(@as(u64, 4096), sizes.result_size);
+    try std.testing.expectEqual(@as(u64, 2048), sizes.scratch_size);
+    try std.testing.expectEqual(@as(u64, 2048), sizes.update_scratch_size);
+}
+
+test "Vulkan AS storage sizing covers all update-compaction combinations" {
+    try std.testing.expectEqual(@as(usize, 4), storage_update_compaction_variants.len);
+    try std.testing.expect(!storage_update_compaction_variants[0].allow_update);
+    try std.testing.expect(!storage_update_compaction_variants[0].allow_compaction);
+    try std.testing.expect(storage_update_compaction_variants[1].allow_update);
+    try std.testing.expect(!storage_update_compaction_variants[1].allow_compaction);
+    try std.testing.expect(!storage_update_compaction_variants[2].allow_update);
+    try std.testing.expect(storage_update_compaction_variants[2].allow_compaction);
+    try std.testing.expect(storage_update_compaction_variants[3].allow_update);
+    try std.testing.expect(storage_update_compaction_variants[3].allow_compaction);
 }
 
 fn zeroedInstanceBytes() [@sizeOf(vk.AccelerationStructureInstanceKHR)]u8 {
