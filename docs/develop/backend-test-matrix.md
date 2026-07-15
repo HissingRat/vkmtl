@@ -10,7 +10,8 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
   and external package consumer smoke on `ubuntu-24.04`; build-only evidence.
 - `hosted_windows_build`: formatting, tests, forced-Vulkan build, validation
   plan, and external package consumer smoke on `windows-2025`; build-only
-  evidence.
+  evidence. The forced build also gates the backend-private `vulkan-1.dll`
+  loader and complete non-Darwin Metal bridge stubs.
 - `self_hosted_metal_smoke`: `scripts/ci/run_gpu_smoke.sh metal ...` on a
   physical Apple Silicon host labeled `vkmtl-metal`.
 - `self_hosted_vulkan_smoke`: `scripts/ci/run_gpu_smoke.sh vulkan ...` on a

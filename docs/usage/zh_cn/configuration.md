@@ -58,7 +58,9 @@ adapter 名称不匹配时，context 初始化会返回 `AdapterNotFound`。
 可打开且存在可用 physical device 时可用。Headless Vulkan 不要求 `VK_KHR_swapchain` 或
 presentation queue。Windows 打开 `vulkan-1.dll`；macOS 依次尝试
 `libvulkan.1.dylib`、`libvulkan.dylib`；其他桌面 host 依次尝试
-`libvulkan.so.1`、`libvulkan.so`。
+`libvulkan.so.1`、`libvulkan.so`。Windows 路径使用 backend-private Win32
+loader，因为 Zig 0.16 的 `std.DynLib` 不支持 Windows；DLL 或必需 symbol 缺失仍返回
+typed `VulkanUnavailable`。
 
 ## 示例 Override
 

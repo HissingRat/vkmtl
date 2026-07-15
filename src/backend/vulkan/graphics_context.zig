@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
+const VulkanLoader = @import("loader.zig");
 
 const Allocator = std.mem.Allocator;
 const GraphicsContext = @This();
@@ -49,7 +50,7 @@ const Device = vk.DeviceProxy;
 pub const CommandBuffer = vk.CommandBufferProxy;
 
 allocator: Allocator,
-loader: ?std.DynLib,
+loader: ?VulkanLoader,
 vkb: BaseWrapper,
 instance: Instance,
 debug_messenger: vk.DebugUtilsMessengerEXT,
@@ -1533,12 +1534,12 @@ fn loadBaseWrapper(surface_provider: core.VulkanSurfaceProvider) !BaseWrapper {
 }
 
 const HeadlessBaseWrapper = struct {
-    loader: std.DynLib,
+    loader: VulkanLoader,
     wrapper: BaseWrapper,
 };
 
 fn loadHeadlessBaseWrapper() !HeadlessBaseWrapper {
-    var loader = try openVulkanLoader();
+    var loader = try VulkanLoader.open();
     errdefer loader.close();
 
     const get_instance_proc_addr = loader.lookup(
@@ -1566,22 +1567,6 @@ fn loadHeadlessBaseWrapper() !HeadlessBaseWrapper {
     return .{
         .loader = loader,
         .wrapper = .{ .dispatch = dispatch },
-    };
-}
-
-fn openVulkanLoader() !std.DynLib {
-    const primary = switch (builtin.os.tag) {
-        .windows => "vulkan-1.dll",
-        .macos => "libvulkan.1.dylib",
-        else => "libvulkan.so.1",
-    };
-    return std.DynLib.open(primary) catch {
-        const fallback = switch (builtin.os.tag) {
-            .windows => return error.VulkanUnavailable,
-            .macos => "libvulkan.dylib",
-            else => "libvulkan.so",
-        };
-        return std.DynLib.open(fallback) catch error.VulkanUnavailable;
     };
 }
 

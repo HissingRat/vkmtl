@@ -736,6 +736,93 @@ vkmtl_metal_status vkmtl_metal_render_pipeline_state_create(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_mesh_render_pipeline_state_create(
+    vkmtl_metal_clear_screen *owner,
+    vkmtl_metal_shader_module *mesh_shader,
+    const char *mesh_entry,
+    size_t mesh_entry_len,
+    const vkmtl_metal_function_constant *mesh_constants,
+    size_t mesh_constant_count,
+    vkmtl_metal_shader_module *object_shader,
+    const char *object_entry,
+    size_t object_entry_len,
+    const vkmtl_metal_function_constant *object_constants,
+    size_t object_constant_count,
+    vkmtl_metal_shader_module *fragment_shader,
+    const char *fragment_entry,
+    size_t fragment_entry_len,
+    const vkmtl_metal_function_constant *fragment_constants,
+    size_t fragment_constant_count,
+    const vkmtl_metal_render_pipeline_color_attachment *color_attachments,
+    size_t color_attachment_count,
+    vkmtl_metal_texture_format depth_format,
+    vkmtl_metal_compare_function depth_compare_function,
+    unsigned int depth_write_enabled,
+    unsigned int stencil_enabled,
+    vkmtl_metal_stencil_operation front_stencil_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_fail_operation,
+    vkmtl_metal_stencil_operation front_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function front_stencil_compare_function,
+    vkmtl_metal_stencil_operation back_stencil_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_fail_operation,
+    vkmtl_metal_stencil_operation back_depth_stencil_pass_operation,
+    vkmtl_metal_compare_function back_stencil_compare_function,
+    unsigned int stencil_read_mask,
+    unsigned int stencil_write_mask,
+    unsigned int sample_count,
+    unsigned int mesh_threads_per_threadgroup,
+    unsigned int object_threads_per_threadgroup,
+    const char *cache_path,
+    size_t cache_path_len,
+    uint64_t cache_identity_hash,
+    unsigned int cache_read_only,
+    vkmtl_metal_render_pipeline_state **out_pipeline
+) {
+    (void)owner;
+    (void)mesh_shader;
+    (void)mesh_entry;
+    (void)mesh_entry_len;
+    (void)mesh_constants;
+    (void)mesh_constant_count;
+    (void)object_shader;
+    (void)object_entry;
+    (void)object_entry_len;
+    (void)object_constants;
+    (void)object_constant_count;
+    (void)fragment_shader;
+    (void)fragment_entry;
+    (void)fragment_entry_len;
+    (void)fragment_constants;
+    (void)fragment_constant_count;
+    (void)color_attachments;
+    (void)color_attachment_count;
+    (void)depth_format;
+    (void)depth_compare_function;
+    (void)depth_write_enabled;
+    (void)stencil_enabled;
+    (void)front_stencil_fail_operation;
+    (void)front_depth_fail_operation;
+    (void)front_depth_stencil_pass_operation;
+    (void)front_stencil_compare_function;
+    (void)back_stencil_fail_operation;
+    (void)back_depth_fail_operation;
+    (void)back_depth_stencil_pass_operation;
+    (void)back_stencil_compare_function;
+    (void)stencil_read_mask;
+    (void)stencil_write_mask;
+    (void)sample_count;
+    (void)mesh_threads_per_threadgroup;
+    (void)object_threads_per_threadgroup;
+    (void)cache_path;
+    (void)cache_path_len;
+    (void)cache_identity_hash;
+    (void)cache_read_only;
+    if (out_pipeline != NULL) {
+        *out_pipeline = NULL;
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 void vkmtl_metal_render_pipeline_state_destroy(vkmtl_metal_render_pipeline_state *pipeline) {
     (void)pipeline;
 }
@@ -1173,6 +1260,23 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_primitives(
     (void)vertex_count;
     (void)instance_count;
     (void)base_instance;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_draw_mesh_threadgroups(
+    vkmtl_metal_render_command_encoder *encoder,
+    unsigned int threadgroup_count_x,
+    unsigned int threadgroup_count_y,
+    unsigned int threadgroup_count_z,
+    unsigned int object_threads_per_threadgroup,
+    unsigned int mesh_threads_per_threadgroup
+) {
+    (void)encoder;
+    (void)threadgroup_count_x;
+    (void)threadgroup_count_y;
+    (void)threadgroup_count_z;
+    (void)object_threads_per_threadgroup;
+    (void)mesh_threads_per_threadgroup;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 

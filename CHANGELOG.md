@@ -107,6 +107,15 @@ reserved for the next minor release and are documented with migration guidance.
 - Added Metal vertex, fragment, and compute function-constant specialization by
   stable numeric ID.
 
+### Fixed
+
+- Fixed Windows Vulkan builds under Zig 0.16 by using a backend-private Win32
+  loader for `vulkan-1.dll` instead of the unsupported Windows branch of
+  `std.DynLib`. Missing loaders and required symbols still report
+  `VulkanUnavailable`.
+- Completed the non-Darwin Metal bridge stubs for mesh-pipeline creation and
+  mesh-threadgroup draws so the full forced-Vulkan Windows install graph links.
+
 ### Changed
 
 - Presentation format selection is now bounded and deterministic on both

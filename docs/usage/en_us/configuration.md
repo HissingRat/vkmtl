@@ -69,7 +69,10 @@ Metal directly; Vulkan is available when the Vulkan loader opens and exposes a
 usable physical device. The headless Vulkan path does not require
 `VK_KHR_swapchain` or a presentation queue. On Windows it opens
 `vulkan-1.dll`; on macOS it tries `libvulkan.1.dylib` then `libvulkan.dylib`;
-on other desktop hosts it tries `libvulkan.so.1` then `libvulkan.so`.
+on other desktop hosts it tries `libvulkan.so.1` then `libvulkan.so`. The
+Windows path uses a backend-private Win32 loader because Zig 0.16
+`std.DynLib` does not support Windows; a missing DLL or required symbol still
+reports the typed `VulkanUnavailable` outcome.
 
 ## Example Overrides
 
