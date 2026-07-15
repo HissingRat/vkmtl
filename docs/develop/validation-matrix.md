@@ -66,7 +66,13 @@ Current cases:
   capability-gated.
 - `ray_tracing_native_parity`: basic ray tracing, executable AS maintenance,
   Metal AABB/multi-source TLAS input, native-only availability, and planning
-  records remain distinct.
+  records remain distinct. Period 55 additionally validates caller-owned RT
+  output usage/whole-texture shape/extent, per-dispatch Vulkan descriptor
+  ownership, the one-native-segment command rule, strict finite-run failure
+  states, and fixed ACES/sRGB CPU reference values; the executable command owns
+  the storage-write-to-sampled postcondition. Metal has a three-frame API
+  Validation run; the new Vulkan color-managed path retains an explicit
+  physical-rerun gap.
 - `ray_tracing_completeness`: update/refit/compact resources, many-instance
   TLAS validation, native ray-query discovery, planning-only complex/callable
   SBT records, and RT stress plans stay capability-gated and deterministic.

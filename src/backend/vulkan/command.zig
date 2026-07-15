@@ -73,6 +73,7 @@ pub const CommandBuffer = struct {
     temporary_render_pass: vk.RenderPass = .null_handle,
     temporary_framebuffer: vk.Framebuffer = .null_handle,
     temporary_blit_buffers: std.ArrayList(VulkanBuffer) = .empty,
+    temporary_ray_dispatch_resources: std.ArrayList(VulkanRayTracingPipelineState.DispatchResources) = .empty,
     timeline_waits: std.ArrayList(VulkanSync.TimelinePoint) = .empty,
     timeline_signals: std.ArrayList(VulkanSync.TimelinePoint) = .empty,
 
@@ -110,7 +111,9 @@ pub const CommandBuffer = struct {
         if (self.cmdbuf == .null_handle) return;
         self.destroyTemporaryRenderPassResources();
         self.destroyTemporaryBlitResources();
+        self.destroyTemporaryRayDispatchResources();
         self.temporary_blit_buffers.deinit(self.gc.allocator);
+        self.temporary_ray_dispatch_resources.deinit(self.gc.allocator);
         self.timeline_waits.deinit(self.gc.allocator);
         self.timeline_signals.deinit(self.gc.allocator);
         self.gc.dev.freeCommandBuffers(self.pool, &.{self.cmdbuf});
@@ -397,7 +400,7 @@ pub const CommandBuffer = struct {
         self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
     }
 
-    pub fn traceRaysToDrawable(
+    pub fn traceRaysToTexture(
         self: *CommandBuffer,
         pipeline: *VulkanRayTracingPipelineState,
         top_level: *const VulkanAccelerationStructure,
@@ -405,8 +408,11 @@ pub const CommandBuffer = struct {
         dispatch: core.RayDispatchDescriptor,
     ) core.AdvancedFeatureError!void {
         self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
-        const swapchain = self.swapchain orelse return core.AdvancedFeatureError.InvalidRayTracingPipeline;
-        try pipeline.updateDescriptorSet(top_level, output, dispatch);
+        self.temporary_ray_dispatch_resources.ensureUnusedCapacity(self.gc.allocator, 1) catch {
+            return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        };
+        var dispatch_resources = try pipeline.makeDispatchResources(top_level, output, dispatch);
+        errdefer dispatch_resources.deinit();
 
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
@@ -419,7 +425,52 @@ pub const CommandBuffer = struct {
             .ray_tracing_khr,
             pipeline.layout,
             0,
-            &.{pipeline.descriptor_set},
+            &.{dispatch_resources.descriptor_set},
+            null,
+        );
+        self.gc.dev.cmdTraceRaysKHR(
+            self.cmdbuf,
+            &pipeline.raygen_region,
+            &pipeline.miss_region,
+            &pipeline.hit_region,
+            &pipeline.callable_region,
+            dispatch.width,
+            dispatch.height,
+            dispatch.depth,
+        );
+        output.transitionLayout(self.cmdbuf, .shader_read_only_optimal);
+
+        self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.temporary_ray_dispatch_resources.appendAssumeCapacity(dispatch_resources);
+    }
+
+    pub fn traceRaysToDrawable(
+        self: *CommandBuffer,
+        pipeline: *VulkanRayTracingPipelineState,
+        top_level: *const VulkanAccelerationStructure,
+        output: *const VulkanTextureView,
+        dispatch: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!void {
+        self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        const swapchain = self.swapchain orelse return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.temporary_ray_dispatch_resources.ensureUnusedCapacity(self.gc.allocator, 1) catch {
+            return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        };
+        var dispatch_resources = try pipeline.makeDispatchResources(top_level, output, dispatch);
+        errdefer dispatch_resources.deinit();
+
+        self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+        }) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+
+        output.transitionLayout(self.cmdbuf, .general);
+        self.gc.dev.cmdBindPipeline(self.cmdbuf, .ray_tracing_khr, pipeline.handle);
+        self.gc.dev.cmdBindDescriptorSets(
+            self.cmdbuf,
+            .ray_tracing_khr,
+            pipeline.layout,
+            0,
+            &.{dispatch_resources.descriptor_set},
             null,
         );
         self.gc.dev.cmdTraceRaysKHR(
@@ -488,6 +539,7 @@ pub const CommandBuffer = struct {
         );
 
         self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        self.temporary_ray_dispatch_resources.appendAssumeCapacity(dispatch_resources);
         self.present_requested = true;
         self.uses_current_drawable = true;
     }
@@ -517,6 +569,7 @@ pub const CommandBuffer = struct {
     ) !void {
         defer self.destroyTemporaryRenderPassResources();
         defer self.destroyTemporaryBlitResources();
+        defer self.destroyTemporaryRayDispatchResources();
         if (self.present_requested) {
             const swapchain = self.swapchain orelse return error.UnsupportedBackendForPresentation;
             _ = try swapchain.present(self.cmdbuf, self.timeline_waits.items, self.timeline_signals.items);
@@ -752,6 +805,13 @@ pub const CommandBuffer = struct {
             buffer.deinit();
         }
         self.temporary_blit_buffers.clearRetainingCapacity();
+    }
+
+    fn destroyTemporaryRayDispatchResources(self: *CommandBuffer) void {
+        for (self.temporary_ray_dispatch_resources.items) |*resources| {
+            resources.deinit();
+        }
+        self.temporary_ray_dispatch_resources.clearRetainingCapacity();
     }
 };
 

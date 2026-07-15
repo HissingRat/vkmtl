@@ -289,18 +289,10 @@ fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, f
 }
 
 fn findSurfaceFormat(gc: *const GraphicsContext, allocator: Allocator) !vk.SurfaceFormatKHR {
-    const preferred = vk.SurfaceFormatKHR{
-        .format = .b8g8r8a8_srgb,
-        .color_space = .srgb_nonlinear_khr,
-    };
-
     const surface_formats = try gc.instance.getPhysicalDeviceSurfaceFormatsAllocKHR(gc.pdev, gc.surface, allocator);
     defer allocator.free(surface_formats);
 
-    for (surface_formats) |sfmt| {
-        if (std.meta.eql(sfmt, preferred)) return preferred;
-    }
-    return surface_formats[0];
+    return GraphicsContext.selectPresentationSurfaceFormat(surface_formats) orelse error.SwapchainCreationFailed;
 }
 
 fn findPresentMode(gc: *const GraphicsContext, allocator: Allocator) !vk.PresentModeKHR {

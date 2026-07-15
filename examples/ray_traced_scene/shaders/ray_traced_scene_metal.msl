@@ -310,5 +310,9 @@ kernel void raygen(
     if (native_hit.type != intersection_type::triangle && all(color <= float3(0.0f))) {
         color = float3(0.015f, 0.018f, 0.026f);
     }
-    output.write(float4(clamp(color, float3(0.0f), float3(1.0f)), 1.0f), tid);
+    if (!all(isfinite(color))) {
+        color = float3(0.0f);
+    }
+    color = clamp(color, float3(0.0f), float3(65504.0f));
+    output.write(float4(color, 1.0f), tid);
 }

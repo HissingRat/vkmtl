@@ -292,6 +292,26 @@ pub const CommandBuffer = struct {
             descriptor.inline_data_binding,
         ));
     }
+
+    pub fn traceRaysToTexture(
+        self: *CommandBuffer,
+        pipeline: *const MetalRayTracingPipelineState,
+        acceleration_structure: *const MetalAccelerationStructure,
+        output: *const MetalTextureView,
+        descriptor: core.RayDispatchDescriptor,
+    ) core.AdvancedFeatureError!void {
+        try checkRayTracingCommand(metal.vkmtl_metal_command_buffer_dispatch_rays_to_texture(
+            self.handle,
+            pipeline.handle,
+            acceleration_structure.handle,
+            output.handle,
+            descriptor.width,
+            descriptor.height,
+            if (descriptor.inline_data.len == 0) null else descriptor.inline_data.ptr,
+            descriptor.inline_data.len,
+            descriptor.inline_data_binding,
+        ));
+    }
 };
 
 pub const BlitCommandEncoder = struct {

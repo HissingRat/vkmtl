@@ -225,7 +225,9 @@ void raygen() {
     const float3 ray_origin = scene_data.camera.xyz;
     const float3 ray_direction = normalize(float3(p.x, p.y, -1.0));
     const float time_seconds = scene_data.params.x;
-    const float3 color = clamp(traceColor(ray_origin, ray_direction, time_seconds), float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0));
+    float3 color = traceColor(ray_origin, ray_direction, time_seconds);
+    if (!all(isfinite(color))) color = float3(0.0, 0.0, 0.0);
+    color = clamp(color, float3(0.0, 0.0, 0.0), float3(65504.0, 65504.0, 65504.0));
     output_texture[pixel] = float4(color, 1.0);
 }
 

@@ -155,6 +155,7 @@ pub fn memoryBudget(self: *const MetalClearScreen) ?MemoryBudget {
 
 pub fn formatCapabilities(self: *const MetalClearScreen, format: core.TextureFormat) core.FormatCapabilities {
     var capabilities = core.defaultFormatCapabilities(format);
+    if (format == .rgba16_float) capabilities.storage = true;
     capabilities.blit_source = false;
     capabilities.blit_destination = false;
     capabilities.presentation = !self.extent.isZero() and format == .bgra8_unorm_srgb;
@@ -628,6 +629,7 @@ test "Metal format capabilities match the default sRGB drawable and scaled blit 
     try std.testing.expect(half_float.sampled);
     try std.testing.expect(half_float.filterable);
     try std.testing.expect(half_float.color_attachment);
+    try std.testing.expect(half_float.storage);
     const integer = screen.formatCapabilities(.r32_uint);
     try std.testing.expect(integer.storage);
     try std.testing.expect(!integer.filterable);

@@ -6143,6 +6143,7 @@ pub const CommandBufferDebugState = struct {
     presented: bool = false,
     reusable: bool = false,
     signpost_count: u32 = 0,
+    encoding_segment_completed: bool = false,
 
     pub fn init(
         descriptor: CommandBufferDescriptor,
@@ -6164,26 +6165,38 @@ pub const CommandBufferDebugState = struct {
         self.state = .ready;
         self.presented = false;
         self.signpost_count = 0;
+        self.encoding_segment_completed = false;
+    }
+
+    pub fn requireEncodingSegment(self: CommandBufferDebugState) CommandEncodingError!void {
+        if (self.state != .ready or self.encoding_segment_completed) {
+            return CommandEncodingError.InvalidCommandBufferState;
+        }
+    }
+
+    pub fn recordDirectCommand(self: *CommandBufferDebugState) CommandEncodingError!void {
+        try self.requireEncodingSegment();
+        self.encoding_segment_completed = true;
     }
 
     pub fn makeRenderCommandEncoder(
         self: *CommandBufferDebugState,
         descriptor: RenderPassDescriptor,
     ) CommandEncodingError!RenderCommandEncoderDebugState {
-        if (self.state != .ready) return CommandEncodingError.InvalidCommandBufferState;
+        try self.requireEncodingSegment();
         try descriptor.validate();
         self.state = .render_encoding;
         return .{};
     }
 
     pub fn makeBlitCommandEncoder(self: *CommandBufferDebugState) CommandEncodingError!BlitCommandEncoderDebugState {
-        if (self.state != .ready) return CommandEncodingError.InvalidCommandBufferState;
+        try self.requireEncodingSegment();
         self.state = .blit_encoding;
         return .{};
     }
 
     pub fn makeComputeCommandEncoder(self: *CommandBufferDebugState) CommandEncodingError!ComputeCommandEncoderDebugState {
-        if (self.state != .ready) return CommandEncodingError.InvalidCommandBufferState;
+        try self.requireEncodingSegment();
         self.state = .compute_encoding;
         return .{};
     }
@@ -6192,7 +6205,7 @@ pub const CommandBufferDebugState = struct {
         self: *CommandBufferDebugState,
         descriptor: DebugSignpostDescriptor,
     ) CommandEncodingError!void {
-        if (self.state != .ready) return CommandEncodingError.InvalidCommandBufferState;
+        try self.requireEncodingSegment();
         try descriptor.validate();
         self.signpost_count += 1;
     }
@@ -6200,16 +6213,19 @@ pub const CommandBufferDebugState = struct {
     pub fn finishRenderEncoding(self: *CommandBufferDebugState) CommandEncodingError!void {
         if (self.state != .render_encoding) return CommandEncodingError.InvalidCommandBufferState;
         self.state = .ready;
+        self.encoding_segment_completed = true;
     }
 
     pub fn finishBlitEncoding(self: *CommandBufferDebugState) CommandEncodingError!void {
         if (self.state != .blit_encoding) return CommandEncodingError.InvalidCommandBufferState;
         self.state = .ready;
+        self.encoding_segment_completed = true;
     }
 
     pub fn finishComputeEncoding(self: *CommandBufferDebugState) CommandEncodingError!void {
         if (self.state != .compute_encoding) return CommandEncodingError.InvalidCommandBufferState;
         self.state = .ready;
+        self.encoding_segment_completed = true;
     }
 
     pub fn presentDrawable(self: *CommandBufferDebugState) CommandEncodingError!void {
@@ -13573,6 +13589,7 @@ test "command debug state validates render pass ordering" {
     try std.testing.expectError(CommandEncodingError.InvalidRenderCommandEncoderState, encoder.drawPrimitives(.{
         .vertex_count = 3,
     }));
+    try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.makeBlitCommandEncoder());
 
     try command_buffer.presentDrawable();
     try command_buffer.commit();
@@ -13608,6 +13625,15 @@ test "command buffer descriptor validates pooling and reset gates" {
     try debug.commit();
     try debug.reset();
     try std.testing.expectEqual(CommandBufferState.ready, debug.status());
+}
+
+test "command debug state permits one direct encoding segment before commit" {
+    var command_buffer = CommandBufferDebugState{};
+    try command_buffer.recordDirectCommand();
+    try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.recordDirectCommand());
+    try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.makeBlitCommandEncoder());
+    try std.testing.expectError(CommandEncodingError.InvalidCommandBufferState, command_buffer.insertDebugSignpost(.{ .label = "after direct command" }));
+    try command_buffer.commit();
 }
 
 test "command debug state validates blit pass ordering" {

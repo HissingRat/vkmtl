@@ -14,9 +14,6 @@ allocator: std.mem.Allocator,
 handle: vk.Pipeline,
 layout: vk.PipelineLayout,
 descriptor_set_layout: vk.DescriptorSetLayout,
-descriptor_pool: vk.DescriptorPool,
-descriptor_set: vk.DescriptorSet,
-inline_data_buffer: VulkanBuffer,
 sbt_buffer: VulkanBuffer,
 raygen_region: vk.StridedDeviceAddressRegionKHR,
 miss_region: vk.StridedDeviceAddressRegionKHR,
@@ -157,25 +154,6 @@ pub fn init(
     }, null);
     errdefer gc.dev.destroyPipelineLayout(layout, null);
 
-    const descriptor_pool = try createDescriptorPool(gc);
-    errdefer gc.dev.destroyDescriptorPool(descriptor_pool, null);
-    var descriptor_set: vk.DescriptorSet = undefined;
-    try gc.dev.allocateDescriptorSets(&.{
-        .descriptor_pool = descriptor_pool,
-        .descriptor_set_count = 1,
-        .p_set_layouts = &set_layouts,
-    }, @ptrCast(&descriptor_set));
-
-    var inline_data_bytes = [_]u8{0} ** 4096;
-    var inline_data_buffer = try VulkanBuffer.init(gc, .{
-        .label = "vkmtl ray tracing inline data",
-        .length = inline_data_bytes.len,
-        .bytes = inline_data_bytes[0..],
-        .usage = .{ .uniform = true },
-        .storage_mode = .shared,
-    });
-    errdefer inline_data_buffer.deinit();
-
     const pipeline_info = vk.RayTracingPipelineCreateInfoKHR{
         .stage_count = @intCast(stages.len),
         .p_stages = stages.ptr,
@@ -244,9 +222,6 @@ pub fn init(
         .handle = pipeline,
         .layout = layout,
         .descriptor_set_layout = descriptor_set_layout,
-        .descriptor_pool = descriptor_pool,
-        .descriptor_set = descriptor_set,
-        .inline_data_buffer = inline_data_buffer,
         .sbt_buffer = sbt_buffer,
         .raygen_region = .{
             .device_address = base_address,
@@ -276,8 +251,6 @@ pub fn init(
 
 pub fn deinit(self: *VulkanRayTracingPipelineState) void {
     self.sbt_buffer.deinit();
-    self.inline_data_buffer.deinit();
-    self.gc.dev.destroyDescriptorPool(self.descriptor_pool, null);
     self.gc.dev.destroyPipeline(self.handle, null);
     self.gc.dev.destroyPipelineLayout(self.layout, null);
     self.gc.dev.destroyDescriptorSetLayout(self.descriptor_set_layout, null);
@@ -285,24 +258,66 @@ pub fn deinit(self: *VulkanRayTracingPipelineState) void {
 
 pub fn setLabel(self: *VulkanRayTracingPipelineState, label_value: ?[]const u8) void {
     self.gc.setDebugName(.pipeline, GraphicsContext.debugObjectHandle(self.handle), label_value);
-    self.inline_data_buffer.setLabel(label_value);
     self.sbt_buffer.setLabel(label_value);
 }
 
-pub fn updateDescriptorSet(
+pub const DispatchResources = struct {
+    gc: *const GraphicsContext,
+    descriptor_pool: vk.DescriptorPool,
+    descriptor_set: vk.DescriptorSet,
+    inline_data_buffer: VulkanBuffer,
+
+    pub fn deinit(self: *DispatchResources) void {
+        self.inline_data_buffer.deinit();
+        self.gc.dev.destroyDescriptorPool(self.descriptor_pool, null);
+        self.descriptor_pool = .null_handle;
+        self.descriptor_set = .null_handle;
+    }
+};
+
+pub fn makeDispatchResources(
     self: *VulkanRayTracingPipelineState,
     top_level: *const VulkanAccelerationStructure,
     output: *const VulkanTextureView,
     dispatch: core.RayDispatchDescriptor,
-) core.AdvancedFeatureError!void {
+) core.AdvancedFeatureError!DispatchResources {
     if (top_level.kind != .top_level or !top_level.built_value or top_level.handle == .null_handle) {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
     }
-    if (dispatch.inline_data.len > self.inline_data_buffer.length()) {
+    const inline_data_capacity = 4096;
+    if (dispatch.inline_data.len > inline_data_capacity) {
         return core.AdvancedFeatureError.InvalidRayTracingPipeline;
     }
+
+    const descriptor_pool = createDescriptorPool(self.gc) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    };
+    errdefer self.gc.dev.destroyDescriptorPool(descriptor_pool, null);
+
+    const set_layouts = [_]vk.DescriptorSetLayout{self.descriptor_set_layout};
+    var descriptor_set: vk.DescriptorSet = undefined;
+    self.gc.dev.allocateDescriptorSets(&.{
+        .descriptor_pool = descriptor_pool,
+        .descriptor_set_count = 1,
+        .p_set_layouts = &set_layouts,
+    }, @ptrCast(&descriptor_set)) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    };
+
+    var inline_data_bytes = [_]u8{0} ** inline_data_capacity;
+    var inline_data_buffer = VulkanBuffer.init(self.gc, .{
+        .label = "vkmtl ray tracing dispatch inline data",
+        .length = inline_data_bytes.len,
+        .bytes = inline_data_bytes[0..],
+        .usage = .{ .uniform = true },
+        .storage_mode = .shared,
+    }) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    };
+    errdefer inline_data_buffer.deinit();
+
     if (dispatch.inline_data.len != 0) {
-        self.inline_data_buffer.replaceBytes(0, dispatch.inline_data) catch {
+        inline_data_buffer.replaceBytes(0, dispatch.inline_data) catch {
             return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         };
     }
@@ -318,14 +333,14 @@ pub fn updateDescriptorSet(
         .image_layout = .general,
     };
     const inline_data_info = vk.DescriptorBufferInfo{
-        .buffer = self.inline_data_buffer.handle,
+        .buffer = inline_data_buffer.handle,
         .offset = 0,
-        .range = @intCast(self.inline_data_buffer.length()),
+        .range = @intCast(inline_data_buffer.length()),
     };
     const writes = [_]vk.WriteDescriptorSet{
         .{
             .p_next = &acceleration_structure_info,
-            .dst_set = self.descriptor_set,
+            .dst_set = descriptor_set,
             .dst_binding = 0,
             .dst_array_element = 0,
             .descriptor_count = 1,
@@ -335,7 +350,7 @@ pub fn updateDescriptorSet(
             .p_texel_buffer_view = undefined,
         },
         .{
-            .dst_set = self.descriptor_set,
+            .dst_set = descriptor_set,
             .dst_binding = 1,
             .dst_array_element = 0,
             .descriptor_count = 1,
@@ -345,7 +360,7 @@ pub fn updateDescriptorSet(
             .p_texel_buffer_view = undefined,
         },
         .{
-            .dst_set = self.descriptor_set,
+            .dst_set = descriptor_set,
             .dst_binding = 2,
             .dst_array_element = 0,
             .descriptor_count = 1,
@@ -356,6 +371,12 @@ pub fn updateDescriptorSet(
         },
     };
     self.gc.dev.updateDescriptorSets(&writes, null);
+    return .{
+        .gc = self.gc,
+        .descriptor_pool = descriptor_pool,
+        .descriptor_set = descriptor_set,
+        .inline_data_buffer = inline_data_buffer,
+    };
 }
 
 fn createDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLayout {
@@ -412,4 +433,11 @@ fn findHitGroupKind(descriptor: core.RayTracingPipelineDescriptor) core.RayTraci
         if (group.kind == .hit) return group.hit_group_kind;
     }
     return .triangles;
+}
+
+test "Vulkan ray tracing dispatch state is not shared by pipeline instances" {
+    try std.testing.expect(!@hasField(VulkanRayTracingPipelineState, "descriptor_set"));
+    try std.testing.expect(!@hasField(VulkanRayTracingPipelineState, "inline_data_buffer"));
+    try std.testing.expect(@hasField(DispatchResources, "descriptor_set"));
+    try std.testing.expect(@hasField(DispatchResources, "inline_data_buffer"));
 }

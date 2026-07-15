@@ -38,6 +38,7 @@ pub const ComplexShaderBindingTableDescriptor = core.ComplexShaderBindingTableDe
 pub const ComplexShaderBindingTablePlan = core.ComplexShaderBindingTablePlan;
 pub const ShaderBindingTable = runtime.ShaderBindingTable;
 pub const RayTracingDrawableResources = runtime.RayTracingDrawableResources;
+pub const RayTracingTextureResources = runtime.RayTracingTextureResources;
 pub const RayQueryDescriptor = core.RayQueryDescriptor;
 pub const RayQueryPlan = core.RayQueryPlan;
 pub const RayTracingStressDescriptor = core.RayTracingStressDescriptor;

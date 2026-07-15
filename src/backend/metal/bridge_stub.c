@@ -2042,3 +2042,26 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     (void)inline_data_index;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
+
+vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_texture_view *output_texture_view,
+    unsigned int width,
+    unsigned int height,
+    const void *inline_data,
+    size_t inline_data_len,
+    unsigned int inline_data_index
+) {
+    (void)command_buffer;
+    (void)pipeline;
+    (void)acceleration_structure;
+    (void)output_texture_view;
+    (void)width;
+    (void)height;
+    (void)inline_data;
+    (void)inline_data_len;
+    (void)inline_data_index;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}

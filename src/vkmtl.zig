@@ -89,6 +89,9 @@ test "facades preserve canonical declaration identity" {
         if (@hasDecl(resource, "SparseBufferLowering") or @hasDecl(resource, "planSparseBufferLowering")) @compileError("native sparse buffer lowering leaked into resource");
         if (@hasDecl(resource, "SparseTextureLowering") or @hasDecl(resource, "planSparseTextureLowering")) @compileError("native sparse texture lowering leaked into resource");
         if (@hasDecl(ray_tracing, "RayQueryLoweringMode")) @compileError("ray query lowering leaked into the portable facade");
+        if (ray_tracing.RayTracingTextureResources != ray_tracing.RayTracingDrawableResources) {
+            @compileError("ray tracing texture resource compatibility identity drift");
+        }
         if (!@hasDecl(binding, "validateDescriptorIndexingLayout")) @compileError("binding operations are missing");
         if (!@hasDecl(ray_tracing, "planAccelerationStructureBuild")) @compileError("ray tracing operations are missing");
     }

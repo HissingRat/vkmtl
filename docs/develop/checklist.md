@@ -2944,6 +2944,52 @@ contract before chunk implementation begins.
 - [x] Run API/semantic guards, tests, default/Vulkan builds, package smoke,
   physical Metal evidence, format/diff gates, and commit.
 
+## Period 55 Phase 1 Checklist
+
+- [x] Define the ray-tracing color contract as linear scene output followed by
+  one display transform and one hardware sRGB encode.
+- [x] Allocate texture-only ray dispatch to
+  `ray_tracing.RayTracingTextureResources` and
+  `CommandBuffer.dispatchRaysToTexture(...)` without growing root, `Device`,
+  `WindowContext`, or `HeadlessContext`.
+- [x] Preserve `RayTracingDrawableResources` and
+  `dispatchRaysToDrawable(...)` as source-compatible legacy presentation APIs.
+- [x] Require the selected device to report sampled and storage support for the
+  linear intermediate format before creating it.
+
+## Period 55 Phase 2 Checklist
+
+- [x] Make Metal ray dispatch consume the caller's output texture instead of
+  acquiring or presenting a drawable inside the RT bridge.
+- [x] Add Vulkan texture-only RT dispatch with an exact RT-write to
+  fragment-read layout transition.
+- [x] Validate output usage, view shape, and dispatch extent before native
+  encoding on both backends.
+- [x] Keep Vulkan descriptors and inline data per dispatch through completion,
+  and reject a second native encoding segment with a typed state error.
+
+## Period 55 Phase 3 Checklist
+
+- [x] Add a manifest-backed fullscreen display shader with fixed exposure and
+  tone-mapping semantics.
+- [x] Render the same linear `rgba16_float` RT output through the public render
+  path on Metal and Vulkan.
+- [x] Keep the final attachment `bgra8_unorm_srgb` and avoid manual sRGB
+  encoding in the shader.
+- [x] Recreate resize-dependent bind groups, views, and textures in safe
+  lifetime order.
+
+## Period 55 Phase 4 Checklist
+
+- [x] Add deterministic CPU color-transform and RT resource-contract tests.
+- [x] Make the finite-run marker strict for invalid limits, early closure, and
+  persistent zero-sized framebuffers.
+- [x] Update API inventory, migration guidance, semantic inventory, matrices,
+  usage docs, changelog, roadmap, and Period 55 closeout.
+- [x] Run API/semantic guards, tests, default/Vulkan builds, package smoke,
+  physical Metal validation, and format/diff gates; keep the new Vulkan color
+  path's physical RT-machine rerun explicit as follow-up evidence.
+
 ## First Backend-Independent Triangle Checklist
 
 - [x] Create a surface through public vkmtl API.

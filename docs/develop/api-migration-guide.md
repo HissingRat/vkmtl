@@ -15,6 +15,49 @@ drawable, presentation method, or presentation-shaped native-handle view.
 
 Existing `WindowContext` source and behavior are unchanged.
 
+## Period 55 v0.2.0 Texture Ray Dispatch Update
+
+Existing ray-tracing callers need no source change.
+`RayTracingDrawableResources` and
+`CommandBuffer.dispatchRaysToDrawable(...)` remain available with their
+existing presentation behavior. New code that needs composable, offscreen, or
+headless-capable output should use the exact resource alias
+`vkmtl.ray_tracing.RayTracingTextureResources` and the additive texture
+command:
+
+```zig
+var commands = try queue.makeCommandBuffer();
+_ = try commands.dispatchRaysToTexture(
+    &ray_pipeline,
+    &shader_binding_table,
+    dispatch_descriptor,
+    .{
+        .acceleration_structure = &top_level_as,
+        .output = &linear_output_view,
+    },
+);
+try commands.commit();
+
+// A later public render pass may sample linear_output_view and present it.
+```
+
+The output view must be a live, same-backend, two-dimensional, single-sample
+view over mip zero/layer zero of a one-mip, one-layer texture, with both
+shader-read and shader-write texture usage, and it must cover the dispatch
+extent. The current Vulkan artifact consumes a TLAS; the current Metal manual
+ray-generation artifact consumes a primitive BLAS. A successful texture
+dispatch does not acquire or present a drawable and leaves the output ready for
+sampled-texture consumption. It consumes that
+command buffer's native encoding segment, so commit it before creating the
+consumer command buffer shown by the comment above.
+
+For color-managed presentation, write scene-linear values to a capability-
+gated `rgba16_float` texture, apply exposure and tone mapping in a public
+fullscreen pass, and return display-linear values to
+`bgra8_unorm_srgb`. Do not apply a shader-side sRGB transfer; the attachment
+performs the single display encode. This is a preferred migration path, not a
+removal or semantic change to the legacy drawable command.
+
 ## Period 54 v0.2.0 Exact Occlusion Update
 
 Existing query literals retain `.boolean` visibility because

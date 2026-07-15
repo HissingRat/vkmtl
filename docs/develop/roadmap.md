@@ -1003,6 +1003,31 @@ statistics, calibration, advanced reflection, and function logs are precisely
 unsupported under the current ownership and result shapes. See
 `docs/develop/period54/`.
 
+## Period 55: Color-Managed Ray-Tracing Presentation
+
+Status: complete.
+
+Goal: give Metal and Vulkan the same ray-tracing color contract: native ray
+dispatch writes a caller-owned linear scene texture, a public fullscreen render
+pass applies one documented exposure/tone-map transform, and an sRGB drawable
+performs the only display transfer encoding. Preserve the existing drawable
+dispatch API for compatibility while making texture dispatch the composable,
+headless-capable canonical path.
+
+The additive texture command now writes a caller-owned `rgba16_float` target
+on Metal and Vulkan, with exact usage/whole-texture-shape/extent validation and
+a Vulkan RT-write to fragment-sampled transition. Vulkan descriptor and inline
+data are per dispatch, and the portable command state rejects an unsafe second
+native encoding segment. The example samples that linear target through one
+shared fixed-exposure ACES-fitted fullscreen pass and lets the
+`bgra8_unorm_srgb` attachment perform the only sRGB encode. Its finite-run
+marker also fails on invalid limits, early closure, or a persistent zero-sized
+framebuffer. Metal API Validation completed three physical frames. The
+implementation, unit, and forced-build evidence cover Vulkan; a physical rerun
+of this new color-managed path remains explicitly pending on the RT machine.
+
+See `docs/develop/period55/`.
+
 ## v0.1.0 Compatibility Release
 
 Status: complete. The annotated tag points to
@@ -1049,7 +1074,7 @@ See `docs/develop/period32+/target.md`.
   complete. Remaining validation work is non-gate native-pressure and physical
   Linux GPU coverage tracked by the parity report.
 - Period 45 is complete as the native semantic coverage audit, and Periods
-  46-54 plus the additive headless runtime are complete implementation slices.
+  46-55 plus the additive headless runtime are complete implementation slices.
   The Period 45 source ledger now has zero incomplete routes. A future
   native-semantic breadth period begins with a new baseline audit or an
   explicit decision to allocate one of the precisely unsupported contracts;

@@ -3262,25 +3262,74 @@ pub const RayTracingDrawableResources = struct {
     acceleration_structure: *AccelerationStructure,
     output: *TextureView,
 
-    fn validate(
+    fn validateAccelerationStructure(
         self: RayTracingDrawableResources,
         backend: core.Backend,
     ) core.AdvancedFeatureError!void {
         assertAlive(self.acceleration_structure.state().alive, .acceleration_structure);
-        assertAlive(self.output.state().alive, .texture_view);
-        if (self.acceleration_structure.selectedBackend() != backend or self.output.selectedBackend() != backend) {
+        if (self.acceleration_structure.selectedBackend() != backend) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
         const valid_kind = switch (backend) {
             .vulkan => self.acceleration_structure.state().descriptor_value.kind == .top_level,
-            .metal => self.acceleration_structure.state().descriptor_value.kind == .bottom_level or
-                self.acceleration_structure.state().descriptor_value.kind == .top_level,
+            .metal => self.acceleration_structure.state().descriptor_value.kind == .bottom_level,
         };
         if (!valid_kind or !self.acceleration_structure.isBuilt()) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
     }
+
+    fn validate(
+        self: RayTracingDrawableResources,
+        backend: core.Backend,
+    ) core.AdvancedFeatureError!void {
+        try self.validateAccelerationStructure(backend);
+        assertAlive(self.output.state().alive, .texture_view);
+        if (self.output.selectedBackend() != backend) {
+            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        }
+    }
+
+    fn validateTextureDispatch(
+        self: RayTracingDrawableResources,
+        backend: core.Backend,
+        descriptor: core.RayDispatchDescriptor,
+    ) (core.AdvancedFeatureError || core.TextureError || RuntimeError)!void {
+        try self.validateAccelerationStructure(backend);
+        assertAlive(self.output.state().alive, .texture_view);
+        const output_state = self.output.state();
+        if (self.output.selectedBackend() != backend) return RuntimeError.BackendMismatch;
+        if (!output_state.usage_value.shader_write or !output_state.usage_value.shader_read) {
+            return core.TextureError.UnsupportedTextureUsage;
+        }
+        if (output_state.dimension_value != .two_d or
+            output_state.base_mip_level_value != 0 or
+            output_state.mip_level_count_value != 1 or
+            output_state.base_array_layer_value != 0 or
+            output_state.array_layer_count_value != 1)
+        {
+            return core.TextureError.UnsupportedTextureViewDimension;
+        }
+        if (output_state.subresource_usage_tracker) |subresource_tracker| {
+            const texture = subresource_tracker.value.texture;
+            const texture_layer_count: u32 = if (texture.dimension == .three_d) 1 else texture.depth_or_array_layers;
+            if (texture.mip_level_count != 1 or texture_layer_count != 1) {
+                return core.TextureError.UnsupportedTextureViewDimension;
+            }
+        }
+        if (output_state.sample_count_value != 1) return core.TextureError.UnsupportedSampleCount;
+        if (descriptor.depth != 1 or
+            descriptor.width > output_state.width_value or
+            descriptor.height > output_state.height_value)
+        {
+            return core.TextureError.InvalidTextureExtent;
+        }
+    }
 };
+
+/// Canonical resource bundle for ray dispatch into a caller-owned texture.
+/// The older drawable name remains an exact alias for source compatibility.
+pub const RayTracingTextureResources = RayTracingDrawableResources;
 
 const BackendPrivateMetalRayTracingTables = struct {
     function_table_entries: u32,
@@ -5180,9 +5229,10 @@ pub const CommandBuffer = struct {
         resources: AccelerationStructureBuildResources,
     ) !void {
         assertObjectAlive(self.privateState().alive, "command_buffer");
-        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug.requireEncodingSegment();
         if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try resources.validate(self.privateState().backend, plan);
+        try self.privateState().debug.recordDirectCommand();
         _ = resources.scratch.recordUsage(.acceleration_structure_scratch);
         for (resources.geometries) |geometry| geometry.recordUsage();
         var driver_submitted = false;
@@ -5347,9 +5397,10 @@ pub const CommandBuffer = struct {
         resources: AccelerationStructureMaintenanceResources,
     ) !void {
         assertObjectAlive(self.privateState().alive, "command_buffer");
-        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug.requireEncodingSegment();
         if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try resources.validate(self.privateState().backend, plan);
+        try self.privateState().debug.recordDirectCommand();
         if (resources.scratch) |scratch| _ = scratch.recordUsage(.acceleration_structure_scratch);
 
         var driver_submitted = false;
@@ -5424,11 +5475,12 @@ pub const CommandBuffer = struct {
         assertObjectAlive(self.privateState().alive, "command_buffer");
         assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
         assertAlive(shader_binding_table.state().alive, .shader_binding_table);
-        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug.requireEncodingSegment();
         if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
         try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
+        try self.privateState().debug.recordDirectCommand();
         var driver_submitted = false;
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
@@ -5454,12 +5506,13 @@ pub const CommandBuffer = struct {
         if (!self.privateState().presentation_available) return RuntimeError.UnsupportedBackendForPresentation;
         assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
         assertAlive(shader_binding_table.state().alive, .shader_binding_table);
-        if (self.privateState().debug.state != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug.requireEncodingSegment();
         if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
         try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
         try resources.validate(self.privateState().backend);
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
+        try self.privateState().debug.recordDirectCommand();
         var driver_submitted = false;
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
@@ -5503,6 +5556,72 @@ pub const CommandBuffer = struct {
         return plan;
     }
 
+    /// Encodes ray tracing into a caller-owned whole single-mip, single-layer
+    /// texture view with shader-read and shader-write usage. A successful
+    /// dispatch leaves the output ready for a sampled-texture consumer and
+    /// consumes this command buffer's native encoding segment; commit before
+    /// creating the consumer command buffer.
+    pub fn dispatchRaysToTexture(
+        self: *CommandBuffer,
+        pipeline: *RayTracingPipelineState,
+        shader_binding_table: *ShaderBindingTable,
+        descriptor: core.RayDispatchDescriptor,
+        resources: RayTracingTextureResources,
+    ) !core.RayDispatchPlan {
+        assertObjectAlive(self.privateState().alive, "command_buffer");
+        assertAlive(pipeline.state().alive, .ray_tracing_pipeline_state);
+        assertAlive(shader_binding_table.state().alive, .shader_binding_table);
+        try self.privateState().debug.requireEncodingSegment();
+        if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
+        try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
+        try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
+        const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
+        try resources.validateTextureDispatch(self.privateState().backend, descriptor);
+        try ensureTextureViewOwnedByQueue(self.privateState().queue_kind_value, resources.output);
+        try self.privateState().debug.recordDirectCommand();
+        var driver_submitted = false;
+        if (self.privateState().impl) |*impl| switch (impl.*) {
+            .vulkan => |*vulkan| {
+                const vulkan_pipeline = pipeline.vulkanImpl() orelse {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                };
+                const vulkan_as = switch (resources.acceleration_structure.state().impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => |*acceleration_structure| acceleration_structure,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                };
+                const vulkan_output = switch (resources.output.state().impl) {
+                    .vulkan => |*output| output,
+                    .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                };
+                try vulkan.traceRaysToTexture(vulkan_pipeline, vulkan_as, vulkan_output, descriptor);
+                driver_submitted = true;
+            },
+            .metal => |*metal| {
+                const metal_pipeline = pipeline.metalImpl() orelse {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                };
+                const metal_as = switch (resources.acceleration_structure.state().impl orelse {
+                    return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+                }) {
+                    .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                    .metal => |*acceleration_structure| acceleration_structure,
+                };
+                const metal_output = switch (resources.output.state().impl) {
+                    .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+                    .metal => |*output| output,
+                };
+                try metal.traceRaysToTexture(metal_pipeline, metal_as, metal_output, descriptor);
+                driver_submitted = true;
+            },
+        };
+        _ = resources.output.recordUsage(.storage_texture_write);
+        _ = resources.output.recordUsage(.sampled_texture);
+        shader_binding_table.recordDispatch(plan, self.privateState().impl != null, driver_submitted);
+        return plan;
+    }
+
     pub fn label(self: CommandBuffer) ?[]const u8 {
         return self.privateState().label_value;
     }
@@ -5530,7 +5649,7 @@ pub const CommandBuffer = struct {
 
     pub fn pushDebugGroup(self: *CommandBuffer, label_value: []const u8) !void {
         assertObjectAlive(self.privateState().alive, "command_buffer");
-        if (self.privateState().debug.status() != .ready) return core.CommandEncodingError.InvalidCommandBufferState;
+        try self.privateState().debug.requireEncodingSegment();
         try self.privateState().debug_groups.push(label_value);
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| vulkan.pushDebugGroup(label_value),
@@ -10630,11 +10749,11 @@ test "runtime encodes acceleration structure refit and compaction resources" {
         .length_value = @intCast(@max(build_plan.scratch_size, build_plan.update_scratch_size)),
         .usage_value = .{ .acceleration_structure_scratch = true },
     });
-    var command_buffer = CommandBuffer.init(.{
+    var build_command_buffer = CommandBuffer.init(.{
         .backend = .vulkan,
         .queue_kind_value = .compute,
     });
-    try command_buffer.encodeAccelerationStructureBuild(build_plan, .{
+    try build_command_buffer.encodeAccelerationStructureBuild(build_plan, .{
         .result = &source,
         .scratch = &scratch,
     });
@@ -10643,7 +10762,11 @@ test "runtime encodes acceleration structure refit and compaction resources" {
         .acceleration_structure = descriptor,
         .operation = .refit,
     });
-    try command_buffer.encodeAccelerationStructureMaintenance(refit_plan, .{
+    var refit_command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    });
+    try refit_command_buffer.encodeAccelerationStructureMaintenance(refit_plan, .{
         .source = &source,
         .scratch = &scratch,
     });
@@ -10657,9 +10780,13 @@ test "runtime encodes acceleration structure refit and compaction resources" {
         .source_result_size = source.resultSize(),
         .compacted_size_hint = destination.resultSize(),
     });
+    var invalid_compact_command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    });
     try std.testing.expectError(
         core.AdvancedFeatureError.InvalidAccelerationStructureResources,
-        command_buffer.encodeAccelerationStructureMaintenance(compact_plan, .{
+        invalid_compact_command_buffer.encodeAccelerationStructureMaintenance(compact_plan, .{
             .source = &source,
             .destination = &destination,
         }),
@@ -10668,11 +10795,19 @@ test "runtime encodes acceleration structure refit and compaction resources" {
         .acceleration_structure = descriptor,
         .flags = .{ .allow_update = true, .allow_compaction = true },
     });
-    try command_buffer.encodeAccelerationStructureBuild(compactable_build_plan, .{
+    var compactable_build_command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    });
+    try compactable_build_command_buffer.encodeAccelerationStructureBuild(compactable_build_plan, .{
         .result = &source,
         .scratch = &scratch,
     });
-    try command_buffer.encodeAccelerationStructureMaintenance(compact_plan, .{
+    var compact_command_buffer = CommandBuffer.init(.{
+        .backend = .vulkan,
+        .queue_kind_value = .compute,
+    });
+    try compact_command_buffer.encodeAccelerationStructureMaintenance(compact_plan, .{
         .source = &source,
         .destination = &destination,
     });
@@ -10945,6 +11080,122 @@ test "runtime creates shader binding tables and dispatches rays" {
     try std.testing.expectEqual(@as(u64, 1), shader_binding_table.dispatchCount());
     try std.testing.expect(!shader_binding_table.lastDispatchRecordedBackendCommand());
     try std.testing.expect(!shader_binding_table.lastDispatchSubmittedToDriver());
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidCommandBufferState,
+        command_buffer.dispatchRays(&pipeline, &shader_binding_table, .{
+            .width = 8,
+            .height = 4,
+        }),
+    );
+}
+
+test "ray texture dispatch resources require a writable 2D output extent" {
+    var tracker = ResourceTracker{};
+    var acceleration_structure = AccelerationStructure.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .descriptor_value = .{
+            .kind = .top_level,
+            .primitive_count = 1,
+        },
+        .sizes_value = .{
+            .result_size = 1024,
+            .scratch_size = 256,
+        },
+        .native_handle = .{
+            .backend = .vulkan,
+            .kind = .top_level,
+            .result_size = 1024,
+            .scratch_alignment = 256,
+        },
+        .built_value = true,
+    });
+    var output = TextureView.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba16_float,
+        .dimension_value = .two_d,
+        .usage_value = .{
+            .shader_read = true,
+            .shader_write = true,
+        },
+        .storage_mode_value = .private,
+        .sample_count_value = 1,
+        .width_value = 64,
+        .height_value = 32,
+        .impl = .{ .vulkan = undefined },
+    });
+    const resources = RayTracingTextureResources{
+        .acceleration_structure = &acceleration_structure,
+        .output = &output,
+    };
+
+    try resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32 });
+    try ensureTextureViewOwnedByQueue(.graphics, &output);
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidQueueOwnershipState,
+        ensureTextureViewOwnedByQueue(.compute, &output),
+    );
+    try std.testing.expectError(
+        core.TextureError.InvalidTextureExtent,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 65, .height = 32 }),
+    );
+    try std.testing.expectError(
+        core.TextureError.InvalidTextureExtent,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32, .depth = 2 }),
+    );
+
+    output.state().usage_value.shader_write = false;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureUsage,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32 }),
+    );
+    output.state().usage_value.shader_write = true;
+    output.state().usage_value.shader_read = false;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureUsage,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32 }),
+    );
+    output.state().usage_value.shader_read = true;
+    output.state().dimension_value = .two_d_array;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureViewDimension,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32 }),
+    );
+    output.state().dimension_value = .two_d;
+    output.state().base_mip_level_value = 1;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureViewDimension,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32 }),
+    );
+    output.state().base_mip_level_value = 0;
+
+    const multi_subresource_tracker = try SharedTextureUsageTracker.init(std.testing.allocator, .{
+        .format = .rgba16_float,
+        .width = 64,
+        .height = 32,
+        .mip_level_count = 2,
+        .usage = .{
+            .shader_read = true,
+            .shader_write = true,
+        },
+    });
+    defer multi_subresource_tracker.release();
+    output.state().subresource_usage_tracker = multi_subresource_tracker;
+    defer output.state().subresource_usage_tracker = null;
+    try std.testing.expectError(
+        core.TextureError.UnsupportedTextureViewDimension,
+        resources.validateTextureDispatch(.vulkan, .{ .width = 64, .height = 32 }),
+    );
+
+    acceleration_structure.state().backend = .metal;
+    acceleration_structure.state().descriptor_value.kind = .top_level;
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        resources.validateAccelerationStructure(.metal),
+    );
+    acceleration_structure.state().descriptor_value.kind = .bottom_level;
+    try resources.validateAccelerationStructure(.metal);
 }
 
 test "runtime device plans Metal ray tracing mapping from native capabilities" {

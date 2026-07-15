@@ -736,6 +736,24 @@ pub fn build(b: *std.Build) void {
     });
     const run_voxel_world_tests = b.addRunArtifact(voxel_world_tests);
 
+    const ray_traced_scene_color_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/ray_traced_scene/color.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_ray_traced_scene_color_tests = b.addRunArtifact(ray_traced_scene_color_tests);
+
+    const ray_traced_scene_finite_run_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/ray_traced_scene/finite_run.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_ray_traced_scene_finite_run_tests = b.addRunArtifact(ray_traced_scene_finite_run_tests);
+
     const api_guard_files = b.addWriteFiles();
     const api_guard_root = api_guard_files.addCopyFile(b.path("tools/api_guard/main.zig"), "main.zig");
     _ = api_guard_files.addCopyFile(b.path("src/vkmtl.zig"), "src/vkmtl.zig");
@@ -873,6 +891,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_root_tests.step);
     test_step.dependOn(&run_development_matrix_tests.step);
     test_step.dependOn(&run_voxel_world_tests.step);
+    test_step.dependOn(&run_ray_traced_scene_color_tests.step);
+    test_step.dependOn(&run_ray_traced_scene_finite_run_tests.step);
     test_step.dependOn(&run_api_guard_tests.step);
     test_step.dependOn(&semantic_inventory_cmd.step);
     test_step.dependOn(&run_semantic_inventory_tests.step);

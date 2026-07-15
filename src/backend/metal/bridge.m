@@ -5004,6 +5004,63 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_texture_view *output_texture_view,
+    unsigned int width,
+    unsigned int height,
+    const void *inline_data,
+    size_t inline_data_len,
+    unsigned int inline_data_index
+) {
+    if (command_buffer == NULL ||
+        command_buffer->command_buffer == nil ||
+        pipeline == NULL ||
+        pipeline->pipeline == nil ||
+        acceleration_structure == NULL ||
+        acceleration_structure->acceleration_structure == nil ||
+        acceleration_structure->built == 0 ||
+        output_texture_view == NULL ||
+        output_texture_view->texture == nil ||
+        width == 0 ||
+        height == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    if (acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
+        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    }
+
+    @autoreleasepool {
+        id<MTLComputeCommandEncoder> encoder =
+            [command_buffer->command_buffer computeCommandEncoder];
+        if (encoder == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+
+        [encoder setComputePipelineState:pipeline->pipeline];
+        [encoder setTexture:output_texture_view->texture atIndex:0];
+        if (![encoder respondsToSelector:@selector(setAccelerationStructure:atBufferIndex:)]) {
+            [encoder endEncoding];
+            return VKMTL_METAL_STATUS_UNSUPPORTED;
+        }
+        [encoder setAccelerationStructure:acceleration_structure->acceleration_structure atBufferIndex:0];
+        if (inline_data != NULL && inline_data_len != 0) {
+            [encoder setBytes:inline_data length:inline_data_len atIndex:inline_data_index];
+        }
+
+        const NSUInteger threadgroup_width = 8;
+        const NSUInteger threadgroup_height = 8;
+        MTLSize grid_size = MTLSizeMake(width, height, 1);
+        MTLSize threadgroup_size = MTLSizeMake(threadgroup_width, threadgroup_height, 1);
+        [encoder dispatchThreads:grid_size threadsPerThreadgroup:threadgroup_size];
+        [encoder endEncoding];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_command_buffer *command_buffer,

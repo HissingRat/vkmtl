@@ -11,6 +11,14 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Added the exact `ray_tracing.RayTracingTextureResources` alias and
+  `CommandBuffer.dispatchRaysToTexture(...)` for native Metal/Vulkan ray
+  dispatch into caller-owned textures without drawable acquisition or
+  presentation side effects.
+- Added a shared color-managed `ray_traced_scene` display path: capability-
+  gated scene-linear `rgba16_float`, fixed exposure `1.0`, an ACES-fitted
+  fullscreen transform, and one hardware encode through
+  `bgra8_unorm_srgb`.
 - Completed the bounded Period 19 voxel renderer pressure test with visible-face
   CPU chunk meshing, generated atlas materials, reflection-derived layouts,
   camera and chunk culling, bounded streaming/rebuild work, pressure metrics,
@@ -90,6 +98,17 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- Direct AS/RT encoding now rejects a second native encoding segment with
+  `InvalidCommandBufferState`, and Vulkan RT dispatch owns descriptor/inline
+  data per dispatch through completion. Texture RT output is restricted to a
+  whole single-mip, single-layer view until Vulkan native layout tracking is
+  per-subresource.
+- `VKMTL_RT_FRAME_LIMIT` is now a strict positive finite-run contract: invalid
+  configuration, early window closure, and a persistent zero-sized framebuffer
+  fail explicitly instead of hanging or printing a false success marker.
+- Vulkan texture RT dispatch now finishes in sampled-image layout for the
+  fragment consumer, while Metal binds the caller's output texture directly.
+  The shared fullscreen pass removes backend-dependent RT display conversion.
 - Aligned the Metal window drawable with the existing portable window-pipeline
   convention by using `bgra8_unorm_srgb`; Metal format capabilities now report
   presentation only for that actual layer format, matching Vulkan's preferred
@@ -161,6 +180,10 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- Period 55 adds one exact ray-tracing facade alias and one `CommandBuffer`
+  method, targeting `v0.2.0`. The root, `Device`, context-owner, and runtime-
+  handle sets are unchanged; `RayTracingDrawableResources` and
+  `dispatchRaysToDrawable(...)` remain available with their legacy behavior.
 - Period 52 adds one ray-tracing facade resource bundle, one `CommandBuffer`
   method, three `AccelerationStructure` evidence methods, and defaulted plan
   fields. These additive changes target `v0.2.0`; no root, `Device`,

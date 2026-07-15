@@ -186,7 +186,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/ray_traced_scene",
         .run_step = "run-ray-traced-scene",
         .kind = .render,
-        .backend_expectation = "ray tracing descriptor, backend-private AS/pipeline/SBT records, and feature gate",
+        .backend_expectation = "native RT writes a caller-owned linear texture and a shared color-managed pass presents it behind capability gates",
     },
 };
 
@@ -487,6 +487,24 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .expectation = "bounded smoke, default, and stress chunk workloads complete under Metal API Validation and print voxel_world_pressure_test=ok",
     },
     .{
+        .name = "ray_tracing_metal_color_path",
+        .host = .macos,
+        .backend = .metal,
+        .required = false,
+        .command = "MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene",
+        .requires_runtime_configuration = true,
+        .expectation = "three color-managed Metal RT frames complete under API Validation and print the finite success marker",
+    },
+    .{
+        .name = "ray_tracing_vulkan_color_path",
+        .host = .windows,
+        .backend = .vulkan,
+        .required = false,
+        .command = "VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan",
+        .requires_runtime_configuration = true,
+        .expectation = "a Vulkan RT device renders three frames through the shared color-managed path and prints the finite success marker",
+    },
+    .{
         .name = "binding_variant_regression",
         .host = .headless,
         .backend = null,
@@ -556,7 +574,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .backend = null,
         .required = true,
         .command = "zig build test",
-        .expectation = "ray tracing planning, Metal mapping, internal native-advanced inventory, and Period 29 routing regressions pass",
+        .expectation = "ray tracing planning, native mappings, caller-owned output validation, per-dispatch Vulkan resources, finite-run, and color-reference regressions pass",
     },
 };
 
@@ -1518,6 +1536,7 @@ pub const RayTracingNativeParityFeature = enum {
     shader_binding_table_dispatch_planning,
     complex_shader_binding_table_planning,
     native_ray_dispatch_commands,
+    texture_dispatch_and_color_presentation,
     ray_query_planning,
     metal_ray_tracing_mapping_planning,
     native_metal_ray_tracing_execution,
@@ -1610,6 +1629,13 @@ pub const ray_tracing_native_parity_matrix = [_]RayTracingNativeParityMatrixEntr
         .metal_status = .backend_private_runtime,
         .deferred_to = "Period 32+ driver parity plan",
         .validation = "runtime SBT objects own backend-private records and dispatch command metadata",
+    },
+    .{
+        .feature = .texture_dispatch_and_color_presentation,
+        .public_api = "vkmtl.CommandBuffer.dispatchRaysToTexture and vkmtl.ray_tracing.RayTracingTextureResources",
+        .vulkan_status = .portable_runtime,
+        .metal_status = .portable_runtime,
+        .validation = "both backends write a caller-owned linear texture, preserve per-dispatch state, and use one shared ACES/sRGB presentation contract",
     },
     .{
         .feature = .ray_query_planning,
@@ -1805,8 +1831,8 @@ pub const validation_cases = [_]ValidationCase{
     .{
         .name = "ray_tracing_native_parity",
         .kind = .ray_tracing_native_parity,
-        .test_location = "src/core.zig and src/runtime/window_context.zig Period 28 tests",
-        .expectation = "ray tracing planning, Metal mapping, internal native-advanced inventory, and future Period 29 assignments stay explicit",
+        .test_location = "src/core.zig, src/runtime/window_context.zig, Vulkan dispatch invariants, and examples/ray_traced_scene focused tests",
+        .expectation = "ray tracing planning and advanced gaps stay explicit while Period 55 caller-owned dispatch, one-segment command state, finite-run, and color references remain deterministic",
     },
     .{
         .name = "period44_device_evidence",
@@ -1964,6 +1990,8 @@ test "backend test matrix metadata is valid" {
     var has_advanced_resource_geometry_regression = false;
     var has_advanced_geometry_feature_gates = false;
     var has_ray_tracing_native_parity_regression = false;
+    var has_ray_tracing_metal_color_path = false;
+    var has_ray_tracing_vulkan_color_path = false;
     for (backend_test_matrix) |entry| {
         if (entry.requires_runtime_configuration and !entry.required) configured_optional += 1;
         if ((entry.host == .macos or entry.host == .linux or entry.host == .windows) and
@@ -1979,6 +2007,8 @@ test "backend test matrix metadata is valid" {
         if (std.mem.eql(u8, entry.name, "advanced_resource_geometry_regression")) has_advanced_resource_geometry_regression = true;
         if (std.mem.eql(u8, entry.name, "advanced_geometry_feature_gates")) has_advanced_geometry_feature_gates = true;
         if (std.mem.eql(u8, entry.name, "ray_tracing_native_parity_regression")) has_ray_tracing_native_parity_regression = true;
+        if (std.mem.eql(u8, entry.name, "ray_tracing_metal_color_path")) has_ray_tracing_metal_color_path = true;
+        if (std.mem.eql(u8, entry.name, "ray_tracing_vulkan_color_path")) has_ray_tracing_vulkan_color_path = true;
     }
     try std.testing.expect(configured_optional >= 1);
     try std.testing.expectEqual(@as(usize, 3), hosted_package_smokes);
@@ -1989,6 +2019,8 @@ test "backend test matrix metadata is valid" {
     try std.testing.expect(has_advanced_resource_geometry_regression);
     try std.testing.expect(has_advanced_geometry_feature_gates);
     try std.testing.expect(has_ray_tracing_native_parity_regression);
+    try std.testing.expect(has_ray_tracing_metal_color_path);
+    try std.testing.expect(has_ray_tracing_vulkan_color_path);
 }
 
 test "Period 44 validation jobs separate hosted builds from physical GPU evidence" {

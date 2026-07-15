@@ -48,6 +48,12 @@
       "source": "../examples/bindless_textures/shaders/bindless_textures.slang",
       "vertex_entry": "vs_main",
       "fragment_entry": "fs_main"
+    },
+    {
+      "name": "ray_traced_scene_present",
+      "source": "../examples/ray_traced_scene/shaders/ray_traced_scene_present.slang",
+      "vertex_entry": "present_vs",
+      "fragment_entry": "present_fs"
     }
   ],
   "compute_shaders": [

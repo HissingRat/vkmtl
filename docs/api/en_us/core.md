@@ -516,6 +516,31 @@ intent. Supported Metal and Vulkan RT devices have both produced visible
 physical-device output; the 9/9 release evidence does not promote unrelated
 planning-only native pressure features.
 
+Period 55 adds the composable runtime route
+`CommandBuffer.dispatchRaysToTexture(...)`. Its resource argument is the
+canonical `vkmtl.ray_tracing.RayTracingTextureResources`, an exact alias of
+the retained `RayTracingDrawableResources` name. The output must be a live,
+same-backend, single-sample 2D view with shader-read and shader-write usage and
+must cover the dispatch extent. The view must select mip zero and layer zero of
+a texture with exactly one mip and one layer. The acceleration-structure kind
+must match the active artifact: the current Vulkan path consumes a TLAS, while
+the current Metal ray-generation kernel consumes a primitive BLAS. A
+successful call writes the caller-owned texture, performs no drawable
+acquisition or presentation, and
+leaves Vulkan output ready for sampled-texture consumption. Metal binds that
+same caller texture directly. The direct call consumes the command buffer's
+single native encoding segment: commit it before creating the command buffer
+that samples or otherwise consumes the result. A second encoder or direct
+command returns `InvalidCommandBufferState`.
+`dispatchRaysToDrawable(...)` remains available as a legacy presentation
+command.
+
+For portable RT display, use a sampled-plus-storage-capable
+`rgba16_float` scene-linear intermediate, apply exposure and tone mapping in a
+normal public render pass, and write display-linear values to
+`bgra8_unorm_srgb`. The final attachment owns the single sRGB transfer encode;
+do not add a shader-side gamma or sRGB OETF.
+
 Period 30 adds backend-private runtime records to those objects: acceleration
 structure handles/build records, ray tracing pipeline metadata, SBT records,
 dispatch records, Metal table metadata, advanced-inventory routing, and parity
@@ -737,7 +762,11 @@ the current synchronous commit path; callback thread identity and reentrant use
 are not promised.
 Command buffers are still one-shot after `commit()`; pooled or reusable command
 buffers are represented by descriptor fields and rejected by feature gates until
-native reset/pooling is implemented.
+native reset/pooling is implemented. Before commit, the current portable
+backend contract accepts one native encoding segment: one render, compute, or
+blit encoder, or one direct AS/RT command. Presentation metadata may follow an
+eligible render/direct-drawable segment. Starting a second encoder or direct
+command returns `InvalidCommandBufferState`.
 
 `vkmtl.sync.QueueKind`, `QueueCapabilities`, `QueueDescriptor`, and
 `QueueSelectionPlan` define the multi-queue selection vocabulary.

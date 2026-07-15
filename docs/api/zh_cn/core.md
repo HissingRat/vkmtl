@@ -433,6 +433,25 @@ Period 29 新增这些 advanced path 的公开 runtime contract：
 会验证 ownership、resource range 和 command intent。支持的 Metal 与 Vulkan RT 设备都已经
 产生物理可见输出；9/9 release evidence 不会把其他 planning-only native pressure 路径升级为可用。
 
+Period 55 新增可组合的 runtime 路径
+`CommandBuffer.dispatchRaysToTexture(...)`。它使用 canonical
+`vkmtl.ray_tracing.RayTracingTextureResources`；这个名字与保留的
+`RayTracingDrawableResources` 是 exact alias。Output 必须是存活、同 backend、single-sample
+2D view，同时声明 shader-read 和 shader-write usage，并覆盖 dispatch extent；这个 view 必须选择
+只有一个 mip 和一个 layer 的 texture 的 mip zero/layer zero。Acceleration-structure kind 必须匹配
+active artifact：当前 Vulkan 路径使用 TLAS，当前 Metal ray-generation kernel 使用 primitive BLAS。
+成功调用只写入 caller-owned texture，不获取或呈现 drawable；Vulkan 会让输出进入
+sampled-texture consumer 所需状态，Metal 则直接绑定同一个 caller texture。这个 direct call 会用完
+command buffer 的单个 native encoding
+segment，因此必须先 commit，再创建用于 sample/compose 的 command buffer；追加第二个 encoder 或
+direct command 会返回 `InvalidCommandBufferState`。`dispatchRaysToDrawable(...)` 继续作为 legacy
+presentation command 保留。
+
+可移植 RT 显示应使用同时支持 sampled 与 storage 的 `rgba16_float` scene-linear
+intermediate，在普通 public render pass 中执行 exposure/tone mapping，再把 display-linear 值写入
+`bgra8_unorm_srgb`。最终 attachment 负责唯一一次 sRGB transfer encode；shader 不应再做 gamma
+或 sRGB OETF。
+
 Period 30 给这些对象补上 backend-private runtime record：acceleration structure handle/build
 record、ray tracing pipeline metadata、SBT record、dispatch record、Metal table metadata、
 advanced inventory routing，以及 parity diagnostics。driver-level ray tracing pixels 和更完整的
@@ -614,7 +633,11 @@ try command_buffer.commit();
 lifecycle state；`lifecycleStatus()` 报告 encoding、scheduled、completed 或 failed。配置 callback
 后，当前同步 commit 路径会各发送一次 scheduled/completed；不承诺 callback thread identity，也不
 允许假定 reentrant command-buffer use。当前 command buffer 在 `commit()` 后仍然是 one-shot；pooled 或 reusable
-command buffer 已经由 descriptor 表达，但在 native reset/pooling 接上前会被 feature gate 拒绝。
+command buffer 已经由 descriptor 表达，但在 native reset/pooling 接上前会被 feature gate 拒绝。Commit
+之前，当前 portable backend contract 只接受一个 native encoding segment：一个 render、compute 或
+blit encoder，或者一个 direct AS/RT command。符合条件的 render/direct-drawable segment 之后仍可添加
+presentation metadata；启动第二个 encoder 或 direct command 会返回
+`InvalidCommandBufferState`。
 
 `vkmtl.sync.QueueKind`、`QueueCapabilities`、`QueueDescriptor` 和 `QueueSelectionPlan` 定义
 multi-queue selection 词汇。`vkmtl.command.queueCapabilities(device)` 返回当前 device 的 logical

@@ -989,6 +989,17 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     size_t inline_data_len,
     unsigned int inline_data_index
 );
+vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
+    vkmtl_metal_command_buffer *command_buffer,
+    vkmtl_metal_ray_tracing_pipeline_state *pipeline,
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    vkmtl_metal_texture_view *output_texture_view,
+    unsigned int width,
+    unsigned int height,
+    const void *inline_data,
+    size_t inline_data_len,
+    unsigned int inline_data_index
+);
 
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(
     vkmtl_metal_clear_screen *owner,

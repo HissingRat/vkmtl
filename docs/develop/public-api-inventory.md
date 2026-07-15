@@ -1,7 +1,7 @@
 # Public API Inventory
 
-Status: `v0.1.x` compatibility baseline plus additive headless owner, refreshed
-on 2026-07-15.
+Status: `v0.1.x` compatibility baseline plus allocated `v0.2.0` additions,
+refreshed on 2026-07-15.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
@@ -37,8 +37,8 @@ rg -c '^[ ]*pub fn ' src/runtime/window_context.zig
 rg -c '^[ ]*pub fn ' src/runtime/headless_context.zig
 ```
 
-The current results are 451 in `window_context.zig` and six in
-`headless_context.zig`. The former is 17 module-level operations and 434
+The current results are 452 in `window_context.zig` and six in
+`headless_context.zig`. The former is 17 module-level operations and 435
 methods; six module-level declarations are private cross-file context-owner
 plumbing and are not reachable through `vkmtl`. Facade operations may be
 `pub const` aliases or direct `pub fn` declarations and are counted separately
@@ -186,7 +186,7 @@ aliases and with types used by other domains.
 | `api/shader.zig` | 39 | 4 | source, reflection, specialization, compiler inputs and results |
 | `api/binding.zig` | 41 | 2 | layouts, bind groups, resource tables, offsets, constants |
 | `api/compute.zig` | 8 | 0 | compute pipeline and dispatch descriptors, atomics, threadgroup memory |
-| `api/ray_tracing.zig` | 54 | 11 | acceleration structures, RT pipelines, SBTs, dispatch, queries, stress plans |
+| `api/ray_tracing.zig` | 55 | 11 | acceleration structures, RT pipelines, SBTs, dispatch, queries, stress plans |
 | `api/interop.zig` | 49 | 21 | external resource contracts, platform import planning and diagnostics |
 | `api/native.zig` | 20 | 4 | neutral native handles, insertion, sparse lowering, and backend-lowering escape hatches |
 
@@ -197,7 +197,7 @@ The nested native modules are measured separately:
 | `api/native/vulkan.zig` | 9 | 2 |
 | `api/native/metal.zig` | 15 | 4 |
 
-Across the 13 top-level facades, this is 534 declarations and 94 callable
+Across the 13 top-level facades, this is 535 declarations and 94 callable
 operation aliases. Moving sparse lowering from `resource` to `native` changes
 the ownership distribution without changing the operation total;
 removing the public `RayQueryLoweringMode` removes one type declaration.
@@ -372,7 +372,7 @@ The current major runtime owner counts are:
 | `RenderCommandEncoder` | 31 | natural render command owner |
 | `ComputeCommandEncoder` | 21 | natural compute command owner |
 | `BlitCommandEncoder` | 21 | natural transfer command owner |
-| `CommandBuffer` | 19 | lifecycle, encoder creation, and RT maintenance encoding |
+| `CommandBuffer` | 22 | lifecycle, encoder creation, presentation, synchronization, and RT build, maintenance, and texture dispatch encoding |
 | `Texture` | 19 | resource lifetime and texture operations |
 | `TextureView` | 18 | view lifetime and queries |
 | `AccelerationStructure` | 17 | capability-gated RT owner and maintenance evidence |
@@ -829,6 +829,39 @@ resource-view pool, tensor/ML, function-log, pass-boundary counter, calibrated
 timestamp, and multi-counter statistic contracts receive no public
 declarations because their complete ownership/result semantics are not
 allocated.
+
+## Period 55 v0.2.0 Texture Ray Dispatch Update
+
+Period 55 leaves the guarded root, `Device`, `WindowContext`,
+`HeadlessContext`, and runtime-handle name/layout sets unchanged.
+`ray_tracing.RayTracingTextureResources` is the one new facade declaration,
+bringing that facade to 55 declarations and the 13-facade total to 535. It is
+an exact type alias of `RayTracingDrawableResources`; the legacy name remains
+source-compatible.
+
+`CommandBuffer` gains `dispatchRaysToTexture(...)`, bringing the actual owner
+surface from 21 to 22 public methods and the total public functions in
+`window_context.zig` to 452. This audit also corrects the stale 19-method count
+previously carried by the inventory; the two already-existing methods are not
+Period 55 API additions. The new method writes to the caller-owned texture
+view without acquiring or presenting a drawable. The existing
+`dispatchRays(...)` and `dispatchRaysToDrawable(...)` declarations and
+supported rendering results remain unchanged; new composition code should
+prefer the texture command and perform presentation in a normal render pass.
+
+The direct AS/RT commands now reject a second encoding segment with the
+existing `InvalidCommandBufferState` error. This is validation of a previously
+unsafe sequence, not a new declaration: the supported one-encoding-segment-
+per-command-buffer contract and the legacy drawable presentation result remain
+unchanged. The texture output view is limited to mip zero/layer zero of a
+single-mip, single-layer texture until native Vulkan layout tracking becomes
+per-subresource.
+
+The example's intermediate `rgba16_float` texture is capability-gated on both
+sampled and storage support. That format use does not add a new enum tag or
+change `FormatCapabilities` meaning. The additive alias and method target
+`v0.2.0`; no field, error, default, ownership rule, or existing method is
+removed or renamed.
 
 ## Compatibility Impact
 

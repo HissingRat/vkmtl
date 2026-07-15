@@ -601,6 +601,25 @@ Tracked in `docs/develop/period54/`.
 Expected result: all 111 audited Metal semantic units have executable or
 precise unsupported outcomes, without a broad Metal 4 feature flag.
 
+## Wave 36: Color-Managed Ray-Tracing Presentation
+
+Tracked in `docs/develop/period55/`.
+
+- [x] Allocate an additive caller-owned RT texture command without changing
+  the root or context owners.
+- [x] Lower Metal RT directly to the caller texture without drawable
+  acquisition.
+- [x] Lower Vulkan RT output to a sampled-image postcondition.
+- [x] Present scene-linear `rgba16_float` through one shared fixed-exposure
+  ACES-fitted pass to `bgra8_unorm_srgb`.
+- [x] Lock deterministic color/resource validation and physical Metal
+  evidence while keeping the new Vulkan path's physical rerun explicit.
+
+Expected result: backend ray generation has one composable scene-linear output
+contract and one shared display transform. Metal has physical evidence; Vulkan
+physical validation of this new route remains a device-matrix follow-up rather
+than an inferred claim.
+
 ## Slice Checklist
 
 Before starting a backend-completion slice:

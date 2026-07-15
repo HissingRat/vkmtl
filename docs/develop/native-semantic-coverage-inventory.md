@@ -1,6 +1,6 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 54 complete, 2026-07-15.
+Status: Period 55 complete, 2026-07-15.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -38,6 +38,13 @@ executes on both backends, resource tables and explicit barriers preserve the
 admitted Metal 4 observable semantics through existing compatibility layers,
 and the remaining allocator/pipeline/dataset/tensor/ML/counter contracts are
 precisely unsupported rather than exposed through a broad feature flag.
+Period 55 makes the basic RT output contract composable: both backends write a
+caller-owned scene-linear texture, the Vulkan lowering leaves it in sampled
+layout, and the shared public render path applies one fixed ACES-fitted display
+transform before one hardware sRGB encode. Metal has a three-frame physical
+API Validation run. The new color-managed Vulkan path has unit/forced-build
+evidence; its physical RT-machine rerun remains pending and is not inferred
+from the earlier visible Vulkan RT evidence.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence; Vulkan has implementation and forced-build
@@ -125,7 +132,7 @@ develops a different lowering or support state.
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |
 | RES-04 | Sampler filtering, addressing, LOD, comparison, anisotropy, normalized/unnormalized coordinates, and fixed border color | `resource` | `native-exact` | `native-exact` | `unit`; unnormalized coordinates use the documented shared constraint set and device gates still apply. |
 | RES-05 | Full-texture mipmap generation | `transfer` | `native-exact` | `native-exact` | `unit`; partial mip/layer ranges remain incomplete. |
-| RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. The Metal current drawable and Vulkan's preferred surface format are `bgra8_unorm_srgb`; Vulkan still falls back to a supported surface format when that preference is unavailable. Metal advertises presentation only for its actual layer format, otherwise uses a conservative capability table, and Vulkan queries format properties; unallocated native formats remain unsupported. |
+| RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit` plus Period 55 Metal `gpu-pixels`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. Period 55 admits sampled-plus-storage `rgba16_float` as the capability-gated linear RT intermediate on both backends. The Metal current drawable and Vulkan's preferred surface format are `bgra8_unorm_srgb`; Vulkan still falls back to a supported surface format when that preference is unavailable. Metal advertises presentation only for its actual layer format, otherwise uses a conservative capability table, and Vulkan queries format properties; unallocated native formats remain unsupported. |
 | RES-07 | Capability-gated shader-visible buffer GPU address | `resource`, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke` on Apple M4 Pro plus Vulkan unit/inspection; callers declare `shader_device_address`, creation checks the usable feature, and zero/unavailable native addresses return typed errors. |
 | RES-08 | Automatic/shared/managed/private portable storage behavior and CPU/GPU visibility boundaries | `resource`, `transfer` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal plus Vulkan unit/inspection; Metal composes `didModifyRange` and `synchronizeResource`, Vulkan uses host-coherent managed buffers, and private CPU access is rejected. |
 | SHD-01 | Build-time Slang compilation and embedded runtime shader resolution | `shader` | `composed-exact` | `composed-exact` | Hosted build and `gpu-pixels`; MSL and SPIR-V are produced before runtime. |
@@ -186,7 +193,7 @@ develops a different lowering or support state.
 | --- | --- | --- | --- | --- | --- |
 | GEO-01 | Tessellation pipeline and patch draw under the source-only artifact contract | `render` | `unsupported` | `native-exact` | Vulkan compiles schema-2 SPIR-V, enables tessellation, creates patch-list pipelines, and draws patches. The pinned Slang Metal target rejects hull/domain stages. |
 | GEO-02 | Resource-free mesh pipeline and dispatch; optional task/object stage separately gated | `render` | `native-exact` | `native-exact` | Physical Metal mesh rendering plus Vulkan forced-build/unit evidence. Pinned task/object compilation crashes, so usable task support stays false on both backends. |
-| RT-01 | Basic native acceleration structure, RT pipeline, dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Visible physical Metal and Vulkan paths are recorded. Device capability gates apply. |
+| RT-01 | Basic native acceleration structure, RT pipeline, caller-owned texture dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Period 55 writes a caller-owned scene-linear texture on both backends, leaves Vulkan output ready for fragment sampling, and presents through one shared ACES-fitted fullscreen pass to `bgra8_unorm_srgb`. Metal API Validation completed three physical frames. Earlier visible physical Vulkan RT evidence remains valid, while the new color-managed Vulkan path has unit/forced-build evidence and still needs a physical RT-machine rerun. Device and format capability gates apply. |
 | RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | Metal physical evidence includes a TLAS over two distinct BLAS sources; Vulkan supports the same source array. Non-default instance metadata is outside the executable contract. |
 | RT-03 | Triangle and AABB BLAS geometry input | `ray_tracing` | `native-exact` | `native-exact` | Physical Metal headless evidence builds both forms. Metal AS allocation takes the maximum of triangle/AABB and ordinary/update native sizes, while command validation uses the selected plan's exact scratch size. Vulkan procedural scene evidence already exercises AABB input. |
 | RT-04 | Custom intersection execution | `ray_tracing` | `unsupported` | `native-exact` | Vulkan procedural pixels are observed. Metal schema-2 artifacts have no linked intersection function or driver-bound table. |
@@ -215,14 +222,14 @@ their presence in the ledger does not admit public API or claim execution.
 | Source family | Current inventory state | Required action |
 | --- | --- | --- |
 | Core device, queues, command buffers, resources, render/compute/blit encoders | Audited | Executable common rows plus native synchronization, physical queue, lifecycle, and timed Metal presentation work completed in Period 48. |
-| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; unallocated native breadth stays explicit. |
+| Pixel/vertex formats, texture types/views, sampler variants | Audited/incomplete | Period 47 closed the allocated common subset; Period 55 exercises sampled-plus-storage `rgba16_float` as the linear RT intermediate. Unallocated native breadth stays explicit. |
 | Heaps, placement resources, residency sets, sparse resources | Audited | Period 49 executes native placement heaps and closes residency/sparse execution as unsupported under the current handle-free mapping contract. |
 | Argument buffers/tables and indirect command buffers | Audited | Period 50 executes resource tables and CPU-authored reusable command lists. Period 54 confirms the admitted Metal 4 table semantics are composed through that layer; raw table identity and GPU mutation remain unsupported. |
 | Function constants, dynamic libraries, linked functions, function pointers | Audited | Period 46 completed numeric-ID function constants. Period 50 closes linked functions, stitching, and dynamic libraries unsupported under manifest schema 1; Period 52 closes RT function tables under the same artifact boundary. |
 | Tessellation, object/mesh shaders, layered rendering, amplification | Audited | Period 51 executes Vulkan tessellation and mesh-only paths on both backends; task/object artifacts, advanced-stage bindings, and layered/amplified rendering are precisely unsupported under current contracts. |
 | Tile shaders, imageblocks, raster-order groups, programmable blending | Audited | Period 51 closes these unsupported because the current pass/shader contracts cannot preserve their observable memory and ordering semantics. |
 | Counter sample buffers, GPU timestamps, statistics, capture scopes | Audited | Period 46 completed native timestamp/Boolean visibility; Period 54 adds exact-count visibility and closes pass attachments, calibration, counter heaps, pipeline statistics, device-specific counters, and function logs unsupported under current result/lifetime shapes. |
-| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. |
+| Ray tracing maintenance, function tables, motion, callable/intersection breadth | Audited | Period 52 executes ordinary AS maintenance/AABB/multi-source TLAS paths and closes the remaining advanced contracts precisely unsupported. Period 55 adds caller-owned texture dispatch and shared color-managed presentation without reopening those advanced routes. |
 | Fast resource loading / Metal I/O | Audited | Period 53 closes MTLIO and compressed-stream execution unsupported: synchronous file reads/staging do not preserve async status, cancellation, priority, queue ordering, or scratch/compression semantics. |
 | Metal 4 command allocators, argument tables, pipeline datasets, flexible pipeline state | Audited | Resource-table and barrier effects compose exactly through existing contracts. Allocator/reusable-buffer/feedback, flexible-pipeline, compiler/archive/dataset, tensor, and ML object models are precisely unsupported. |
 | External sharing, IOSurface, shared-event handles, platform handles | Audited | Period 53 executes Metal raw resource and IOSurface imports. Export and external synchronization remain precisely unsupported; Period 48 covers only vkmtl-owned same-device native shared events. |
@@ -253,7 +260,7 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-54 are complete. The exactly-once gap-routing
+The source audit and Periods 46-55 are complete. The exactly-once gap-routing
 file is empty because all 111 audited Metal semantic units now have an
 executable or precise unsupported outcome. New native-semantic implementation
 periods must be created from a new SDK/baseline audit or an explicit decision

@@ -2,11 +2,14 @@ const std = @import("std");
 const vkmtl = @import("vkmtl");
 const glfw = @import("zig_glfw");
 const common = @import("vkmtl_examples_common");
+const color = @import("color.zig");
+const finite_run = @import("finite_run.zig");
 
 extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
 
 const app_name = "vkmtl ray traced scene";
 const rt_shader_source = @embedFile("shaders/ray_traced_scene_rt.slang");
+const present_shader_source = @embedFile("shaders/ray_traced_scene_present.slang");
 const initial_width = 960;
 const initial_height = 540;
 const native_scene_time: f32 = -1.1;
@@ -16,6 +19,14 @@ const large_sphere_rings: u32 = 36;
 const large_sphere_segments: u32 = 72;
 const procedural_sphere_count: u32 = 10;
 const scene_object_count: u32 = 10;
+
+const present_color_attachments = [_]vkmtl.RenderPipelineColorAttachmentDescriptor{
+    .{ .format = .bgra8_unorm_srgb },
+};
+
+comptime {
+    if (color.exposure != 1.0) @compileError("ray traced display shader exposure must match color.zig");
+}
 
 const RtVertex = extern struct {
     x: f32,
@@ -42,6 +53,11 @@ const RtSceneData = extern struct {
 };
 
 pub fn main(_: std.process.Init.Minimal) !void {
+    const frame_limit = frameLimitFromEnv() catch |err| {
+        std.debug.print("ray traced scene finite run configuration failed: VKMTL_RT_FRAME_LIMIT: {s}\n", .{@errorName(err)});
+        return err;
+    };
+
     try glfw.init();
     defer glfw.terminate();
 
@@ -72,6 +88,16 @@ pub fn main(_: std.process.Init.Minimal) !void {
     const capability_report = device.capabilityReport();
     if (device.selectedBackend() == .vulkan and !capability_report.ray_tracing.supported) {
         printRayTracingUnsupported(capability_report.ray_tracing);
+        return;
+    }
+    const scene_format_caps = device.getFormatCaps(.rgba16_float);
+    if (!scene_format_caps.storage or !scene_format_caps.sampled) {
+        std.debug.print("ray tracing display unsupported: rgba16_float requires storage and sampled support\n", .{});
+        return;
+    }
+    const drawable_format_caps = device.getFormatCaps(.bgra8_unorm_srgb);
+    if (!drawable_format_caps.presentation) {
+        std.debug.print("ray tracing display unsupported: bgra8_unorm_srgb presentation unavailable\n", .{});
         return;
     }
 
@@ -196,6 +222,9 @@ pub fn main(_: std.process.Init.Minimal) !void {
         return err;
     };
 
+    var display = try DisplayPipeline.init(allocator, &device);
+    defer display.deinit();
+
     if (device.selectedBackend() == .vulkan) {
         const scene_time_start = glfw.timeSeconds();
         const procedural_aabbs = buildProceduralSphereAabbs();
@@ -303,71 +332,54 @@ pub fn main(_: std.process.Init.Minimal) !void {
             return err;
         };
 
-        var output_texture: ?vkmtl.Texture = null;
-        var output_view: ?vkmtl.TextureView = null;
+        var output_target: ?*DisplayTarget = null;
         var output_extent = vkmtl.Extent2D{ .width = 0, .height = 0 };
         defer {
-            if (output_view) |*view| view.deinit();
-            if (output_texture) |*texture| texture.deinit();
+            if (output_target) |target| target.destroy();
         }
 
         var reported_visible_pixels = false;
+        var rendered_frames: u64 = 0;
+        var zero_extent_watchdog = finite_run.ZeroExtentWatchdog{};
         while (!glfw.windowShouldClose(window)) {
             const extent = common.framebufferExtent(window);
             if (extent.isZero()) {
                 glfw.pollEvents();
+                if (!glfw.windowShouldClose(window)) {
+                    try requireFiniteFramebuffer(frame_limit, &zero_extent_watchdog, "vulkan");
+                }
                 continue;
             }
+            zero_extent_watchdog.reset();
 
             try swapchain.resize(extent);
             const scene_time_seconds = currentSceneTime(scene_time_start);
 
-            if (output_view == null or output_texture == null or output_extent.width != extent.width or output_extent.height != extent.height) {
-                if (output_view) |*view| view.deinit();
-                output_view = null;
-                if (output_texture) |*texture| texture.deinit();
-                output_texture = null;
-
-                var texture = try device.makeTexture(.{
-                    .label = "ray traced scene output",
-                    .format = .bgra8_unorm,
-                    .width = extent.width,
-                    .height = extent.height,
-                    .usage = .{
-                        .copy_source = true,
-                        .shader_write = true,
-                    },
-                    .storage_mode = .private,
-                });
-                const view = try texture.makeTextureView(.{});
-                output_texture = texture;
-                output_view = view;
+            if (output_target == null or output_extent.width != extent.width or output_extent.height != extent.height) {
+                if (output_target) |target| target.destroy();
+                output_target = null;
+                output_target = try DisplayTarget.create(allocator, &device, &display, extent);
                 output_extent = extent;
             }
 
-            if (output_view) |*view| {
-                var frame_command_buffer = try queue.makeCommandBuffer();
+            if (output_target) |target| {
                 const scene_data = makeSceneData(scene_time_seconds);
                 const scene_data_bytes = std.mem.asBytes(&scene_data);
-                const dispatch_plan = frame_command_buffer.dispatchRaysToDrawable(
+                const dispatch_plan = traceAndPresent(
+                    &queue,
                     &pipeline_state,
                     &shader_binding_table,
+                    &top_level_acceleration_structure,
+                    target,
+                    &display,
                     .{
                         .width = extent.width,
                         .height = extent.height,
                         .inline_data = scene_data_bytes[0..],
                         .inline_data_binding = 2,
                     },
-                    .{
-                        .acceleration_structure = &top_level_acceleration_structure,
-                        .output = view,
-                    },
                 ) catch |err| {
-                    std.debug.print("ray traced scene Vulkan dispatch encode failed: {s}\n", .{@errorName(err)});
-                    return err;
-                };
-                frame_command_buffer.commit() catch |err| {
-                    std.debug.print("ray traced scene Vulkan dispatch submit failed: {s}\n", .{@errorName(err)});
+                    std.debug.print("ray traced scene Vulkan color-managed frame failed: {s}\n", .{@errorName(err)});
                     return err;
                 };
 
@@ -401,76 +413,62 @@ pub fn main(_: std.process.Init.Minimal) !void {
             }
 
             glfw.pollEvents();
+            rendered_frames += 1;
+            if (finite_run.reachedFrameLimit(frame_limit, rendered_frames)) break;
         }
+        try reportFiniteRunCompletion("vulkan", frame_limit, rendered_frames);
         return;
     }
 
     if (device.selectedBackend() == .metal) {
         const scene_time_start = glfw.timeSeconds();
-        var output_texture: ?vkmtl.Texture = null;
-        var output_view: ?vkmtl.TextureView = null;
+        var output_target: ?*DisplayTarget = null;
         var output_extent = vkmtl.Extent2D{ .width = 0, .height = 0 };
         defer {
-            if (output_view) |*view| view.deinit();
-            if (output_texture) |*texture| texture.deinit();
+            if (output_target) |target| target.destroy();
         }
 
         var reported_visible_pixels = false;
+        var rendered_frames: u64 = 0;
+        var zero_extent_watchdog = finite_run.ZeroExtentWatchdog{};
         while (!glfw.windowShouldClose(window)) {
             const extent = common.framebufferExtent(window);
             if (extent.isZero()) {
                 glfw.pollEvents();
+                if (!glfw.windowShouldClose(window)) {
+                    try requireFiniteFramebuffer(frame_limit, &zero_extent_watchdog, "metal");
+                }
                 continue;
             }
+            zero_extent_watchdog.reset();
 
             try swapchain.resize(extent);
-            if (output_view == null or output_texture == null or output_extent.width != extent.width or output_extent.height != extent.height) {
-                if (output_view) |*view| view.deinit();
-                output_view = null;
-                if (output_texture) |*texture| texture.deinit();
-                output_texture = null;
-
-                var texture = try device.makeTexture(.{
-                    .label = "metal ray traced scene output",
-                    .format = .rgba8_unorm,
-                    .width = extent.width,
-                    .height = extent.height,
-                    .usage = .{
-                        .copy_source = true,
-                        .shader_write = true,
-                    },
-                    .storage_mode = .private,
-                });
-                const view = try texture.makeTextureView(.{});
-                output_texture = texture;
-                output_view = view;
+            if (output_target == null or output_extent.width != extent.width or output_extent.height != extent.height) {
+                if (output_target) |target| target.destroy();
+                output_target = null;
+                output_target = try DisplayTarget.create(allocator, &device, &display, extent);
                 output_extent = extent;
             }
 
-            if (output_view) |*view| {
-                var frame_command_buffer = try queue.makeCommandBuffer();
+            if (output_target) |target| {
                 const scene_time_seconds = currentSceneTime(scene_time_start);
                 const scene_data = makeSceneData(scene_time_seconds);
                 const scene_data_bytes = std.mem.asBytes(&scene_data);
-                const dispatch_plan = frame_command_buffer.dispatchRaysToDrawable(
+                const dispatch_plan = traceAndPresent(
+                    &queue,
                     &pipeline_state,
                     &shader_binding_table,
+                    &acceleration_structure,
+                    target,
+                    &display,
                     .{
                         .width = extent.width,
                         .height = extent.height,
                         .inline_data = scene_data_bytes[0..],
                         .inline_data_binding = 2,
                     },
-                    .{
-                        .acceleration_structure = &acceleration_structure,
-                        .output = view,
-                    },
                 ) catch |err| {
-                    std.debug.print("ray traced scene Metal dispatch encode failed: {s}\n", .{@errorName(err)});
-                    return err;
-                };
-                frame_command_buffer.commit() catch |err| {
-                    std.debug.print("ray traced scene Metal dispatch submit failed: {s}\n", .{@errorName(err)});
+                    std.debug.print("ray traced scene Metal color-managed frame failed: {s}\n", .{@errorName(err)});
                     return err;
                 };
 
@@ -503,15 +501,202 @@ pub fn main(_: std.process.Init.Minimal) !void {
             }
 
             glfw.pollEvents();
+            rendered_frames += 1;
+            if (finite_run.reachedFrameLimit(frame_limit, rendered_frames)) break;
         }
+        try reportFiniteRunCompletion("metal", frame_limit, rendered_frames);
         return;
     }
 
     unreachable;
 }
 
+const DisplayPipeline = struct {
+    compiled_shader: vkmtl.shader.CompiledRenderShader,
+    bind_group_layout: vkmtl.binding.BindGroupLayout,
+    sampler: vkmtl.SamplerState,
+    pipeline: vkmtl.RenderPipelineState,
+
+    fn init(allocator: std.mem.Allocator, device: *vkmtl.Device) !DisplayPipeline {
+        var compiled_shader = try device.compileRenderShader("ray_traced_scene_present", present_shader_source, .{
+            .vertex_entry = "present_vs",
+            .fragment_entry = "present_fs",
+        });
+        errdefer compiled_shader.deinit();
+
+        const stages = compiled_shader.stageDescriptors(device.selectedBackend());
+        var derived_layouts = try vkmtl.shader.Reflection.deriveRenderPipelineBindGroupLayouts(
+            allocator,
+            stages.vertex,
+            stages.fragment,
+        );
+        defer derived_layouts.deinit();
+        if (derived_layouts.descriptors().len != 1) return error.MissingDerivedBindGroupLayout;
+
+        var bind_group_layout = try device.makeBindGroupLayout(derived_layouts.descriptors()[0]);
+        errdefer bind_group_layout.deinit();
+        var sampler = try device.makeSamplerState(.{
+            .min_filter = .nearest,
+            .mag_filter = .nearest,
+        });
+        errdefer sampler.deinit();
+
+        const bind_group_layouts = [_]vkmtl.BindGroupLayoutDescriptor{
+            bind_group_layout.descriptor(),
+        };
+        var pipeline = try device.makeRenderPipelineState(.{
+            .label = "ray traced scene display transform",
+            .vertex = stages.vertex,
+            .fragment = stages.fragment,
+            .bind_group_layouts = bind_group_layouts[0..],
+            .primitive_topology = .triangle,
+            .color_attachments = present_color_attachments[0..],
+        });
+        errdefer pipeline.deinit();
+
+        return .{
+            .compiled_shader = compiled_shader,
+            .bind_group_layout = bind_group_layout,
+            .sampler = sampler,
+            .pipeline = pipeline,
+        };
+    }
+
+    fn deinit(self: *DisplayPipeline) void {
+        self.pipeline.deinit();
+        self.sampler.deinit();
+        self.bind_group_layout.deinit();
+        self.compiled_shader.deinit();
+    }
+};
+
+const DisplayTarget = struct {
+    allocator: std.mem.Allocator,
+    texture: vkmtl.Texture,
+    view: vkmtl.TextureView,
+    bind_group: vkmtl.binding.BindGroup,
+
+    fn create(
+        allocator: std.mem.Allocator,
+        device: *vkmtl.Device,
+        display: *DisplayPipeline,
+        extent: vkmtl.Extent2D,
+    ) !*DisplayTarget {
+        const target = try allocator.create(DisplayTarget);
+        errdefer allocator.destroy(target);
+        target.allocator = allocator;
+        target.texture = try device.makeTexture(.{
+            .label = "ray traced scene linear HDR output",
+            .format = .rgba16_float,
+            .width = extent.width,
+            .height = extent.height,
+            .usage = .{
+                .shader_read = true,
+                .shader_write = true,
+            },
+            .storage_mode = .private,
+        });
+        errdefer target.texture.deinit();
+        target.view = try target.texture.makeTextureView(.{});
+        errdefer target.view.deinit();
+
+        const entries = [_]vkmtl.BindGroupEntry{
+            .{
+                .binding = 0,
+                .resource = .{ .sampled_texture = &target.view },
+            },
+            .{
+                .binding = 1,
+                .resource = .{ .sampler = &display.sampler },
+            },
+        };
+        target.bind_group = try device.makeBindGroup(.{
+            .layout = &display.bind_group_layout,
+            .entries = entries[0..],
+        });
+        return target;
+    }
+
+    fn destroy(self: *DisplayTarget) void {
+        const allocator = self.allocator;
+        self.bind_group.deinit();
+        self.view.deinit();
+        self.texture.deinit();
+        allocator.destroy(self);
+    }
+};
+
+fn traceAndPresent(
+    queue: *vkmtl.Queue,
+    pipeline: *vkmtl.ray_tracing.RayTracingPipelineState,
+    shader_binding_table: *vkmtl.ray_tracing.ShaderBindingTable,
+    acceleration_structure: *vkmtl.ray_tracing.AccelerationStructure,
+    target: *DisplayTarget,
+    display: *DisplayPipeline,
+    descriptor: vkmtl.ray_tracing.RayDispatchDescriptor,
+) !vkmtl.ray_tracing.RayDispatchPlan {
+    var trace_command_buffer = try queue.makeCommandBuffer();
+    const plan = try trace_command_buffer.dispatchRaysToTexture(
+        pipeline,
+        shader_binding_table,
+        descriptor,
+        .{
+            .acceleration_structure = acceleration_structure,
+            .output = &target.view,
+        },
+    );
+    try trace_command_buffer.commit();
+
+    var present_command_buffer = try queue.makeCommandBuffer();
+    var present_encoder = try present_command_buffer.makeRenderCommandEncoder(.{
+        .color_attachments = &.{.{
+            .clear_color = .{ .red = 0.0, .green = 0.0, .blue = 0.0, .alpha = 1.0 },
+        }},
+    });
+    try present_encoder.setRenderPipelineState(&display.pipeline);
+    try present_encoder.setBindGroup(&target.bind_group, .{ .index = 0 });
+    try present_encoder.drawPrimitives(.{
+        .primitive_type = .triangle,
+        .vertex_count = 3,
+    });
+    try present_encoder.endEncoding();
+    try present_command_buffer.presentDrawable();
+    try present_command_buffer.commit();
+    return plan;
+}
+
 fn currentSceneTime(start_seconds: f64) f32 {
     return native_scene_time + @as(f32, @floatCast(glfw.timeSeconds() - start_seconds));
+}
+
+fn frameLimitFromEnv() finite_run.FrameLimitError!?u64 {
+    const value = getenv("VKMTL_RT_FRAME_LIMIT");
+    return finite_run.parseFrameLimit(if (value) |text| std.mem.span(text) else null);
+}
+
+fn requireFiniteFramebuffer(
+    frame_limit: ?u64,
+    watchdog: *finite_run.ZeroExtentWatchdog,
+    backend: []const u8,
+) !void {
+    if (frame_limit == null or !watchdog.observe(glfw.timeSeconds())) return;
+    std.debug.print(
+        "ray traced scene finite run failed: backend={s} framebuffer remained 0x0 for {d:.1} seconds\n",
+        .{ backend, finite_run.zero_extent_timeout_seconds },
+    );
+    return error.RayTracingFiniteRunFramebufferTimeout;
+}
+
+fn reportFiniteRunCompletion(backend: []const u8, frame_limit: ?u64, rendered_frames: u64) !void {
+    const limit = frame_limit orelse return;
+    if (!finite_run.reachedFrameLimit(limit, rendered_frames)) {
+        std.debug.print(
+            "ray traced scene finite run failed: backend={s} window closed after {} of {} frames\n",
+            .{ backend, rendered_frames, limit },
+        );
+        return error.RayTracingFiniteRunWindowClosedEarly;
+    }
+    std.debug.print("ray traced scene finite run ok: backend={s} frames={}\n", .{ backend, rendered_frames });
 }
 
 fn makeSceneData(time_seconds: f32) RtSceneData {
