@@ -389,8 +389,7 @@ See `docs/develop/period18/`.
 
 ## Period 19: Voxel World Pressure Test
 
-Status: deferred until the backend completion periods make the render and
-binding stack less experimental.
+Status: active. Phase 1 is complete; Phase 2 is next.
 
 Goal: build a Minecraft-like block world prototype under `examples/` as the
 final pressure test for the core render, resource, shader, binding, transfer,
@@ -403,6 +402,11 @@ and presentation stack.
 - Phase 5: chunk streaming and mesh rebuild loop
 - Phase 6: lighting and visibility polish
 - Phase 7: pressure-test report
+
+The period was reactivated after Periods 46-54 closed the original backend and
+semantic-routing blockers. Phase 1 fixes the bounded workload, portable
+non-sparse resource path, metrics, controls, and API-allocation rule and adds a
+public-API-only runnable window scaffold.
 
 See `docs/develop/period19/`.
 
@@ -1035,8 +1039,9 @@ See `docs/develop/period32+/target.md`.
 - Period 45 is complete as the native semantic coverage audit, and Periods
   46-54 plus the additive headless runtime are complete implementation slices.
   The Period 45 source ledger now has zero incomplete routes. A future
-  mainline begins with a new native baseline audit or an explicit decision to
-  allocate one of the precisely unsupported contracts.
+  native-semantic breadth period begins with a new baseline audit or an
+  explicit decision to allocate one of the precisely unsupported contracts;
+  Period 19 instead pressure-tests the already closed surface.
 - Period 32 Phases 6-7 are closed. The Vulkan RT path was visibly observed on
   Windows/NVIDIA hardware; unsupported behavior is documented from the
   deterministic capability contract and unit coverage because the host had no
@@ -1068,8 +1073,9 @@ See `docs/develop/period32+/target.md`.
   queues, memory, residency, resource-table scale, pipeline persistence, ray
   tracing completeness, advanced geometry, external interop, edge semantics,
   profiling, capture, debug markers, CI, and device-matrix validation.
-- Period 19 remains the voxel pressure-test target, but it is deferred until the
-  backend completion work removes the obvious render and binding blockers.
+- Period 19 is now the active voxel pressure-test target. The backend
+  completion gate has been satisfied; Phase 1 is complete and Phase 2 owns the
+  first static chunk mesher and visible geometry.
 - Period 11 remains the long-term capability-query baseline for advanced
   backend work.
 - Periods 20 through 30 are backend completion and parity periods, not a
@@ -1078,6 +1084,7 @@ See `docs/develop/period32+/target.md`.
   periods. When they describe advanced lowering, treat Period 20+ as the
   current source of truth for executable native backend closure.
 - Feature gates must be truthful before advanced backend lowering begins.
-- Period 19 intentionally comes after production hardening. The voxel example is
-  a pressure test, not the place to invent missing backend fundamentals.
+- Period 19 follows production hardening. The voxel example is a pressure test,
+  not the place to invent missing backend fundamentals; real missing contracts
+  require an explicit semantic and public-API allocation.
 - Each period should include tests or examples that prove the new capability.

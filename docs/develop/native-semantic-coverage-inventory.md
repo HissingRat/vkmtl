@@ -255,6 +255,8 @@ mark one backend incomplete/unsupported.
 
 The source audit and Periods 46-54 are complete. The exactly-once gap-routing
 file is empty because all 111 audited Metal semantic units now have an
-executable or precise unsupported outcome. New implementation periods must be
-created from a new SDK/baseline audit or an explicit decision to allocate one
-of the currently unsupported contracts; no incomplete Period 45 route remains.
+executable or precise unsupported outcome. New native-semantic implementation
+periods must be created from a new SDK/baseline audit or an explicit decision
+to allocate one of the currently unsupported contracts; no incomplete Period
+45 route remains. Application-level workload periods such as Period 19 may
+exercise the closed surface without creating a semantic route in advance.

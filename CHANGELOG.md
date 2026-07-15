@@ -11,6 +11,9 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Reactivated the bounded Period 19 voxel renderer pressure test and added the
+  public-API-only `examples/voxel_world` window scaffold, `run-voxel-world`
+  build step, and finite-frame smoke marker.
 - Added capability-gated exact occlusion sample counts through
   `diagnostics.OcclusionQueryMode.counting`, native Metal counting visibility,
   and Vulkan precise occlusion queries.

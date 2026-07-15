@@ -257,6 +257,31 @@ pub fn build(b: *std.Build) void {
     const rainbow_cube_step = b.step("run-rainbow-cube", "Run the vkmtl rotating rainbow cube example");
     rainbow_cube_step.dependOn(&rainbow_cube_cmd.step);
 
+    const voxel_world = b.addExecutable(.{
+        .name = "vkmtl-voxel-world",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/voxel_world/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+                .{ .name = "zig_glfw", .module = zig_glfw },
+                .{ .name = "vkmtl_examples_common", .module = vkmtl_examples_common },
+            },
+        }),
+    });
+    voxel_world.root_module.linkLibrary(glfw);
+    b.installArtifact(voxel_world);
+
+    const voxel_world_cmd = b.addRunArtifact(voxel_world);
+    voxel_world_cmd.step.dependOn(b.getInstallStep());
+    configureVulkanRuntimeForRun(b, voxel_world_cmd, target.result.os.tag, vulkan_runtime);
+    forwardRunArgs(b, voxel_world_cmd);
+
+    const voxel_world_step = b.step("run-voxel-world", "Run the vkmtl voxel world pressure-test example");
+    voxel_world_step.dependOn(&voxel_world_cmd.step);
+
     const transfer_readback = b.addExecutable(.{
         .name = "vkmtl-transfer-readback",
         .root_module = b.createModule(.{

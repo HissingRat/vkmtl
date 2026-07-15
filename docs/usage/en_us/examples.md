@@ -43,6 +43,7 @@ which mode applies.
 | Offscreen texture | `zig build run-offscreen-texture` | Window | Offscreen triangle sampled onto the presented quad; pixel mode prints `render pixel regression ok backend=... max_channel_delta=...`. |
 | MSAA triangle | `zig build run-msaa-triangle` | Window | Multisampled triangle resolved and sampled into the drawable. |
 | Rainbow cube | `zig build run-rainbow-cube` | Window | Rotating textured cube with depth and indexed drawing. |
+| Voxel world | `zig build run-voxel-world` | Window; set `VKMTL_VOXEL_FRAME_LIMIT=N` for finite smoke | Phase 1 sky-colored public-API scaffold; chunk rendering begins in Period 19 Phase 2. |
 | Transfer readback | `zig build run-transfer-readback` | Auto-exit | Exact copies pass and print `transfer readback ok`. |
 | Compute readback | `zig build run-compute-readback` | Auto-exit | Storage buffer/texture bytes match and print `compute readback ok`. |
 | Capability dump | `zig build run-capability-dump` | Auto-exit | Console report starts with backend/adapter and includes features, limits, formats, and diagnostics. |
@@ -202,6 +203,26 @@ The Slang source lives beside the example:
 ```text
 examples/rainbow_cube/shaders/rainbow_cube.slang
 ```
+
+## Voxel World Pressure Test
+
+`examples/voxel_world` is the bounded Minecraft-like renderer pressure test.
+Period 19 Phase 1 currently supplies a public-API-only window/presentation
+scaffold and fixes the `16 x 64 x 16` chunk, smoke/default/stress profiles,
+portable non-sparse resource path, diagnostics, and eventual controls. Phase 2
+adds the first visible-face chunk mesh and real Slang pipeline.
+
+Run it interactively or as a finite-frame scaffold smoke:
+
+```sh
+zig build run-voxel-world
+VKMTL_VOXEL_FRAME_LIMIT=2 VKMTL_BACKEND=metal zig build run-voxel-world
+zig build run-voxel-world -Dvulkan
+```
+
+The finite smoke prints `voxel_world_phase1_scaffold=ok`. The current visual
+output is intentionally only a sky-colored drawable; it is not yet a claim of
+voxel geometry execution.
 
 ## Transfer Readback
 

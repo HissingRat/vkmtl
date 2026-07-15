@@ -98,6 +98,14 @@ pub const examples = [_]ExampleEntry{
         .backend_expectation = "integrated 3D cube with depth, texture, uniforms, and indexed draw",
     },
     .{
+        .name = "voxel_world",
+        .path = "examples/voxel_world",
+        .run_step = "run-voxel-world",
+        .kind = .render,
+        .deterministic_output = "voxel_world_phase1_scaffold=ok",
+        .backend_expectation = "portable voxel workload scaffold before chunk rendering phases",
+    },
+    .{
         .name = "transfer_readback",
         .path = "examples/transfer_readback",
         .run_step = "run-transfer-readback",
@@ -1894,7 +1902,7 @@ pub fn validateDocumentationTopics(topics: []const DocumentationTopic) Developme
 
 test "example gallery metadata is valid" {
     try validateExamples(examples[0..]);
-    try std.testing.expectEqual(@as(usize, 16), implementedExampleCount(examples[0..]));
+    try std.testing.expectEqual(@as(usize, 17), implementedExampleCount(examples[0..]));
 }
 
 test "deterministic examples declare output markers" {

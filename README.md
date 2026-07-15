@@ -116,6 +116,7 @@ zig build run-api-guard
 zig build run-triangle
 zig build run-offscreen-texture
 zig build run-rainbow-cube
+zig build run-voxel-world
 zig build run-transfer-readback
 zig build run-compute-readback
 zig build run-external-import

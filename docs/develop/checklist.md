@@ -40,11 +40,15 @@ closed one by one as vkmtl moves from prototype to library.
   `docs/develop/native-semantic-coverage-inventory.md` as the authoritative
   semantic-support ledger. Periods 46-54 and the additive headless-runtime
   refactor are complete. The original exactly-once semantic gap routing now
-  has zero incomplete rows; a future mainline requires a new baseline audit or
-  an explicit unsupported-contract allocation.
+  has zero incomplete rows; a future native-semantic breadth period requires a
+  new baseline audit or an explicit unsupported-contract allocation. The
+  Period 19 workload proceeds independently against the closed surface.
 - The completed headless-runtime slice keeps `WindowContext` unchanged and
   adds a real no-surface `HeadlessContext`; its allocation, ownership, backend,
   and validation evidence are recorded in `docs/develop/headless-context.md`.
+- Period 19 is reactivated now that the original backend-completion gate is
+  satisfied. Its Phase 1 bounded workload and public-API-only scaffold are
+  complete; Phase 2 static chunk meshing is the current implementation slice.
 
 ## Headless Runtime Context
 
@@ -1233,19 +1237,21 @@ closed one by one as vkmtl moves from prototype to library.
 
 ## Period 19 Phase 1 Checklist
 
-Period 19 is deferred until the backend completion periods have removed the
-obvious render and binding blockers.
+The backend-completion gate is satisfied. Phase 1 fixes the portable workload
+contract before chunk implementation begins.
 
-- [ ] Define voxel world example contract before implementation.
-- [ ] Add `examples/voxel_world` as a public API example target.
-- [ ] Keep gameplay, networking, save files, and full engine concerns out of scope.
-- [ ] List vkmtl features the example must exercise.
-- [ ] Document expected output and controls.
+- [x] Define voxel world example contract before implementation.
+- [x] Add `examples/voxel_world` as a public API example target.
+- [x] Keep gameplay, networking, save files, and full engine concerns out of scope.
+- [x] List vkmtl features the example must exercise.
+- [x] Document expected output and controls.
+- [x] Pass format, API guard, tests, default/Vulkan builds, and finite-frame
+  physical Metal scaffold validation.
 
 ## Period 19 Phase 2 Checklist
 
-- [ ] Define chunk mesh scope before implementation.
-- [ ] Define block IDs, chunk dimensions, vertex format, and index format.
+- [x] Define chunk mesh scope before implementation.
+- [x] Define block IDs, chunk dimensions, vertex format, and index format.
 - [ ] Generate CPU chunk meshes with visible faces only.
 - [ ] Upload vertex and index buffers through public vkmtl APIs.
 - [ ] Add simple meshing tests.

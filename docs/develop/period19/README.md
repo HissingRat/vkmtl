@@ -1,6 +1,6 @@
 # Period 19: Voxel World Pressure Test
 
-Status: planned.
+Status: active. Phase 1 is complete; Phase 2 is next.
 
 Goal: build a Minecraft-like block world prototype under `examples/` as the
 final pressure test for vkmtl's render, resource, shader, binding, transfer,
@@ -10,10 +10,17 @@ This is not a full game engine period. The target is a focused voxel renderer
 prototype: fly a camera through a chunked block world, render visible faces with
 a texture atlas, and use the result to expose remaining vkmtl bottlenecks.
 
+Period 19 was reactivated after Periods 46-54 closed the original render,
+binding, synchronization, resource, and semantic-routing blockers. New public
+API is not assumed: the pressure test must first use the current canonical
+surface and turn any real missing contract into an explicit allocation.
+
 ## Phase 1: Voxel Example Contract
 
-- Define the exact scope of `examples/voxel_world`.
-- Keep gameplay out of scope.
+- Define the exact scope and bounded workload profiles.
+- Add a public-API-only `examples/voxel_world` window scaffold and run step.
+- Keep gameplay out of scope and advanced optional capabilities off the
+  correctness path.
 
 See `phase1.md`.
 

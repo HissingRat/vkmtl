@@ -185,5 +185,7 @@ Metal 4 feature flag substitutes for per-semantic gates.
 ## Next Slice
 
 Periods 46-54 are complete and the exactly-once route file has no remaining
-incomplete semantic ID. The next slice requires a new source baseline or an
-explicit unsupported-contract allocation rather than inheriting stale routes.
+incomplete semantic ID. The next native-semantic breadth slice requires a new
+source baseline or an explicit unsupported-contract allocation rather than
+inheriting stale routes. Period 19's active voxel workload is a consumer-side
+pressure test of the closed surface and does not reopen this routing file.
