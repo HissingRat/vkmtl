@@ -379,7 +379,7 @@ acceleration structure、pipeline、SBT、`vkCmdTraceRaysKHR` 和 output present
 本次 AS sizing 修复后的 Vulkan stderr 没有 error、warning 或 VUID，但也没有明确打印
 `VK_LAYER_KHRONOS_validation` 已启用，且没有包含 device/driver identity。因此这里只记录为
 物理执行证据，不宣称 validation-layer-clean 或具名设备结果。
-[Period32 Phase 6 验证记录](../../develop/period32/phase6.md)列出了实际观察到的
+[整合后的验证记录](../../develop/validation.md)列出了实际观察到的
 Windows/NVIDIA 硬件、命令、build gate 和本地 ignored screenshot evidence。
 
 如果 Vulkan runtime 缺少所需 extension、feature、limit 或 device procedure，示例会在

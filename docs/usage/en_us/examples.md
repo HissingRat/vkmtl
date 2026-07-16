@@ -515,7 +515,7 @@ The current procedural marker supersedes the original Period32
 `driver_pixels=visible_vulkan_rt_output` marker. It still proves the native
 Vulkan acceleration-structure, pipeline, SBT, `vkCmdTraceRaysKHR`, and
 output-presentation path, now as part of the later procedural scene. The
-[Period32 Phase 6 validation record](../../develop/period32/phase6.md) names
+[The consolidated validation record](../../develop/validation.md) names
 the observed Windows/NVIDIA hardware, command, build gates, and the local
 ignored screenshot evidence.
 

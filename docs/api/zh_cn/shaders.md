@@ -234,7 +234,7 @@ defer vertex_descriptor.deinit();
 ```
 
 所有 shader-backed examples 都附带运行时生成的 reflection artifact。更多 binding model 决策见
-`docs/develop/period1/phase6.md`。
+`docs/develop/architecture.md`。
 
 Schema 1 覆盖 portable buffer、texture、sampler、fixed array、storage access 和 vertex-input
 子集。Bindless/runtime-sized array、tensor、payload、function table 和 backend-only reflection

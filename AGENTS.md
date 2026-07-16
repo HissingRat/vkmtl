@@ -31,15 +31,15 @@ rewriting the rest of the library.
 
 ## Public API Evolution
 
-`docs/develop/public-api-rules.md` is the authoritative policy for public API
-changes. Read it before adding, removing, renaming, or moving any declaration
-reachable through `src/vkmtl.zig`, and before changing public methods, fields,
-enum tags, errors, defaults, ownership, lifetime, capability, or limit meaning.
+`docs/develop/public-api.md` is the authoritative policy for public API and
+release compatibility changes. Read it before adding, removing, renaming, or
+moving any declaration reachable through `src/vkmtl.zig`, and before changing
+public methods, fields, enum tags, errors, defaults, ownership, lifetime,
+capability, or limit meaning.
 `docs/develop/public-api-inventory.md` is the current surface snapshot and
 canonical namespace assignment; update it in the same change whenever the
-public surface changes. `docs/develop/api-migration-guide.md` records the
-intentional Phase 9 break and is the compatibility reference for callers
-updating from the prototype surface.
+public surface changes. `docs/develop/migration.md` is the compatibility
+reference for callers updating from older surfaces.
 
 `docs/develop/native-semantic-coverage-inventory.md` is the authoritative
 backend execution inventory. Read it before claiming that a capability is
@@ -48,13 +48,13 @@ meaning of a feature, limit, or format capability. Update the relevant row and
 evidence in the same change. Planning-only, validation-only, or native-query
 availability must never be reported as executable support.
 
-`docs/develop/release-policy.md` defines the versioned compatibility promise.
-For `v0.1.x`, preserve the documented portable Zig source API; intentional
-portable source breaks require `v0.2.0` or later, changelog coverage, and
-migration guidance. Do not treat opaque `_state` layout, binary ABI, raw native
-handles, or backend-native escape hatches as stable API. Capability-gated work
-is supported only when the selected device reports it and the path is
-documented as executable.
+The release policy is part of `docs/develop/public-api.md`. For `v0.1.x`,
+preserve the documented portable Zig source API; intentional portable source
+breaks require `v0.2.0` or later, changelog coverage, and migration guidance.
+Do not treat opaque `_state` layout, binary ABI, raw native handles, or
+backend-native escape hatches as stable API. Capability-gated work is supported
+only when the selected device reports it and the path is documented as
+executable.
 
 In particular:
 
@@ -194,21 +194,21 @@ an example or application needs direct control. Keep examples on the public
 runtime shader declaration APIs; the build-time precompiler owns the embedded
 artifact blobs.
 
-## Phase Discipline
+## Development Slice Discipline
 
 Follow `docs/develop/roadmap.md`.
 
-Before starting work on any phase, read `docs/develop/checklist.md` and
-complete the checklist items that define or unblock that phase. If a checklist
-item is a design decision, make the decision explicit in docs before
-implementing code that depends on it.
+Before starting a slice, read its active roadmap item and complete the design
+decisions that define or unblock it. Make those decisions explicit before
+implementing code that depends on them. Do not create another `periodNN/`
+directory; completed outcomes move to `docs/develop/history.md`.
 
-Before changing public API during a phase, also read and apply
-`docs/develop/public-api-rules.md` and `docs/develop/release-policy.md`.
+Before changing public API, also read and apply
+`docs/develop/public-api.md`.
 
-Current priority follows the active phase in `docs/develop/checklist.md`. Keep
-work in small vertical slices and do not jump to broad engine features before
-the backend boundary for the current slice is stable.
+Current priority follows `docs/develop/roadmap.md`. Keep work in small vertical
+slices and do not jump to broad engine features before the backend boundary for
+the current slice is stable.
 
 ## Worktree Habits
 

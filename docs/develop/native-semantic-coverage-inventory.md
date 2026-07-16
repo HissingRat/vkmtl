@@ -18,7 +18,7 @@ documented behavior is preserved. If a backend cannot preserve that behavior,
 vkmtl must report a capability-gated or typed unsupported result.
 
 This document remains the compact feature-family view. Period 45 adds the
-source-driven detail in `period45/metal-semantic-ledger.md`. Period 45 recorded
+source-driven detail in `data/metal-semantic-ledger.md`. Period 45 recorded
 the historical 99-unit/77-gap baseline. Period 46 split broad query/counter
 rows into 101 units. Period 47 Phase 1 split six advanced remainders from its
 portable targets, producing 107 stable Metal semantic units and retaining the

@@ -288,4 +288,4 @@ access, and vertex-input subset. Bindless/runtime-sized arrays, tensors,
 payloads, function tables, and backend-only reflection protocols are not
 silently approximated by this schema.
 
-See `docs/develop/period1/phase6.md` for the binding-model decision notes.
+See `docs/develop/architecture.md` for the binding and shader-system boundary.

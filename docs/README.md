@@ -34,68 +34,28 @@ vkmtl documentation is organized by audience and purpose.
 
 ## Development
 
-- `develop/release-policy.md`: release versioning, compatibility, package,
-  toolchain, capability, and release-gate contract
-- `develop/release-review-v0.1.0.md`: completed record for the first tagged
-  compatibility release
-- `develop/public-api-rules.md`: authoritative public API evolution,
-  namespacing, compatibility, and removal rules
+- `develop/README.md`: developer-document index, authority order, and
+  maintenance rules
+- `develop/architecture.md`: stable module boundaries, ownership, backend
+  interface, shader pipeline, headless runtime, and presentation contract
+- `develop/public-api.md`: authoritative API admission, compatibility,
+  package, and release policy
 - `develop/public-api-inventory.md`: current root export, owner method,
   namespace, and compatibility inventory
+- `develop/migration.md`: caller migration from older namespaces, owners, and
+  build integration
 - `develop/native-semantic-coverage-inventory.md`: Metal/Vulkan semantic
   lowering status, unsupported behavior, and execution evidence
-- `develop/headless-context.md`: no-window context allocation, backend
-  lowering, presentation boundary, and validation evidence
-- `develop/api-migration-roadmap.md`: completed staged plan for canonical
-  facades, caller migration, owner convergence, and pre-tag cleanup
-- `develop/api-migration-map.md`: implemented final root, namespace,
-  native-name, and runtime-owner allocation
-- `develop/api-migration-guide.md`: caller migration from the prototype API to
-  the completed pre-tag surface
-- `develop/roadmap.md`: route, stages, and what comes next
-- `develop/checklist.md`: checkable tasks and phase gates
-- `develop/period1/`: core library slice, phases 0 through 9
-- `develop/period2/`: runtime architecture and specs
-- `develop/period3/`: resource coverage
-- `develop/period4/`: shader and binding
-- `develop/period5/`: render pipeline
-- `develop/period6/`: command, sync, and transfer
-- `develop/period7/`: compute
-- `develop/period8/`: pipeline and object cache
-- `develop/period9/`: examples, test matrix, and documentation
-- `develop/period10/`: advanced backend-gated features
-- `develop/period11/`: backend capability reality
-- `develop/period12/`: bindless and argument buffer backend lowering
-- `develop/period13/`: multi-surface and presentation backend work
-- `develop/period14/`: native interop and external resources
-- `develop/period15/`: sparse and tiled resource backend lowering
-- `develop/period16/`: tessellation and mesh pipeline backend lowering
-- `develop/period17/`: ray tracing backend lowering
-- `develop/period18/`: production hardening and performance
-- `develop/period19/`: voxel world pressure-test example
-- `develop/period43/`: profiling, capture, and debug-marker diagnostics
-- `develop/period44/`: CI/device evidence, pixel regression, GPU soak, and
-  current parity report
-- `develop/period45/`: native semantic source audit, backend mappings, and gap
-  priority
-- `develop/period46/`: native queries, GPU counters, and Metal specialization
-- `develop/period47/`: common resource, format, render, compute, and reflection
-  breadth
-- `develop/period48/`: native synchronization, physical queues, command
-  lifecycle, and presentation timing
-- `develop/period49/`: native heaps, memory telemetry, hardware memoryless
-  attachments, and sparse/residency support boundaries
-- `develop/period50/`: scalable resource tables, reusable indirect commands,
-  driver pipeline artifacts, and explicit dynamic-linking boundaries
-- `develop/period51/`: advanced rasterization, tessellation, and mesh geometry
-  closure
-- `develop/backend-test-matrix.md`: backend/host validation matrix
-- `develop/validation-matrix.md`: validation coverage inventory
+- `develop/validation.md`: backend/host matrix, evidence classes, required
+  commands, physical results, and release decision rules
+- `develop/roadmap.md`: current work only; completed task detail is removed
+- `develop/history.md`: compact Period 1-56, migration, and release ledger;
+  full old phase notes remain available at the recorded Git snapshot
 
 ## Releases
 
 - `../CHANGELOG.md`: user-facing release history and migration-impact summary
-- `develop/api-migration-guide.md`: prototype-to-`v0.1.0` source migration
+- `develop/migration.md`: source and package migration reference
 - `usage/en_us/compatibility.md`: English package and compatibility contract
 - `usage/zh_cn/compatibility.md`: 中文 package 与兼容性契约
 

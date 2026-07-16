@@ -502,7 +502,7 @@ pub const backend_test_matrix = [_]BackendMatrixEntry{
         .required = false,
         .command = "VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan",
         .requires_runtime_configuration = true,
-        .expectation = "a Vulkan RT device renders three frames through the application-owned composition path; the Period 56 legacy raw-copy probe remains a separate required physical rerun",
+        .expectation = "a Vulkan RT device renders through the application-owned composition path and the legacy raw-copy probe; both have accepted physical orientation evidence",
     },
     .{
         .name = "binding_variant_regression",
@@ -1908,12 +1908,12 @@ pub const documentation_topics = [_]DocumentationTopic{
     },
     .{
         .name = "backend_test_matrix",
-        .path = "docs/develop/backend-test-matrix.md",
+        .path = "docs/develop/validation.md",
         .expectation = "backend and host validation rows",
     },
     .{
         .name = "validation_matrix",
-        .path = "docs/develop/validation-matrix.md",
+        .path = "docs/develop/validation.md",
         .expectation = "validation case inventory and integration gaps",
     },
     .{
@@ -1928,7 +1928,7 @@ pub const documentation_topics = [_]DocumentationTopic{
     },
     .{
         .name = "period44_parity_report",
-        .path = "docs/develop/period44/parity-report.md",
+        .path = "docs/develop/validation.md",
         .expectation = "observed Metal, Vulkan, and hosted evidence, known unsupported lanes, and release decision",
     },
 };

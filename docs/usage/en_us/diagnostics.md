@@ -120,4 +120,4 @@ Period 44 report records all nine release gates as observed. Longer soak,
 device-loss injection, native memory pressure, physical async queues, sparse
 binding, native cache persistence, and native RT stress remain separate
 non-gate evidence rather than being implied by 9/9. See
-`docs/develop/period44/parity-report.md`.
+`docs/develop/validation.md`.

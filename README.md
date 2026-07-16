@@ -29,18 +29,20 @@ hatches.
 ## Documentation
 
 - [Docs index](docs/README.md): map of the documentation set.
-- [Release policy](docs/develop/release-policy.md): `v0.1.x` compatibility,
-  package, toolchain, capability, and release-gate contract.
+- [Developer docs](docs/develop/README.md): current contract and planning
+  sources of truth.
+- [Public API policy](docs/develop/public-api.md): API admission, `v0.1.x`
+  compatibility, package, toolchain, and release gates.
 - [Changelog](CHANGELOG.md): user-visible release history.
-- [Roadmap](docs/develop/roadmap.md): route and stage boundaries.
-- [Checklist](docs/develop/checklist.md): checkable implementation and polish
-  tasks.
+- [Roadmap](docs/develop/roadmap.md): current priorities and completion gates.
 - [Native semantic coverage](docs/develop/native-semantic-coverage-inventory.md):
   Metal/Vulkan lowering status, unsupported semantics, and evidence gaps.
-- [Headless context design](docs/develop/headless-context.md): no-window owner,
-  backend lowering, lifetime, and presentation boundary.
-- [API migration guide](docs/develop/api-migration-guide.md): updating callers
-  from the prototype surface to the final pre-tag namespaces and owners.
+- [Architecture](docs/develop/architecture.md): module boundaries, ownership,
+  backend lowering, shaders, headless execution, and presentation.
+- [API migration](docs/develop/migration.md): updating callers from older
+  namespaces, owners, and package integration.
+- [Validation](docs/develop/validation.md): required backend, host, package,
+  physical GPU, pixel, and release evidence.
 - [Core API zh_CN](docs/api/zh_cn/core.md): current public API surface in
   Chinese.
 - [Features and limits zh_CN](docs/api/zh_cn/features-and-limits.md): capability
@@ -61,8 +63,8 @@ hatches.
   issue-report guidance in English.
 - [Validation en_US](docs/usage/en_us/validation.md): Vulkan and Metal native
   API validation setup in English.
-- [Current parity report](docs/develop/period44/parity-report.md): observed,
-  configured, and missing backend/device evidence.
+- [Development history](docs/develop/history.md): compact Period 1-56 and
+  release evidence ledger.
 
 ## Package And Compatibility
 

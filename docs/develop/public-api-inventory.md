@@ -5,8 +5,8 @@ refreshed on 2026-07-15.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
-the first intentional compatibility surface; `public-api-rules.md` remains the
-authoritative admission policy and `api-migration-guide.md` records how callers
+the first intentional compatibility surface; `public-api.md` remains the
+authoritative admission policy and `migration.md` records how callers
 move from the prototype surface.
 
 The cutover is intentionally breaking. It changes public reachability and
@@ -480,7 +480,7 @@ swapchain
 Its former 46 creation, compilation, queue, swapchain, diagnostics, and planning
 forwards were removed. Their final replacements are natural `Device`, `Queue`,
 or `Swapchain` methods, or the facade operations summarized above and detailed
-in `api-migration-guide.md`.
+in `migration.md`.
 
 ## Example Regression Set
 
@@ -1008,9 +1008,9 @@ When the public surface changes:
 - [ ] Confirm every guarded runtime handle still has exactly one `_state`
   storage field and exposes no private implementation type.
 - [ ] Update the example regression set.
-- [ ] Update `api-migration-guide.md` for compatibility changes.
+- [ ] Update `migration.md` for compatibility changes.
 - [ ] Update the exact-name API guard after an approved allowlist change.
 - [ ] Confirm public facades do not import backend-private bindings.
 - [ ] Update the package/module and shader-manifest inventory when consumer
   build options or schema fields change.
-- [ ] Run the validation required by `public-api-rules.md`.
+- [ ] Run the validation required by `public-api.md`.
