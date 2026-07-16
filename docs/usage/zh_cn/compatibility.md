@@ -17,8 +17,8 @@ drawable、presentation 和 presentation-shaped native handle。
 不能依赖 raw native-handle value，也不能假设 backend-native escape hatch 在 `0.x` minor
 release 间稳定。`v0.1.x` 支持的工具链是 Zig `0.16.0`。
 
-权威规则见 [release policy](../../develop/release-policy.md)，从 prototype 更新的调用方见
-[API migration guide](../../develop/api-migration-guide.md)。
+权威规则见 [public API and release policy](../../develop/public-api.md)，从旧版本更新的调用方见
+[migration reference](../../develop/migration.md)。
 
 ## Package 与 Shader Manifest
 

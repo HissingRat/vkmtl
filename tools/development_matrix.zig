@@ -616,7 +616,7 @@ pub const ValidationEvidenceState = enum {
     missing,
 };
 
-pub const Period44Job = struct {
+pub const ValidationJob = struct {
     name: []const u8,
     host_os: MatrixHost,
     target_os: MatrixHost,
@@ -630,7 +630,7 @@ pub const Period44Job = struct {
     attach_capability_dump: bool = false,
     command: []const u8,
 
-    pub fn validate(self: Period44Job) DevelopmentMatrixError!void {
+    pub fn validate(self: ValidationJob) DevelopmentMatrixError!void {
         if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
         if (self.architecture.len == 0) return DevelopmentMatrixError.EmptyExpectation;
         if (self.command.len == 0) return DevelopmentMatrixError.EmptyRunStep;
@@ -651,7 +651,7 @@ pub const Period44Job = struct {
     }
 };
 
-pub const period44_jobs = [_]Period44Job{
+pub const validation_jobs = [_]ValidationJob{
     .{
         .name = "hosted_macos_build",
         .host_os = .macos,
@@ -791,7 +791,7 @@ pub const period44_jobs = [_]Period44Job{
     },
 };
 
-pub fn validatePeriod44Jobs(entries: []const Period44Job) DevelopmentMatrixError!void {
+pub fn validateValidationJobs(entries: []const ValidationJob) DevelopmentMatrixError!void {
     for (entries, 0..) |entry, i| {
         try entry.validate();
         for (entries[i + 1 ..]) |other| {
@@ -809,34 +809,34 @@ pub const BackendEvidenceExpectation = enum {
     native_escape_hatch,
 };
 
-pub const Period44FeatureExpectation = struct {
+pub const BackendFeatureExpectation = struct {
     name: []const u8,
     vulkan: BackendEvidenceExpectation,
     metal: BackendEvidenceExpectation,
     evidence: []const u8,
 
-    pub fn validate(self: Period44FeatureExpectation) DevelopmentMatrixError!void {
+    pub fn validate(self: BackendFeatureExpectation) DevelopmentMatrixError!void {
         if (self.name.len == 0) return DevelopmentMatrixError.EmptyName;
         if (self.evidence.len == 0) return DevelopmentMatrixError.EmptyExpectation;
     }
 };
 
-pub const period44_feature_expectations = [_]Period44FeatureExpectation{
+pub const backend_feature_expectations = [_]BackendFeatureExpectation{
     .{ .name = "object_and_encoder_debug_markers", .vulkan = .capability_gated, .metal = .executable, .evidence = "capability dump and native capture/debug tool" },
     .{ .name = "command_buffer_debug_markers", .vulkan = .validation_only, .metal = .executable, .evidence = "DebugMarkerCapabilities" },
     .{ .name = "native_gpu_timestamps", .vulkan = .capability_gated, .metal = .capability_gated, .evidence = "native query regression plus QuerySet.resultSource" },
-    .{ .name = "boolean_occlusion_visibility", .vulkan = .capability_gated, .metal = .capability_gated, .evidence = "offscreen native query readback/resolve and reset/reuse regression" },
+    .{ .name = "boolean_occlusion_visibility", .vulkan = .capability_gated, .metal = .executable, .evidence = "offscreen native query readback/resolve and reset/reuse regression" },
     .{ .name = "scaled_texture_blit", .vulkan = .capability_gated, .metal = .typed_unsupported, .evidence = "format capability dump and UnsupportedTextureBlit" },
     .{ .name = "pipeline_statistics_queries", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "QuerySet creation gate" },
-    .{ .name = "native_heap_backing", .vulkan = .planning_only, .metal = .planning_only, .evidence = "heap and aliasing plans" },
-    .{ .name = "native_sparse_page_binding", .vulkan = .planning_only, .metal = .planning_only, .evidence = "sparse residency plans" },
-    .{ .name = "external_resource_import", .vulkan = .planning_only, .metal = .planning_only, .evidence = "external interop capability matrix" },
-    .{ .name = "native_dedicated_queues", .vulkan = .planning_only, .metal = .planning_only, .evidence = "logical queue fallback report" },
-    .{ .name = "ray_query", .vulkan = .capability_gated, .metal = .typed_unsupported, .evidence = "ray query plan and selected device features" },
+    .{ .name = "native_heap_backing", .vulkan = .executable, .metal = .executable, .evidence = "native placement resources and validated heap offsets" },
+    .{ .name = "native_sparse_page_binding", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "resource-bound sparse mapping contract is absent" },
+    .{ .name = "external_resource_import", .vulkan = .typed_unsupported, .metal = .executable, .evidence = "Metal borrowed-resource readback; Vulkan import contract is incomplete" },
+    .{ .name = "queue_selection_with_graphics_fallback", .vulkan = .executable, .metal = .executable, .evidence = "physical queue selection when available with exact graphics fallback" },
+    .{ .name = "ray_query", .vulkan = .typed_unsupported, .metal = .typed_unsupported, .evidence = "ordinary-stage acceleration-structure binding contract is absent" },
     .{ .name = "native_handle_escape_hatch", .vulkan = .native_escape_hatch, .metal = .native_escape_hatch, .evidence = "NativeHandles tagged union lifetime contract" },
 };
 
-pub fn validatePeriod44FeatureExpectations(entries: []const Period44FeatureExpectation) DevelopmentMatrixError!void {
+pub fn validateBackendFeatureExpectations(entries: []const BackendFeatureExpectation) DevelopmentMatrixError!void {
     for (entries, 0..) |entry, i| {
         try entry.validate();
         for (entries[i + 1 ..]) |other| {
@@ -2023,15 +2023,15 @@ test "backend test matrix metadata is valid" {
     try std.testing.expect(has_ray_tracing_vulkan_color_path);
 }
 
-test "Period 44 validation jobs separate hosted builds from physical GPU evidence" {
-    try validatePeriod44Jobs(period44_jobs[0..]);
+test "validation jobs separate hosted builds from physical GPU evidence" {
+    try validateValidationJobs(validation_jobs[0..]);
 
     var hosted_jobs: usize = 0;
     var hosted_package_smokes: usize = 0;
     var physical_metal = false;
     var physical_vulkan = false;
     var release_gpu_jobs: usize = 0;
-    for (period44_jobs) |entry| {
+    for (validation_jobs) |entry| {
         if (entry.execution == .hosted_build) {
             hosted_jobs += 1;
             try std.testing.expectEqual(ValidationDeviceClass.none, entry.device_class);
@@ -2055,20 +2055,26 @@ test "Period 44 validation jobs separate hosted builds from physical GPU evidenc
     try std.testing.expect(release_gpu_jobs >= 4);
 }
 
-test "feature expectations keep remaining unsupported and planning lanes explicit" {
-    try validatePeriod44FeatureExpectations(period44_feature_expectations[0..]);
+test "feature expectations keep backend evidence lanes explicit" {
+    try validateBackendFeatureExpectations(backend_feature_expectations[0..]);
 
     var typed_unsupported: usize = 0;
-    var planning_only: usize = 0;
+    var executable: usize = 0;
+    var capability_gated: usize = 0;
+    var validation_only: usize = 0;
     var native_escape_hatches: usize = 0;
-    for (period44_feature_expectations) |entry| {
+    for (backend_feature_expectations) |entry| {
         if (entry.vulkan == .typed_unsupported or entry.metal == .typed_unsupported) typed_unsupported += 1;
-        if (entry.vulkan == .planning_only or entry.metal == .planning_only) planning_only += 1;
+        if (entry.vulkan == .executable or entry.metal == .executable) executable += 1;
+        if (entry.vulkan == .capability_gated or entry.metal == .capability_gated) capability_gated += 1;
+        if (entry.vulkan == .validation_only or entry.metal == .validation_only) validation_only += 1;
         if (entry.vulkan == .native_escape_hatch or entry.metal == .native_escape_hatch) native_escape_hatches += 1;
     }
 
     try std.testing.expect(typed_unsupported >= 3);
-    try std.testing.expect(planning_only >= 4);
+    try std.testing.expect(executable >= 3);
+    try std.testing.expect(capability_gated >= 3);
+    try std.testing.expect(validation_only >= 1);
     try std.testing.expect(native_escape_hatches >= 1);
 }
 

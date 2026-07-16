@@ -2,16 +2,16 @@ const std = @import("std");
 const matrix = @import("vkmtl_development_matrix");
 
 pub fn main(init: std.process.Init) !void {
-    try matrix.validatePeriod44Jobs(matrix.period44_jobs[0..]);
-    try matrix.validatePeriod44FeatureExpectations(matrix.period44_feature_expectations[0..]);
+    try matrix.validateValidationJobs(matrix.validation_jobs[0..]);
+    try matrix.validateBackendFeatureExpectations(matrix.backend_feature_expectations[0..]);
 
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    try stdout.print("vkmtl Period 44 validation plan\n", .{});
-    try stdout.print("jobs: {}\n", .{matrix.period44_jobs.len});
-    for (matrix.period44_jobs) |job| {
+    try stdout.print("vkmtl validation plan\n", .{});
+    try stdout.print("jobs: {}\n", .{matrix.validation_jobs.len});
+    for (matrix.validation_jobs) |job| {
         try stdout.print(
             "job {s}: host={s} target={s} arch={s} backend={s} device={s} execution={s} expected={s} evidence={s} release_required={} capability_dump={}\n",
             .{
@@ -31,8 +31,8 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("  command: {s}\n", .{job.command});
     }
 
-    try stdout.print("feature expectations: {}\n", .{matrix.period44_feature_expectations.len});
-    for (matrix.period44_feature_expectations) |feature| {
+    try stdout.print("feature expectations: {}\n", .{matrix.backend_feature_expectations.len});
+    for (matrix.backend_feature_expectations) |feature| {
         try stdout.print("feature {s}: vulkan={s} metal={s} evidence={s}\n", .{
             feature.name,
             @tagName(feature.vulkan),

@@ -23,8 +23,8 @@ alignment, or contents of opaque `_state` storage, raw native-handle values, or
 the stability of backend-native escape hatches. The supported toolchain for
 `v0.1.x` is Zig `0.16.0`.
 
-See the authoritative [release policy](../../develop/release-policy.md) and the
-[prototype migration guide](../../develop/api-migration-guide.md).
+See the authoritative [public API and release policy](../../develop/public-api.md)
+and the [migration reference](../../develop/migration.md).
 
 ## Package And Shader Manifest
 

@@ -57,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     try writeGate(stdout, "metal_soak", evidence.metal_soak);
     try writeGate(stdout, "vulkan_soak", evidence.vulkan_soak);
     try stdout.print("evidence: {}/9\n", .{evidence.satisfiedCount()});
-    try stdout.print("known feature expectations: {}\n", .{matrix.period44_feature_expectations.len});
+    try stdout.print("known feature expectations: {}\n", .{matrix.backend_feature_expectations.len});
     try stdout.print("release ready: {}\n", .{evidence.isReady()});
     try stdout.print("voxel-world pressure test: deferred\n", .{});
     try stdout.flush();

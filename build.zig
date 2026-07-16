@@ -801,10 +801,10 @@ pub fn build(b: *std.Build) void {
     const semantic_inventory_cmd = b.addRunArtifact(semantic_inventory);
     semantic_inventory_cmd.addFileArg(b.path("src/core.zig"));
     semantic_inventory_cmd.addFileArg(b.path("docs/develop/native-semantic-coverage-inventory.md"));
-    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/device-feature-semantic-map.tsv"));
-    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/metal-semantic-ledger.md"));
-    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/metal-protocol-semantic-map.tsv"));
-    semantic_inventory_cmd.addFileArg(b.path("docs/develop/period45/gap-routing.tsv"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/data/device-feature-semantic-map.tsv"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/data/metal-semantic-ledger.md"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/data/metal-protocol-semantic-map.tsv"));
+    semantic_inventory_cmd.addFileArg(b.path("docs/develop/data/gap-routing.tsv"));
     const semantic_inventory_step = b.step(
         "run-semantic-inventory-check",
         "Verify native semantic IDs, status vocabulary, and DeviceFeatures coverage",
@@ -833,7 +833,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(validation_plan);
     const validation_plan_cmd = b.addRunArtifact(validation_plan);
-    const validation_plan_step = b.step("run-validation-plan", "Print the Period 44 host, backend, device, and feature validation plan");
+    const validation_plan_step = b.step("run-validation-plan", "Print the host, backend, device, and feature validation plan");
     validation_plan_step.dependOn(&validation_plan_cmd.step);
 
     const release_readiness = b.addExecutable(.{
@@ -850,7 +850,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(release_readiness);
     const release_readiness_cmd = b.addRunArtifact(release_readiness);
     forwardRunArgs(b, release_readiness_cmd);
-    const release_readiness_step = b.step("run-release-readiness", "Evaluate explicit Period 44 release evidence gates");
+    const release_readiness_step = b.step("run-release-readiness", "Evaluate explicit release evidence gates");
     release_readiness_step.dependOn(&release_readiness_cmd.step);
 
     const backend_pipeline_tests = b.addTest(.{

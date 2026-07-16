@@ -3,7 +3,7 @@
 All notable user-facing changes to vkmtl are recorded in this file.
 
 vkmtl follows the release and compatibility policy in
-[`docs/develop/release-policy.md`](docs/develop/release-policy.md). Because the
+[`docs/develop/public-api.md`](docs/develop/public-api.md). Because the
 project is still in the `0.x` series, intentional portable source breaks are
 reserved for the next minor release and are documented with migration guidance.
 
