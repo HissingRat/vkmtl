@@ -633,18 +633,19 @@ on clean commit `7d88ffe` with `presentation_max_channel_delta=0` and
 sampled only the background and center, so it did not detect a separate
 clip-space Y inversion in general geometry.
 
-After the general raster correction, this remains the required physical
-Vulkan command:
+After the general raster correction, the supplied physical Windows rerun used:
 
 ```sh
-VKMTL_BACKEND=vulkan zig build run-pixel-regression -Dvulkan
+zig build run-pixel-regression
 ```
 
-It must report both `raster_orientation=top_left` and
-`presentation_orientation=top_left`, with channel deltas within the configured
-bounds. This lane is independent of the accepted RT scene orientation. Its
-absence does not reopen Period 56 visual closure, but it leaves the corrected
-general-raster contract incomplete for a fresh release matrix.
+It selected `.vulkan` and returned `max_channel_delta=0`,
+`raster_orientation=top_left`,
+`presentation_max_channel_delta=0`, and
+`presentation_orientation=top_left`. Counter-clockwise back-culling preserved
+the 61170-sample occlusion result; native timestamps and query reset/reuse also
+passed. This closes current physical Vulkan raster semantics independently of
+the accepted RT scene orientation.
 
 ### Current Windows Vulkan Headless And Raster Diagnostic
 
@@ -667,10 +668,17 @@ printed `voxel_world_pressure_test=ok`. These runs are accepted as pressure
 diagnostics only. The visible Vulkan voxel scene was vertically inverted, so
 they do not close raster parity or the Vulkan voxel release lane.
 
-The corrected exact commit must rerun the pixel regression and all three voxel
-profiles. Pixel output must contain both top-left orientation markers; voxel
-output must retain the pressure bounds and show the same upright scene as
-Metal.
+The subsequent corrected-path run passed the asymmetric raster/composition
+readback with both channel deltas at zero. Its smoke/default/stress voxel runs
+completed 24/48/160 frames with resident counts 9/81/289, pending work zero,
+and `voxel_world_pressure_test=ok`. The stress run rendered 121 visible and
+culled 168 resident chunks. Together the deterministic raster readback and
+bounded voxel runs close the earlier orientation/pressure diagnostic.
+
+The supplied corrected-path artifact did not repeat `git rev-parse HEAD` or
+`git status --short`. It is accepted physical behavior evidence, but it is not
+an exact-release-commit cleanliness record. The future release candidate must
+still refresh every required lane against its final clean commit.
 
 ## Optional And Pressure Lanes
 
@@ -708,9 +716,11 @@ MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=stress \
 Each run must print `voxel_world_pressure_test=ok`, drain pending rebuilds,
 and remain within the 9/81/289 resident bounds. The durable Metal observation
 used an Apple M4 Pro and bounded upload/rebuild budgets. Equivalent Vulkan
-pressure execution on `7d88ffe` met all numeric bounds, but its visible scene
-was vertically inverted. It remains diagnostic rather than accepted voxel
-raster evidence until repeated after the backend viewport correction.
+pressure execution on `7d88ffe` met all numeric bounds but used the inverted
+general raster path. The post-correction rerun again passed smoke/default/
+stress at 9/81/289 resident chunks with zero pending work; the asymmetric
+top/bottom pixel readback independently establishes corrected raster
+orientation.
 
 ### MoltenVK And iOS
 
@@ -807,5 +817,8 @@ The current durable state is:
 - clean-commit Windows Vulkan HeadlessContext and 5x2 composition execution is
   recorded on an RTX 5080, while its old general raster path was vertically
   inverted;
-- the corrected asymmetric raster/cull pixel regression and voxel profiles
-  remain required artifacts for the next fresh release matrix.
+- corrected physical Vulkan asymmetric raster/cull and composition readback
+  both report top-left orientation with zero channel delta, and all three voxel
+  profiles pass their pressure bounds;
+- every required lane must still be refreshed on the exact clean future
+  release commit.

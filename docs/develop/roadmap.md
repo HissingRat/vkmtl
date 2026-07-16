@@ -47,26 +47,16 @@ availability, and forced compilation never substitute for executable support.
   voxel pressure bound. The same run exposed a separate vertical inversion in
   ordinary geometry rasterization, so its voxel result is diagnostic rather
   than accepted raster evidence.
+- The corrected physical Vulkan rerun reports zero channel delta for both the
+  asymmetric raster and 5x2 composition checks, with both orientation markers
+  `top_left`. Smoke/default/stress voxel profiles again pass at 9/81/289
+  resident chunks with zero pending work.
 
 ## Priority 1: Close Current Release Evidence
 
-The first item closes an implementation bug in the existing Metal-like raster
-contract without adding public API. The remaining item validates the future
-release commit.
+The raster correction now has physical Metal and Vulkan evidence. Current
+physical results remain historical until repeated on the final release commit.
 
-- [ ] Rerun the corrected general raster and voxel paths on a physical Vulkan
-  device. First run:
-
-  ```sh
-  VKMTL_BACKEND=vulkan zig build run-pixel-regression -Dvulkan
-  ```
-
-  Require `raster_orientation=top_left`,
-  `presentation_orientation=top_left`, and channel deltas within their
-  configured bounds. Then rerun smoke/default/stress voxel profiles, preserving
-  the 9/81/289 resident bounds and `voxel_world_pressure_test=ok`, and confirm
-  the scene is upright. The old pressure metrics do not substitute for this
-  corrected-commit result.
 - [ ] Refresh every required physical lane against the exact future release
   commit before tagging; historical evidence remains history only.
 

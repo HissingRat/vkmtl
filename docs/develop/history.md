@@ -867,6 +867,26 @@ The exact-tag review recorded:
 - **Non-goal:** no HDR formats, metadata, exposure, tone mapping, gamut policy,
   or general color-management pipeline was added.
 
+### Post-Period 56 - Raster Coordinate Parity Correction
+
+- **Problem:** ordinary Vulkan geometry used a positive native viewport height,
+  so Metal-like clip-space Y appeared vertically inverted even though the
+  separate fullscreen texture-composition regression was top-left.
+- **Outcome:** `dd40422` lowers public positive, top-left viewports to adjusted
+  negative-height Vulkan viewports, preserves direct winding names, and applies
+  the existing winding/cull descriptors through native Metal encoder state.
+- **Regression:** the pixel lane now renders a counter-clockwise asymmetric
+  triangle with back-face culling and samples distinct top/bottom pixels. Both
+  Metal and Vulkan report `raster_orientation=top_left`; Vulkan returned zero
+  raster and composition channel delta.
+- **Physical Vulkan:** smoke/default/stress voxel runs completed 24/48/160
+  frames at 9/81/289 resident chunks, drained pending work, and emitted
+  `voxel_world_pressure_test=ok`. The corrected stress run observed 121 visible
+  and 168 culled chunks.
+- **Evidence boundary:** the corrected-path log did not repeat the commit hash
+  or clean-worktree command, so it proves the physical behavior but does not
+  replace a future exact-release-commit matrix refresh.
+
 ## Durable Historical Decisions
 
 Several decisions survived many periods and explain why some advanced native

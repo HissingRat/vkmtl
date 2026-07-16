@@ -3,7 +3,7 @@
 Status: Period 56 complete, updated 2026-07-16. Vulkan legacy RT and corrected
 canonical composition both have physical execution and visual-orientation
 evidence. The general raster-coordinate correction is implemented; its
-physical Vulkan geometry/voxel rerun remains pending.
+physical Vulkan raster and voxel reruns now pass.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -84,8 +84,10 @@ portable positive-height, top-left viewport to an adjusted negative-height
 Vulkan viewport while retaining direct winding names. Metal now lowers the
 existing winding and cull descriptors into native encoder state rather than
 relying on native defaults. An asymmetric back-culled triangle readback guards
-the top/bottom and facing contract; physical Metal passes, while the corrected
-Vulkan pixel and voxel reruns remain required evidence.
+the top/bottom and facing contract. Physical Metal and Vulkan both report
+top-left raster/composition orientation; the corrected Vulkan run returned
+zero channel delta and all three voxel profiles drained pending work within
+their 9/81/289 resident bounds.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence. The same `7d88ffe` Windows Vulkan run
@@ -187,7 +189,7 @@ develops a different lowering or support state.
 
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
-| REN-01 | Metal-like clip/NDC Y, positive top-left public viewport/scissor, winding/cull parity, render pipelines, indexed/direct draw, depth, stencil, and blend | `render` | `native-exact` | `native-exact` | Metal sets native viewport, winding, and cull encoder state. Vulkan lowers to `y + height` and negative native height (core 1.1 or `VK_KHR_maintenance1`) while keeping winding names direct. Unit lowering checks plus an asymmetric counter-clockwise, back-culled top/bottom readback cover the contract; physical Metal passes and the corrected physical Vulkan rerun is pending. |
+| REN-01 | Metal-like clip/NDC Y, positive top-left public viewport/scissor, winding/cull parity, render pipelines, indexed/direct draw, depth, stencil, and blend | `render` | `native-exact` | `native-exact` | Metal sets native viewport, winding, and cull encoder state. Vulkan lowers to `y + height` and negative native height (core 1.1 or `VK_KHR_maintenance1`) while keeping winding names direct. Unit lowering checks plus an asymmetric counter-clockwise, back-culled top/bottom readback cover the contract. Physical Metal and Vulkan both pass; Vulkan reports zero channel delta and both top-left orientation markers. |
 | REN-02 | MRT, offscreen targets, MSAA color resolve | `render` | `native-exact` | `native-exact` | `unit` and representative `gpu-pixels`. |
 | REN-03 | Base vertex/base instance and instance step rate | `render` | `native-exact` | `native-exact` | `unit`; Vulkan divisor support is capability-gated. |
 | REN-04 | Indirect/explicit multi-draw and CPU-authored reusable draw lists | `render`, `command` | `composed-exact` | `composed-exact` | `gpu-smoke` on Metal for native ICB execution; Vulkan and Metal paths whose active shader pipeline is not ICB-compatible expand immutable commands into repeated native draws. GPU-authored mutation is excluded. |
@@ -309,8 +311,9 @@ automatic/sRGB/linear offscreen pixels plus selected-drawable smoke and both
 legacy formats are recorded for Period 56. Vulkan legacy raw-copy physical
 evidence and the corrected canonical 3000-frame visual run are recorded. The
 general raster-coordinate correction has deterministic and physical Metal
-evidence; corrected physical Vulkan asymmetric-triangle and voxel evidence is
-the next closeout item. The exactly-once gap-routing file is empty because all
+evidence. Corrected physical Vulkan asymmetric-raster and smoke/default/stress
+voxel evidence is also recorded; only a future exact-release-commit refresh is
+needed. The exactly-once gap-routing file is empty because all
 111 audited Metal semantic units now have an
 executable or precise unsupported outcome. New native-semantic implementation
 periods must be created from a new SDK/baseline audit or an explicit decision
