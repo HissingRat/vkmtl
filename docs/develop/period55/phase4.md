@@ -56,17 +56,17 @@ regression provenance only and is not Vulkan execution evidence.
 The Vulkan implementation and shader artifacts have unit and forced-build
 coverage. The Period 55 texture-presentation path now builds, submits,
 presents, and completes three physical frames on the Vulkan RT machine. Its
-first screenshot exposed a vertically flipped fullscreen composition, so the
-required post-fix visual rerun remains:
+first screenshot exposed a vertically flipped fullscreen composition. The
+post-fix visual rerun completed 3000 frames with the established top-left
+orientation using:
 
 ```sh
-VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 \
+VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3000 \
   zig build run-ray-traced-scene -Dvulkan
 ```
 
-Only a correctly oriented physical result may complete that new-path visual
-evidence. The legacy raw-copy route already passes physical execution and
-orientation.
+That correctly oriented result completes the new-path visual evidence. The
+legacy raw-copy route also passes physical execution and orientation.
 
 ## Documentation Closeout
 

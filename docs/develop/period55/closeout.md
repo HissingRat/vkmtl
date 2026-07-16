@@ -61,10 +61,10 @@ is `0.0/0.18/0.5/0.8/1.0 -> 0/46/128/204/255`.
   `run-ray-traced-scene` execution, establishing command and architecture
   validity in addition to the separate byte-level display-pass regression.
 - Vulkan has implementation, unit, shader-artifact, forced-build, and
-  three-frame physical submission/presentation evidence. The first canonical
-  screenshot exposed a fullscreen Y flip; corrected visual acceptance remains
-  one post-fix Vulkan rerun. The legacy raw-copy screenshot is correctly
-  oriented.
+  physical submission/presentation evidence. The first canonical screenshot
+  exposed a fullscreen Y flip; after the fragment-position UV fix, the
+  corrected path completed 3000 frames with the established orientation. The
+  legacy raw-copy screenshot is also correctly oriented.
 
 The legacy drawable route is retained only for compatibility. New rendering,
 offscreen, and future headless composition should use texture dispatch.

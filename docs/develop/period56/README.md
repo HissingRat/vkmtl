@@ -3,8 +3,8 @@
 Status: complete. Phases 1-5, deterministic validation, the physical Metal
 request-mode offscreen-pixel plus selected-drawable smoke matrix, and both
 Metal legacy RT routes are recorded. Vulkan legacy raw-copy execution and
-visual orientation are recorded; canonical execution succeeds but its
-post-orientation-fix visual rerun remains open.
+visual orientation are recorded, and the corrected canonical composition
+completed 3000 physical frames with the established top-left orientation.
 
 Goal: make the presentation format request observable and make the selected
 drawable format deterministic. `PresentationDescriptor.format` remains the
@@ -89,7 +89,7 @@ See `phase5.md`.
 
 The implementation and validation record is summarized in `closeout.md`.
 `vulkan-physical-evidence.md` records the successful legacy route, the
-canonical vertical-flip finding, and the exact remaining canonical rerun.
+canonical vertical-flip finding, its correction, and the accepted rerun.
 
 ## Non-Goals
 

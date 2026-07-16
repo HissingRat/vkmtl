@@ -83,7 +83,8 @@ Current cases:
   offscreen shared-display readback with a maximum one-byte channel delta; the
   shared-display Vulkan path now submits and completes physically; its first
   screenshot exposed a vertical composition flip, and the corrected
-  fragment-position UV path retains one visual rerun gap.
+  fragment-position UV path subsequently completed 3000 frames with the
+  accepted orientation.
   Period 56 additionally locks request-versus-selected presentation state,
   deterministic and exact SDR selection, selected-only presentation
   capabilities, requested-versus-actual extent, same-request/recovery resize,
@@ -99,9 +100,11 @@ Current cases:
   offscreen pixels plus actual selected-drawable bind/present smoke and
   three-frame sRGB/linear legacy raw-copy runs with
   `trace_driver_submitted=true`. Vulkan canonical and legacy routes both submit
-  and complete three frames; legacy visual orientation passes, while canonical
-  needs a post-fix orientation screenshot/readback. The supplied Vulkan stderr
-  does not positively prove that the validation layer was enabled.
+  and complete; legacy visual orientation passes, while the corrected canonical
+  route completed 3000 frames with the same top-left orientation. The supplied
+  Vulkan stderr does not positively prove that the validation layer was
+  enabled. The updated asymmetric 5x2 physical Vulkan pixel readback remains a
+  separate required release-matrix artifact.
 - `ray_tracing_completeness`: update/refit/compact resources, many-instance
   TLAS validation, native ray-query discovery, planning-only complex/callable
   SBT records, and RT stress plans stay capability-gated and deterministic.

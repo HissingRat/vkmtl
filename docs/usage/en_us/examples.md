@@ -501,8 +501,9 @@ The historical Vulkan physical evidence above still proves the native RT
 backend, but it predates the Period 55 shared presentation path. The new Vulkan
 path now builds, submits, presents, and completes three physical frames. Its
 first canonical screenshot exposed a vertical fullscreen-composition flip;
-the fragment-position UV fix still needs one corrected Vulkan visual rerun.
-The legacy raw-copy screenshot has the established orientation.
+after the fragment-position UV fix, the corrected Vulkan path completed 3000
+frames with the established top-left orientation. The legacy raw-copy
+screenshot has the same orientation.
 
 Set `VKMTL_RT_LEGACY_DRAWABLE=1` only to validate the compatibility route. With
 `VKMTL_RT_FRAME_LIMIT=3`, the example dispatches into a caller-owned linear

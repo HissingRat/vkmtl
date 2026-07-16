@@ -624,7 +624,7 @@ shared reference transform. The golden scalar mapping is
 that evidence validates command execution, not captured reference bytes.
 Vulkan now submits and completes this route physically. Its first screenshot
 exposed a vertical composition flip; the corrected fragment-position UV path
-still needs one visual device-matrix rerun rather than an inferred claim.
+subsequently completed 3000 frames with the accepted top-left orientation.
 
 ## Wave 37: Observable Presentation Format Selection
 
@@ -649,8 +649,8 @@ Tracked in `docs/develop/period56/`.
 - [x] Record Metal legacy caller-output probes for sRGB and linear selected
   drawables under API Validation.
 - [x] Keep Vulkan RT-machine evidence explicit rather than inferred from forced
-  builds. Legacy raw copy now passes execution and orientation; corrected
-  canonical orientation needs one rerun.
+  builds. Legacy raw copy and corrected canonical composition now both pass
+  execution and visual orientation.
 
 Expected result: callers can distinguish requested and selected presentation
 formats and build pipelines against the concrete drawable. The presentation

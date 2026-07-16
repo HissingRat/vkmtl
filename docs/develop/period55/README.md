@@ -58,8 +58,9 @@ completed a finite three-frame run for the command architecture. The Metal
 pixel-regression lane also rendered the shared pass into an offscreen sRGB
 attachment and read back black, `0.18`, `0.5`, yellow, and blue with a maximum
 one-byte channel delta. Vulkan has implementation, unit, and forced-build
-evidence for the new path; its physical RT-machine presentation rerun is still
-explicit follow-up evidence rather than an inferred pass.
+evidence for the new path. Its corrected physical RT-machine presentation run
+completed 3000 frames with the established top-left orientation; that evidence
+is recorded rather than inferred from build coverage.
 
 ## Compatibility
 

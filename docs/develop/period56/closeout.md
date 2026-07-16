@@ -178,7 +178,7 @@ error. The existing `metal_table_entries=0/runtime_ready=false` diagnostic is
 for the separate function-table route and is not evidence against the submitted
 manual ray dispatch.
 
-## Vulkan Physical Record And Remaining Follow-Up
+## Vulkan Physical Record
 
 The first Windows attempts on both routes selected Vulkan and the expected
 presentation branch, then stopped in the vkmtl BLAS resource preflight before
@@ -196,10 +196,16 @@ closes that physical route.
 
 Visual comparison found the canonical `texture_composition` screenshot to be
 the same scene vertically flipped. Its native execution markers are valid, but
-its visual route remains unaccepted until the fragment-position UV fix is
-rerun on Vulkan. The logs do not positively identify the device/driver or prove
-that the Khronos validation layer was enabled, so no named-device or
+the presentation shader required a fragment-position UV fix. The corrected
+canonical path then completed 3000 frames; its screenshot has the same
+top-left orientation as the accepted compatibility result. This closes both
+physical visual routes. The logs do not positively identify the device/driver
+or prove that the Khronos validation layer was enabled, so no named-device or
 validation-layer-clean claim is added. See `vulkan-physical-evidence.md`.
+
+The updated asymmetric 5x2 physical Vulkan pixel regression is separate from
+RT visual acceptance. It remains required release-matrix evidence even though
+it is not a Period 56 closure gate.
 
 Descriptor-exact sizing for arbitrary multi-geometry arrays remains a separate
 follow-up; it did not cause either the original preflight failure or the

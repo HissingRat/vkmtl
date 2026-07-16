@@ -363,8 +363,8 @@ segment。
 Metal API Validation 已物理执行这个新路径 3 帧。上面的历史 Vulkan 物理证据仍能证明 native RT
 backend，但早于 Period 55 shared presentation path。新的 Vulkan path 现在已经在 RT 真机上
 完成 BLAS/TLAS build、ray dispatch、present 和 3 帧 finite run。第一次 canonical 截图暴露了
-fullscreen composition 上下翻转；fragment-position UV 修复仍需一次 Vulkan 方向复跑。legacy
-raw-copy 截图方向正确。
+fullscreen composition 上下翻转；fragment-position UV 修复后的 Vulkan path 已完成 3000 帧，
+并具有正确的 top-left 方向。legacy raw-copy 截图方向同样正确。
 
 只有验证兼容路径时才设置 `VKMTL_RT_LEGACY_DRAWABLE=1`。配合
 `VKMTL_RT_FRAME_LIMIT=3`，示例会向 caller-owned linear BGRA8 target dispatch，raw-copy 到

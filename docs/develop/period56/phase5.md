@@ -124,9 +124,15 @@ paths. Both built BLAS/TLAS objects, submitted 518400 rays, reported
 frames without an error, warning, or VUID in the supplied stderr.
 
 The legacy raw-copy screenshot has the established orientation and closes that
-physical compatibility route. The canonical screenshot exposed a full vertical
-flip in the fullscreen composition stage, so canonical visual acceptance stays
-open until the fragment-position UV fix is rerun on Vulkan. The logs contain no
-positive validation-layer-enabled marker and no device/driver identity; this
-record does not claim either. See `vulkan-physical-evidence.md` for the exact
-markers, screenshot comparison, and remaining evidence boundary.
+physical compatibility route. The first canonical screenshot exposed a full
+vertical flip in the fullscreen composition stage. After the
+fragment-position UV fix, the canonical path completed 3000 frames and its new
+screenshot has the same top-left orientation as the accepted compatibility
+result. Both physical visual routes are therefore accepted. The logs contain
+no positive validation-layer-enabled marker and no device/driver identity;
+this record does not claim either. See `vulkan-physical-evidence.md` for the
+exact markers and screenshot comparisons.
+
+The updated asymmetric 5x2 physical Vulkan pixel regression remains a required
+release-matrix lane. It is separate from, and does not reopen, the accepted RT
+visual routes.

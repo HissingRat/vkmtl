@@ -34,9 +34,9 @@ The authoritative matrix metadata lives in `tools/development_matrix.zig`.
   composition plus both admitted legacy raw-copy formats:
   `MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=srgb zig build run-ray-traced-scene && MTL_DEBUG_LAYER=1 VKMTL_BACKEND=metal VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 VKMTL_PRESENTATION_FORMAT=linear zig build run-ray-traced-scene`.
 - `ray_tracing_vulkan_color_path`: physical RT-machine application-owned
-  composition plus legacy raw copy. Both submit and complete three frames; the
-  legacy screenshot passes orientation, while canonical visual acceptance must
-  rerun after the fragment-position UV fix:
+  composition plus legacy raw copy. Both submit and complete; the legacy
+  three-frame screenshot passes orientation, and the corrected canonical path
+  completed 3000 frames with the same top-left orientation:
   `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvulkan`
   and
   `VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 VKMTL_RT_LEGACY_DRAWABLE=1 zig build run-ray-traced-scene -Dvulkan`.
@@ -361,8 +361,8 @@ VKMTL_BACKEND=vulkan VKMTL_RT_FRAME_LIMIT=3 zig build run-ray-traced-scene -Dvul
 
 Its first screenshot exposed a vertical fullscreen-composition flip. The
 fragment-position UV correction has asymmetric Metal readback and forced-build
-evidence; the physical Vulkan command must be repeated for corrected visual
-acceptance. Earlier RT markers do not replace that rerun.
+evidence, and its physical Vulkan rerun completed 3000 frames with the accepted
+orientation. Earlier RT markers were not used as a substitute.
 
 ## Period 56 Presentation Selection And Legacy Raw-Copy Evidence
 
@@ -414,9 +414,15 @@ Both Metal legacy commands above printed `Metal API Validation Enabled`,
 error. The Vulkan legacy command now reports the same path/submission/finite-run
 markers and visibly preserves the established orientation. The Vulkan
 canonical command also submits and completes, but its supplied screenshot
-revealed a vertical composition flip; it needs one post-fix screenshot/log
-rerun. The supplied Vulkan logs have no positive validation-layer marker, so
-they are not claimed as validation-layer-clean.
+revealed a vertical composition flip. Its post-fix screenshot/log rerun then
+completed 3000 frames with the established top-left orientation. The supplied
+Vulkan logs have no positive validation-layer marker, so they are not claimed
+as validation-layer-clean.
+
+The post-fix asymmetric 5x2
+`VKMTL_BACKEND=vulkan zig build run-pixel-regression -Dvulkan` readback remains
+required release-matrix evidence. It is independent of the accepted RT scene
+orientation.
 
 Presentation selection performs no HDR mapping, tone mapping, gamma policy, or
 gamut conversion. The legacy transfer is raw byte copying, not a
