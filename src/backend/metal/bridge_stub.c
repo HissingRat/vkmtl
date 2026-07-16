@@ -1037,6 +1037,24 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_front_facing_winding(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_winding winding
+) {
+    (void)encoder;
+    (void)winding;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_cull_mode(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_cull_mode cull_mode
+) {
+    (void)encoder;
+    (void)cull_mode;
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_buffer(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_buffer *buffer,

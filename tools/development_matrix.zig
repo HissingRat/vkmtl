@@ -81,7 +81,7 @@ pub const examples = [_]ExampleEntry{
         .path = "examples/offscreen_texture",
         .run_step = "run-offscreen-texture",
         .kind = .render,
-        .backend_expectation = "offscreen color target sampled into current drawable",
+        .backend_expectation = "asymmetric back-culled raster top/bottom readback plus top-left texture composition",
     },
     .{
         .name = "msaa_triangle",

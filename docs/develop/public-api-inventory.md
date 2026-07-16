@@ -918,6 +918,27 @@ or lifetime rule is removed or renamed. The
 presentation resolver and legacy raw-copy route add no HDR, tone-mapping,
 gamma, or gamut-conversion API.
 
+## Raster Coordinate Contract Correction
+
+The guarded root and every runtime owner method set remain unchanged. This
+correction assigns an explicit portable meaning to the existing `Viewport`,
+`Winding`, `CullMode`, `RenderPipelineDescriptor.front_facing_winding`, and
+`RenderPipelineDescriptor.cull_mode` declarations; it adds no declaration,
+enum tag, field, method, default, error, owner, or lifetime rule.
+
+vkmtl rasterization uses Metal-like normalized device coordinates: negative Y
+is the bottom, positive Y is the top, and depth is `[0, 1]`. Public viewport and
+scissor origins are top-left, their positive Y direction is downward, and a
+public viewport height is positive. Clockwise/counter-clockwise winding and
+front/back culling have the same observable meaning on both backends for the
+same projected vertices. Vulkan implements the contract in backend-private
+viewport lowering; Metal receives the corresponding winding and cull encoder
+state directly.
+
+This is a backend correctness fix, not a portable source migration. A Vulkan
+application that compensated for the prior unintended vertical inversion in
+its own shader must remove that workaround to follow the documented contract.
+
 ## Compatibility Impact
 
 This is an intentional pre-tag breaking migration:

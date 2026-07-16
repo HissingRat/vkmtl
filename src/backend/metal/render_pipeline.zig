@@ -15,6 +15,8 @@ supports_indirect_command_buffers: bool,
 uses_depth: bool,
 sample_count: u32,
 fill_mode: metal.vkmtl_metal_triangle_fill_mode,
+front_facing_winding: metal.vkmtl_metal_winding,
+cull_mode: metal.vkmtl_metal_cull_mode,
 depth_bias: core.DepthBiasDescriptor,
 
 const Error = error{
@@ -99,6 +101,8 @@ pub fn init(
         .uses_depth = descriptor.depth_stencil != null,
         .sample_count = descriptor.sample_count,
         .fill_mode = triangleFillMode(descriptor.fill_mode),
+        .front_facing_winding = winding(descriptor.front_facing_winding),
+        .cull_mode = cullMode(descriptor.cull_mode),
         .depth_bias = descriptor.depth_bias,
     };
 }
@@ -187,6 +191,8 @@ pub fn initMesh(
         .uses_depth = descriptor.depth_stencil != null,
         .sample_count = descriptor.sample_count,
         .fill_mode = triangleFillMode(descriptor.fill_mode),
+        .front_facing_winding = winding(descriptor.front_facing_winding),
+        .cull_mode = cullMode(descriptor.cull_mode),
         .depth_bias = descriptor.depth_bias,
     };
 }
@@ -362,6 +368,21 @@ fn triangleFillMode(fill_mode: core.TriangleFillMode) metal.vkmtl_metal_triangle
     };
 }
 
+fn winding(value: core.Winding) metal.vkmtl_metal_winding {
+    return switch (value) {
+        .clockwise => metal.VKMTL_METAL_WINDING_CLOCKWISE,
+        .counter_clockwise => metal.VKMTL_METAL_WINDING_COUNTER_CLOCKWISE,
+    };
+}
+
+fn cullMode(value: core.CullMode) metal.vkmtl_metal_cull_mode {
+    return switch (value) {
+        .none => metal.VKMTL_METAL_CULL_MODE_NONE,
+        .front => metal.VKMTL_METAL_CULL_MODE_FRONT,
+        .back => metal.VKMTL_METAL_CULL_MODE_BACK,
+    };
+}
+
 fn colorWriteMask(mask: core.ColorWriteMask) u32 {
     return (if (mask.red) @as(u32, 1) << 0 else 0) |
         (if (mask.green) @as(u32, 1) << 1 else 0) |
@@ -464,4 +485,27 @@ fn check(status: metal.vkmtl_metal_status) Error!void {
 test "invalid ICB-capable render pipeline retries without indirect commands" {
     try std.testing.expect(shouldRetryWithoutIndirectCommands(metal.VKMTL_METAL_STATUS_INVALID_PIPELINE));
     try std.testing.expect(!shouldRetryWithoutIndirectCommands(metal.VKMTL_METAL_STATUS_INVALID_SHADER));
+}
+
+test "Metal raster winding and cull state lower directly" {
+    try std.testing.expectEqual(
+        @as(metal.vkmtl_metal_winding, metal.VKMTL_METAL_WINDING_CLOCKWISE),
+        winding(.clockwise),
+    );
+    try std.testing.expectEqual(
+        @as(metal.vkmtl_metal_winding, metal.VKMTL_METAL_WINDING_COUNTER_CLOCKWISE),
+        winding(.counter_clockwise),
+    );
+    try std.testing.expectEqual(
+        @as(metal.vkmtl_metal_cull_mode, metal.VKMTL_METAL_CULL_MODE_NONE),
+        cullMode(.none),
+    );
+    try std.testing.expectEqual(
+        @as(metal.vkmtl_metal_cull_mode, metal.VKMTL_METAL_CULL_MODE_FRONT),
+        cullMode(.front),
+    );
+    try std.testing.expectEqual(
+        @as(metal.vkmtl_metal_cull_mode, metal.VKMTL_METAL_CULL_MODE_BACK),
+        cullMode(.back),
+    );
 }

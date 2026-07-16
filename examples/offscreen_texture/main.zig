@@ -275,7 +275,7 @@ pub fn main(_: std.process.Init.Minimal) !void {
                 &screen_vertex_buffer,
                 &screen_index_buffer,
             );
-            std.debug.print("render pixel regression ok backend={s} max_channel_delta={} presentation_max_channel_delta={} presentation_orientation=top_left\n", .{
+            std.debug.print("render pixel regression ok backend={s} max_channel_delta={} raster_orientation=top_left presentation_max_channel_delta={} presentation_orientation=top_left\n", .{
                 @tagName(context.selectedBackend()),
                 max_channel_delta,
                 presentation_max_channel_delta,
@@ -516,6 +516,16 @@ fn validateOffscreenPixels(
         .{ 143, 116, 118, 255 },
         12,
     ));
+    max_channel_delta = @max(max_channel_delta, try validatePixel(
+        pixelSlice(bytes, bytes_per_row, offscreen_width / 2, offscreen_height / 4),
+        .{ 68, 161, 172, 255 },
+        3,
+    ));
+    max_channel_delta = @max(max_channel_delta, try validatePixel(
+        pixelSlice(bytes, bytes_per_row, offscreen_width / 2, 3 * offscreen_height / 4),
+        .{ 217, 71, 64, 255 },
+        3,
+    ));
     return max_channel_delta;
 }
 
@@ -731,6 +741,8 @@ fn offscreenPipelineDescriptor(
         .fragment = specialized_fragment,
         .vertex_descriptor = vertex_descriptor,
         .primitive_topology = .triangle,
+        .front_facing_winding = .counter_clockwise,
+        .cull_mode = .back,
         .color_attachments = offscreen_color_attachments[0..],
     };
 }

@@ -852,6 +852,7 @@ const VulkanExtensionSupport = struct {
     shader_float_controls: bool = false,
     mesh_shader: bool = false,
     memory_budget: bool = false,
+    maintenance1: bool = false,
 };
 
 fn queryExtensionSupport(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator) !VulkanExtensionSupport {
@@ -882,6 +883,7 @@ fn mergeExtensionSupport(current: VulkanExtensionSupport, extension_name: []cons
     if (std.mem.eql(u8, extension_name, vk.extensions.khr_shader_float_controls.name)) result.shader_float_controls = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_mesh_shader.name)) result.mesh_shader = true;
     if (std.mem.eql(u8, extension_name, vk.extensions.ext_memory_budget.name)) result.memory_budget = true;
+    if (std.mem.eql(u8, extension_name, vk.extensions.khr_maintenance_1.name)) result.maintenance1 = true;
     return result;
 }
 
@@ -1240,6 +1242,9 @@ fn initializeCandidate(
         try extension_names.append(allocator, vk.extensions.ext_descriptor_indexing.name);
     }
     if (enable_mesh_shaders) try extension_names.append(allocator, vk.extensions.ext_mesh_shader.name);
+    if (candidate.props.api_version < vk.API_VERSION_1_1.toU32()) {
+        try extension_names.append(allocator, vk.extensions.khr_maintenance_1.name);
+    }
 
     const priority = [_]f32{1};
     const native_features = instance.getPhysicalDeviceFeatures(candidate.pdev);
@@ -1362,6 +1367,11 @@ fn pickPhysicalDevice(instance: Instance, allocator: Allocator, surface: ?vk.Sur
 
 fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator, surface: ?vk.SurfaceKHR) !?DeviceCandidate {
     if (!try checkExtensionSupport(instance, pdev, allocator, surface != null)) return null;
+    const props = instance.getPhysicalDeviceProperties(pdev);
+    if (props.api_version < vk.API_VERSION_1_1.toU32()) {
+        const extensions = try queryExtensionSupport(instance, pdev, allocator);
+        if (!extensions.maintenance1) return null;
+    }
     if (surface) |surface_handle| {
         if (!try checkSurfaceSupport(instance, pdev, surface_handle)) return null;
     }
@@ -1369,7 +1379,7 @@ fn checkSuitable(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocat
     if (try allocateQueues(instance, pdev, allocator, surface)) |allocation| {
         return .{
             .pdev = pdev,
-            .props = instance.getPhysicalDeviceProperties(pdev),
+            .props = props,
             .queues = allocation,
             .host_query_reset = hostQueryResetSupported(instance, pdev),
             .timeline_semaphore = timelineSemaphoreSupported(instance, pdev),
@@ -1606,6 +1616,7 @@ test "Vulkan extension support maps optional backend capabilities" {
     support = mergeExtensionSupport(support, vk.extensions.khr_ray_query.name);
     support = mergeExtensionSupport(support, vk.extensions.ext_mesh_shader.name);
     support = mergeExtensionSupport(support, vk.extensions.ext_memory_budget.name);
+    support = mergeExtensionSupport(support, vk.extensions.khr_maintenance_1.name);
 
     try std.testing.expect(support.descriptor_indexing);
     try std.testing.expect(support.vertex_attribute_divisor_khr);
@@ -1620,6 +1631,7 @@ test "Vulkan extension support maps optional backend capabilities" {
     try std.testing.expect(support.ray_query);
     try std.testing.expect(support.mesh_shader);
     try std.testing.expect(support.memory_budget);
+    try std.testing.expect(support.maintenance1);
 }
 
 test "Vulkan ray tracing extension gate reports the first missing KHR dependency" {

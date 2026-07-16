@@ -909,6 +909,18 @@ portably and lower to native Vulkan and Metal dynamic-state commands.
 only when the active render pipeline enables matching blend, stencil, or
 depth-bias state.
 
+Raster coordinates follow one Metal-like contract on both backends. After
+perspective division, normalized device coordinates use `x = -1` at the left,
+`x = +1` at the right, `y = -1` at the bottom, `y = +1` at the top, and a
+`z` range of `[0, 1]`. Public viewport and scissor origins are measured from
+the top-left of the render target, with positive `x` moving right and positive
+`y` moving down; public viewport width and height are always positive.
+`front_facing_winding` and `cull_mode` therefore have the same observable
+meaning for the same projected vertices on Metal and Vulkan. The Vulkan
+backend implements this contract with an adjusted negative-height native
+viewport and keeps clockwise/counter-clockwise winding names unchanged. Shader
+code must not add a backend-specific clip-space Y flip.
+
 Direct draw descriptors include `base_instance`; indexed draw descriptors also
 include `base_vertex`. These base fields now lower to native Vulkan and Metal
 direct draw commands. Indirect draw lowers to the native backend and requires

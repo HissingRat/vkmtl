@@ -834,6 +834,14 @@ pub const RenderCommandEncoder = struct {
             self.handle,
             pipeline.fill_mode,
         ));
+        try check(metal.vkmtl_metal_render_command_encoder_set_front_facing_winding(
+            self.handle,
+            pipeline.front_facing_winding,
+        ));
+        try check(metal.vkmtl_metal_render_command_encoder_set_cull_mode(
+            self.handle,
+            pipeline.cull_mode,
+        ));
         if (pipeline.depth_bias.enabled) {
             try self.setDepthBias(pipeline.depth_bias);
         }

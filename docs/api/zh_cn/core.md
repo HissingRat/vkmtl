@@ -747,6 +747,15 @@ Dynamic render state descriptor 包括 `Viewport`、`ScissorRect`、`BlendColor`
 state 命令。`BlendColor`、`StencilReference` 和 `DepthBiasDescriptor` 是否影响最终输出仍取决于
 当前 render pipeline 是否启用了对应 blend、stencil 或 depth-bias state。
 
+两个 backend 采用同一套 Metal-like raster 坐标契约。Perspective divide 之后，normalized
+device coordinate 的 `x = -1` 位于左侧、`x = +1` 位于右侧、`y = -1` 位于底部、
+`y = +1` 位于顶部，`z` 范围为 `[0, 1]`。Public viewport 和 scissor 的 origin 从
+render target 左上角计算，正 `x` 向右、正 `y` 向下；public viewport 的 width 和 height
+始终为正。对相同的 projected vertex，`front_facing_winding` 与 `cull_mode` 在 Metal 和
+Vulkan 上具有相同的可观察含义。Vulkan backend 通过调整后的 negative-height native
+viewport 实现该契约，同时保持 clockwise/counter-clockwise winding 名称直接对应。Shader
+不应再添加 backend-specific clip-space Y flip。
+
 Direct draw descriptor 包含 `base_instance`；indexed draw descriptor 也包含 `base_vertex`。
 这些 base 字段已经下沉到 Vulkan 和 Metal direct draw 命令。indirect draw 会下沉到
 native backend，并要求 indirect buffer 使用 `.indirect` usage；`draw_count > 1` 会按

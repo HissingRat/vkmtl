@@ -905,6 +905,7 @@ fn primitiveTopology(topology: core.PrimitiveTopology) vk.PrimitiveTopology {
 }
 
 fn frontFace(winding: core.Winding) vk.FrontFace {
+    // VkFrontFace's framebuffer-area sign keeps Metal-like winding names direct.
     return switch (winding) {
         .clockwise => .clockwise,
         .counter_clockwise => .counter_clockwise,
@@ -924,6 +925,11 @@ fn cullMode(mode: core.CullMode) vk.CullModeFlags {
         .front => .{ .front_bit = true },
         .back => .{ .back_bit = true },
     };
+}
+
+test "Vulkan winding remains direct with negative-height viewports" {
+    try std.testing.expectEqual(vk.FrontFace.clockwise, frontFace(.clockwise));
+    try std.testing.expectEqual(vk.FrontFace.counter_clockwise, frontFace(.counter_clockwise));
 }
 
 fn colorWriteMask(mask: core.ColorWriteMask) vk.ColorComponentFlags {

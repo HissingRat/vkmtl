@@ -588,6 +588,7 @@ the new feature or exhaustively switch over public enums/errors:
 
 | Area | Caller action |
 | --- | --- |
+| Raster coordinates | Use the documented Metal-like clip-space Y on every backend. Remove Vulkan-only shader or projection Y flips that compensated for the earlier backend inversion; public viewport/scissor coordinates remain top-left with positive dimensions. |
 | Queries | Set `QuerySetDescriptor.occlusion_mode = .counting` only when `occlusion_counting_queries` is reported; handle `UnsupportedOcclusionCountingQueries` and `QueryBackendFailure`. |
 | Query render passes | Set `RenderPassDescriptor.occlusion_query_set` and pass the same set to begin/end query calls. |
 | Synchronization | `timeline_fences` now means a native monotonic object with host and GPU wait/signal; do not infer external sharing. |

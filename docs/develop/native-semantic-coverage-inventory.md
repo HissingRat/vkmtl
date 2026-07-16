@@ -2,7 +2,8 @@
 
 Status: Period 56 complete, updated 2026-07-16. Vulkan legacy RT and corrected
 canonical composition both have physical execution and visual-orientation
-evidence.
+evidence. The general raster-coordinate correction is implemented; its
+physical Vulkan geometry/voxel rerun remains pending.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -76,10 +77,21 @@ graphics-queue-only. Destructive Vulkan recreation failure permanently loses
 presentation, preventing stale framebuffer/image-view use. Normal and poisoned
 Vulkan teardown wait graphics fences and the presentation queue before
 destroying swapchain images, semaphores, or the swapchain handle.
+Post-Period-56 physical Vulkan voxel pressure on commit `7d88ffe` satisfied its
+resource/work bounds but exposed that ordinary geometry rasterization still
+used Vulkan's opposite clip-space Y orientation. The backend now lowers the
+portable positive-height, top-left viewport to an adjusted negative-height
+Vulkan viewport while retaining direct winding names. Metal now lowers the
+existing winding and cull descriptors into native encoder state rather than
+relying on native defaults. An asymmetric back-culled triangle readback guards
+the top/bottom and facing contract; physical Metal passes, while the corrected
+Vulkan pixel and voxel reruns remain required evidence.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
-texture-backed offscreen evidence; Vulkan has implementation and forced-build
-evidence, while a physical loader/device rerun remains pending.
+texture-backed offscreen evidence. The same `7d88ffe` Windows Vulkan run
+created a real NVIDIA GeForce RTX 5080 device and completed transfer, compute,
+texture-backed render readback, native query, and reset/reuse checks; this is
+historical evidence and not a substitute for an exact future release commit.
 It is a coverage inventory, not a claim that incomplete source semantics are
 executable.
 
@@ -156,7 +168,7 @@ develops a different lowering or support state.
 | --- | --- | --- | --- | --- | --- |
 | DEV-01 | Backend selection, adapter/device discovery, capability report, and ordinary execution limits | root, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke`; native and usable features are reported separately, while queried resource/dispatch/threadgroup limits feed validation. |
 | DEV-02 | Command queue/buffer creation, commit, lifecycle callbacks, immediate presentation, and capability-gated timing | `command`, `presentation` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal for callback-once and minimum-duration presentation; Vulkan callbacks compose submit/queue completion and timed presentation remains feature-closed. Failed commits terminalize/deinitialize backend state, release active/query borrows, retire the work serial, and report failed lifecycle; Vulkan waits submitted work before temporary-resource destruction. |
-| DEV-03 | No-surface runtime initialization with device/queues, presentation exclusion, and texture-backed offscreen commands | root, `command`, `render` | `native-exact` | `native-exact` | Metal `gpu-pixels` covers headless compute, transfer, and offscreen clear/readback. Vulkan has focused tests and forced-build evidence; the backend-private Windows loader opens `vulkan-1.dll` without relying on Zig 0.16's unsupported Windows `std.DynLib` branch, and the full `x86_64-windows` forced-Vulkan install graph cross-compiles. Physical Windows loader/device execution remains pending. Current-drawable commands fail before backend presentation work. |
+| DEV-03 | No-surface runtime initialization with device/queues, presentation exclusion, and texture-backed offscreen commands | root, `command`, `render` | `native-exact` | `native-exact` | Metal `gpu-pixels` covers headless compute, transfer, and offscreen clear/readback. On clean commit `7d88ffe`, physical Windows Vulkan loaded `vulkan-1.dll`, selected an NVIDIA GeForce RTX 5080, and completed HeadlessContext transfer, compute, and offscreen readback. Focused tests and the full forced `x86_64-windows` install graph cover the backend-private loader and stubs. Current-drawable commands fail before backend presentation work. |
 | DEV-04 | Selected-device stable identity and native peer-group membership diagnostics | `diagnostics` | `native-exact` | `native-exact` | Physical Metal reports registry and peer-group properties. Vulkan reports device UUID plus selected physical-device-group index/count/subset allocation; neither backend claims peer allocation or cross-device command execution. |
 | RES-01 | Buffer creation, upload, mapping, copy, and destruction | `resource`, `transfer` | `native-exact` | `native-exact` | `gpu-pixels` for representative upload/copy/readback. |
 | RES-02 | 1D/2D/3D, array, cube, and multisample texture fundamentals | `resource` | `native-exact` | `native-exact` | `unit` plus representative `gpu-pixels`; full shape/format matrix remains unobserved. |
@@ -175,7 +187,7 @@ develops a different lowering or support state.
 
 | ID | Semantic contract | Public owner | Metal | Vulkan | Evidence / current gap |
 | --- | --- | --- | --- | --- | --- |
-| REN-01 | Render pipelines, indexed/direct draw, viewport, scissor, cull, depth, stencil, blend | `render` | `native-exact` | `native-exact` | Representative `gpu-pixels`; not every state combination is physically observed. |
+| REN-01 | Metal-like clip/NDC Y, positive top-left public viewport/scissor, winding/cull parity, render pipelines, indexed/direct draw, depth, stencil, and blend | `render` | `native-exact` | `native-exact` | Metal sets native viewport, winding, and cull encoder state. Vulkan lowers to `y + height` and negative native height (core 1.1 or `VK_KHR_maintenance1`) while keeping winding names direct. Unit lowering checks plus an asymmetric counter-clockwise, back-culled top/bottom readback cover the contract; physical Metal passes and the corrected physical Vulkan rerun is pending. |
 | REN-02 | MRT, offscreen targets, MSAA color resolve | `render` | `native-exact` | `native-exact` | `unit` and representative `gpu-pixels`. |
 | REN-03 | Base vertex/base instance and instance step rate | `render` | `native-exact` | `native-exact` | `unit`; Vulkan divisor support is capability-gated. |
 | REN-04 | Indirect/explicit multi-draw and CPU-authored reusable draw lists | `render`, `command` | `composed-exact` | `composed-exact` | `gpu-smoke` on Metal for native ICB execution; Vulkan and Metal paths whose active shader pipeline is not ICB-compatible expand immutable commands into repeated native draws. GPU-authored mutation is excluded. |
@@ -296,8 +308,10 @@ The source audit and Periods 46-56 are complete. Metal
 automatic/sRGB/linear offscreen pixels plus selected-drawable smoke and both
 legacy formats are recorded for Period 56. Vulkan legacy raw-copy physical
 evidence and the corrected canonical 3000-frame visual run are recorded. The
-exactly-once gap-routing file is empty because all 111
-audited Metal semantic units now have an
+general raster-coordinate correction has deterministic and physical Metal
+evidence; corrected physical Vulkan asymmetric-triangle and voxel evidence is
+the next closeout item. The exactly-once gap-routing file is empty because all
+111 audited Metal semantic units now have an
 executable or precise unsupported outcome. New native-semantic implementation
 periods must be created from a new SDK/baseline audit or an explicit decision
 to allocate one of the currently unsupported contracts; no incomplete Period

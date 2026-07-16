@@ -213,14 +213,10 @@ pub const CommandBuffer = struct {
             .p_clear_values = &clear_values,
         }, .@"inline");
 
-        const viewport = vk.Viewport{
-            .x = 0,
-            .y = 0,
+        const viewport = lowerViewport(.{
             .width = @floatFromInt(pass.extent.width),
             .height = @floatFromInt(pass.extent.height),
-            .min_depth = 0,
-            .max_depth = 1,
-        };
+        });
         const scissor = vk.Rect2D{
             .offset = .{ .x = 0, .y = 0 },
             .extent = pass.extent,
@@ -1115,14 +1111,7 @@ pub const RenderCommandEncoder = struct {
 
     pub fn setViewport(self: *RenderCommandEncoder, viewport: core.Viewport) !void {
         try viewport.validate();
-        self.gc.dev.cmdSetViewport(self.cmdbuf, 0, &.{.{
-            .x = viewport.x,
-            .y = viewport.y,
-            .width = viewport.width,
-            .height = viewport.height,
-            .min_depth = viewport.min_depth,
-            .max_depth = viewport.max_depth,
-        }});
+        self.gc.dev.cmdSetViewport(self.cmdbuf, 0, &.{lowerViewport(viewport)});
     }
 
     pub fn setScissorRect(self: *RenderCommandEncoder, rect: core.ScissorRect) !void {
@@ -2192,6 +2181,36 @@ fn imageAspectMaskForAspect(aspect: core.TextureAspect) vk.ImageAspectFlags {
         .depth => .{ .depth_bit = true },
         .stencil => .{ .stencil_bit = true },
     };
+}
+
+fn lowerViewport(viewport: core.Viewport) vk.Viewport {
+    // vkmtl follows Metal clip-space Y while keeping a top-left public origin.
+    return .{
+        .x = viewport.x,
+        .y = viewport.y + viewport.height,
+        .width = viewport.width,
+        .height = -viewport.height,
+        .min_depth = viewport.min_depth,
+        .max_depth = viewport.max_depth,
+    };
+}
+
+test "Vulkan viewport lowering preserves Metal-like clip-space Y" {
+    const viewport = lowerViewport(.{
+        .x = 3,
+        .y = 5,
+        .width = 10,
+        .height = 20,
+        .min_depth = 0.25,
+        .max_depth = 0.75,
+    });
+
+    try std.testing.expectEqual(@as(f32, 3), viewport.x);
+    try std.testing.expectEqual(@as(f32, 25), viewport.y);
+    try std.testing.expectEqual(@as(f32, 10), viewport.width);
+    try std.testing.expectEqual(@as(f32, -20), viewport.height);
+    try std.testing.expectEqual(@as(f32, 0.25), viewport.min_depth);
+    try std.testing.expectEqual(@as(f32, 0.75), viewport.max_depth);
 }
 
 test "Vulkan fill buffer fallback selection covers unaligned ranges" {

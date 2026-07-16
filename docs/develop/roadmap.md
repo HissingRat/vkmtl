@@ -42,27 +42,31 @@ availability, and forced compilation never substitute for executable support.
 - Canonical and compatibility Vulkan ray-traced presentation both execute and
   have accepted top-left visual orientation. The corrected canonical path ran
   3000 frames on the supported RT machine.
+- Clean Windows Vulkan evidence on `7d88ffe` selected an RTX 5080, completed
+  physical HeadlessContext and 5x2 composition checks, and met every numeric
+  voxel pressure bound. The same run exposed a separate vertical inversion in
+  ordinary geometry rasterization, so its voxel result is diagnostic rather
+  than accepted raster evidence.
 
 ## Priority 1: Close Current Release Evidence
 
-These items validate the current commit; they do not change API semantics.
+The first item closes an implementation bug in the existing Metal-like raster
+contract without adding public API. The remaining item validates the future
+release commit.
 
-- [ ] Run the updated asymmetric 5x2 Vulkan pixel regression on a physical
-  Vulkan device:
+- [ ] Rerun the corrected general raster and voxel paths on a physical Vulkan
+  device. First run:
 
   ```sh
   VKMTL_BACKEND=vulkan zig build run-pixel-regression -Dvulkan
   ```
 
-  Record `presentation_orientation=top_left` and channel deltas no greater
-  than one. This is a required release-matrix artifact, separate from the
-  accepted RT scene orientation.
-- [ ] Record physical Vulkan `HeadlessContext` loader/device execution on
-  Windows or Linux. Forced Windows cross-compilation proves buildability, not
-  loader/device execution.
-- [ ] Run the bounded voxel pressure example on physical Vulkan hardware and
-  record capability/device context. Physical Metal smoke/default/stress and
-  forced Vulkan compilation are already recorded.
+  Require `raster_orientation=top_left`,
+  `presentation_orientation=top_left`, and channel deltas within their
+  configured bounds. Then rerun smoke/default/stress voxel profiles, preserving
+  the 9/81/289 resident bounds and `voxel_world_pressure_test=ok`, and confirm
+  the scene is upright. The old pressure metrics do not substitute for this
+  corrected-commit result.
 - [ ] Refresh every required physical lane against the exact future release
   commit before tagging; historical evidence remains history only.
 

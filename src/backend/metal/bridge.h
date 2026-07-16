@@ -200,6 +200,17 @@ typedef enum vkmtl_metal_triangle_fill_mode {
     VKMTL_METAL_TRIANGLE_FILL_MODE_LINES = 1,
 } vkmtl_metal_triangle_fill_mode;
 
+typedef enum vkmtl_metal_winding {
+    VKMTL_METAL_WINDING_CLOCKWISE = 0,
+    VKMTL_METAL_WINDING_COUNTER_CLOCKWISE = 1,
+} vkmtl_metal_winding;
+
+typedef enum vkmtl_metal_cull_mode {
+    VKMTL_METAL_CULL_MODE_NONE = 0,
+    VKMTL_METAL_CULL_MODE_FRONT = 1,
+    VKMTL_METAL_CULL_MODE_BACK = 2,
+} vkmtl_metal_cull_mode;
+
 typedef enum vkmtl_metal_blend_factor {
     VKMTL_METAL_BLEND_FACTOR_ZERO = 0,
     VKMTL_METAL_BLEND_FACTOR_ONE = 1,
@@ -1050,6 +1061,14 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_pipeline(
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
     vkmtl_metal_render_command_encoder *encoder,
     vkmtl_metal_triangle_fill_mode fill_mode
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_front_facing_winding(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_winding winding
+);
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_cull_mode(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_cull_mode cull_mode
 );
 vkmtl_metal_status vkmtl_metal_render_command_encoder_set_vertex_buffer(
     vkmtl_metal_render_command_encoder *encoder,

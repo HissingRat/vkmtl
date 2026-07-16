@@ -79,6 +79,12 @@ Deterministic offscreen pixels are not current-drawable readback unless the
 test explicitly reads the current drawable. A later bind-and-present smoke in
 the same executable remains separate windowed physical evidence.
 
+Raster orientation and texture-composition orientation are independent gates.
+The raster check uses a counter-clockwise asymmetric triangle with back-face
+culling, samples distinct pixels above and below center, and reports
+`raster_orientation=top_left`. The 5x2 texture-composition check reports
+`presentation_orientation=top_left`; neither result substitutes for the other.
+
 ### Soak And Pressure Evidence
 
 A soak repeats bounded resource creation, resize, shader resolution, transfer,
@@ -215,8 +221,8 @@ rows. Together they are the nine explicit release-readiness gates.
 | --- | --- | --- | --- |
 | `self_hosted_metal_smoke` | Metal | capability, transfer, compute, render smoke | capability dump and workload logs |
 | `self_hosted_vulkan_smoke` | Vulkan | capability, transfer, compute, render smoke | capability dump and workload logs |
-| `local_metal_pixel_regression` | Metal | deterministic transfer, compute, and render readback | readback values and deltas |
-| `local_vulkan_pixel_regression` | Vulkan | deterministic transfer, compute, and render readback | readback values and deltas |
+| `local_metal_pixel_regression` | Metal | deterministic transfer, compute, asymmetric raster, and presentation-composition readback | readback values, deltas, and orientation markers |
+| `local_vulkan_pixel_regression` | Vulkan | deterministic transfer, compute, asymmetric raster, and presentation-composition readback | readback values, deltas, and orientation markers |
 | `self_hosted_metal_soak` | Metal | 120 bounded iterations | host, capability, and soak logs |
 | `self_hosted_vulkan_soak` | Vulkan | 120 bounded iterations | host, capability, and soak logs |
 
@@ -577,6 +583,12 @@ The asymmetric 5x2 top/bottom-row composition regression passes physical Metal
 readback with at most one byte of channel delta and reports
 `presentation_orientation=top_left`.
 
+After the general raster correction, a local physical Metal run also enabled
+counter-clockwise front-facing state with back-face culling, preserved the
+61170-sample occlusion result, returned `max_channel_delta=0`, and reported
+both `raster_orientation=top_left` and
+`presentation_orientation=top_left`.
+
 ### Current Vulkan RT Evidence
 
 The post-acceleration-structure-sizing Windows reruns selected both expected
@@ -615,17 +627,50 @@ driver and do not prove that `VK_LAYER_KHRONOS_validation` was enabled. They
 are physical execution and visual-orientation evidence only. The earlier named
 Period 44 NVIDIA host must not be inferred as the identity of these later logs.
 
-The updated asymmetric 5x2 physical Vulkan pixel regression is still a
-required release artifact:
+The asymmetric 5x2 physical Vulkan composition regression subsequently passed
+on clean commit `7d88ffe` with `presentation_max_channel_delta=0` and
+`presentation_orientation=top_left`. That version's ordinary raster check
+sampled only the background and center, so it did not detect a separate
+clip-space Y inversion in general geometry.
+
+After the general raster correction, this remains the required physical
+Vulkan command:
 
 ```sh
 VKMTL_BACKEND=vulkan zig build run-pixel-regression -Dvulkan
 ```
 
-It must report `presentation_orientation=top_left` and channel deltas within
-the configured bounds. This lane is independent of the accepted RT scene
-orientation. Its absence does not reopen Period 56 visual closure, but it does
-leave `local_vulkan_pixel_regression` incomplete for a fresh release matrix.
+It must report both `raster_orientation=top_left` and
+`presentation_orientation=top_left`, with channel deltas within the configured
+bounds. This lane is independent of the accepted RT scene orientation. Its
+absence does not reopen Period 56 visual closure, but it leaves the corrected
+general-raster contract incomplete for a fresh release matrix.
+
+### Current Windows Vulkan Headless And Raster Diagnostic
+
+Clean commit `7d88ffe46d9c5b7f16d8f16319c84e8b6cf9f2e7`
+selected an NVIDIA GeForce RTX 5080 through `vulkan_query` with a clean
+worktree. `run-pixel-regression` completed physical HeadlessContext transfer
+and compute readback, native occlusion/timestamp work and reset/reuse, and the
+then-current render/composition checks with `max_channel_delta=1`,
+`presentation_max_channel_delta=0`, and
+`presentation_orientation=top_left`.
+
+This closes physical Vulkan loader/device execution for that exact commit. It
+does not establish general raster orientation: the 5x2 path tested texture
+composition, while the ordinary raster readback did not distinguish top from
+bottom and did not enable culling.
+
+On the same code line, smoke/default/stress voxel runs completed 24/48/160
+frames, drained pending rebuilds, stayed within 9/81/289 resident chunks, and
+printed `voxel_world_pressure_test=ok`. These runs are accepted as pressure
+diagnostics only. The visible Vulkan voxel scene was vertically inverted, so
+they do not close raster parity or the Vulkan voxel release lane.
+
+The corrected exact commit must rerun the pixel regression and all three voxel
+profiles. Pixel output must contain both top-left orientation markers; voxel
+output must retain the pressure bounds and show the same upright scene as
+Metal.
 
 ## Optional And Pressure Lanes
 
@@ -663,8 +708,9 @@ MTL_DEBUG_LAYER=1 VKMTL_VOXEL_PROFILE=stress \
 Each run must print `voxel_world_pressure_test=ok`, drain pending rebuilds,
 and remain within the 9/81/289 resident bounds. The durable Metal observation
 used an Apple M4 Pro and bounded upload/rebuild budgets. Equivalent Vulkan
-execution remains a separate physical-device lane; artifact and forced-build
-coverage do not satisfy it.
+pressure execution on `7d88ffe` met all numeric bounds, but its visible scene
+was vertically inverted. It remains diagnostic rather than accepted voxel
+raster evidence until repeated after the backend viewport correction.
 
 ### MoltenVK And iOS
 
@@ -758,7 +804,8 @@ The current durable state is:
   Validation, and asymmetric 5x2 readback evidence is recorded;
 - current Vulkan canonical and legacy RT execution and visual orientation are
   accepted;
-- the latest Vulkan RT logs do not establish validation-layer or device/driver
-  identity;
-- the post-orientation-fix asymmetric 5x2 Vulkan pixel regression remains a
-  required artifact for the next fresh release matrix.
+- clean-commit Windows Vulkan HeadlessContext and 5x2 composition execution is
+  recorded on an RTX 5080, while its old general raster path was vertically
+  inverted;
+- the corrected asymmetric raster/cull pixel regression and voxel profiles
+  remain required artifacts for the next fresh release matrix.

@@ -1327,6 +1327,28 @@ static MTLTriangleFillMode vkmtl_triangle_fill_mode(vkmtl_metal_triangle_fill_mo
     }
 }
 
+static MTLWinding vkmtl_winding(vkmtl_metal_winding winding) {
+    switch (winding) {
+        case VKMTL_METAL_WINDING_COUNTER_CLOCKWISE:
+            return MTLWindingCounterClockwise;
+        case VKMTL_METAL_WINDING_CLOCKWISE:
+        default:
+            return MTLWindingClockwise;
+    }
+}
+
+static MTLCullMode vkmtl_cull_mode(vkmtl_metal_cull_mode cull_mode) {
+    switch (cull_mode) {
+        case VKMTL_METAL_CULL_MODE_FRONT:
+            return MTLCullModeFront;
+        case VKMTL_METAL_CULL_MODE_BACK:
+            return MTLCullModeBack;
+        case VKMTL_METAL_CULL_MODE_NONE:
+        default:
+            return MTLCullModeNone;
+    }
+}
+
 static MTLBlendFactor vkmtl_blend_factor(vkmtl_metal_blend_factor factor) {
     switch (factor) {
         case VKMTL_METAL_BLEND_FACTOR_ZERO:
@@ -5448,6 +5470,34 @@ vkmtl_metal_status vkmtl_metal_render_command_encoder_set_triangle_fill_mode(
 
     @autoreleasepool {
         [encoder->encoder setTriangleFillMode:vkmtl_triangle_fill_mode(fill_mode)];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_front_facing_winding(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_winding winding
+) {
+    if (encoder == NULL || encoder->encoder == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setFrontFacingWinding:vkmtl_winding(winding)];
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_render_command_encoder_set_cull_mode(
+    vkmtl_metal_render_command_encoder *encoder,
+    vkmtl_metal_cull_mode cull_mode
+) {
+    if (encoder == NULL || encoder->encoder == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    @autoreleasepool {
+        [encoder->encoder setCullMode:vkmtl_cull_mode(cull_mode)];
         return VKMTL_METAL_STATUS_OK;
     }
 }

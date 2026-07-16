@@ -11,6 +11,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Fixed
 
+- Fixed ordinary Vulkan raster geometry appearing vertically inverted relative
+  to Metal. vkmtl now lowers its positive, top-left public viewport to an
+  adjusted negative-height Vulkan viewport, applies Metal winding/cull state
+  natively, and checks asymmetric back-culled top/bottom pixels in the render
+  regression.
 - Fixed the shared `ray_traced_scene` fullscreen composition appearing
   vertically inverted on Vulkan. The presentation shader now derives 1:1 UVs
   from top-left fragment coordinates instead of interpolated clip-space Y, and
