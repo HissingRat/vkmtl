@@ -202,6 +202,40 @@ Additive declarations may enter a patch release when existing source behavior
 does not change. `HeadlessContext` is additive: it owns a no-presentation
 device/queue runtime while leaving `WindowContext` unchanged.
 
+### Ray-tracing application bindings
+
+The unreleased ray-tracing application-resource allocation belongs to
+`v0.2.0`. It reuses the canonical `binding` domain instead of creating a
+ray-tracing-specific resource union, owner method, runtime handle, or root
+alias:
+
+- `ShaderVisibility.ray_tracing` defaults to false;
+- `RayTracingPipelineDescriptor.bind_group_layout` defaults to null;
+- `RayTracingDrawableResources.bind_group` defaults to null, and the exact
+  `RayTracingTextureResources` alias exposes the same field;
+- fixed binding 0 is the acceleration structure, binding 1 is the primary
+  output, binding 2 is inline dispatch data, and the one optional application
+  group may use bindings 3 through 14 inclusive;
+- application entries may use ordinary uniform/storage buffers,
+  sampled/storage textures, samplers, and compare samplers; arrays occupy
+  consecutive slots inside the range and dynamic offsets are not admitted;
+- the pipeline snapshots the layout descriptor, while dispatch borrows the
+  bind group and every referenced runtime resource through command-buffer
+  completion.
+
+Null layout/group values preserve the earlier resource-free RT path. A
+pipeline with an application layout must use a resource-bearing texture or
+drawable dispatch with an exactly matching live bind group; plain
+`dispatchRays(...)` cannot satisfy that pipeline. Backend, device/tracker,
+queue ownership, resource usage, dead-resource, reserved-slot, and layout
+mismatches fail before native work.
+
+Although the nullable fields are defaulted shape extensions, the complete
+allocation is not eligible for a `v0.1.x` patch: the released
+`RayDispatchDescriptor.inline_data_binding` default moves from 1 to 2 and the
+public `BindingError` set gains RT-specific cases. Those changes require the
+documented `v0.2.0` migration boundary.
+
 ### Intentional removal or rename
 
 1. Define and document the canonical replacement.

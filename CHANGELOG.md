@@ -11,6 +11,57 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Fixed
 
+- Fixed Vulkan `voxel_world` interactive startup returning
+  `InvalidResourceBarrierState` before its first streamed chunk. The async
+  no-TLAS frame skipped RT/PTGI production, leaving the new a-trous scratch
+  images in Vulkan's undefined layout, but the terrain group previously tried
+  to bind them after the sky draw had already started the HDR render pass. RT
+  mode now defers terrain and water-lighting bindings until the first successful
+  PTGI producer has initialized those sampled images. Raster mode is unchanged.
+  A follow-up interactive Windows RTX rerun no longer reproduced the startup
+  failure; a finite validation run with pixel metrics remains pending.
+- Fixed bounded voxel PTGI rays treating incomplete or horizontal TLAS exits as
+  unobstructed sky. Nonzero x/z bounds now enter frame data only after a TLAS
+  contains the complete contiguous profile square; sparse bootstrap and moving
+  subsets publish zero extent, so their diffuse misses cannot sample the
+  environment. With complete bounds, environment radiance and the traced-edge
+  mix both require proof that the path reaches the terrain top before crossing
+  a horizontal boundary. Side exits no longer inject false sky light.
+- Reduced interactive `voxel_world` chunk-loading stalls with one bounded
+  background CPU meshing worker and exactly one outstanding job/result.
+  Interactive rendering never waits for CPU mesh completion and publishes at
+  most one completed chunk per frame; deterministic finite validation may wait
+  for each worker result and publish two. Stream tickets discard stale
+  completions, while a
+  worker-spawn failure retains the synchronous fallback. GPU upload, BLAS, and
+  TLAS work remains synchronous on the render thread under the existing 8 MiB
+  upload budget. Ordinary TLAS additions coalesce for at most four frames;
+  bootstrap, drain, and replacement rebuild immediately. An undrained finite
+  run now prints `voxel_world_pressure_test=incomplete` and returns
+  `VoxelWorldStreamingNotDrained` instead of reporting success.
+- Fixed overly bright daytime voxel shadows in hybrid PTGI mode. The raster
+  fallback keeps its full analytic sky environment, while the active PTGI path
+  uses reconstructed RT indirect lighting as its primary environment
+  contribution. Daytime ambient and hybrid raster/RT environment floors are
+  reduced; direct sun, night ambient, water Fresnel, and the celestial glint
+  remain unchanged.
+- Fixed late Metal hybrid-RT visibility loss caused by declaring only the TLAS
+  at compute dispatch. Each AS wrapper now owns the build and traversal state
+  needed for later maintenance and dispatch. TLAS source/instance replacement
+  is transactional and restores the previous state on failure; successful
+  build/update publishes the replacement, while TLAS compact copy transfers
+  the complete reusable state to its destination. Metal marks the bound TLAS
+  and every indirectly referenced BLAS as read resources, while a dispatch
+  missing retained dependencies returns a typed invalid-command error. Finite
+  voxel runs validate visibility after pending work drains and repeat the
+  readback on the final frame; a 300-frame Metal soak retains non-zero primary,
+  shadowed, and sky-occluded counts.
+- Fixed acceleration-structure sizing and many-source TLAS execution discovered
+  by the hybrid voxel workload. Vulkan now allocates every declared instance
+  and maps either one repeated or exactly N BLAS sources. Metal now sizes from
+  the real selected/final descriptor, rechecks result and scratch capacity,
+  dynamically owns source arrays, and rejects a reflected BLAS/TLAS pipeline
+  kind mismatch before dispatch.
 - Fixed ordinary Vulkan raster geometry appearing vertically inverted relative
   to Metal. vkmtl now lowers its positive, top-left public viewport to an
   adjusted negative-height Vulkan viewport, applies Metal winding/cull state
@@ -28,6 +79,143 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Added
 
+- Expanded the current `voxel_world` diffuse PTGI sample from one segment to a
+  bounded path of at most three sequential cosine-weighted segments per covered
+  opaque pixel. Every hit performs independent sun/moon next-event estimation,
+  and the residual environment approximation is added only at a terminal
+  configured hit. A miss evaluates the environment only after escaping above
+  the published terrain/TLAS bounds, as described in the boundary fix above.
+  The native pipeline retains recursion depth 1 because ray generation issues
+  the traces sequentially. Water reflection remains a separate one-segment,
+  unfiltered and undenoised specular path. Logs and the final pressure marker
+  now report `ptgi_bounces=3`; `primary_rays` remains dispatch-thread count,
+  not segment count. This is a clean-room experimental enhancement, not a claim
+  that the default SEUS PTGI E12 reflection/diffuse chain uses three bounces.
+  After the final TLAS-boundary tightening, 24-frame fixed-noon and
+  fixed-midnight Metal API Validation smokes recorded
+  `rt_ms_per_frame=10.767` and `11.248` with zero invalid pixels. The fixed-noon
+  96-frame
+  default lane drained 169 resident chunks with 22 TLAS builds, 96 dispatches,
+  353,894,400 dispatch threads, `rt_ms_per_frame=16.327`, 2,404,265 primary
+  hits, 863,410 directly lit, 1,540,855 shadowed, 1,932,365 indirect-lit,
+  626,079 low-indirect, 2,404,258 reconstructed, 632,564 covered/lit reflection,
+  297,535 penumbra, zero invalid pixels, and all markers true. Frame p50/p95/max
+  were 24.081/28.004/442.164 ms; these are validation observations rather than
+  portable performance gates.
+- Increased the `voxel_world` default view radius from four to six chunks. The
+  current smoke/default/stress grids are 3 x 3, 13 x 13, and 17 x 17, with
+  9/169/289 maximum resident chunks. The canonical fixed-camera default
+  validation lane is now 96 frames without autopilot so all 169 chunks can
+  drain deterministically. Streaming metrics now report background versus
+  synchronous fallback mode, submitted/completed/stale/failed mesh jobs, and
+  cumulative mesh, stream-upload, and TLAS-build times.
+- Added deterministic grassland trees and low-basin lakes to `voxel_world`.
+  Tree roots and complete canopies require ordinary, low-slope grass
+  footprints, so snow columns remain tree-free. Wood and opaque leaf atlas
+  tiles participate in the same chunk meshing, BLAS/TLAS geometry, and packed
+  material-column reconstruction as the terrain.
+- Refined the example-private voxel lakes with separate opaque and water index
+  ranges while retaining solid-water contact faces. Opaque terrain now renders
+  into its own linear HDR target; a wave-normal and camera-distance water
+  G-buffer drives screen-space refraction, RGB Beer-Lambert absorption and
+  in-scattering in a separate full-coverage HDR water overlay. Hybrid RT traces
+  one reflection ray from each visible water pixel against the opaque terrain
+  TLAS; raster fallback uses the current sky reflection. The presentation pass
+  composites the overlay before bloom and tone mapping. Water remains absent
+  from chunk BLASes, so reflection cannot see water and ordinary PTGI rays can
+  still reach the lake bed. This adds no public API or backend semantic. The
+  bounded model cannot recover off-screen or hidden refraction data and does
+  not implement nested/underwater media, caustics, multilayer transparency, or
+  order-independent transparency. Fixed-camera finite RT runs now read back the
+  reflection target and require nonzero covered/lit pixels with no invalid
+  samples, reporting `rt_reflection_validated`; autopilot reports the same
+  metrics without requiring visible water.
+- Refined that lake surface through a clean-room, SEUS PTGI E12-inspired
+  strategy without copying its source, constants, shader organization, or
+  assets. Six world-continuous analytic wave bands now share one stabilized
+  normal between raster shading and the water G-buffer. Depth- and
+  screen-validity-aware refraction feeds a homogeneous single-scattering
+  medium with absorption `(0.240, 0.062, 0.014)` and scattering `0.070`, so
+  shallow water remains clear instead of receiving a painted blue tint while
+  depth develops the intended blue-green attenuation. A dielectric `F0` of
+  `0.02`, a narrow sun/moon glint, a 96-world-unit opaque-TLAS reflection ray,
+  and directional day/night/twilight sky misses complete the surface response.
+  This remains one unfiltered reflection sample per visible water pixel; foam,
+  caustics, rain response, parallax water, temporal/reflection denoising,
+  nested or underwater media, water-to-water reflection, and off-screen
+  refraction recovery remain deliberately unimplemented.
+- Added one optional application bind group to native ray-tracing pipelines.
+  `ShaderVisibility.ray_tracing`,
+  `RayTracingPipelineDescriptor.bind_group_layout`, and
+  `RayTracingDrawableResources.bind_group` reuse the ordinary binding domain;
+  the exact `RayTracingTextureResources` alias gains the same field. Bindings
+  0/1/2 are reserved for acceleration structure, primary output, and inline
+  data, while one application group may use 3 through 14 without dynamic
+  offsets. Pipeline creation copies the layout; dispatch borrows the matching
+  group and its resources through command-buffer completion.
+- Added an example-private five-minute day/night presentation to `voxel_world`.
+  One continuous 300-second clock maps 0/75/150/225/300 seconds to midnight,
+  sunrise, noon, sunset, and wrapped midnight across the sky, raster terrain
+  lighting, and hybrid-RT directional visibility. The sky displays opposite
+  sun/moon directions, fades and twinkles stars, and retains the CPU 5x7
+  bitmap-font UI. The upper-right FPS label remains visible under an
+  ESC-toggled translucent title overlay; Escape pauses/resumes input instead
+  of closing the window.
+- Added a clean-room, E12-inspired analytic voxel atmosphere with a bright
+  horizon, deep zenith, warm low-sun glow, and world-anchored lower
+  self-shadowed cumulus plus upper stretched cirrus. The independent real-time
+  cloud wind appears in raster sky and, on the hybrid path, RT miss/PTGI
+  environment and hardware-RT water reflections. Raster water fallback keeps
+  an analytic current-sky tint without procedural clouds or celestial disks.
+  Smooth ground-hemisphere fading prevents bright downward RT misses, and RT
+  cloud environment evaluation is deferred to actual misses or traced-edge
+  blending. Strength-gated dense cumulus produces full day/twilight and
+  restrained moonlight cloud shadows while keeping the sun/moon handoff at
+  zero directional contribution. The celestial freeze does not stop clouds or
+  the independent 64-second water loop. No E12 source, constants, shader
+  organization, textures, or assets are copied. Weather/rain, volumetric cloud
+  raymarching, cloud TAA, and a public atmosphere API remain out of scope.
+- Replaced the voxel example's periodic terrain profile with deterministic
+  fixed-point continentalness, erosion, ridge, detail, temperature, and
+  moisture fields. Grass, sand, and snow surfaces remain continuous across
+  positive and negative chunk boundaries while preserving bounded streaming.
+- Updated voxel flight controls to WASD, Space/Shift vertical motion, and Ctrl
+  acceleration.
+- Upgraded `voxel_world` with a deterministic 748 x 68 sRGB atlas containing
+  eleven face-specific high-detail grass/dirt/stone/sand/snow/wood/leaves/water
+  tiles, replicated borders, and alpha-derived detail normals. Atlas mipmaps
+  remain a documented follow-up.
+- Added a capability-gated hardware-RT PTGI mode to `voxel_world`: indexed
+  per-chunk triangle BLAS objects, a complete bounded 17 x 17 TLAS (up to 289
+  instances), exact CPU-terrain material-column data plus atlas
+  reads through the new RT bind group, full-resolution `rgba16_float`
+  scene-linear radiance, separate direct sun/moon visibility, and one
+  cosine-weighted indirect sample per pixel per frame. Temporal reprojection,
+  rejection/clamping, and four edge-aware a-trous passes reconstruct the
+  indirect result before composition; camera/light/source/resize discontinuities
+  reset history, and the outer traced-neighborhood band fades to the current
+  sky environment. `VKMTL_VOXEL_RT=auto|off|required`
+  preserves automatic raster fallback and an exact required-native-RT lane.
+- Added build-time Metal binding normalization from Slang target reflection so
+  generated MSL buffer/texture/sampler indices match vkmtl's logical binding
+  slots, including fixed resource arrays, instead of relying on target slot
+  compaction.
+- Added generic Vulkan bind-group texture transitions around compute dispatch
+  and before render sampling, including storage-access masks, resource arrays,
+  compute-write visibility, and delayed render-pass begin where a legal image
+  barrier is required.
+- Added an independently authored voxel presentation profile with fixed
+  exposure, bloom, vignette, a filmic shoulder, output gamma, subtle
+  saturation, sharpening, and dithering. SEUS PTGI E12 was used only as a
+  visual-strategy reference; no
+  source, shader organization, constants, or assets were copied, and no
+  pixel-identical result is claimed.
+- Added finite-run material-bound PTGI validation and bounded history/reset
+  checks. Validation rejects NaN, infinity, and negative raw or reconstructed
+  radiance and requires nonzero direct, shadowed, indirect, and reconstructed
+  pixels. Metal executes the route physically under API Validation. Vulkan has
+  focused tests, ordinary/forced builds, and shader compile validation only;
+  physical Vulkan execution of this new route remains explicitly pending.
 - Added `Swapchain.selectedFormat()` as the concrete presentation-owned query;
   `Swapchain.presentationDescriptor().format` continues to expose the original
   request.
@@ -135,6 +323,11 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Changed
 
+- The RT shader binding ABI now reserves 0 for the acceleration structure, 1
+  for the primary output, and 2 for inline dispatch data.
+  `RayDispatchDescriptor.inline_data_binding` therefore defaults to 2 and
+  rejects another explicit value when inline data is present. Resource-free
+  pipelines still omit both new nullable layout/group fields.
 - Presentation format selection is now bounded and deterministic on both
   backends. `.automatic` prefers `bgra8_unorm_srgb`, then `bgra8_unorm`; either
   explicit SDR request must match exactly or returns
@@ -258,6 +451,13 @@ reserved for the next minor release and are documented with migration guidance.
 
 ### Compatibility
 
+- The RT bind-group allocation targets `v0.2.0`. Its nullable fields are
+  defaulted, and root/facade-name/owner-method/runtime-handle sets do not grow,
+  but the released inline-data default changes from binding 1 to 2 and
+  `BindingError` gains `ReservedRayTracingBinding` and
+  `RayTracingPipelineLayoutMismatch`. Inline-data shaders and exhaustive error
+  switches require the migration documented in `docs/develop/migration.md`;
+  this complete change is not eligible for a `v0.1.x` patch.
 - Period 56 adds one `Swapchain` method plus
   `UnsupportedPresentationFormat` and `PresentationFormatMismatch`, targeting
   `v0.2.0`. Root, `Device`, context-owner, `CommandBuffer`, and runtime-handle

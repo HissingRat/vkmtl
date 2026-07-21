@@ -400,6 +400,22 @@ typedef struct vkmtl_metal_acceleration_structure_build_sizes {
     size_t update_scratch_size;
 } vkmtl_metal_acceleration_structure_build_sizes;
 
+typedef struct vkmtl_metal_ray_dispatch_buffer_binding {
+    vkmtl_metal_buffer *buffer;
+    size_t offset;
+    unsigned int index;
+} vkmtl_metal_ray_dispatch_buffer_binding;
+
+typedef struct vkmtl_metal_ray_dispatch_texture_binding {
+    vkmtl_metal_texture_view *texture_view;
+    unsigned int index;
+} vkmtl_metal_ray_dispatch_texture_binding;
+
+typedef struct vkmtl_metal_ray_dispatch_sampler_binding {
+    vkmtl_metal_sampler_state *sampler;
+    unsigned int index;
+} vkmtl_metal_ray_dispatch_sampler_binding;
+
 vkmtl_metal_status vkmtl_metal_probe_create(vkmtl_metal_probe **out_probe);
 void vkmtl_metal_probe_destroy(vkmtl_metal_probe *probe);
 vkmtl_metal_status vkmtl_metal_probe_copy_device_name(
@@ -842,6 +858,24 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
     unsigned int allow_update,
     vkmtl_metal_acceleration_structure_build_sizes *out_sizes
 );
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_triangle_sizes(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int primitive_count,
+    unsigned int vertex_stride,
+    unsigned int vertex_count,
+    unsigned int index_type,
+    unsigned int opaque,
+    unsigned int allow_update,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+);
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_aabb_sizes(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int primitive_count,
+    unsigned int bounding_box_stride,
+    unsigned int opaque,
+    unsigned int allow_update,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+);
 vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
@@ -878,7 +912,8 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
     vkmtl_metal_buffer *index_buffer,
     size_t index_buffer_offset,
     unsigned int index_type,
-    unsigned int primitive_count
+    unsigned int primitive_count,
+    unsigned int opaque
 );
 vkmtl_metal_status vkmtl_metal_acceleration_structure_set_aabb_geometry(
     vkmtl_metal_acceleration_structure *acceleration_structure,
@@ -1004,7 +1039,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     unsigned int height,
     const void *inline_data,
     size_t inline_data_len,
-    unsigned int inline_data_index
+    unsigned int inline_data_index,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
 );
 vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
     vkmtl_metal_command_buffer *command_buffer,
@@ -1015,7 +1056,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
     unsigned int height,
     const void *inline_data,
     size_t inline_data_len,
-    unsigned int inline_data_index
+    unsigned int inline_data_index,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
 );
 
 vkmtl_metal_status vkmtl_metal_render_command_encoder_create(

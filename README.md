@@ -63,8 +63,8 @@ hatches.
   issue-report guidance in English.
 - [Validation en_US](docs/usage/en_us/validation.md): Vulkan and Metal native
   API validation setup in English.
-- [Development history](docs/develop/history.md): compact Period 1-56 and
-  release evidence ledger.
+- [Development history](docs/develop/history.md): compact Period 1-56,
+  post-Period-56 outcomes, and release evidence ledger.
 
 ## Package And Compatibility
 
@@ -109,6 +109,32 @@ Examples belong under `examples/`.
 Ordinary example code should not use raw Vulkan or Metal calls. Explicitly
 named native/interop samples may create the external object being imported,
 but all vkmtl-side execution must use the public API.
+
+The [voxel-world example](examples/voxel_world/README.md) includes an optional
+hardware-RT PTGI lane selected with `VKMTL_VOXEL_RT=auto|off|required`. It uses
+one stochastic diffuse path per covered opaque pixel per frame, with up to
+three sequential cosine-weighted segments and independent sun/moon
+next-event estimation at every hit. Temporal accumulation and four a-trous
+passes reconstruct that sample before an independently authored fixed
+presentation profile. The native pipeline still has recursion depth 1 because
+ray generation issues the segments sequentially; the water reflection remains
+one unfiltered specular segment. Frame data receives nonzero TLAS x/z bounds
+only after the complete contiguous profile square has been published; sparse
+bootstrap or moving subsets use zero extent and cannot sample the diffuse-miss
+environment. With complete bounds, the path must escape above the terrain top
+before a horizontal edge, and the same proof gates the traced-edge environment
+mix. Its current default view is a 13 x 13,
+169-chunk neighborhood within
+the complete bounded 17 x 17 RT limit, and secondary hits use the CPU terrain
+sampler's exact material columns. CPU chunk meshing runs through a bounded
+example-private background worker while GPU upload and acceleration-structure
+work remain on the render thread. Metal has physical API Validation execution
+for the material-bound route; Vulkan currently has build/test/compile
+validation only, so no physical Vulkan PTGI result is claimed. SEUS PTGI E12
+was a visual-strategy reference, not copied source, constants, assets, or a
+pixel-identity target. Its default explicit reflection/diffuse chain is not a
+three-bounce prescription; the current three-segment PTGI path is a clean-room
+experimental enhancement.
 
 ## Run Examples
 

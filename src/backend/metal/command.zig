@@ -4,7 +4,8 @@ const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
 const MetalAdvancedBinding = @import("advanced_binding.zig");
 const MetalAccelerationStructure = @import("acceleration_structure.zig");
-const MetalBindGroup = @import("bind_group.zig").MetalBindGroup;
+const MetalBindGroupBackend = @import("bind_group.zig");
+const MetalBindGroup = MetalBindGroupBackend.MetalBindGroup;
 const MetalBuffer = @import("buffer.zig");
 const MetalClearScreen = @import("clear_screen.zig");
 const MetalComputePipelineState = @import("compute_pipeline.zig");
@@ -16,6 +17,123 @@ const MetalTexture = @import("texture.zig");
 const MetalTextureView = @import("texture_view.zig");
 const MetalSync = @import("sync.zig");
 const slots = @import("slots.zig");
+
+const first_ray_dispatch_application_binding: u32 = 3;
+const last_ray_dispatch_application_binding: u32 = 14;
+const maximum_ray_dispatch_application_bindings: usize = @intCast(
+    last_ray_dispatch_application_binding - first_ray_dispatch_application_binding + 1,
+);
+
+const RayDispatchBindings = struct {
+    buffers: [maximum_ray_dispatch_application_bindings]metal.vkmtl_metal_ray_dispatch_buffer_binding = undefined,
+    textures: [maximum_ray_dispatch_application_bindings]metal.vkmtl_metal_ray_dispatch_texture_binding = undefined,
+    samplers: [maximum_ray_dispatch_application_bindings]metal.vkmtl_metal_ray_dispatch_sampler_binding = undefined,
+    buffer_count: usize = 0,
+    texture_count: usize = 0,
+    sampler_count: usize = 0,
+
+    fn init(
+        bind_group: ?*const MetalBindGroupBackend.MetalBindGroup,
+    ) core.AdvancedFeatureError!RayDispatchBindings {
+        var result = RayDispatchBindings{};
+        const group = bind_group orelse return result;
+        var used_bindings: [maximum_ray_dispatch_application_bindings]bool = @splat(false);
+        var expected_resource_count: usize = 0;
+
+        for (group.layout_entries) |layout_entry| {
+            if (!layout_entry.visibility.ray_tracing or layout_entry.dynamic_offset) {
+                return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+            }
+            expected_resource_count = std.math.add(
+                usize,
+                expected_resource_count,
+                @intCast(layout_entry.array_count),
+            ) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+
+        var resource_count: usize = 0;
+        for (group.entries) |entry| {
+            const layout_entry = group.layoutEntryForBinding(entry.binding) orelse {
+                return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+            };
+            if (entry.resourceCount() != @as(usize, @intCast(layout_entry.array_count))) {
+                return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+            }
+
+            for (0..entry.resourceCount()) |resource_index| {
+                const resource = entry.resourceAt(resource_index);
+                if (std.meta.activeTag(resource) != layout_entry.resource) {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                }
+                const resource_offset = std.math.cast(u32, resource_index) orelse {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                };
+                const native_index = std.math.add(u32, layout_entry.binding, resource_offset) catch {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                };
+                if (native_index < first_ray_dispatch_application_binding or
+                    native_index > last_ray_dispatch_application_binding)
+                {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                }
+                const used_index: usize = @intCast(native_index - first_ray_dispatch_application_binding);
+                if (used_bindings[used_index]) {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                }
+                used_bindings[used_index] = true;
+                try result.append(resource, native_index);
+                resource_count += 1;
+            }
+        }
+        if (resource_count != expected_resource_count) {
+            return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        return result;
+    }
+
+    fn append(
+        self: *RayDispatchBindings,
+        resource: MetalBindGroupBackend.MetalBindGroup.Resource,
+        index: u32,
+    ) core.AdvancedFeatureError!void {
+        switch (resource) {
+            .uniform_buffer, .storage_buffer => |binding| {
+                if (self.buffer_count == self.buffers.len) {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                }
+                const offset = std.math.cast(usize, binding.offset) orelse {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                };
+                self.buffers[self.buffer_count] = .{
+                    .buffer = binding.buffer.handle,
+                    .offset = offset,
+                    .index = index,
+                };
+                self.buffer_count += 1;
+            },
+            .storage_texture, .sampled_texture => |texture_view| {
+                if (self.texture_count == self.textures.len) {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                }
+                self.textures[self.texture_count] = .{
+                    .texture_view = texture_view.handle,
+                    .index = index,
+                };
+                self.texture_count += 1;
+            },
+            .sampler, .compare_sampler => |sampler| {
+                if (self.sampler_count == self.samplers.len) {
+                    return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+                }
+                self.samplers[self.sampler_count] = .{
+                    .sampler = sampler.handle,
+                    .index = index,
+                };
+                self.sampler_count += 1;
+            },
+        }
+    }
+};
 
 pub const RenderPassColorAttachmentTarget = union(enum) {
     current_drawable,
@@ -230,16 +348,24 @@ pub const CommandBuffer = struct {
                 .instances => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
             }
         }
-        var native_instance_sources: [64]?*metal.vkmtl_metal_acceleration_structure = @splat(null);
-        const native_instance_source_count: usize = if (instance_sources.len != 0) blk: {
+        const native_instance_source_count: usize = if (instance_sources.len != 0)
+            instance_sources.len
+        else if (instance_source != null)
+            1
+        else
+            0;
+        const native_instance_sources = self.owner.allocator.alloc(
+            ?*metal.vkmtl_metal_acceleration_structure,
+            native_instance_source_count,
+        ) catch return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+        defer self.owner.allocator.free(native_instance_sources);
+        if (instance_sources.len != 0) {
             for (instance_sources, 0..) |source, source_index| {
                 native_instance_sources[source_index] = source.handle;
             }
-            break :blk instance_sources.len;
-        } else if (instance_source) |source| blk: {
+        } else if (instance_source) |source| {
             native_instance_sources[0] = source.handle;
-            break :blk 1;
-        } else 0;
+        }
         try checkAccelerationStructureCommand(metal.vkmtl_metal_command_buffer_build_acceleration_structure(
             self.handle,
             acceleration_structure.handle,
@@ -247,11 +373,12 @@ pub const CommandBuffer = struct {
             native_scratch_offset,
             native_required_scratch_size,
             if (update_source) |source| source.handle else null,
-            if (native_instance_source_count == 0) null else &native_instance_sources,
+            if (native_instance_source_count == 0) null else native_instance_sources.ptr,
             native_instance_source_count,
             @intFromBool(plan.allow_update),
             @intFromBool(plan.mode == .update),
         ));
+        acceleration_structure.refreshBuildSizes();
     }
 
     pub fn encodeAccelerationStructureMaintenance(
@@ -281,7 +408,9 @@ pub const CommandBuffer = struct {
         acceleration_structure: *const MetalAccelerationStructure,
         output: *const MetalTextureView,
         descriptor: core.RayDispatchDescriptor,
+        bind_group: ?*const MetalBindGroupBackend.MetalBindGroup,
     ) core.AdvancedFeatureError!void {
+        const bindings = try RayDispatchBindings.init(bind_group);
         try checkRayTracingCommand(metal.vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
             self.handle,
             pipeline.handle,
@@ -292,6 +421,12 @@ pub const CommandBuffer = struct {
             if (descriptor.inline_data.len == 0) null else descriptor.inline_data.ptr,
             descriptor.inline_data.len,
             descriptor.inline_data_binding,
+            if (bindings.buffer_count == 0) null else bindings.buffers[0..].ptr,
+            bindings.buffer_count,
+            if (bindings.texture_count == 0) null else bindings.textures[0..].ptr,
+            bindings.texture_count,
+            if (bindings.sampler_count == 0) null else bindings.samplers[0..].ptr,
+            bindings.sampler_count,
         ));
     }
 
@@ -301,7 +436,9 @@ pub const CommandBuffer = struct {
         acceleration_structure: *const MetalAccelerationStructure,
         output: *const MetalTextureView,
         descriptor: core.RayDispatchDescriptor,
+        bind_group: ?*const MetalBindGroupBackend.MetalBindGroup,
     ) core.AdvancedFeatureError!void {
+        const bindings = try RayDispatchBindings.init(bind_group);
         try checkRayTracingCommand(metal.vkmtl_metal_command_buffer_dispatch_rays_to_texture(
             self.handle,
             pipeline.handle,
@@ -312,6 +449,12 @@ pub const CommandBuffer = struct {
             if (descriptor.inline_data.len == 0) null else descriptor.inline_data.ptr,
             descriptor.inline_data.len,
             descriptor.inline_data_binding,
+            if (bindings.buffer_count == 0) null else bindings.buffers[0..].ptr,
+            bindings.buffer_count,
+            if (bindings.texture_count == 0) null else bindings.textures[0..].ptr,
+            bindings.texture_count,
+            if (bindings.sampler_count == 0) null else bindings.samplers[0..].ptr,
+            bindings.sampler_count,
         ));
     }
 };

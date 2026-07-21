@@ -476,23 +476,61 @@ fn hashProgrammableStage(hash: *u64, stage: core.ProgrammableStageDescriptor) vo
     hashShaderSpecialization(hash, stage.specialization);
 }
 
+fn hashBindGroupLayoutEntry(hash: *u64, entry: core.BindGroupLayoutEntry) void {
+    hashU64(hash, entry.binding);
+    hashU64(hash, @intFromEnum(entry.resource));
+    hashBool(hash, entry.visibility.vertex);
+    hashBool(hash, entry.visibility.fragment);
+    hashBool(hash, entry.visibility.compute);
+    hashBool(hash, entry.visibility.ray_tracing);
+    hashBool(hash, entry.dynamic_offset);
+    hashU64(hash, entry.array_count);
+    if (entry.storage_access) |access| {
+        hashBool(hash, true);
+        hashU64(hash, @intFromEnum(access));
+    } else {
+        hashBool(hash, false);
+    }
+}
+
 fn hashBindGroupLayoutDescriptor(hash: *u64, descriptor: core.BindGroupLayoutDescriptor) void {
     hashU64(hash, descriptor.entries.len);
-    for (descriptor.entries) |entry| {
-        hashU64(hash, entry.binding);
-        hashU64(hash, @intFromEnum(entry.resource));
-        hashBool(hash, entry.visibility.vertex);
-        hashBool(hash, entry.visibility.fragment);
-        hashBool(hash, entry.visibility.compute);
-        hashBool(hash, entry.dynamic_offset);
-        hashU64(hash, entry.array_count);
-        if (entry.storage_access) |access| {
-            hashBool(hash, true);
-            hashU64(hash, @intFromEnum(access));
-        } else {
-            hashBool(hash, false);
+    for (descriptor.entries) |entry| hashBindGroupLayoutEntry(hash, entry);
+}
+
+fn hashCanonicalBindGroupLayoutDescriptor(hash: *u64, descriptor: core.BindGroupLayoutDescriptor) void {
+    hashU64(hash, descriptor.entries.len);
+    var previous_binding: ?u32 = null;
+    for (0..descriptor.entries.len) |_| {
+        var next_entry: ?core.BindGroupLayoutEntry = null;
+        for (descriptor.entries) |entry| {
+            if (previous_binding) |previous| {
+                if (entry.binding <= previous) continue;
+            }
+            if (next_entry == null or entry.binding < next_entry.?.binding) next_entry = entry;
         }
+        const entry = next_entry orelse return;
+        hashBindGroupLayoutEntry(hash, entry);
+        previous_binding = entry.binding;
     }
+}
+
+fn bindGroupLayoutFingerprint(backend: core.Backend, descriptor: core.BindGroupLayoutDescriptor) u64 {
+    var fingerprint = objectFingerprintStart(.bind_group_layout, backend);
+    hashCanonicalBindGroupLayoutDescriptor(&fingerprint, descriptor);
+    return fingerprint;
+}
+
+fn bindGroupLayoutsEqual(
+    expected: core.BindGroupLayoutDescriptor,
+    actual: core.BindGroupLayoutDescriptor,
+) bool {
+    if (expected.entries.len != actual.entries.len) return false;
+    for (expected.entries) |expected_entry| {
+        const actual_entry = actual.entryForBinding(expected_entry.binding) orelse return false;
+        if (!std.meta.eql(expected_entry, actual_entry)) return false;
+    }
+    return true;
 }
 
 fn hashVertexDescriptor(hash: *u64, descriptor: core.VertexDescriptor) void {
@@ -683,6 +721,7 @@ fn hashDescriptorIndexingLayoutDescriptor(hash: *u64, descriptor: core.Descripto
         hashBool(hash, range.visibility.vertex);
         hashBool(hash, range.visibility.fragment);
         hashBool(hash, range.visibility.compute);
+        hashBool(hash, range.visibility.ray_tracing);
         hashU64(hash, range.descriptor_count);
         hashBool(hash, range.partially_bound);
         hashBool(hash, range.update_after_bind);
@@ -1029,6 +1068,31 @@ const SharedTextureUsageTracker = struct {
     }
 };
 
+const SharedQueueOwnershipTracker = struct {
+    allocator: std.mem.Allocator,
+    reference_count: usize = 1,
+    owner: core.QueueKind = .graphics,
+
+    fn init(allocator: std.mem.Allocator) !*SharedQueueOwnershipTracker {
+        const shared = try allocator.create(SharedQueueOwnershipTracker);
+        shared.* = .{ .allocator = allocator };
+        return shared;
+    }
+
+    fn retain(self: *SharedQueueOwnershipTracker) void {
+        std.debug.assert(self.reference_count > 0);
+        self.reference_count += 1;
+    }
+
+    fn release(self: *SharedQueueOwnershipTracker) void {
+        std.debug.assert(self.reference_count > 0);
+        self.reference_count -= 1;
+        if (self.reference_count != 0) return;
+        const allocator = self.allocator;
+        allocator.destroy(self);
+    }
+};
+
 pub const Texture = struct {
     _state: [@sizeOf(State)]u8 align(@alignOf(State)),
 
@@ -1049,6 +1113,7 @@ pub const Texture = struct {
         sample_count_value: u32,
         usage_state: core.ResourceUsageState = .{},
         subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
+        queue_ownership_tracker: ?*SharedQueueOwnershipTracker = null,
         owner_queue_value: core.QueueKind = .graphics,
         heap_owner: ?*Heap.State = null,
         alive: bool = true,
@@ -1076,6 +1141,10 @@ pub const Texture = struct {
         if (state_value.subresource_usage_tracker) |subresource_tracker| {
             subresource_tracker.release();
             state_value.subresource_usage_tracker = null;
+        }
+        if (state_value.queue_ownership_tracker) |queue_ownership_tracker| {
+            queue_ownership_tracker.release();
+            state_value.queue_ownership_tracker = null;
         }
         if (state_value.heap_owner) |heap| {
             std.debug.assert(heap.live_resource_count != 0);
@@ -1120,7 +1189,10 @@ pub const Texture = struct {
     }
 
     pub fn ownerQueue(self: Texture) core.QueueKind {
-        return self.state().owner_queue_value;
+        return if (self.state().queue_ownership_tracker) |tracker|
+            tracker.owner
+        else
+            self.state().owner_queue_value;
     }
 
     fn recordUsage(self: *Texture, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
@@ -1223,6 +1295,7 @@ pub const Texture = struct {
             .storage_mode_value = self.state().storage_mode_value,
             .sample_count_value = self.state().sample_count_value,
             .subresource_usage_tracker = self.state().subresource_usage_tracker,
+            .queue_ownership_tracker = self.state().queue_ownership_tracker,
             .width_value = mipDimension(self.width(), resolved.base_mip_level),
             .height_value = mipDimension(self.height(), resolved.base_mip_level),
             .base_mip_level_value = resolved.base_mip_level,
@@ -1230,10 +1303,11 @@ pub const Texture = struct {
             .base_array_layer_value = resolved.base_array_layer,
             .array_layer_count_value = resolved.array_layer_count,
             .component_mapping_value = resolved.component_mapping,
-            .owner_queue_value = self.state().owner_queue_value,
+            .owner_queue_value = self.ownerQueue(),
             .impl = impl,
         });
         if (self.state().subresource_usage_tracker) |subresource_tracker| subresource_tracker.retain();
+        if (self.state().queue_ownership_tracker) |queue_ownership_tracker| queue_ownership_tracker.retain();
         view.setLabel(descriptor.label);
         return view;
     }
@@ -1811,6 +1885,7 @@ pub const TextureView = struct {
         owner_queue_value: core.QueueKind = .graphics,
         usage_state: core.ResourceUsageState = .{},
         subresource_usage_tracker: ?*SharedTextureUsageTracker = null,
+        queue_ownership_tracker: ?*SharedQueueOwnershipTracker = null,
         alive: bool = true,
         impl: Impl,
     };
@@ -1836,6 +1911,10 @@ pub const TextureView = struct {
         if (state_value.subresource_usage_tracker) |subresource_tracker| {
             subresource_tracker.release();
             state_value.subresource_usage_tracker = null;
+        }
+        if (state_value.queue_ownership_tracker) |queue_ownership_tracker| {
+            queue_ownership_tracker.release();
+            state_value.queue_ownership_tracker = null;
         }
         state_value.tracker.release(.texture_view);
     }
@@ -1913,7 +1992,10 @@ pub const TextureView = struct {
     }
 
     pub fn ownerQueue(self: TextureView) core.QueueKind {
-        return self.state().owner_queue_value;
+        return if (self.state().queue_ownership_tracker) |tracker|
+            tracker.owner
+        else
+            self.state().owner_queue_value;
     }
 
     fn recordUsage(self: *TextureView, next_usage: core.ResourceUsageKind) core.ResourceUsageTransition {
@@ -2378,6 +2460,8 @@ pub const Heap = struct {
         const state_value = self.state();
         const subresource_usage_tracker = try SharedTextureUsageTracker.init(state_value.allocator, texture_descriptor);
         errdefer subresource_usage_tracker.release();
+        const queue_ownership_tracker = try SharedQueueOwnershipTracker.init(state_value.allocator);
+        errdefer queue_ownership_tracker.release();
         const heap_impl = state_value.impl orelse return core.HeapError.UnsupportedHeaps;
         const impl = switch (heap_impl) {
             .vulkan => |*vulkan| Texture.Impl{ .vulkan = try vulkan.makeTexture(texture_descriptor, allocation) },
@@ -2396,6 +2480,7 @@ pub const Heap = struct {
             .storage_mode_value = texture_descriptor.storage_mode,
             .sample_count_value = texture_descriptor.sample_count,
             .subresource_usage_tracker = subresource_usage_tracker,
+            .queue_ownership_tracker = queue_ownership_tracker,
             .heap_owner = state_value,
             .impl = impl,
         });
@@ -2663,6 +2748,22 @@ pub const AccelerationStructure = struct {
         };
     }
 
+    fn syncBackendBuildSizes(
+        self: *AccelerationStructure,
+        sizes: core.AccelerationStructureBuildSizes,
+    ) void {
+        self.state().sizes_value.result_size = @max(self.state().sizes_value.result_size, sizes.result_size);
+        self.state().sizes_value.scratch_size = @max(self.state().sizes_value.scratch_size, sizes.scratch_size);
+        self.state().sizes_value.update_scratch_size = @max(
+            self.state().sizes_value.update_scratch_size,
+            sizes.update_scratch_size,
+        );
+        self.state().native_handle.result_size = @max(
+            self.state().native_handle.result_size,
+            sizes.result_size,
+        );
+    }
+
     fn markMaintained(
         self: *AccelerationStructure,
         plan: core.AccelerationStructureMaintenancePlan,
@@ -2821,9 +2922,13 @@ pub const AccelerationStructureBuildResources = struct {
         if (scratch_end > @as(u64, @intCast(self.scratch.length()))) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
+        const backend_can_resize_result = if (self.result.state().impl) |impl| switch (impl) {
+            .metal => backend == .metal,
+            .vulkan => false,
+        } else false;
         if (self.result.state().descriptor_value.kind != plan.kind or
             self.result.state().descriptor_value.primitive_count != plan.primitive_count or
-            self.result.resultSize() < plan.result_size)
+            (self.result.resultSize() < plan.result_size and !backend_can_resize_result))
         {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
@@ -2976,6 +3081,8 @@ pub const RayTracingPipelineState = struct {
         allocator: std.mem.Allocator,
         label_value: ?[]const u8 = null,
         descriptor_value: core.RayTracingPipelineDescriptor,
+        bind_group_layout_entries: ?[]core.BindGroupLayoutEntry = null,
+        bind_group_layout_fingerprint: ?u64 = null,
         alive: bool = true,
         lowering: core.RayTracingPipelineLowering,
         native_handle: BackendPrivateRayTracingPipelineHandle,
@@ -3001,6 +3108,7 @@ pub const RayTracingPipelineState = struct {
             .metal => |*metal| metal.deinit(),
         };
         state_value.allocator.free(state_value.descriptor_value.shader_groups);
+        if (state_value.bind_group_layout_entries) |entries| state_value.allocator.free(entries);
         state_value.tracker.release(.ray_tracing_pipeline_state);
     }
 
@@ -3038,6 +3146,19 @@ pub const RayTracingPipelineState = struct {
 
     pub fn functionTableEntryCount(self: RayTracingPipelineState) u32 {
         return self.lowering().functionTableEntryCount();
+    }
+
+    fn expectsBindGroup(self: RayTracingPipelineState) bool {
+        return self.state().bind_group_layout_fingerprint != null;
+    }
+
+    fn acceptsBindGroup(self: RayTracingPipelineState, bind_group: BindGroup) bool {
+        const state_value = self.state();
+        const expected_fingerprint = state_value.bind_group_layout_fingerprint orelse return false;
+        const expected_layout = state_value.descriptor_value.bind_group_layout orelse return false;
+        const actual_layout = bind_group.layoutDescriptor();
+        if (expected_fingerprint != bindGroupLayoutFingerprint(state_value.backend, actual_layout)) return false;
+        return bindGroupLayoutsEqual(expected_layout, actual_layout);
     }
 
     pub fn hasBackendPrivatePipelineHandle(self: RayTracingPipelineState) bool {
@@ -3261,6 +3382,30 @@ pub const ShaderBindingTable = struct {
 pub const RayTracingDrawableResources = struct {
     acceleration_structure: *AccelerationStructure,
     output: *TextureView,
+    bind_group: ?*BindGroup = null,
+
+    fn validateBindGroup(
+        self: RayTracingDrawableResources,
+        backend: core.Backend,
+        tracker: ?*ResourceTracker,
+        queue: core.QueueKind,
+        pipeline: RayTracingPipelineState,
+    ) (core.BindingError || core.CommandEncodingError || RuntimeError)!void {
+        const bind_group = self.bind_group orelse {
+            if (pipeline.expectsBindGroup()) return core.BindingError.RayTracingPipelineLayoutMismatch;
+            return;
+        };
+        assertAlive(bind_group.state().alive, .bind_group);
+        try expectSameBackend(backend, bind_group.selectedBackend());
+        if (tracker == null or bind_group.state().tracker != tracker.? or !pipeline.acceptsBindGroup(bind_group.*)) {
+            return core.BindingError.RayTracingPipelineLayoutMismatch;
+        }
+        try validateRayTracingBindGroupResources(bind_group.*, backend, tracker.?, queue);
+    }
+
+    fn recordBindGroupUsage(self: RayTracingDrawableResources) void {
+        if (self.bind_group) |bind_group| recordRayTracingBindGroupResources(bind_group.*);
+    }
 
     fn validateAccelerationStructure(
         self: RayTracingDrawableResources,
@@ -3272,7 +3417,9 @@ pub const RayTracingDrawableResources = struct {
         }
         const valid_kind = switch (backend) {
             .vulkan => self.acceleration_structure.state().descriptor_value.kind == .top_level,
-            .metal => self.acceleration_structure.state().descriptor_value.kind == .bottom_level,
+            .metal => switch (self.acceleration_structure.state().descriptor_value.kind) {
+                .bottom_level, .top_level => true,
+            },
         };
         if (!valid_kind or !self.acceleration_structure.isBuilt()) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -3412,6 +3559,9 @@ pub const MetalRayTracingExecutionMapping = struct {
         assertAlive(self.state().alive, .metal_ray_tracing_execution_mapping);
         self.state().alive = false;
         self.state().allocator.free(self.state().descriptor_value.pipeline.shader_groups);
+        if (self.state().descriptor_value.pipeline.bind_group_layout) |layout| {
+            self.state().allocator.free(layout.entries);
+        }
         self.state().allocator.free(self.state().descriptor_value.intersections);
         self.state().tracker.release(.metal_ray_tracing_execution_mapping);
     }
@@ -4209,6 +4359,12 @@ pub const BindGroupDescriptor = struct {
     entries: []const BindGroupEntry = &.{},
 };
 
+const BindGroupRuntimeResource = struct {
+    binding: u32,
+    array_element: u32,
+    resource: BindGroupResource,
+};
+
 pub const ResourceTableDescriptor = struct {
     label: ?[]const u8 = null,
     layout: *AdvancedBindGroupLayout,
@@ -4288,6 +4444,7 @@ pub const ResourceTable = struct {
             out.vertex = out.vertex or range.visibility.vertex;
             out.fragment = out.fragment or range.visibility.fragment;
             out.compute = out.compute or range.visibility.compute;
+            out.ray_tracing = out.ray_tracing or range.visibility.ray_tracing;
         }
         return out;
     }
@@ -4572,6 +4729,7 @@ pub const BindGroup = struct {
         alive: bool = true,
         layout_entries: []const core.BindGroupLayoutEntry = &.{},
         entries: []core.BindGroupEntry,
+        runtime_resources: []BindGroupRuntimeResource = &.{},
         impl: ?Impl = null,
     };
 
@@ -4595,6 +4753,7 @@ pub const BindGroup = struct {
         };
         state_value.allocator.free(state_value.layout_entries);
         state_value.allocator.free(state_value.entries);
+        state_value.allocator.free(state_value.runtime_resources);
         state_value.tracker.release(.bind_group);
     }
 
@@ -4622,6 +4781,22 @@ pub const BindGroup = struct {
     pub fn layoutDescriptor(self: BindGroup) core.BindGroupLayoutDescriptor {
         assertAlive(self.state().alive, .bind_group);
         return .{ .entries = self.state().layout_entries };
+    }
+
+    fn vulkanImpl(self: *BindGroup) ?*VulkanBindGroupBackend.VulkanBindGroup {
+        if (self.state().impl) |*impl| return switch (impl.*) {
+            .vulkan => |*vulkan| vulkan,
+            .metal => null,
+        };
+        return null;
+    }
+
+    fn metalImpl(self: *BindGroup) ?*MetalBindGroupBackend.MetalBindGroup {
+        if (self.state().impl) |*impl| return switch (impl.*) {
+            .vulkan => null,
+            .metal => |*metal| metal,
+        };
+        return null;
     }
 };
 
@@ -5328,10 +5503,13 @@ pub const CommandBuffer = struct {
                             .vulkan => |*vulkan_source| vulkan_source,
                             .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                         } else null;
-                        var vulkan_instance_source_buffer: [64]*const VulkanAccelerationStructure = undefined;
-                        if (resources.instance_sources.len > vulkan_instance_source_buffer.len) {
-                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-                        }
+                        const allocator = (self.privateState().runtime_state orelse
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources).allocator;
+                        const vulkan_instance_source_buffer = try allocator.alloc(
+                            *const VulkanAccelerationStructure,
+                            resources.instance_sources.len,
+                        );
+                        defer allocator.free(vulkan_instance_source_buffer);
                         for (resources.instance_sources, 0..) |source, source_index| {
                             vulkan_instance_source_buffer[source_index] = switch (source.state().impl orelse {
                                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -5341,10 +5519,11 @@ pub const CommandBuffer = struct {
                             };
                         }
                         const instance_source_impls = vulkan_instance_source_buffer[0..resources.instance_sources.len];
-                        var vulkan_geometry_buffer: [64]VulkanAccelerationStructure.GeometryInput = undefined;
-                        if (resources.geometries.len > vulkan_geometry_buffer.len) {
-                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-                        }
+                        const vulkan_geometry_buffer = try allocator.alloc(
+                            VulkanAccelerationStructure.GeometryInput,
+                            resources.geometries.len,
+                        );
+                        defer allocator.free(vulkan_geometry_buffer);
                         for (resources.geometries, 0..) |geometry, geometry_index| {
                             vulkan_geometry_buffer[geometry_index] = switch (geometry) {
                                 .triangles => |triangles| .{ .triangles = .{
@@ -5404,10 +5583,13 @@ pub const CommandBuffer = struct {
                             .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                             .metal => |*metal_source| metal_source,
                         } else null;
-                        var metal_instance_source_buffer: [64]*const MetalAccelerationStructure = undefined;
-                        if (resources.instance_sources.len > metal_instance_source_buffer.len) {
-                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-                        }
+                        const allocator = (self.privateState().runtime_state orelse
+                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources).allocator;
+                        const metal_instance_source_buffer = try allocator.alloc(
+                            *const MetalAccelerationStructure,
+                            resources.instance_sources.len,
+                        );
+                        defer allocator.free(metal_instance_source_buffer);
                         for (resources.instance_sources, 0..) |source, source_index| {
                             metal_instance_source_buffer[source_index] = switch (source.state().impl orelse {
                                 return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -5417,10 +5599,11 @@ pub const CommandBuffer = struct {
                             };
                         }
                         const instance_source_impls = metal_instance_source_buffer[0..resources.instance_sources.len];
-                        var metal_geometry_buffer: [64]MetalAccelerationStructure.GeometryInput = undefined;
-                        if (resources.geometries.len > metal_geometry_buffer.len) {
-                            return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-                        }
+                        const metal_geometry_buffer = try allocator.alloc(
+                            MetalAccelerationStructure.GeometryInput,
+                            resources.geometries.len,
+                        );
+                        defer allocator.free(metal_geometry_buffer);
                         for (resources.geometries, 0..) |geometry, geometry_index| {
                             metal_geometry_buffer[geometry_index] = switch (geometry) {
                                 .triangles => |triangles| .{ .triangles = .{
@@ -5455,6 +5638,7 @@ pub const CommandBuffer = struct {
                             instance_source_impls,
                             metal_geometries,
                         );
+                        resources.result.syncBackendBuildSizes(metal_as.buildSizes());
                         driver_submitted = true;
                     },
                 };
@@ -5551,6 +5735,7 @@ pub const CommandBuffer = struct {
         if (self.privateState().queue_kind_value == .transfer) return core.CommandEncodingError.InvalidQueueCapability;
         try expectSameBackend(self.privateState().backend, pipeline.selectedBackend());
         try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
+        if (pipeline.expectsBindGroup()) return core.BindingError.RayTracingPipelineLayoutMismatch;
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
         try self.privateState().debug.recordDirectCommand();
         var driver_submitted = false;
@@ -5592,9 +5777,16 @@ pub const CommandBuffer = struct {
             runtime_state.actual_presentation_extent,
             selected_format,
         );
+        try resources.validateBindGroup(
+            self.privateState().backend,
+            self.privateState().tracker,
+            self.privateState().queue_kind_value,
+            pipeline.*,
+        );
         try ensureTextureViewOwnedByQueue(self.privateState().queue_kind_value, resources.output);
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
         try self.privateState().debug.recordDirectCommand();
+        resources.recordBindGroupUsage();
         var driver_submitted = false;
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
@@ -5611,7 +5803,17 @@ pub const CommandBuffer = struct {
                     .vulkan => |*output| output,
                     .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                 };
-                try vulkan.traceRaysToDrawable(vulkan_pipeline, vulkan_as, vulkan_output, descriptor);
+                const vulkan_bind_group = if (resources.bind_group) |bind_group|
+                    bind_group.vulkanImpl() orelse return RuntimeError.BackendMismatch
+                else
+                    null;
+                try vulkan.traceRaysToDrawable(
+                    vulkan_pipeline,
+                    vulkan_as,
+                    vulkan_output,
+                    descriptor,
+                    vulkan_bind_group,
+                );
                 driver_submitted = true;
             },
             .metal => |*metal| {
@@ -5631,6 +5833,10 @@ pub const CommandBuffer = struct {
                         metal_as,
                         metal_output,
                         descriptor,
+                        if (resources.bind_group) |bind_group|
+                            bind_group.metalImpl() orelse return RuntimeError.BackendMismatch
+                        else
+                            null,
                     ),
                 }
                 driver_submitted = true;
@@ -5664,8 +5870,15 @@ pub const CommandBuffer = struct {
         try expectSameBackend(self.privateState().backend, shader_binding_table.selectedBackend());
         const plan = try shader_binding_table.dispatchPlan(pipeline.*, descriptor);
         try resources.validateTextureDispatch(self.privateState().backend, descriptor);
+        try resources.validateBindGroup(
+            self.privateState().backend,
+            self.privateState().tracker,
+            self.privateState().queue_kind_value,
+            pipeline.*,
+        );
         try ensureTextureViewOwnedByQueue(self.privateState().queue_kind_value, resources.output);
         try self.privateState().debug.recordDirectCommand();
+        resources.recordBindGroupUsage();
         var driver_submitted = false;
         if (self.privateState().impl) |*impl| switch (impl.*) {
             .vulkan => |*vulkan| {
@@ -5682,7 +5895,17 @@ pub const CommandBuffer = struct {
                     .vulkan => |*output| output,
                     .metal => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                 };
-                try vulkan.traceRaysToTexture(vulkan_pipeline, vulkan_as, vulkan_output, descriptor);
+                const vulkan_bind_group = if (resources.bind_group) |bind_group|
+                    bind_group.vulkanImpl() orelse return RuntimeError.BackendMismatch
+                else
+                    null;
+                try vulkan.traceRaysToTexture(
+                    vulkan_pipeline,
+                    vulkan_as,
+                    vulkan_output,
+                    descriptor,
+                    vulkan_bind_group,
+                );
                 driver_submitted = true;
             },
             .metal => |*metal| {
@@ -5699,7 +5922,17 @@ pub const CommandBuffer = struct {
                     .vulkan => return core.AdvancedFeatureError.InvalidAccelerationStructureResources,
                     .metal => |*output| output,
                 };
-                try metal.traceRaysToTexture(metal_pipeline, metal_as, metal_output, descriptor);
+                const metal_bind_group = if (resources.bind_group) |bind_group|
+                    bind_group.metalImpl() orelse return RuntimeError.BackendMismatch
+                else
+                    null;
+                try metal.traceRaysToTexture(
+                    metal_pipeline,
+                    metal_as,
+                    metal_output,
+                    descriptor,
+                    metal_bind_group,
+                );
                 driver_submitted = true;
             },
         };
@@ -7735,7 +7968,9 @@ pub const Device = struct {
                         0;
                 },
                 .metal => |*metal| {
-                    const sizes = try metal.accelerationStructureBuildSizes(sizing_descriptor);
+                    var sizing_build_descriptor = descriptor;
+                    sizing_build_descriptor.acceleration_structure = sizing_descriptor;
+                    const sizes = try metal.accelerationStructureBuildSizes(sizing_build_descriptor);
                     plan.result_size = sizes.result_size;
                     plan.scratch_size = std.mem.alignForward(u64, sizes.scratch_size, descriptor.scratch_alignment);
                     plan.update_scratch_size = if (descriptor.mode == .update or
@@ -7768,7 +8003,7 @@ pub const Device = struct {
                         .allow_compaction = descriptor.operation == .compact,
                     },
                 ),
-                .metal => |*metal| try metal.accelerationStructureBuildSizes(descriptor.acceleration_structure),
+                .metal => |*metal| try metal.accelerationStructureMaintenanceBuildSizes(descriptor.acceleration_structure),
             };
             if (descriptor.operation != .compact) {
                 plan.scratch_size = std.mem.alignForward(u64, sizes.update_scratch_size, descriptor.scratch_alignment);
@@ -7826,11 +8061,17 @@ pub const Device = struct {
         });
     }
 
-    fn validateRayTracingPipelineDescriptor(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!void {
+    fn validateRayTracingPipelineDescriptor(
+        self: Device,
+        descriptor: core.RayTracingPipelineDescriptor,
+    ) (core.AdvancedFeatureError || core.BindingError)!void {
         try descriptor.validate(self.features(), self.limits());
     }
 
-    fn planRayTracingPipelineLowering(self: Device, descriptor: core.RayTracingPipelineDescriptor) core.AdvancedFeatureError!core.RayTracingPipelineLowering {
+    fn planRayTracingPipelineLowering(
+        self: Device,
+        descriptor: core.RayTracingPipelineDescriptor,
+    ) (core.AdvancedFeatureError || core.BindingError)!core.RayTracingPipelineLowering {
         const metal_intersections: []const core.MetalIntersectionFunctionDescriptor = &.{};
         return try core.RayTracingPipelineLowering.fromDescriptor(
             self.state().backend,
@@ -7852,6 +8093,11 @@ pub const Device = struct {
         );
         const shader_groups = try self.state().allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.shader_groups);
         errdefer self.state().allocator.free(shader_groups);
+        const bind_group_layout_entries: ?[]core.BindGroupLayoutEntry = if (descriptor.bind_group_layout) |layout|
+            try self.state().allocator.dupe(core.BindGroupLayoutEntry, layout.entries)
+        else
+            null;
+        errdefer if (bind_group_layout_entries) |entries| self.state().allocator.free(entries);
         var impl: ?RayTracingPipelineState.Impl = null;
         errdefer if (impl) |*pipeline_impl| switch (pipeline_impl.*) {
             .vulkan => |*vulkan| vulkan.deinit(),
@@ -7884,15 +8130,33 @@ pub const Device = struct {
             .descriptor_value = .{
                 .label = descriptor.label,
                 .shader_groups = shader_groups,
+                .ray_generation = descriptor.ray_generation,
+                .miss = descriptor.miss,
+                .closest_hit = descriptor.closest_hit,
+                .any_hit = descriptor.any_hit,
+                .intersection = descriptor.intersection,
                 .max_recursion_depth = descriptor.max_recursion_depth,
+                .bind_group_layout = if (descriptor.bind_group_layout) |layout| .{
+                    .label = layout.label,
+                    .entries = bind_group_layout_entries.?,
+                    .cache_policy = layout.cache_policy,
+                } else null,
             },
+            .bind_group_layout_entries = bind_group_layout_entries,
+            .bind_group_layout_fingerprint = if (descriptor.bind_group_layout) |layout|
+                bindGroupLayoutFingerprint(self.state().backend, layout)
+            else
+                null,
             .lowering = lowering,
             .native_handle = native_handle,
             .impl = impl,
         });
     }
 
-    fn planMetalRayTracingMapping(self: Device, descriptor: core.MetalRayTracingMappingDescriptor) core.AdvancedFeatureError!core.MetalRayTracingMappingPlan {
+    fn planMetalRayTracingMapping(
+        self: Device,
+        descriptor: core.MetalRayTracingMappingDescriptor,
+    ) (core.AdvancedFeatureError || core.BindingError)!core.MetalRayTracingMappingPlan {
         if (self.state().backend != .metal) return core.AdvancedFeatureError.UnsupportedRayTracing;
         return try core.MetalRayTracingMappingPlan.fromDescriptor(
             descriptor,
@@ -7910,6 +8174,11 @@ pub const Device = struct {
         );
         const shader_groups = try self.state().allocator.dupe(core.RayTracingShaderGroupDescriptor, descriptor.pipeline.shader_groups);
         errdefer self.state().allocator.free(shader_groups);
+        const bind_group_layout_entries: ?[]core.BindGroupLayoutEntry = if (descriptor.pipeline.bind_group_layout) |layout|
+            try self.state().allocator.dupe(core.BindGroupLayoutEntry, layout.entries)
+        else
+            null;
+        errdefer if (bind_group_layout_entries) |entries| self.state().allocator.free(entries);
         const intersections = try self.state().allocator.dupe(core.MetalIntersectionFunctionDescriptor, descriptor.intersections);
         errdefer self.state().allocator.free(intersections);
 
@@ -7922,7 +8191,17 @@ pub const Device = struct {
                 .pipeline = .{
                     .label = descriptor.pipeline.label,
                     .shader_groups = shader_groups,
+                    .ray_generation = descriptor.pipeline.ray_generation,
+                    .miss = descriptor.pipeline.miss,
+                    .closest_hit = descriptor.pipeline.closest_hit,
+                    .any_hit = descriptor.pipeline.any_hit,
+                    .intersection = descriptor.pipeline.intersection,
                     .max_recursion_depth = descriptor.pipeline.max_recursion_depth,
+                    .bind_group_layout = if (descriptor.pipeline.bind_group_layout) |layout| .{
+                        .label = layout.label,
+                        .entries = bind_group_layout_entries.?,
+                        .cache_policy = layout.cache_policy,
+                    } else null,
                 },
                 .intersections = intersections,
                 .function_table_label = descriptor.function_table_label,
@@ -8539,6 +8818,9 @@ pub const Device = struct {
         const layout_entries = try self.state().allocator.dupe(core.BindGroupLayoutEntry, descriptor.layout.state().entries);
         errdefer self.state().allocator.free(layout_entries);
 
+        const runtime_resources = try copyBindGroupRuntimeResources(self.state().allocator, descriptor.entries);
+        errdefer self.state().allocator.free(runtime_resources);
+
         const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| bind_group_impl: {
                 const vulkan_entries = try materializeVulkanBindGroupEntries(self.state().allocator, descriptor.entries);
@@ -8575,6 +8857,7 @@ pub const Device = struct {
             .label_value = descriptor.label,
             .layout_entries = layout_entries,
             .entries = entries,
+            .runtime_resources = runtime_resources,
             .impl = impl,
         });
     }
@@ -8589,6 +8872,8 @@ pub const Device = struct {
         }
         const subresource_usage_tracker = try SharedTextureUsageTracker.init(self.state().allocator, descriptor);
         errdefer subresource_usage_tracker.release();
+        const queue_ownership_tracker = try SharedQueueOwnershipTracker.init(self.state().allocator);
+        errdefer queue_ownership_tracker.release();
         const impl = switch (self.state().impl) {
             .vulkan => |*vulkan| Texture.Impl{ .vulkan = try vulkan.makeTexture(descriptor) },
             .metal => |*metal| Texture.Impl{ .metal = try metal.makeTexture(descriptor) },
@@ -8605,6 +8890,7 @@ pub const Device = struct {
             .storage_mode_value = descriptor.storage_mode,
             .sample_count_value = descriptor.sample_count,
             .subresource_usage_tracker = subresource_usage_tracker,
+            .queue_ownership_tracker = queue_ownership_tracker,
             .impl = impl,
         });
         texture.setLabel(descriptor.label);
@@ -8665,6 +8951,8 @@ pub const Device = struct {
             descriptor.textureDescriptor(),
         );
         errdefer subresource_usage_tracker.release();
+        const queue_ownership_tracker = try SharedQueueOwnershipTracker.init(self.state().allocator);
+        errdefer queue_ownership_tracker.release();
         var metal_texture = try switch (self.state().impl) {
             .metal => |*metal| MetalTexture.initExternal(metal, descriptor),
             .vulkan => unreachable,
@@ -8683,6 +8971,7 @@ pub const Device = struct {
             .storage_mode_value = texture_descriptor.storage_mode,
             .sample_count_value = texture_descriptor.sample_count,
             .subresource_usage_tracker = subresource_usage_tracker,
+            .queue_ownership_tracker = queue_ownership_tracker,
             .impl = .{ .metal = metal_texture },
         });
         texture.setLabel(descriptor.label);
@@ -9228,7 +9517,7 @@ pub fn initHeadlessRuntime(
 
     var impl: BackendRuntime = switch (backend) {
         .vulkan => .{ .vulkan = try VulkanClearScreen.initHeadless(allocator, app_name) },
-        .metal => .{ .metal = try MetalClearScreen.initHeadless() },
+        .metal => .{ .metal = try MetalClearScreen.initHeadless(allocator) },
     };
     errdefer deinitBackendRuntime(&impl);
 
@@ -9325,6 +9614,7 @@ pub const WindowContext = struct {
             },
             .metal => .{
                 .metal = try MetalClearScreen.init(
+                    allocator,
                     options.surface,
                     options.presentation,
                 ),
@@ -9450,6 +9740,30 @@ fn materializeBindGroupEntries(
     return entries;
 }
 
+fn copyBindGroupRuntimeResources(
+    allocator: std.mem.Allocator,
+    entries: []const BindGroupEntry,
+) ![]BindGroupRuntimeResource {
+    var resource_count: usize = 0;
+    for (entries) |entry| {
+        resource_count = try std.math.add(usize, resource_count, entry.resourceCount());
+    }
+
+    const resources = try allocator.alloc(BindGroupRuntimeResource, resource_count);
+    var resource_offset: usize = 0;
+    for (entries) |entry| {
+        for (0..entry.resourceCount()) |array_element| {
+            resources[resource_offset] = .{
+                .binding = entry.binding,
+                .array_element = @intCast(array_element),
+                .resource = entry.resourceAt(array_element),
+            };
+            resource_offset += 1;
+        }
+    }
+    return resources;
+}
+
 fn recordBufferBarrier(
     backend: core.Backend,
     features: core.DeviceFeatures,
@@ -9514,7 +9828,7 @@ fn recordTextureOwnershipTransfer(
 ) !void {
     assertAlive(texture.state().alive, .texture);
     try descriptor.validate(features);
-    if (texture.state().owner_queue_value != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    if (texture.ownerQueue() != descriptor.source) return core.CommandEncodingError.InvalidQueueOwnershipState;
     if (texture.state().subresource_usage_tracker) |subresource_tracker| {
         const summary = if (descriptor.before == descriptor.after)
             try subresource_tracker.value.transition(.{}, descriptor.after)
@@ -9532,7 +9846,11 @@ fn recordTextureOwnershipTransfer(
             _ = try texture.state().usage_state.applyExplicitBarrier(descriptor.before, descriptor.after);
         }
     }
-    texture.state().owner_queue_value = descriptor.destination;
+    if (texture.state().queue_ownership_tracker) |queue_ownership_tracker| {
+        queue_ownership_tracker.owner = descriptor.destination;
+    } else {
+        texture.state().owner_queue_value = descriptor.destination;
+    }
 }
 
 fn ensureBufferOwnedByQueue(queue: core.QueueKind, buffer: *const Buffer) core.CommandEncodingError!void {
@@ -9540,7 +9858,7 @@ fn ensureBufferOwnedByQueue(queue: core.QueueKind, buffer: *const Buffer) core.C
 }
 
 fn ensureTextureOwnedByQueue(queue: core.QueueKind, texture: *const Texture) core.CommandEncodingError!void {
-    if (texture.state().owner_queue_value != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
+    if (texture.ownerQueue() != queue) return core.CommandEncodingError.InvalidQueueOwnershipState;
 }
 
 fn ensureTextureViewOwnedByQueue(queue: core.QueueKind, texture_view: *const TextureView) core.CommandEncodingError!void {
@@ -9583,6 +9901,115 @@ fn validateDynamicOffsetsForBindGroup(
         bind_group.layoutDescriptor(),
         core.defaultDeviceLimits(bind_group.selectedBackend()),
     );
+}
+
+fn validateRayTracingBindGroupResources(
+    bind_group: BindGroup,
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    queue: core.QueueKind,
+) (core.BindingError || core.CommandEncodingError || RuntimeError)!void {
+    for (bind_group.state().runtime_resources) |runtime_resource| {
+        const layout_entry = bind_group.layoutDescriptor().entryForBinding(runtime_resource.binding) orelse {
+            return core.BindingError.RayTracingPipelineLayoutMismatch;
+        };
+        if (runtime_resource.array_element >= layout_entry.array_count or
+            runtime_resource.resource.resourceKind() != layout_entry.resource)
+        {
+            return core.BindingError.RayTracingPipelineLayoutMismatch;
+        }
+        try validateRayTracingBindGroupResource(runtime_resource.resource, layout_entry, backend, tracker, queue);
+    }
+}
+
+fn recordRayTracingBindGroupResources(bind_group: BindGroup) void {
+    for (bind_group.state().runtime_resources) |runtime_resource| {
+        const layout_entry = bind_group.layoutDescriptor().entryForBinding(runtime_resource.binding).?;
+        recordRayTracingBindGroupResourceUsage(runtime_resource.resource, layout_entry);
+    }
+}
+
+fn validateRayTracingBindGroupResource(
+    resource: BindGroupResource,
+    layout_entry: core.BindGroupLayoutEntry,
+    backend: core.Backend,
+    tracker: *ResourceTracker,
+    queue: core.QueueKind,
+) (core.BindingError || core.CommandEncodingError || RuntimeError)!void {
+    if (!resourceTableResourceAlive(resource)) return core.BindingError.RayTracingPipelineLayoutMismatch;
+    try expectSameBackend(backend, bindGroupResourceBackend(resource));
+    if (bindGroupResourceTracker(resource) != tracker) return core.BindingError.RayTracingPipelineLayoutMismatch;
+
+    switch (resource) {
+        .uniform_buffer => |binding| {
+            try ensureBufferOwnedByQueue(queue, binding.buffer);
+            try validateBindGroupBufferRange(binding);
+            if (!binding.buffer.usage().uniform) return core.BindingError.RayTracingPipelineLayoutMismatch;
+        },
+        .storage_buffer => |binding| {
+            try ensureBufferOwnedByQueue(queue, binding.buffer);
+            try validateBindGroupBufferRange(binding);
+            if (!binding.buffer.usage().storage) return RuntimeError.InvalidStorageBufferUsage;
+        },
+        .sampled_texture => |texture_view| {
+            try ensureTextureViewOwnedByQueue(queue, texture_view);
+            if (!texture_view.usage().shader_read) return core.BindingError.RayTracingPipelineLayoutMismatch;
+        },
+        .storage_texture => |texture_view| {
+            try ensureTextureViewOwnedByQueue(queue, texture_view);
+            const access = layout_entry.resolvedStorageAccess().?;
+            if ((access.requiresRead() and !texture_view.usage().shader_read) or
+                (access.requiresWrite() and !texture_view.usage().shader_write))
+            {
+                return RuntimeError.InvalidStorageTextureUsage;
+            }
+        },
+        .sampler, .compare_sampler => {},
+    }
+}
+
+fn validateBindGroupBufferRange(binding: BindGroupBufferBinding) core.BindingError!void {
+    const buffer_length: u64 = @intCast(binding.buffer.length());
+    if (binding.offset >= buffer_length) return core.BindingError.InvalidBufferBindingRange;
+    const binding_size = binding.size orelse buffer_length - binding.offset;
+    if (binding_size == 0 or binding_size > buffer_length - binding.offset) {
+        return core.BindingError.InvalidBufferBindingRange;
+    }
+}
+
+fn bindGroupResourceBackend(resource: BindGroupResource) core.Backend {
+    return switch (resource) {
+        .uniform_buffer, .storage_buffer => |binding| binding.buffer.selectedBackend(),
+        .storage_texture, .sampled_texture => |texture_view| texture_view.selectedBackend(),
+        .sampler, .compare_sampler => |sampler_state| sampler_state.selectedBackend(),
+    };
+}
+
+fn bindGroupResourceTracker(resource: BindGroupResource) *ResourceTracker {
+    return switch (resource) {
+        .uniform_buffer, .storage_buffer => |binding| binding.buffer.state().tracker,
+        .storage_texture, .sampled_texture => |texture_view| texture_view.state().tracker,
+        .sampler, .compare_sampler => |sampler_state| sampler_state.state().tracker,
+    };
+}
+
+fn recordRayTracingBindGroupResourceUsage(
+    resource: BindGroupResource,
+    layout_entry: core.BindGroupLayoutEntry,
+) void {
+    switch (resource) {
+        .uniform_buffer => |binding| _ = binding.buffer.recordUsage(.uniform_buffer),
+        .storage_buffer => |binding| {
+            const access = layout_entry.resolvedStorageAccess().?;
+            _ = binding.buffer.recordUsage(if (access.requiresWrite()) .storage_buffer_write else .storage_buffer_read);
+        },
+        .sampled_texture => |texture_view| _ = texture_view.recordUsage(.sampled_texture),
+        .storage_texture => |texture_view| {
+            const access = layout_entry.resolvedStorageAccess().?;
+            _ = texture_view.recordUsage(if (access.requiresWrite()) .storage_texture_write else .storage_texture_read);
+        },
+        .sampler, .compare_sampler => {},
+    }
 }
 
 fn validateAndRecordStorageAccess(
@@ -10303,6 +10730,7 @@ test "runtime device exposes adapter features limits and format caps" {
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
         .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         },
@@ -10332,6 +10760,7 @@ test "runtime device validates advanced descriptors against selected capabilitie
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
         .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         },
@@ -10411,6 +10840,7 @@ test "runtime device plans sparse texture lowering from native capabilities" {
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
         .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         },
@@ -11337,12 +11767,14 @@ test "ray texture dispatch resources require a writable 2D output extent" {
 
     acceleration_structure.state().backend = .metal;
     acceleration_structure.state().descriptor_value.kind = .top_level;
+    try resources.validateAccelerationStructure(.metal);
+    acceleration_structure.state().descriptor_value.kind = .bottom_level;
+    try resources.validateAccelerationStructure(.metal);
+    acceleration_structure.state().built_value = false;
     try std.testing.expectError(
         core.AdvancedFeatureError.InvalidAccelerationStructureResources,
         resources.validateAccelerationStructure(.metal),
     );
-    acceleration_structure.state().descriptor_value.kind = .bottom_level;
-    try resources.validateAccelerationStructure(.metal);
 }
 
 test "legacy drawable ray dispatch requires a linear BGRA output compatible with the selected presentation format" {
@@ -11390,6 +11822,9 @@ test "legacy drawable ray dispatch requires a linear BGRA output compatible with
 
     try resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb);
     try resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm);
+    acceleration_structure.state().descriptor_value.kind = .top_level;
+    try resources.validateDrawableDispatch(.metal, dispatch, presentation_extent, .bgra8_unorm_srgb);
+    acceleration_structure.state().descriptor_value.kind = .bottom_level;
 
     output.state().format_value = .bgra8_unorm_srgb;
     try std.testing.expectError(
@@ -11830,6 +12265,7 @@ test "runtime advanced bind group layout snapshots descriptor ranges" {
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
         .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         },
@@ -11926,6 +12362,7 @@ test "runtime resource table updates clear and validate slots" {
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
         .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         },
@@ -12036,6 +12473,7 @@ test "runtime resource table rejects update after bind without range support" {
     var tracker = ResourceTracker{};
     var backend_runtime = BackendRuntime{
         .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         },
@@ -12159,6 +12597,7 @@ test "runtime external texture wrapper validates and tracks lifetime" {
     var tracker = ResourceTracker{};
     var backend_runtime: BackendRuntime = switch (backend) {
         .metal => .{ .metal = .{
+            .allocator = std.testing.allocator,
             .handle = undefined,
             .extent = .{ .width = 1, .height = 1 },
         } },
@@ -12711,6 +13150,50 @@ test "runtime queue ownership transfers gate cross queue resource use" {
         .before = .copy_source,
         .after = .copy_destination,
     }));
+}
+
+test "texture views observe shared queue ownership transfers" {
+    var tracker = ResourceTracker{};
+    const queue_ownership_tracker = try SharedQueueOwnershipTracker.init(std.testing.allocator);
+    defer queue_ownership_tracker.release();
+    queue_ownership_tracker.retain();
+    defer queue_ownership_tracker.release();
+
+    var texture = Texture.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .shader_read = true },
+        .sample_count_value = 1,
+        .usage_state = .{ .current = .sampled_texture },
+        .queue_ownership_tracker = queue_ownership_tracker,
+        .impl = undefined,
+    });
+    const texture_view = TextureView.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .shader_read = true },
+        .sample_count_value = 1,
+        .width_value = 1,
+        .height_value = 1,
+        .queue_ownership_tracker = queue_ownership_tracker,
+        .impl = undefined,
+    });
+
+    try recordTextureOwnershipTransfer(.{ .queue_ownership_transfer = true }, &texture, .{
+        .source = .graphics,
+        .destination = .compute,
+        .before = .sampled_texture,
+        .after = .sampled_texture,
+    });
+    try std.testing.expectEqual(core.QueueKind.compute, texture.ownerQueue());
+    try std.testing.expectEqual(core.QueueKind.compute, texture_view.ownerQueue());
+    try ensureTextureViewOwnedByQueue(.compute, &texture_view);
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidQueueOwnershipState,
+        ensureTextureViewOwnedByQueue(.graphics, &texture_view),
+    );
 }
 
 test "runtime explicit barriers update resource usage state" {
@@ -13363,6 +13846,221 @@ test "heap resource storage compatibility stays explicit" {
         .width = 8,
         .storage_mode = .shared,
     }));
+}
+
+test "ray tracing bind group layout identity is binding keyed" {
+    const first_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 3,
+            .resource = .uniform_buffer,
+            .visibility = .{ .ray_tracing = true },
+        },
+        .{
+            .binding = 8,
+            .resource = .storage_texture,
+            .visibility = .{ .ray_tracing = true },
+            .storage_access = .read,
+        },
+    };
+    const reordered_entries = [_]core.BindGroupLayoutEntry{
+        first_entries[1],
+        first_entries[0],
+    };
+    const incompatible_entries = [_]core.BindGroupLayoutEntry{
+        first_entries[0],
+        .{
+            .binding = 8,
+            .resource = .storage_texture,
+            .visibility = .{ .ray_tracing = true },
+            .storage_access = .write,
+        },
+    };
+    const first = core.BindGroupLayoutDescriptor{ .label = "first", .entries = first_entries[0..] };
+    const reordered = core.BindGroupLayoutDescriptor{ .label = "reordered", .entries = reordered_entries[0..] };
+    const incompatible = core.BindGroupLayoutDescriptor{ .entries = incompatible_entries[0..] };
+
+    try std.testing.expectEqual(
+        bindGroupLayoutFingerprint(.vulkan, first),
+        bindGroupLayoutFingerprint(.vulkan, reordered),
+    );
+    try std.testing.expect(bindGroupLayoutsEqual(first, reordered));
+    try std.testing.expect(!bindGroupLayoutsEqual(first, incompatible));
+}
+
+test "ray tracing bind group runtime resources validate and record arrays" {
+    const allocator = std.testing.allocator;
+    var tracker = ResourceTracker{};
+    var other_tracker = ResourceTracker{};
+
+    var uniform_buffer = Buffer.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 64,
+        .usage_value = .{ .uniform = true },
+        .impl = undefined,
+    });
+    var storage_buffer = Buffer.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .length_value = 64,
+        .usage_value = .{ .storage = true },
+        .impl = undefined,
+    });
+    var sampled_texture = TextureView.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .shader_read = true },
+        .sample_count_value = 1,
+        .width_value = 1,
+        .height_value = 1,
+        .impl = undefined,
+    });
+    var storage_texture = TextureView.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .format_value = .rgba8_unorm,
+        .usage_value = .{ .shader_read = true, .shader_write = true },
+        .sample_count_value = 1,
+        .width_value = 1,
+        .height_value = 1,
+        .impl = undefined,
+    });
+    var sampler = SamplerState.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .impl = undefined,
+    });
+
+    const layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 3,
+            .resource = .uniform_buffer,
+            .visibility = .{ .ray_tracing = true },
+        },
+        .{
+            .binding = 4,
+            .resource = .storage_buffer,
+            .visibility = .{ .ray_tracing = true },
+            .storage_access = .read_write,
+        },
+        .{
+            .binding = 5,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+        },
+        .{
+            .binding = 6,
+            .resource = .storage_texture,
+            .visibility = .{ .ray_tracing = true },
+            .storage_access = .read,
+        },
+        .{
+            .binding = 7,
+            .resource = .sampler,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 2,
+        },
+    };
+    const sampler_resources = [_]BindGroupResource{
+        .{ .sampler = &sampler },
+        .{ .sampler = &sampler },
+    };
+    const entries = [_]BindGroupEntry{
+        .{
+            .binding = 3,
+            .resource = .{ .uniform_buffer = .{ .buffer = &uniform_buffer, .size = 32 } },
+        },
+        .{
+            .binding = 4,
+            .resource = .{ .storage_buffer = .{ .buffer = &storage_buffer, .size = 32 } },
+        },
+        .{
+            .binding = 5,
+            .resource = .{ .sampled_texture = &sampled_texture },
+        },
+        .{
+            .binding = 6,
+            .resource = .{ .storage_texture = &storage_texture },
+        },
+        .{
+            .binding = 7,
+            .resource = .{ .sampler = &sampler },
+            .resources = sampler_resources[0..],
+        },
+    };
+    const runtime_resources = try copyBindGroupRuntimeResources(allocator, entries[0..]);
+    defer allocator.free(runtime_resources);
+    const bind_group = BindGroup.init(.{
+        .backend = .vulkan,
+        .tracker = &tracker,
+        .allocator = allocator,
+        .layout_entries = layout_entries[0..],
+        .entries = &.{},
+        .runtime_resources = runtime_resources,
+    });
+
+    try std.testing.expectEqual(@as(usize, 6), runtime_resources.len);
+    try std.testing.expectEqual(@as(u32, 0), runtime_resources[4].array_element);
+    try std.testing.expectEqual(@as(u32, 1), runtime_resources[5].array_element);
+    try validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics);
+    try std.testing.expectEqual(@as(?core.ResourceUsageKind, null), uniform_buffer.currentUsage());
+    try std.testing.expectEqual(@as(?core.ResourceUsageKind, null), storage_buffer.currentUsage());
+    try std.testing.expectEqual(@as(?core.ResourceUsageKind, null), sampled_texture.currentUsage());
+    try std.testing.expectEqual(@as(?core.ResourceUsageKind, null), storage_texture.currentUsage());
+    recordRayTracingBindGroupResources(bind_group);
+    try std.testing.expectEqual(core.ResourceUsageKind.uniform_buffer, uniform_buffer.currentUsage().?);
+    try std.testing.expectEqual(core.ResourceUsageKind.storage_buffer_write, storage_buffer.currentUsage().?);
+    try std.testing.expectEqual(core.ResourceUsageKind.sampled_texture, sampled_texture.currentUsage().?);
+    try std.testing.expectEqual(core.ResourceUsageKind.storage_texture_read, storage_texture.currentUsage().?);
+
+    storage_buffer.state().owner_queue_value = .compute;
+    try std.testing.expectError(
+        core.CommandEncodingError.InvalidQueueOwnershipState,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
+    storage_buffer.state().owner_queue_value = .graphics;
+
+    sampled_texture.state().tracker = &other_tracker;
+    try std.testing.expectError(
+        core.BindingError.RayTracingPipelineLayoutMismatch,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
+    sampled_texture.state().tracker = &tracker;
+
+    sampler.state().alive = false;
+    try std.testing.expectError(
+        core.BindingError.RayTracingPipelineLayoutMismatch,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
+    sampler.state().alive = true;
+
+    uniform_buffer.state().usage_value.uniform = false;
+    try std.testing.expectError(
+        core.BindingError.RayTracingPipelineLayoutMismatch,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
+    uniform_buffer.state().usage_value.uniform = true;
+
+    sampled_texture.state().usage_value.shader_read = false;
+    try std.testing.expectError(
+        core.BindingError.RayTracingPipelineLayoutMismatch,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
+    sampled_texture.state().usage_value.shader_read = true;
+
+    storage_buffer.state().usage_value.storage = false;
+    try std.testing.expectError(
+        RuntimeError.InvalidStorageBufferUsage,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
+    storage_buffer.state().usage_value.storage = true;
+
+    storage_texture.state().usage_value.shader_read = false;
+    try std.testing.expectError(
+        RuntimeError.InvalidStorageTextureUsage,
+        validateRayTracingBindGroupResources(bind_group, .vulkan, &tracker, .graphics),
+    );
 }
 
 test "runtime bind group materialization validates resources against layout" {

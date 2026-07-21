@@ -16,6 +16,7 @@ const metal = @import("metal_bridge");
 
 const MetalClearScreen = @This();
 
+allocator: std.mem.Allocator,
 handle: *metal.vkmtl_metal_clear_screen,
 extent: core.Extent2D,
 selected_presentation_format: ?core.TextureFormat = null,
@@ -38,6 +39,7 @@ const Error = error{
 const adapter_name_buffer_len = 256;
 
 pub fn init(
+    allocator: std.mem.Allocator,
     surface: core.SurfaceDescriptor,
     presentation: core.PresentationDescriptor,
 ) !MetalClearScreen {
@@ -64,6 +66,7 @@ pub fn init(
     const actual_format = try confirmPresentationFormat(selected_format, native_format);
 
     return .{
+        .allocator = allocator,
         .handle = clear_screen,
         .extent = presentation.extent,
         .selected_presentation_format = actual_format,
@@ -71,10 +74,11 @@ pub fn init(
     };
 }
 
-pub fn initHeadless() !MetalClearScreen {
+pub fn initHeadless(allocator: std.mem.Allocator) !MetalClearScreen {
     var handle: ?*metal.vkmtl_metal_clear_screen = null;
     try check(metal.vkmtl_metal_clear_screen_create_headless(&handle));
     return .{
+        .allocator = allocator,
         .handle = handle orelse return Error.NoMetalDevice,
         .extent = .{ .width = 0, .height = 0 },
         .selected_presentation_format = null,
@@ -282,9 +286,16 @@ pub fn supportsNativeTimestampQueries(self: *const MetalClearScreen) bool {
 
 pub fn accelerationStructureBuildSizes(
     self: *MetalClearScreen,
-    descriptor: core.AccelerationStructureDescriptor,
+    descriptor: core.AccelerationStructureBuildDescriptor,
 ) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
     return try MetalAccelerationStructure.queryBuildSizes(self, descriptor);
+}
+
+pub fn accelerationStructureMaintenanceBuildSizes(
+    self: *MetalClearScreen,
+    descriptor: core.AccelerationStructureDescriptor,
+) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
+    return try MetalAccelerationStructure.queryConservativeBuildSizes(self, descriptor);
 }
 
 pub fn makeAccelerationStructure(
@@ -693,6 +704,7 @@ test "Metal native presentation formats map back to the selected portable format
 
 test "Metal format capabilities expose only the selected drawable format" {
     const srgb_screen = MetalClearScreen{
+        .allocator = std.testing.allocator,
         .handle = undefined,
         .extent = .{ .width = 1, .height = 1 },
         .selected_presentation_format = .bgra8_unorm_srgb,
@@ -706,6 +718,7 @@ test "Metal format capabilities expose only the selected drawable format" {
     try std.testing.expect(!srgb_screen.formatCapabilities(.bgra8_unorm).presentation);
 
     const headless = MetalClearScreen{
+        .allocator = std.testing.allocator,
         .handle = undefined,
         .extent = .{ .width = 0, .height = 0 },
         .selected_presentation_format = null,
@@ -715,6 +728,7 @@ test "Metal format capabilities expose only the selected drawable format" {
     try std.testing.expect(!headless.formatCapabilities(.bgra8_unorm).presentation);
 
     const linear_screen = MetalClearScreen{
+        .allocator = std.testing.allocator,
         .handle = undefined,
         .extent = .{ .width = 1, .height = 1 },
         .selected_presentation_format = .bgra8_unorm,

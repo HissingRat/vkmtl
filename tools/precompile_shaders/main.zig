@@ -1,6 +1,7 @@
 const std = @import("std");
 const shader_depfile = @import("depfile.zig");
 const shader_manifest = @import("manifest.zig");
+const metal_binding = @import("metal_binding.zig");
 
 const max_source_bytes = 4 * 1024 * 1024;
 
@@ -484,6 +485,12 @@ fn runSlang(
     const depfile_path = try std.fmt.allocPrint(allocator, "{s}.d", .{output_path});
     defer allocator.free(depfile_path);
     defer std.Io.Dir.cwd().deleteFile(std.Options.debug_io, depfile_path) catch {};
+    const metal_reflection_path: ?[]u8 = if (target == .msl)
+        try std.fmt.allocPrint(allocator, "{s}.slang-reflection.json.tmp", .{output_path})
+    else
+        null;
+    defer if (metal_reflection_path) |path| allocator.free(path);
+    defer if (metal_reflection_path) |path| std.Io.Dir.cwd().deleteFile(std.Options.debug_io, path) catch {};
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
     try argv.appendSlice(allocator, &.{
@@ -497,9 +504,45 @@ fn runSlang(
         entry,
     });
     if (target == .spirv) try argv.append(allocator, "-fvk-use-entrypoint-name");
+    if (metal_reflection_path) |path| {
+        try argv.appendSlice(allocator, &.{ "-reflection-json", path });
+    }
     try argv.appendSlice(allocator, &.{ "-depfile", depfile_path, "-o", output_path });
     try runProcess(allocator, io, argv.items, source_path);
+    if (metal_reflection_path) |path| {
+        try normalizeMetalStageFile(allocator, source_path, entry, path, output_path);
+    }
     try mergeSlangDepfile(allocator, depfile_path, merged_depfile);
+}
+
+fn normalizeMetalStageFile(
+    allocator: std.mem.Allocator,
+    source_path: []const u8,
+    entry: []const u8,
+    reflection_path: []const u8,
+    msl_path: []const u8,
+) !void {
+    const source = try readFile(allocator, source_path);
+    defer allocator.free(source);
+    const reflection_json = try readFile(allocator, reflection_path);
+    defer allocator.free(reflection_json);
+    const msl = try readFile(allocator, msl_path);
+    defer allocator.free(msl);
+    const normalized = metal_binding.normalizeStageMsl(
+        allocator,
+        source,
+        entry,
+        reflection_json,
+        msl,
+    ) catch |err| {
+        std.debug.print(
+            "unable to normalize Metal resource bindings for {s}:{s}: {t}\n",
+            .{ source_path, entry, err },
+        );
+        return err;
+    };
+    defer allocator.free(normalized);
+    try writeFile(msl_path, normalized);
 }
 
 fn runRayTracingSlang(

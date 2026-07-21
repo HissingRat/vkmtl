@@ -581,6 +581,93 @@ The legacy drawable route now requires a whole single-sample
 presentation extent. It is graphics-queue-only and includes presentation; a
 duplicate explicit present returns `InvalidCommandBufferState`.
 
+## Unreleased v0.2 Ray-Tracing Bind-Group Migration
+
+Ray pipelines may now declare one application bind-group layout. The layout
+uses the ordinary `binding` types and is copied by pipeline creation; dispatch
+borrows the matching group and all referenced resources until command-buffer
+completion.
+
+```zig
+const rt_layout_descriptor = vkmtl.binding.BindGroupLayoutDescriptor{
+    .entries = &.{
+        .{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+        },
+        .{
+            .binding = 4,
+            .resource = .sampler,
+            .visibility = .{ .ray_tracing = true },
+        },
+    },
+};
+
+var pipeline = try device.makeRayTracingPipelineState(.{
+    // Existing groups and stages omitted.
+    .shader_groups = shader_groups,
+    .bind_group_layout = rt_layout_descriptor,
+});
+defer pipeline.deinit();
+
+var rt_layout = try device.makeBindGroupLayout(rt_layout_descriptor);
+defer rt_layout.deinit();
+var rt_group = try device.makeBindGroup(.{
+    .layout = &rt_layout,
+    .entries = &.{
+        .{ .binding = 3, .resource = .{ .sampled_texture = &material_view } },
+        .{ .binding = 4, .resource = .{ .sampler = &material_sampler } },
+    },
+});
+defer rt_group.deinit();
+
+_ = try commands.dispatchRaysToTexture(
+    &pipeline,
+    &shader_binding_table,
+    .{
+        .width = extent.width,
+        .height = extent.height,
+        .inline_data = std.mem.asBytes(&frame_data),
+        .inline_data_binding = 2,
+    },
+    .{
+        .acceleration_structure = &top_level_as,
+        .output = &rt_output_view,
+        .bind_group = &rt_group,
+    },
+);
+```
+
+The fixed RT binding allocation is:
+
+| Binding | Owner |
+| ---: | --- |
+| 0 | acceleration structure |
+| 1 | primary output texture |
+| 2 | inline dispatch data |
+| 3-14 | one application bind group |
+
+Application entries may be ordinary uniform/storage buffers,
+sampled/storage textures, samplers, or compare samplers. Resource arrays
+consume consecutive slots and must end no later than 14. Dynamic offsets and
+multiple application groups are not supported by this allocation.
+
+Existing pipelines and resource literals that omit the new nullable fields
+continue to use the resource-free route. Inline-data users still have one
+required migration: the released default and shader slot were binding 1;
+`v0.2.0` moves both to binding 2. Change explicit binding-1 callers and shader
+declarations accordingly. When inline data is non-empty, another explicit
+binding now returns `InvalidRayTracingPipeline`.
+
+A pipeline that declares `bind_group_layout` cannot use plain
+`dispatchRays(...)` and cannot omit the group from a texture/drawable dispatch.
+The group must match the pipeline's copied layout exactly. The group and all
+buffers, texture views, and samplers it references must remain live and on the
+same backend, device/tracker, and compatible queue until the command buffer
+completes. Handle `ReservedRayTracingBinding` and
+`RayTracingPipelineLayoutMismatch` in exhaustive `BindingError` switches.
+
 ## Other Unreleased v0.2 Caller Changes
 
 The following additions preserve ordinary defaults but affect callers that use

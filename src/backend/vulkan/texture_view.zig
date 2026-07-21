@@ -12,6 +12,7 @@ format: core.TextureFormat,
 width: u32,
 height: u32,
 sample_count: u32,
+usage: core.TextureUsage,
 layout: *vk.ImageLayout,
 subresource_range: vk.ImageSubresourceRange,
 
@@ -41,6 +42,7 @@ pub fn init(texture: *VulkanTexture, descriptor: core.TextureViewDescriptor) !Vu
         .width = mipDimension(texture.width_value, resolved.base_mip_level),
         .height = mipDimension(texture.height_value, resolved.base_mip_level),
         .sample_count = texture.sampleCount(),
+        .usage = texture.descriptor.usage,
         .layout = &texture.layout,
         .subresource_range = subresource_range,
     };

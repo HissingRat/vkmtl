@@ -436,5 +436,11 @@ fn shaderStageFlags(visibility: core.ShaderVisibility) vk.ShaderStageFlags {
         .vertex_bit = visibility.vertex,
         .fragment_bit = visibility.fragment,
         .compute_bit = visibility.compute,
+        .raygen_bit_khr = visibility.ray_tracing,
+        .any_hit_bit_khr = visibility.ray_tracing,
+        .closest_hit_bit_khr = visibility.ray_tracing,
+        .miss_bit_khr = visibility.ray_tracing,
+        .intersection_bit_khr = visibility.ray_tracing,
+        .callable_bit_khr = visibility.ray_tracing,
     };
 }

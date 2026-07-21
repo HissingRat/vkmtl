@@ -20,6 +20,42 @@
       "fragment_entry": "fs_main"
     },
     {
+      "name": "voxel_world_water",
+      "source": "../examples/voxel_world/shaders/voxel_world.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "water_fs"
+    },
+    {
+      "name": "voxel_world_sky",
+      "source": "../examples/voxel_world/shaders/voxel_world_sky.slang",
+      "vertex_entry": "sky_vs",
+      "fragment_entry": "sky_fs"
+    },
+    {
+      "name": "voxel_world_ui",
+      "source": "../examples/voxel_world/shaders/voxel_world_ui.slang",
+      "vertex_entry": "vs_main",
+      "fragment_entry": "fs_main"
+    },
+    {
+      "name": "voxel_world_gbuffer",
+      "source": "../examples/voxel_world/shaders/voxel_world_gbuffer.slang",
+      "vertex_entry": "gbuffer_vs",
+      "fragment_entry": "gbuffer_fs"
+    },
+    {
+      "name": "voxel_world_water_gbuffer",
+      "source": "../examples/voxel_world/shaders/voxel_world_gbuffer.slang",
+      "vertex_entry": "gbuffer_vs",
+      "fragment_entry": "water_gbuffer_fs"
+    },
+    {
+      "name": "voxel_world_present",
+      "source": "../examples/voxel_world/shaders/voxel_world_present.slang",
+      "vertex_entry": "present_vs",
+      "fragment_entry": "present_fs"
+    },
+    {
       "name": "msaa_triangle_msaa",
       "source": "../examples/msaa_triangle/shaders/msaa_triangle.slang",
       "vertex_entry": "msaa_vs",
@@ -63,12 +99,32 @@
       "entry": "cs_main"
     },
     {
+      "name": "voxel_world_ptgi_temporal",
+      "source": "../examples/voxel_world/shaders/voxel_world_ptgi.slang",
+      "entry": "temporal_cs"
+    },
+    {
+      "name": "voxel_world_ptgi_atrous",
+      "source": "../examples/voxel_world/shaders/voxel_world_ptgi.slang",
+      "entry": "atrous_cs"
+    },
+    {
       "name": "gpu_soak",
       "source": "../tools/gpu_soak/shaders/soak.slang",
       "entry": "cs_main"
     }
   ],
   "ray_tracing_shaders": [
+    {
+      "name": "voxel_world_rt",
+      "source": "../examples/voxel_world/shaders/voxel_world_rt.slang",
+      "metal_ray_generation_source": "../examples/voxel_world/shaders/voxel_world_rt_metal.msl",
+      "ray_generation_entry": "raygen",
+      "miss_entry": "miss",
+      "closest_hit_entry": "closest_hit",
+      "any_hit_entry": "any_hit",
+      "intersection_entry": "unused_intersection"
+    },
     {
       "name": "ray_traced_scene_rt",
       "source": "../examples/ray_traced_scene/shaders/ray_traced_scene_rt.slang",

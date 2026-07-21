@@ -1928,6 +1928,48 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_triangle_sizes(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int primitive_count,
+    unsigned int vertex_stride,
+    unsigned int vertex_count,
+    unsigned int index_type,
+    unsigned int opaque,
+    unsigned int allow_update,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+) {
+    (void)owner;
+    (void)primitive_count;
+    (void)vertex_stride;
+    (void)vertex_count;
+    (void)index_type;
+    (void)opaque;
+    (void)allow_update;
+    if (out_sizes != NULL) {
+        *out_sizes = (vkmtl_metal_acceleration_structure_build_sizes){0};
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_aabb_sizes(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int primitive_count,
+    unsigned int bounding_box_stride,
+    unsigned int opaque,
+    unsigned int allow_update,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+) {
+    (void)owner;
+    (void)primitive_count;
+    (void)bounding_box_stride;
+    (void)opaque;
+    (void)allow_update;
+    if (out_sizes != NULL) {
+        *out_sizes = (vkmtl_metal_acceleration_structure_build_sizes){0};
+    }
+    return VKMTL_METAL_STATUS_UNSUPPORTED;
+}
+
 vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
@@ -1999,7 +2041,8 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
     vkmtl_metal_buffer *index_buffer,
     size_t index_buffer_offset,
     unsigned int index_type,
-    unsigned int primitive_count
+    unsigned int primitive_count,
+    unsigned int opaque
 ) {
     (void)acceleration_structure;
     (void)vertex_buffer;
@@ -2010,6 +2053,7 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
     (void)index_buffer_offset;
     (void)index_type;
     (void)primitive_count;
+    (void)opaque;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -2166,7 +2210,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     unsigned int height,
     const void *inline_data,
     size_t inline_data_len,
-    unsigned int inline_data_index
+    unsigned int inline_data_index,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
 ) {
     (void)command_buffer;
     (void)pipeline;
@@ -2177,6 +2227,12 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     (void)inline_data;
     (void)inline_data_len;
     (void)inline_data_index;
+    (void)buffer_bindings;
+    (void)buffer_binding_count;
+    (void)texture_bindings;
+    (void)texture_binding_count;
+    (void)sampler_bindings;
+    (void)sampler_binding_count;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }
 
@@ -2189,7 +2245,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
     unsigned int height,
     const void *inline_data,
     size_t inline_data_len,
-    unsigned int inline_data_index
+    unsigned int inline_data_index,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
 ) {
     (void)command_buffer;
     (void)pipeline;
@@ -2200,5 +2262,11 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
     (void)inline_data;
     (void)inline_data_len;
     (void)inline_data_index;
+    (void)buffer_bindings;
+    (void)buffer_binding_count;
+    (void)texture_bindings;
+    (void)texture_binding_count;
+    (void)sampler_bindings;
+    (void)sampler_binding_count;
     return VKMTL_METAL_STATUS_UNSUPPORTED;
 }

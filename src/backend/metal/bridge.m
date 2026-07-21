@@ -103,8 +103,10 @@ struct vkmtl_metal_heap {
 };
 
 struct vkmtl_metal_acceleration_structure {
+    id<MTLDevice> device;
     id<MTLAccelerationStructure> acceleration_structure;
     MTLAccelerationStructureDescriptor *descriptor;
+    NSArray<id<MTLAccelerationStructure>> *traversal_resources;
     id<MTLBuffer> geometry_buffer;
     id<MTLBuffer> index_buffer;
     id<MTLBuffer> instance_buffer;
@@ -119,6 +121,7 @@ struct vkmtl_metal_acceleration_structure {
 
 struct vkmtl_metal_ray_tracing_pipeline_state {
     id<MTLComputePipelineState> pipeline;
+    vkmtl_metal_acceleration_structure_kind acceleration_structure_kind;
 };
 
 struct vkmtl_metal_command_buffer {
@@ -369,6 +372,378 @@ static void vkmtl_fill_identity_instance(MTLAccelerationStructureInstanceDescrip
     instance->accelerationStructureIndex = 0;
 }
 
+static vkmtl_metal_status vkmtl_declare_acceleration_structure_resources(
+    id<MTLComputeCommandEncoder> encoder,
+    vkmtl_metal_acceleration_structure *acceleration_structure
+) {
+    if (encoder == nil ||
+        acceleration_structure == NULL ||
+        acceleration_structure->acceleration_structure == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    [encoder useResource:acceleration_structure->acceleration_structure
+                   usage:MTLResourceUsageRead];
+    if (acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL) {
+        return VKMTL_METAL_STATUS_OK;
+    }
+
+    if (acceleration_structure->descriptor == nil ||
+        acceleration_structure->traversal_resources == nil ||
+        acceleration_structure->traversal_resources.count == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    // A TLAS references BLAS resources indirectly, so declare every traversal
+    // dependency to keep it resident for the dispatch.
+    for (id<MTLAccelerationStructure> source in acceleration_structure->traversal_resources) {
+        [encoder useResource:source usage:MTLResourceUsageRead];
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+#define VKMTL_METAL_FIRST_RAY_DISPATCH_APPLICATION_BINDING 3u
+#define VKMTL_METAL_LAST_RAY_DISPATCH_APPLICATION_BINDING 14u
+#define VKMTL_METAL_MAX_RAY_DISPATCH_APPLICATION_BINDINGS 12u
+
+static BOOL vkmtl_mark_ray_dispatch_application_binding(
+    unsigned int index,
+    unsigned char *used_bindings
+) {
+    if (used_bindings == NULL ||
+        index < VKMTL_METAL_FIRST_RAY_DISPATCH_APPLICATION_BINDING ||
+        index > VKMTL_METAL_LAST_RAY_DISPATCH_APPLICATION_BINDING) {
+        return NO;
+    }
+    const unsigned int used_index =
+        index - VKMTL_METAL_FIRST_RAY_DISPATCH_APPLICATION_BINDING;
+    if (used_bindings[used_index] != 0) {
+        return NO;
+    }
+    used_bindings[used_index] = 1u;
+    return YES;
+}
+
+static vkmtl_metal_status vkmtl_bind_ray_dispatch_application_resources(
+    id<MTLComputeCommandEncoder> encoder,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
+) {
+    if (encoder == nil ||
+        (buffer_binding_count != 0 && buffer_bindings == NULL) ||
+        (texture_binding_count != 0 && texture_bindings == NULL) ||
+        (sampler_binding_count != 0 && sampler_bindings == NULL) ||
+        buffer_binding_count > VKMTL_METAL_MAX_RAY_DISPATCH_APPLICATION_BINDINGS ||
+        texture_binding_count > VKMTL_METAL_MAX_RAY_DISPATCH_APPLICATION_BINDINGS ||
+        sampler_binding_count > VKMTL_METAL_MAX_RAY_DISPATCH_APPLICATION_BINDINGS ||
+        buffer_binding_count + texture_binding_count + sampler_binding_count >
+            VKMTL_METAL_MAX_RAY_DISPATCH_APPLICATION_BINDINGS) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    unsigned char used_bindings[VKMTL_METAL_MAX_RAY_DISPATCH_APPLICATION_BINDINGS] = {0};
+    for (size_t i = 0; i < buffer_binding_count; ++i) {
+        const vkmtl_metal_ray_dispatch_buffer_binding *binding = &buffer_bindings[i];
+        if (!vkmtl_mark_ray_dispatch_application_binding(binding->index, used_bindings) ||
+            binding->buffer == NULL ||
+            binding->buffer->buffer == nil ||
+            binding->offset > binding->buffer->length) {
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        [encoder setBuffer:binding->buffer->buffer
+                    offset:binding->offset
+                   atIndex:binding->index];
+    }
+    for (size_t i = 0; i < texture_binding_count; ++i) {
+        const vkmtl_metal_ray_dispatch_texture_binding *binding = &texture_bindings[i];
+        if (!vkmtl_mark_ray_dispatch_application_binding(binding->index, used_bindings) ||
+            binding->texture_view == NULL ||
+            binding->texture_view->texture == nil) {
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        [encoder setTexture:binding->texture_view->texture atIndex:binding->index];
+    }
+    for (size_t i = 0; i < sampler_binding_count; ++i) {
+        const vkmtl_metal_ray_dispatch_sampler_binding *binding = &sampler_bindings[i];
+        if (!vkmtl_mark_ray_dispatch_application_binding(binding->index, used_bindings) ||
+            binding->sampler == NULL ||
+            binding->sampler->sampler == nil) {
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        [encoder setSamplerState:binding->sampler->sampler atIndex:binding->index];
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+static void vkmtl_finish_tlas_build_transaction(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    NSArray<id<MTLAccelerationStructure>> *previous_sources,
+    NSData *previous_instances,
+    unsigned int previous_allow_update,
+    MTLAccelerationStructureUsage previous_usage,
+    BOOL commit
+) {
+    if (acceleration_structure != NULL && acceleration_structure->descriptor != nil && !commit) {
+        acceleration_structure->allow_update = previous_allow_update;
+        acceleration_structure->descriptor.usage = previous_usage;
+        if (acceleration_structure->kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL) {
+            MTLInstanceAccelerationStructureDescriptor *descriptor =
+                (MTLInstanceAccelerationStructureDescriptor *)acceleration_structure->descriptor;
+            descriptor.instancedAccelerationStructures = previous_sources;
+            if (previous_instances != nil && acceleration_structure->instance_buffer != nil) {
+                memcpy(
+                    [acceleration_structure->instance_buffer contents],
+                    previous_instances.bytes,
+                    previous_instances.length
+                );
+                if ([acceleration_structure->instance_buffer storageMode] == MTLStorageModeManaged) {
+                    [acceleration_structure->instance_buffer didModifyRange:
+                        NSMakeRange(0, previous_instances.length)];
+                }
+            }
+        }
+    }
+    [previous_sources release];
+    [previous_instances release];
+}
+
+static vkmtl_metal_status vkmtl_copy_acceleration_structure_build_state(
+    vkmtl_metal_acceleration_structure *source,
+    vkmtl_metal_acceleration_structure *destination
+) {
+    MTLAccelerationStructureDescriptor *descriptor = [source->descriptor copy];
+    if (descriptor == nil) {
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+    id<MTLBuffer> geometry_buffer = [source->geometry_buffer retain];
+    id<MTLBuffer> index_buffer = [source->index_buffer retain];
+    id<MTLBuffer> instance_buffer = nil;
+    if (source->kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL) {
+        if (source->instance_buffer == nil || [source->instance_buffer contents] == NULL) {
+            [descriptor release];
+            [geometry_buffer release];
+            [index_buffer release];
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        const MTLResourceOptions instance_options =
+            [source->instance_buffer storageMode] == MTLStorageModeManaged
+            ? MTLResourceStorageModeManaged
+            : MTLResourceStorageModeShared;
+        instance_buffer = [source->device
+            newBufferWithLength:source->instance_buffer.length
+                        options:instance_options];
+        if (instance_buffer == nil || [instance_buffer contents] == NULL) {
+            [descriptor release];
+            [geometry_buffer release];
+            [index_buffer release];
+            [instance_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        memcpy(
+            [instance_buffer contents],
+            [source->instance_buffer contents],
+            source->instance_buffer.length
+        );
+        if ([instance_buffer storageMode] == MTLStorageModeManaged) {
+            [instance_buffer didModifyRange:NSMakeRange(0, instance_buffer.length)];
+        }
+        MTLInstanceAccelerationStructureDescriptor *instance_descriptor =
+            (MTLInstanceAccelerationStructureDescriptor *)descriptor;
+        instance_descriptor.instanceDescriptorBuffer = instance_buffer;
+    } else {
+        instance_buffer = [source->instance_buffer retain];
+    }
+    NSArray<id<MTLAccelerationStructure>> *traversal_resources =
+        [source->traversal_resources copy];
+
+    [destination->descriptor release];
+    [destination->geometry_buffer release];
+    [destination->index_buffer release];
+    [destination->instance_buffer release];
+    [destination->traversal_resources release];
+
+    destination->descriptor = descriptor;
+    destination->geometry_buffer = geometry_buffer;
+    destination->index_buffer = index_buffer;
+    destination->instance_buffer = instance_buffer;
+    destination->traversal_resources = traversal_resources;
+    destination->allow_update = source->allow_update;
+    destination->scratch_size = MAX(destination->scratch_size, source->scratch_size);
+    destination->update_scratch_size = MAX(
+        destination->update_scratch_size,
+        source->update_scratch_size
+    );
+    return VKMTL_METAL_STATUS_OK;
+}
+
+static BOOL vkmtl_checked_size_multiply(
+    NSUInteger lhs,
+    NSUInteger rhs,
+    NSUInteger *out_value
+) {
+    if (out_value == NULL || (rhs != 0 && lhs > NSUIntegerMax / rhs)) {
+        return NO;
+    }
+    *out_value = lhs * rhs;
+    return YES;
+}
+
+static vkmtl_metal_status vkmtl_make_triangle_acceleration_structure_descriptor(
+    id<MTLDevice> device,
+    unsigned int primitive_count,
+    unsigned int vertex_stride,
+    unsigned int vertex_count,
+    unsigned int index_type,
+    unsigned int opaque,
+    unsigned int allow_update,
+    MTLAccelerationStructureDescriptor **out_descriptor,
+    id<MTLBuffer> *out_vertex_buffer,
+    id<MTLBuffer> *out_index_buffer
+) {
+    if (out_descriptor == NULL || out_vertex_buffer == NULL || out_index_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    *out_descriptor = nil;
+    *out_vertex_buffer = nil;
+    *out_index_buffer = nil;
+    if (device == nil ||
+        !vkmtl_device_supports_raytracing(device) ||
+        primitive_count == 0 ||
+        vertex_stride < 3u * sizeof(float) ||
+        vertex_count == 0 ||
+        index_type > 2u) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    NSUInteger vertex_buffer_len = 0;
+    if (!vkmtl_checked_size_multiply(vertex_stride, vertex_count, &vertex_buffer_len) ||
+        vertex_buffer_len == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    id<MTLBuffer> vertex_buffer =
+        [device newBufferWithLength:vertex_buffer_len options:MTLResourceStorageModeShared];
+    if (vertex_buffer == nil) {
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+
+    id<MTLBuffer> index_buffer = nil;
+    MTLIndexType metal_index_type = MTLIndexTypeUInt16;
+    if (index_type != 0u) {
+        const NSUInteger index_size = index_type == 1u ? sizeof(uint16_t) : sizeof(uint32_t);
+        NSUInteger index_count = 0;
+        NSUInteger index_buffer_len = 0;
+        if (!vkmtl_checked_size_multiply(primitive_count, 3u, &index_count) ||
+            !vkmtl_checked_size_multiply(index_count, index_size, &index_buffer_len) ||
+            index_buffer_len == 0) {
+            [vertex_buffer release];
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        index_buffer =
+            [device newBufferWithLength:index_buffer_len options:MTLResourceStorageModeShared];
+        if (index_buffer == nil) {
+            [vertex_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        memset([index_buffer contents], 0, index_buffer_len);
+        metal_index_type = index_type == 1u ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32;
+    }
+
+    MTLAccelerationStructureTriangleGeometryDescriptor *geometry =
+        [MTLAccelerationStructureTriangleGeometryDescriptor descriptor];
+    MTLPrimitiveAccelerationStructureDescriptor *descriptor =
+        [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+    if (geometry == nil || descriptor == nil) {
+        [index_buffer release];
+        [vertex_buffer release];
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+    geometry.vertexBuffer = vertex_buffer;
+    geometry.vertexBufferOffset = 0;
+    if ([geometry respondsToSelector:@selector(setVertexFormat:)]) {
+        geometry.vertexFormat = MTLAttributeFormatFloat3;
+    }
+    geometry.vertexStride = vertex_stride;
+    geometry.triangleCount = primitive_count;
+    geometry.opaque = opaque != 0;
+    if (index_buffer != nil) {
+        geometry.indexBuffer = index_buffer;
+        geometry.indexBufferOffset = 0;
+        geometry.indexType = metal_index_type;
+    }
+    descriptor.geometryDescriptors = @[geometry];
+    descriptor.usage = allow_update != 0
+        ? MTLAccelerationStructureUsageRefit
+        : MTLAccelerationStructureUsageNone;
+
+    *out_descriptor = [descriptor retain];
+    *out_vertex_buffer = vertex_buffer;
+    *out_index_buffer = index_buffer;
+    return VKMTL_METAL_STATUS_OK;
+}
+
+static vkmtl_metal_status vkmtl_make_aabb_acceleration_structure_descriptor(
+    id<MTLDevice> device,
+    unsigned int primitive_count,
+    unsigned int bounding_box_stride,
+    unsigned int opaque,
+    unsigned int allow_update,
+    MTLAccelerationStructureDescriptor **out_descriptor,
+    id<MTLBuffer> *out_bounding_box_buffer
+) {
+    if (out_descriptor == NULL || out_bounding_box_buffer == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    *out_descriptor = nil;
+    *out_bounding_box_buffer = nil;
+    if (device == nil ||
+        !vkmtl_device_supports_raytracing(device) ||
+        primitive_count == 0 ||
+        bounding_box_stride < 6u * sizeof(float)) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    NSUInteger bounding_box_buffer_len = 0;
+    if (!vkmtl_checked_size_multiply(
+            primitive_count,
+            bounding_box_stride,
+            &bounding_box_buffer_len
+        ) || bounding_box_buffer_len == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    id<MTLBuffer> bounding_box_buffer =
+        [device newBufferWithLength:bounding_box_buffer_len options:MTLResourceStorageModeShared];
+    if (bounding_box_buffer == nil) {
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+    memset([bounding_box_buffer contents], 0, bounding_box_buffer_len);
+
+    MTLAccelerationStructureBoundingBoxGeometryDescriptor *geometry =
+        [MTLAccelerationStructureBoundingBoxGeometryDescriptor descriptor];
+    MTLPrimitiveAccelerationStructureDescriptor *descriptor =
+        [MTLPrimitiveAccelerationStructureDescriptor descriptor];
+    if (geometry == nil || descriptor == nil) {
+        [bounding_box_buffer release];
+        return VKMTL_METAL_STATUS_COMMAND_FAILED;
+    }
+    geometry.boundingBoxBuffer = bounding_box_buffer;
+    geometry.boundingBoxBufferOffset = 0;
+    geometry.boundingBoxStride = bounding_box_stride;
+    geometry.boundingBoxCount = primitive_count;
+    geometry.opaque = opaque != 0;
+    descriptor.geometryDescriptors = @[geometry];
+    descriptor.usage = allow_update != 0
+        ? MTLAccelerationStructureUsageRefit
+        : MTLAccelerationStructureUsageNone;
+
+    *out_descriptor = [descriptor retain];
+    *out_bounding_box_buffer = bounding_box_buffer;
+    return VKMTL_METAL_STATUS_OK;
+}
+
 static vkmtl_metal_status vkmtl_make_acceleration_structure_descriptor(
     id<MTLDevice> device,
     vkmtl_metal_acceleration_structure_kind kind,
@@ -471,6 +846,11 @@ static vkmtl_metal_status vkmtl_make_acceleration_structure_descriptor(
     return VKMTL_METAL_STATUS_OK;
 }
 
+static MTLAccelerationStructureSizes vkmtl_max_acceleration_structure_sizes(
+    MTLAccelerationStructureSizes a,
+    MTLAccelerationStructureSizes b
+);
+
 static vkmtl_metal_status vkmtl_query_acceleration_structure_sizes(
     id<MTLDevice> device,
     vkmtl_metal_acceleration_structure_kind kind,
@@ -498,15 +878,67 @@ static vkmtl_metal_status vkmtl_query_acceleration_structure_sizes(
     }
 
     *out_sizes = [device accelerationStructureSizesWithDescriptor:descriptor];
-    [descriptor release];
-    [auxiliary_buffer release];
-
     if (kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
+        MTLPrimitiveAccelerationStructureDescriptor *triangle_descriptor =
+            (MTLPrimitiveAccelerationStructureDescriptor *)descriptor;
+        MTLAccelerationStructureTriangleGeometryDescriptor *triangle_geometry =
+            (MTLAccelerationStructureTriangleGeometryDescriptor *)triangle_descriptor.geometryDescriptors[0];
+        triangle_geometry.opaque = NO;
+        *out_sizes = vkmtl_max_acceleration_structure_sizes(
+            *out_sizes,
+            [device accelerationStructureSizesWithDescriptor:triangle_descriptor]
+        );
+
+        NSUInteger index_count = 0;
+        NSUInteger index_buffer_len = 0;
+        if (!vkmtl_checked_size_multiply(primitive_count, 3u, &index_count) ||
+            !vkmtl_checked_size_multiply(index_count, sizeof(uint32_t), &index_buffer_len) ||
+            index_buffer_len == 0) {
+            [descriptor release];
+            [auxiliary_buffer release];
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        id<MTLBuffer> index_buffer =
+            [device newBufferWithLength:index_buffer_len options:MTLResourceStorageModeShared];
+        if (index_buffer == nil) {
+            [descriptor release];
+            [auxiliary_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        memset([index_buffer contents], 0, index_buffer_len);
+        triangle_geometry.indexBuffer = index_buffer;
+        for (unsigned int index_type = 1u; index_type <= 2u; index_type += 1u) {
+            triangle_geometry.indexType = index_type == 1u
+                ? MTLIndexTypeUInt16
+                : MTLIndexTypeUInt32;
+            for (unsigned int opaque = 0u; opaque <= 1u; opaque += 1u) {
+                triangle_geometry.opaque = opaque != 0;
+                *out_sizes = vkmtl_max_acceleration_structure_sizes(
+                    *out_sizes,
+                    [device accelerationStructureSizesWithDescriptor:triangle_descriptor]
+                );
+            }
+        }
+        [index_buffer release];
+
         const NSUInteger bounding_box_stride = 6u * sizeof(float);
-        const NSUInteger bounding_box_buffer_len = (NSUInteger)primitive_count * bounding_box_stride;
+        NSUInteger bounding_box_buffer_len = 0;
+        if (!vkmtl_checked_size_multiply(
+                primitive_count,
+                bounding_box_stride,
+                &bounding_box_buffer_len
+            ) || bounding_box_buffer_len == 0) {
+            [descriptor release];
+            [auxiliary_buffer release];
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
         id<MTLBuffer> bounding_box_buffer =
             [device newBufferWithLength:bounding_box_buffer_len options:MTLResourceStorageModeShared];
-        if (bounding_box_buffer == nil) return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        if (bounding_box_buffer == nil) {
+            [descriptor release];
+            [auxiliary_buffer release];
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
         memset([bounding_box_buffer contents], 0, bounding_box_buffer_len);
 
         MTLAccelerationStructureBoundingBoxGeometryDescriptor *geometry =
@@ -526,16 +958,17 @@ static vkmtl_metal_status vkmtl_query_acceleration_structure_sizes(
         aabb_descriptor.usage = allow_update != 0
             ? MTLAccelerationStructureUsageRefit
             : MTLAccelerationStructureUsageNone;
-        const MTLAccelerationStructureSizes aabb_sizes =
-            [device accelerationStructureSizesWithDescriptor:aabb_descriptor];
-        out_sizes->accelerationStructureSize =
-            MAX(out_sizes->accelerationStructureSize, aabb_sizes.accelerationStructureSize);
-        out_sizes->buildScratchBufferSize =
-            MAX(out_sizes->buildScratchBufferSize, aabb_sizes.buildScratchBufferSize);
-        out_sizes->refitScratchBufferSize =
-            MAX(out_sizes->refitScratchBufferSize, aabb_sizes.refitScratchBufferSize);
+        for (unsigned int opaque = 0u; opaque <= 1u; opaque += 1u) {
+            geometry.opaque = opaque != 0;
+            *out_sizes = vkmtl_max_acceleration_structure_sizes(
+                *out_sizes,
+                [device accelerationStructureSizesWithDescriptor:aabb_descriptor]
+            );
+        }
         [bounding_box_buffer release];
     }
+    [descriptor release];
+    [auxiliary_buffer release];
     return VKMTL_METAL_STATUS_OK;
 }
 
@@ -4136,6 +4569,167 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_query_sizes(
     }
 }
 
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_triangle_sizes(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int primitive_count,
+    unsigned int vertex_stride,
+    unsigned int vertex_count,
+    unsigned int index_type,
+    unsigned int opaque,
+    unsigned int allow_update,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+) {
+    if (out_sizes == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    memset(out_sizes, 0, sizeof(vkmtl_metal_acceleration_structure_build_sizes));
+    if (owner == NULL || owner->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        MTLAccelerationStructureDescriptor *descriptor = nil;
+        id<MTLBuffer> vertex_buffer = nil;
+        id<MTLBuffer> index_buffer = nil;
+        vkmtl_metal_status status = vkmtl_make_triangle_acceleration_structure_descriptor(
+            owner->device,
+            primitive_count,
+            vertex_stride,
+            vertex_count,
+            index_type,
+            opaque,
+            allow_update,
+            &descriptor,
+            &vertex_buffer,
+            &index_buffer
+        );
+        if (status != VKMTL_METAL_STATUS_OK) {
+            return status;
+        }
+        const MTLAccelerationStructureSizes sizes =
+            [owner->device accelerationStructureSizesWithDescriptor:descriptor];
+        [index_buffer release];
+        [vertex_buffer release];
+        [descriptor release];
+
+        out_sizes->result_size = sizes.accelerationStructureSize;
+        out_sizes->scratch_size = sizes.buildScratchBufferSize;
+        out_sizes->update_scratch_size = sizes.refitScratchBufferSize;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+vkmtl_metal_status vkmtl_metal_acceleration_structure_query_aabb_sizes(
+    vkmtl_metal_clear_screen *owner,
+    unsigned int primitive_count,
+    unsigned int bounding_box_stride,
+    unsigned int opaque,
+    unsigned int allow_update,
+    vkmtl_metal_acceleration_structure_build_sizes *out_sizes
+) {
+    if (out_sizes == NULL) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    memset(out_sizes, 0, sizeof(vkmtl_metal_acceleration_structure_build_sizes));
+    if (owner == NULL || owner->device == nil) {
+        return VKMTL_METAL_STATUS_NO_DEVICE;
+    }
+
+    @autoreleasepool {
+        MTLAccelerationStructureDescriptor *descriptor = nil;
+        id<MTLBuffer> bounding_box_buffer = nil;
+        vkmtl_metal_status status = vkmtl_make_aabb_acceleration_structure_descriptor(
+            owner->device,
+            primitive_count,
+            bounding_box_stride,
+            opaque,
+            allow_update,
+            &descriptor,
+            &bounding_box_buffer
+        );
+        if (status != VKMTL_METAL_STATUS_OK) {
+            return status;
+        }
+        const MTLAccelerationStructureSizes sizes =
+            [owner->device accelerationStructureSizesWithDescriptor:descriptor];
+        [bounding_box_buffer release];
+        [descriptor release];
+
+        out_sizes->result_size = sizes.accelerationStructureSize;
+        out_sizes->scratch_size = sizes.buildScratchBufferSize;
+        out_sizes->update_scratch_size = sizes.refitScratchBufferSize;
+        return VKMTL_METAL_STATUS_OK;
+    }
+}
+
+static vkmtl_metal_status vkmtl_ensure_acceleration_structure_result_capacity(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    NSUInteger required_size
+) {
+    if (acceleration_structure == NULL ||
+        acceleration_structure->device == nil ||
+        acceleration_structure->acceleration_structure == nil ||
+        required_size == 0) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+    if (required_size > acceleration_structure->result_size) {
+        id<MTLAccelerationStructure> replacement =
+            [acceleration_structure->device
+                newAccelerationStructureWithSize:required_size];
+        if (replacement == nil) {
+            return VKMTL_METAL_STATUS_COMMAND_FAILED;
+        }
+        replacement.label = acceleration_structure->acceleration_structure.label;
+        [acceleration_structure->acceleration_structure release];
+        acceleration_structure->acceleration_structure = replacement;
+        acceleration_structure->result_size = required_size;
+        acceleration_structure->built = 0u;
+    }
+    return VKMTL_METAL_STATUS_OK;
+}
+
+static vkmtl_metal_status vkmtl_prepare_acceleration_structure_descriptor(
+    vkmtl_metal_acceleration_structure *acceleration_structure,
+    MTLAccelerationStructureDescriptor *descriptor
+) {
+    if (acceleration_structure == NULL ||
+        acceleration_structure->device == nil ||
+        acceleration_structure->acceleration_structure == nil ||
+        descriptor == nil) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
+    }
+
+    descriptor.usage = MTLAccelerationStructureUsageNone;
+    const MTLAccelerationStructureSizes ordinary_sizes =
+        [acceleration_structure->device accelerationStructureSizesWithDescriptor:descriptor];
+    descriptor.usage = MTLAccelerationStructureUsageRefit;
+    const MTLAccelerationStructureSizes update_sizes =
+        [acceleration_structure->device accelerationStructureSizesWithDescriptor:descriptor];
+    descriptor.usage = acceleration_structure->allow_update != 0
+        ? MTLAccelerationStructureUsageRefit
+        : MTLAccelerationStructureUsageNone;
+    const MTLAccelerationStructureSizes required_sizes =
+        vkmtl_max_acceleration_structure_sizes(ordinary_sizes, update_sizes);
+
+    const vkmtl_metal_status capacity_status =
+        vkmtl_ensure_acceleration_structure_result_capacity(
+            acceleration_structure,
+            required_sizes.accelerationStructureSize
+        );
+    if (capacity_status != VKMTL_METAL_STATUS_OK) {
+        return capacity_status;
+    }
+    acceleration_structure->scratch_size = MAX(
+        acceleration_structure->scratch_size,
+        required_sizes.buildScratchBufferSize
+    );
+    acceleration_structure->update_scratch_size = MAX(
+        acceleration_structure->update_scratch_size,
+        required_sizes.refitScratchBufferSize
+    );
+    return VKMTL_METAL_STATUS_OK;
+}
+
 vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
     vkmtl_metal_clear_screen *owner,
     vkmtl_metal_acceleration_structure_kind kind,
@@ -4212,6 +4806,7 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_create(
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
 
+        result->device = [owner->device retain];
         result->acceleration_structure = acceleration_structure;
         result->descriptor = descriptor;
         result->kind = kind;
@@ -4239,9 +4834,11 @@ void vkmtl_metal_acceleration_structure_destroy(
     }
 
     @autoreleasepool {
+        [acceleration_structure->device release];
         [acceleration_structure->instance_buffer release];
         [acceleration_structure->geometry_buffer release];
         [acceleration_structure->index_buffer release];
+        [acceleration_structure->traversal_resources release];
         [acceleration_structure->descriptor release];
         [acceleration_structure->acceleration_structure release];
         free(acceleration_structure);
@@ -4298,7 +4895,8 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
     vkmtl_metal_buffer *index_buffer,
     size_t index_buffer_offset,
     unsigned int index_type,
-    unsigned int primitive_count
+    unsigned int primitive_count,
+    unsigned int opaque
 ) {
     if (acceleration_structure == NULL ||
         acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL ||
@@ -4311,7 +4909,10 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
-    const size_t vertex_bytes = (size_t)vertex_stride * (size_t)vertex_count;
+    NSUInteger vertex_bytes = 0;
+    if (!vkmtl_checked_size_multiply(vertex_stride, vertex_count, &vertex_bytes)) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
     if (vertex_buffer_offset > vertex_buffer->length ||
         vertex_bytes > vertex_buffer->length - vertex_buffer_offset) {
         return VKMTL_METAL_STATUS_INVALID_BUFFER;
@@ -4332,8 +4933,13 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
         if (index_buffer == NULL || index_buffer->buffer == nil) {
             return VKMTL_METAL_STATUS_INVALID_BUFFER;
         }
-        const size_t index_size = index_type == 1u ? sizeof(uint16_t) : sizeof(uint32_t);
-        const size_t index_bytes = (size_t)primitive_count * 3u * index_size;
+        const NSUInteger index_size = index_type == 1u ? sizeof(uint16_t) : sizeof(uint32_t);
+        NSUInteger index_count = 0;
+        NSUInteger index_bytes = 0;
+        if (!vkmtl_checked_size_multiply(primitive_count, 3u, &index_count) ||
+            !vkmtl_checked_size_multiply(index_count, index_size, &index_bytes)) {
+            return VKMTL_METAL_STATUS_INVALID_BUFFER;
+        }
         if (index_buffer_offset > index_buffer->length ||
             index_bytes > index_buffer->length - index_buffer_offset) {
             return VKMTL_METAL_STATUS_INVALID_BUFFER;
@@ -4353,7 +4959,7 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
         }
         geometry.vertexStride = vertex_stride;
         geometry.triangleCount = primitive_count;
-        geometry.opaque = YES;
+        geometry.opaque = opaque != 0;
         if (uses_indices) {
             geometry.indexBuffer = index_buffer->buffer;
             geometry.indexBufferOffset = index_buffer_offset;
@@ -4369,6 +4975,12 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_triangle_geometry(
         descriptor.usage = acceleration_structure->allow_update != 0
             ? MTLAccelerationStructureUsageRefit
             : MTLAccelerationStructureUsageNone;
+
+        const vkmtl_metal_status sizing_status =
+            vkmtl_prepare_acceleration_structure_descriptor(acceleration_structure, descriptor);
+        if (sizing_status != VKMTL_METAL_STATUS_OK) {
+            return sizing_status;
+        }
 
         MTLAccelerationStructureDescriptor *retained_descriptor = [descriptor retain];
         [acceleration_structure->descriptor release];
@@ -4401,7 +5013,14 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_aabb_geometry(
         bounding_box_count == 0) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
-    const size_t bounding_box_bytes = (size_t)bounding_box_stride * (size_t)bounding_box_count;
+    NSUInteger bounding_box_bytes = 0;
+    if (!vkmtl_checked_size_multiply(
+            bounding_box_stride,
+            bounding_box_count,
+            &bounding_box_bytes
+        )) {
+        return VKMTL_METAL_STATUS_INVALID_BUFFER;
+    }
     if (bounding_box_buffer_offset > bounding_box_buffer->length ||
         bounding_box_bytes > bounding_box_buffer->length - bounding_box_buffer_offset) {
         return VKMTL_METAL_STATUS_INVALID_BUFFER;
@@ -4424,6 +5043,12 @@ vkmtl_metal_status vkmtl_metal_acceleration_structure_set_aabb_geometry(
         descriptor.usage = acceleration_structure->allow_update != 0
             ? MTLAccelerationStructureUsageRefit
             : MTLAccelerationStructureUsageNone;
+
+        const vkmtl_metal_status sizing_status =
+            vkmtl_prepare_acceleration_structure_descriptor(acceleration_structure, descriptor);
+        if (sizing_status != VKMTL_METAL_STATUS_OK) {
+            return sizing_status;
+        }
 
         MTLAccelerationStructureDescriptor *retained_descriptor = [descriptor retain];
         [acceleration_structure->descriptor release];
@@ -4476,10 +5101,39 @@ vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
             return VKMTL_METAL_STATUS_INVALID_SHADER;
         }
 
+        MTLComputePipelineReflection *reflection = nil;
         id<MTLComputePipelineState> pipeline =
-            [owner->device newComputePipelineStateWithFunction:function error:&error];
+            [owner->device newComputePipelineStateWithFunction:function
+                                                        options:MTLPipelineOptionArgumentInfo
+                                                     reflection:&reflection
+                                                          error:&error];
         [function release];
         if (pipeline == nil) {
+            return VKMTL_METAL_STATUS_INVALID_PIPELINE;
+        }
+
+        BOOL found_acceleration_structure = NO;
+        vkmtl_metal_acceleration_structure_kind acceleration_structure_kind =
+            VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL;
+        for (MTLArgument *argument in reflection.arguments) {
+            if (argument.index != 0u) {
+                continue;
+            }
+            if (argument.type == MTLArgumentTypePrimitiveAccelerationStructure) {
+                acceleration_structure_kind =
+                    VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL;
+                found_acceleration_structure = YES;
+                break;
+            }
+            if (argument.type == MTLArgumentTypeInstanceAccelerationStructure) {
+                acceleration_structure_kind =
+                    VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL;
+                found_acceleration_structure = YES;
+                break;
+            }
+        }
+        if (!found_acceleration_structure) {
+            [pipeline release];
             return VKMTL_METAL_STATUS_INVALID_PIPELINE;
         }
 
@@ -4491,6 +5145,7 @@ vkmtl_metal_status vkmtl_metal_ray_tracing_pipeline_state_create(
         }
 
         state->pipeline = pipeline;
+        state->acceleration_structure_kind = acceleration_structure_kind;
         *out_pipeline = state;
         return VKMTL_METAL_STATUS_OK;
     }
@@ -4875,10 +5530,11 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
     }
 
     @autoreleasepool {
-        if (allow_update != 0) {
-            acceleration_structure->allow_update = 1u;
-            acceleration_structure->descriptor.usage |= MTLAccelerationStructureUsageRefit;
-        }
+        NSArray<id<MTLAccelerationStructure>> *previous_sources = nil;
+        NSData *previous_instances = nil;
+        const unsigned int previous_allow_update = acceleration_structure->allow_update;
+        const MTLAccelerationStructureUsage previous_usage =
+            acceleration_structure->descriptor.usage;
         if (acceleration_structure->kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL) {
             if (instance_sources == NULL ||
                 (instance_source_count != 1 && instance_source_count != acceleration_structure->primitive_count) ||
@@ -4900,6 +5556,18 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
                 }
                 [native_sources addObject:instance_source->acceleration_structure];
             }
+
+            const NSUInteger instance_data_len =
+                (NSUInteger)acceleration_structure->primitive_count *
+                sizeof(MTLAccelerationStructureInstanceDescriptor);
+            previous_sources = [descriptor.instancedAccelerationStructures retain];
+            previous_instances = [[NSData alloc]
+                initWithBytes:[acceleration_structure->instance_buffer contents]
+                       length:instance_data_len];
+            if (previous_instances == nil) {
+                [previous_sources release];
+                return VKMTL_METAL_STATUS_COMMAND_FAILED;
+            }
             descriptor.instancedAccelerationStructures = native_sources;
 
             MTLAccelerationStructureInstanceDescriptor *instances =
@@ -4918,11 +5586,81 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
             }
         }
 
+        if (allow_update != 0) {
+            acceleration_structure->allow_update = 1u;
+            acceleration_structure->descriptor.usage |= MTLAccelerationStructureUsageRefit;
+        }
+
+        const MTLAccelerationStructureSizes descriptor_sizes =
+            [acceleration_structure->device
+                accelerationStructureSizesWithDescriptor:acceleration_structure->descriptor];
+        const NSUInteger native_required_scratch_size = update != 0
+            ? descriptor_sizes.refitScratchBufferSize
+            : descriptor_sizes.buildScratchBufferSize;
+        if (required_scratch_size < native_required_scratch_size) {
+            vkmtl_finish_tlas_build_transaction(
+                acceleration_structure,
+                previous_sources,
+                previous_instances,
+                previous_allow_update,
+                previous_usage,
+                NO
+            );
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+        if (update != 0 &&
+            update_source == acceleration_structure &&
+            descriptor_sizes.accelerationStructureSize > acceleration_structure->result_size) {
+            vkmtl_finish_tlas_build_transaction(
+                acceleration_structure,
+                previous_sources,
+                previous_instances,
+                previous_allow_update,
+                previous_usage,
+                NO
+            );
+            return VKMTL_METAL_STATUS_INVALID_COMMAND;
+        }
+
         id<MTLAccelerationStructureCommandEncoder> encoder =
             [command_buffer->command_buffer accelerationStructureCommandEncoder];
         if (encoder == nil) {
+            vkmtl_finish_tlas_build_transaction(
+                acceleration_structure,
+                previous_sources,
+                previous_instances,
+                previous_allow_update,
+                previous_usage,
+                NO
+            );
             return VKMTL_METAL_STATUS_COMMAND_FAILED;
         }
+
+        const vkmtl_metal_status capacity_status =
+            vkmtl_ensure_acceleration_structure_result_capacity(
+                acceleration_structure,
+                descriptor_sizes.accelerationStructureSize
+            );
+        if (capacity_status != VKMTL_METAL_STATUS_OK) {
+            [encoder endEncoding];
+            vkmtl_finish_tlas_build_transaction(
+                acceleration_structure,
+                previous_sources,
+                previous_instances,
+                previous_allow_update,
+                previous_usage,
+                NO
+            );
+            return capacity_status;
+        }
+        acceleration_structure->scratch_size = MAX(
+            acceleration_structure->scratch_size,
+            descriptor_sizes.buildScratchBufferSize
+        );
+        acceleration_structure->update_scratch_size = MAX(
+            acceleration_structure->update_scratch_size,
+            descriptor_sizes.refitScratchBufferSize
+        );
 
         if (update != 0) {
             [encoder refitAccelerationStructure:update_source->acceleration_structure
@@ -4937,6 +5675,21 @@ vkmtl_metal_status vkmtl_metal_command_buffer_build_acceleration_structure(
                             scratchBufferOffset:scratch_offset];
         }
         [encoder endEncoding];
+        if (acceleration_structure->kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL) {
+            MTLInstanceAccelerationStructureDescriptor *descriptor =
+                (MTLInstanceAccelerationStructureDescriptor *)acceleration_structure->descriptor;
+            [acceleration_structure->traversal_resources release];
+            acceleration_structure->traversal_resources =
+                [descriptor.instancedAccelerationStructures copy];
+        }
+        vkmtl_finish_tlas_build_transaction(
+            acceleration_structure,
+            previous_sources,
+            previous_instances,
+            previous_allow_update,
+            previous_usage,
+            YES
+        );
         acceleration_structure->built = 1u;
         return VKMTL_METAL_STATUS_OK;
     }
@@ -4971,8 +5724,11 @@ vkmtl_metal_status vkmtl_metal_command_buffer_maintain_acceleration_structure(
         if (destination == NULL ||
             destination == source ||
             destination->acceleration_structure == nil ||
+            destination->device != source->device ||
             destination->kind != source->kind ||
-            destination->primitive_count != source->primitive_count) {
+            destination->primitive_count != source->primitive_count ||
+            (source->kind == VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_TOP_LEVEL &&
+             (source->traversal_resources == nil || source->traversal_resources.count == 0))) {
             return VKMTL_METAL_STATUS_INVALID_COMMAND;
         }
     } else {
@@ -4993,9 +5749,16 @@ vkmtl_metal_status vkmtl_metal_command_buffer_maintain_acceleration_structure(
         } else {
             [encoder copyAndCompactAccelerationStructure:source->acceleration_structure
                                 toAccelerationStructure:destination->acceleration_structure];
-            destination->built = 1u;
         }
         [encoder endEncoding];
+        if (operation == 2u) {
+            const vkmtl_metal_status state_status =
+                vkmtl_copy_acceleration_structure_build_state(source, destination);
+            if (state_status != VKMTL_METAL_STATUS_OK) {
+                return state_status;
+            }
+            destination->built = 1u;
+        }
         return VKMTL_METAL_STATUS_OK;
     }
 }
@@ -5009,7 +5772,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
     unsigned int height,
     const void *inline_data,
     size_t inline_data_len,
-    unsigned int inline_data_index
+    unsigned int inline_data_index,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
 ) {
     if (command_buffer == NULL ||
         command_buffer->command_buffer == nil ||
@@ -5024,12 +5793,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
         output_texture_view->texture == nil ||
         output_texture_view->sample_count != 1 ||
         width == 0 ||
-        height == 0) {
+        height == 0 ||
+        (inline_data_len != 0 && (inline_data == NULL || inline_data_index != 2u))) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
-    if (acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
-        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    if (acceleration_structure->kind != pipeline->acceleration_structure_kind) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
     if (output_texture_view->texture.pixelFormat != MTLPixelFormatBGRA8Unorm ||
@@ -5084,8 +5854,30 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_drawable(
             return VKMTL_METAL_STATUS_UNSUPPORTED;
         }
         [encoder setAccelerationStructure:acceleration_structure->acceleration_structure atBufferIndex:0];
+        const vkmtl_metal_status resource_status =
+            vkmtl_declare_acceleration_structure_resources(encoder, acceleration_structure);
+        if (resource_status != VKMTL_METAL_STATUS_OK) {
+            [encoder endEncoding];
+            [staging release];
+            return resource_status;
+        }
         if (inline_data != NULL && inline_data_len != 0) {
             [encoder setBytes:inline_data length:inline_data_len atIndex:inline_data_index];
+        }
+        const vkmtl_metal_status binding_status =
+            vkmtl_bind_ray_dispatch_application_resources(
+                encoder,
+                buffer_bindings,
+                buffer_binding_count,
+                texture_bindings,
+                texture_binding_count,
+                sampler_bindings,
+                sampler_binding_count
+            );
+        if (binding_status != VKMTL_METAL_STATUS_OK) {
+            [encoder endEncoding];
+            [staging release];
+            return binding_status;
         }
 
         const NSUInteger threadgroup_width = 8;
@@ -5150,7 +5942,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
     unsigned int height,
     const void *inline_data,
     size_t inline_data_len,
-    unsigned int inline_data_index
+    unsigned int inline_data_index,
+    const vkmtl_metal_ray_dispatch_buffer_binding *buffer_bindings,
+    size_t buffer_binding_count,
+    const vkmtl_metal_ray_dispatch_texture_binding *texture_bindings,
+    size_t texture_binding_count,
+    const vkmtl_metal_ray_dispatch_sampler_binding *sampler_bindings,
+    size_t sampler_binding_count
 ) {
     if (command_buffer == NULL ||
         command_buffer->command_buffer == nil ||
@@ -5162,12 +5960,13 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
         output_texture_view == NULL ||
         output_texture_view->texture == nil ||
         width == 0 ||
-        height == 0) {
+        height == 0 ||
+        (inline_data_len != 0 && (inline_data == NULL || inline_data_index != 2u))) {
         return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
-    if (acceleration_structure->kind != VKMTL_METAL_ACCELERATION_STRUCTURE_KIND_BOTTOM_LEVEL) {
-        return VKMTL_METAL_STATUS_UNSUPPORTED;
+    if (acceleration_structure->kind != pipeline->acceleration_structure_kind) {
+        return VKMTL_METAL_STATUS_INVALID_COMMAND;
     }
 
     @autoreleasepool {
@@ -5184,8 +5983,28 @@ vkmtl_metal_status vkmtl_metal_command_buffer_dispatch_rays_to_texture(
             return VKMTL_METAL_STATUS_UNSUPPORTED;
         }
         [encoder setAccelerationStructure:acceleration_structure->acceleration_structure atBufferIndex:0];
+        const vkmtl_metal_status resource_status =
+            vkmtl_declare_acceleration_structure_resources(encoder, acceleration_structure);
+        if (resource_status != VKMTL_METAL_STATUS_OK) {
+            [encoder endEncoding];
+            return resource_status;
+        }
         if (inline_data != NULL && inline_data_len != 0) {
             [encoder setBytes:inline_data length:inline_data_len atIndex:inline_data_index];
+        }
+        const vkmtl_metal_status binding_status =
+            vkmtl_bind_ray_dispatch_application_resources(
+                encoder,
+                buffer_bindings,
+                buffer_binding_count,
+                texture_bindings,
+                texture_binding_count,
+                sampler_bindings,
+                sampler_binding_count
+            );
+        if (binding_status != VKMTL_METAL_STATUS_OK) {
+            [encoder endEncoding];
+            return binding_status;
         }
 
         const NSUInteger threadgroup_width = 8;

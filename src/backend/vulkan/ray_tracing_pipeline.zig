@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const core = @import("../../core.zig");
 const GraphicsContext = @import("graphics_context.zig");
+const VulkanBindGroupBackend = @import("bind_group.zig");
 const VulkanBuffer = @import("buffer.zig");
 const VulkanShaderModule = @import("shader_module.zig");
 const VulkanAccelerationStructure = @import("acceleration_structure.zig");
@@ -14,6 +15,7 @@ allocator: std.mem.Allocator,
 handle: vk.Pipeline,
 layout: vk.PipelineLayout,
 descriptor_set_layout: vk.DescriptorSetLayout,
+bind_group_layout_entries: []core.BindGroupLayoutEntry,
 sbt_buffer: VulkanBuffer,
 raygen_region: vk.StridedDeviceAddressRegionKHR,
 miss_region: vk.StridedDeviceAddressRegionKHR,
@@ -142,7 +144,14 @@ pub fn init(
         },
     };
 
-    const descriptor_set_layout = try createDescriptorSetLayout(gc);
+    const application_layout = descriptor.bind_group_layout;
+    const bind_group_layout_entries = try allocator.dupe(
+        core.BindGroupLayoutEntry,
+        if (application_layout) |layout_descriptor| layout_descriptor.entries else &.{},
+    );
+    errdefer allocator.free(bind_group_layout_entries);
+
+    const descriptor_set_layout = try createDescriptorSetLayout(gc, allocator, bind_group_layout_entries);
     errdefer gc.dev.destroyDescriptorSetLayout(descriptor_set_layout, null);
 
     const set_layouts = [_]vk.DescriptorSetLayout{descriptor_set_layout};
@@ -222,6 +231,7 @@ pub fn init(
         .handle = pipeline,
         .layout = layout,
         .descriptor_set_layout = descriptor_set_layout,
+        .bind_group_layout_entries = bind_group_layout_entries,
         .sbt_buffer = sbt_buffer,
         .raygen_region = .{
             .device_address = base_address,
@@ -254,6 +264,7 @@ pub fn deinit(self: *VulkanRayTracingPipelineState) void {
     self.gc.dev.destroyPipeline(self.handle, null);
     self.gc.dev.destroyPipelineLayout(self.layout, null);
     self.gc.dev.destroyDescriptorSetLayout(self.descriptor_set_layout, null);
+    self.allocator.free(self.bind_group_layout_entries);
 }
 
 pub fn setLabel(self: *VulkanRayTracingPipelineState, label_value: ?[]const u8) void {
@@ -280,6 +291,7 @@ pub fn makeDispatchResources(
     top_level: *const VulkanAccelerationStructure,
     output: *const VulkanTextureView,
     dispatch: core.RayDispatchDescriptor,
+    bind_group: ?*const VulkanBindGroupBackend.VulkanBindGroup,
 ) core.AdvancedFeatureError!DispatchResources {
     if (top_level.kind != .top_level or !top_level.built_value or top_level.handle == .null_handle) {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -289,7 +301,14 @@ pub fn makeDispatchResources(
         return core.AdvancedFeatureError.InvalidRayTracingPipeline;
     }
 
-    const descriptor_pool = createDescriptorPool(self.gc) catch {
+    if (!bindGroupMatchesLayout(self.bind_group_layout_entries, bind_group) or
+        !bindGroupResourcesMatchLayout(self.bind_group_layout_entries, bind_group) or
+        bindGroupSamplesOutput(output, bind_group))
+    {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+
+    const descriptor_pool = createDescriptorPool(self.gc, self.bind_group_layout_entries) catch {
         return core.AdvancedFeatureError.InvalidRayTracingPipeline;
     };
     errdefer self.gc.dev.destroyDescriptorPool(descriptor_pool, null);
@@ -337,40 +356,120 @@ pub fn makeDispatchResources(
         .offset = 0,
         .range = @intCast(inline_data_buffer.length()),
     };
-    const writes = [_]vk.WriteDescriptorSet{
-        .{
-            .p_next = &acceleration_structure_info,
-            .dst_set = descriptor_set,
-            .dst_binding = 0,
-            .dst_array_element = 0,
-            .descriptor_count = 1,
-            .descriptor_type = .acceleration_structure_khr,
-            .p_image_info = undefined,
-            .p_buffer_info = undefined,
-            .p_texel_buffer_view = undefined,
-        },
-        .{
-            .dst_set = descriptor_set,
-            .dst_binding = 1,
-            .dst_array_element = 0,
-            .descriptor_count = 1,
-            .descriptor_type = .storage_image,
-            .p_image_info = @ptrCast(&output_info),
-            .p_buffer_info = undefined,
-            .p_texel_buffer_view = undefined,
-        },
-        .{
-            .dst_set = descriptor_set,
-            .dst_binding = 2,
-            .dst_array_element = 0,
-            .descriptor_count = 1,
-            .descriptor_type = .uniform_buffer,
-            .p_image_info = undefined,
-            .p_buffer_info = @ptrCast(&inline_data_info),
-            .p_texel_buffer_view = undefined,
-        },
+    const application_entries = if (bind_group) |group| group.entries else &.{};
+    const writes = self.allocator.alloc(vk.WriteDescriptorSet, 3 + application_entries.len) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
     };
-    self.gc.dev.updateDescriptorSets(&writes, null);
+    defer self.allocator.free(writes);
+    const application_resource_count = bindGroupResourceCount(application_entries);
+    const buffer_infos = self.allocator.alloc(vk.DescriptorBufferInfo, application_resource_count) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    };
+    defer self.allocator.free(buffer_infos);
+    const image_infos = self.allocator.alloc(vk.DescriptorImageInfo, application_resource_count) catch {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    };
+    defer self.allocator.free(image_infos);
+
+    writes[0] = .{
+        .p_next = &acceleration_structure_info,
+        .dst_set = descriptor_set,
+        .dst_binding = 0,
+        .dst_array_element = 0,
+        .descriptor_count = 1,
+        .descriptor_type = .acceleration_structure_khr,
+        .p_image_info = undefined,
+        .p_buffer_info = undefined,
+        .p_texel_buffer_view = undefined,
+    };
+    writes[1] = .{
+        .dst_set = descriptor_set,
+        .dst_binding = 1,
+        .dst_array_element = 0,
+        .descriptor_count = 1,
+        .descriptor_type = .storage_image,
+        .p_image_info = @ptrCast(&output_info),
+        .p_buffer_info = undefined,
+        .p_texel_buffer_view = undefined,
+    };
+    writes[2] = .{
+        .dst_set = descriptor_set,
+        .dst_binding = 2,
+        .dst_array_element = 0,
+        .descriptor_count = 1,
+        .descriptor_type = .uniform_buffer,
+        .p_image_info = undefined,
+        .p_buffer_info = @ptrCast(&inline_data_info),
+        .p_texel_buffer_view = undefined,
+    };
+
+    var resource_info_index: usize = 0;
+    for (application_entries, writes[3..]) |entry, *write| {
+        const layout_entry = layoutEntryForBinding(self.bind_group_layout_entries, entry.binding) orelse {
+            return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        };
+        if (entry.resourceCount() != layout_entry.array_count) {
+            return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+        }
+        const first_info_index = resource_info_index;
+        write.* = .{
+            .dst_set = descriptor_set,
+            .dst_binding = entry.binding,
+            .dst_array_element = 0,
+            .descriptor_count = @intCast(entry.resourceCount()),
+            .descriptor_type = descriptorTypeForLayoutEntry(layout_entry),
+            .p_image_info = undefined,
+            .p_buffer_info = undefined,
+            .p_texel_buffer_view = undefined,
+        };
+
+        for (0..entry.resourceCount()) |array_index| {
+            const resource = entry.resourceAt(array_index);
+            if (std.meta.activeTag(resource) != layout_entry.resource) {
+                return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+            }
+            switch (resource) {
+                .uniform_buffer, .storage_buffer => |binding| {
+                    buffer_infos[resource_info_index] = .{
+                        .buffer = binding.buffer.handle,
+                        .offset = binding.offset,
+                        .range = binding.size orelse vk.WHOLE_SIZE,
+                    };
+                },
+                .sampled_texture => |texture_view| {
+                    image_infos[resource_info_index] = .{
+                        .sampler = .null_handle,
+                        .image_view = texture_view.handle,
+                        .image_layout = .shader_read_only_optimal,
+                    };
+                },
+                .storage_texture => |texture_view| {
+                    image_infos[resource_info_index] = .{
+                        .sampler = .null_handle,
+                        .image_view = texture_view.handle,
+                        .image_layout = .general,
+                    };
+                },
+                .sampler, .compare_sampler => |sampler_state| {
+                    image_infos[resource_info_index] = .{
+                        .sampler = sampler_state.handle,
+                        .image_view = .null_handle,
+                        .image_layout = .undefined,
+                    };
+                },
+            }
+            resource_info_index += 1;
+        }
+
+        switch (layout_entry.resource) {
+            .uniform_buffer, .storage_buffer => write.p_buffer_info = @ptrCast(&buffer_infos[first_info_index]),
+            .storage_texture, .sampled_texture, .sampler, .compare_sampler => {
+                write.p_image_info = @ptrCast(&image_infos[first_info_index]);
+            },
+        }
+    }
+
+    self.gc.dev.updateDescriptorSets(writes, null);
     return .{
         .gc = self.gc,
         .descriptor_pool = descriptor_pool,
@@ -379,48 +478,214 @@ pub fn makeDispatchResources(
     };
 }
 
-fn createDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLayout {
-    const bindings = [_]vk.DescriptorSetLayoutBinding{
-        .{
-            .binding = 0,
-            .descriptor_type = .acceleration_structure_khr,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
-        .{
-            .binding = 1,
-            .descriptor_type = .storage_image,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
-        .{
-            .binding = 2,
-            .descriptor_type = .uniform_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{
-                .raygen_bit_khr = true,
-                .closest_hit_bit_khr = true,
-                .intersection_bit_khr = true,
-            },
+fn createDescriptorSetLayout(
+    gc: *const GraphicsContext,
+    allocator: std.mem.Allocator,
+    application_entries: []const core.BindGroupLayoutEntry,
+) !vk.DescriptorSetLayout {
+    const bindings = try allocator.alloc(vk.DescriptorSetLayoutBinding, 3 + application_entries.len);
+    defer allocator.free(bindings);
+    bindings[0] = .{
+        .binding = 0,
+        .descriptor_type = .acceleration_structure_khr,
+        .descriptor_count = 1,
+        .stage_flags = .{ .raygen_bit_khr = true },
+    };
+    bindings[1] = .{
+        .binding = 1,
+        .descriptor_type = .storage_image,
+        .descriptor_count = 1,
+        .stage_flags = .{ .raygen_bit_khr = true },
+    };
+    bindings[2] = .{
+        .binding = 2,
+        .descriptor_type = .uniform_buffer,
+        .descriptor_count = 1,
+        .stage_flags = .{
+            .raygen_bit_khr = true,
+            .closest_hit_bit_khr = true,
+            .intersection_bit_khr = true,
         },
     };
+    if (!applicationBindingsValid(application_entries)) {
+        return core.AdvancedFeatureError.InvalidRayTracingPipeline;
+    }
+    for (application_entries, bindings[3..]) |entry, *binding| {
+        binding.* = .{
+            .binding = entry.binding,
+            .descriptor_type = descriptorTypeForLayoutEntry(entry),
+            .descriptor_count = entry.array_count,
+            .stage_flags = rayTracingShaderStageFlags(),
+        };
+    }
     return try gc.dev.createDescriptorSetLayout(&.{
-        .binding_count = bindings.len,
-        .p_bindings = &bindings,
+        .binding_count = @intCast(bindings.len),
+        .p_bindings = bindings.ptr,
     }, null);
 }
 
-fn createDescriptorPool(gc: *const GraphicsContext) !vk.DescriptorPool {
-    const pool_sizes = [_]vk.DescriptorPoolSize{
-        .{ .type = .acceleration_structure_khr, .descriptor_count = 1 },
-        .{ .type = .storage_image, .descriptor_count = 1 },
-        .{ .type = .uniform_buffer, .descriptor_count = 1 },
-    };
+fn createDescriptorPool(
+    gc: *const GraphicsContext,
+    application_entries: []const core.BindGroupLayoutEntry,
+) !vk.DescriptorPool {
+    const counts = descriptorPoolCounts(application_entries);
+    var pool_sizes: [6]vk.DescriptorPoolSize = undefined;
+    var pool_size_count: usize = 0;
+    appendPoolSize(&pool_sizes, &pool_size_count, .acceleration_structure_khr, 1);
+    appendPoolSize(&pool_sizes, &pool_size_count, .storage_image, counts.storage_images +| 1);
+    appendPoolSize(&pool_sizes, &pool_size_count, .uniform_buffer, counts.uniform_buffers +| 1);
+    appendPoolSize(&pool_sizes, &pool_size_count, .storage_buffer, counts.storage_buffers);
+    appendPoolSize(&pool_sizes, &pool_size_count, .sampled_image, counts.sampled_images);
+    appendPoolSize(&pool_sizes, &pool_size_count, .sampler, counts.samplers);
     return try gc.dev.createDescriptorPool(&.{
         .max_sets = 1,
-        .pool_size_count = pool_sizes.len,
-        .p_pool_sizes = &pool_sizes,
+        .pool_size_count = @intCast(pool_size_count),
+        .p_pool_sizes = pool_sizes[0..pool_size_count].ptr,
     }, null);
+}
+
+const DescriptorPoolCounts = struct {
+    uniform_buffers: u32 = 0,
+    storage_buffers: u32 = 0,
+    storage_images: u32 = 0,
+    sampled_images: u32 = 0,
+    samplers: u32 = 0,
+};
+
+fn descriptorPoolCounts(entries: []const core.BindGroupLayoutEntry) DescriptorPoolCounts {
+    var result = DescriptorPoolCounts{};
+    for (entries) |entry| switch (entry.resource) {
+        .uniform_buffer => result.uniform_buffers +|= entry.array_count,
+        .storage_buffer => result.storage_buffers +|= entry.array_count,
+        .storage_texture => result.storage_images +|= entry.array_count,
+        .sampled_texture => result.sampled_images +|= entry.array_count,
+        .sampler, .compare_sampler => result.samplers +|= entry.array_count,
+    };
+    return result;
+}
+
+fn appendPoolSize(
+    pool_sizes: *[6]vk.DescriptorPoolSize,
+    count: *usize,
+    descriptor_type: vk.DescriptorType,
+    descriptor_count: u32,
+) void {
+    if (descriptor_count == 0) return;
+    pool_sizes[count.*] = .{
+        .type = descriptor_type,
+        .descriptor_count = descriptor_count,
+    };
+    count.* += 1;
+}
+
+fn descriptorTypeForLayoutEntry(entry: core.BindGroupLayoutEntry) vk.DescriptorType {
+    return switch (entry.resource) {
+        .uniform_buffer => .uniform_buffer,
+        .storage_buffer => .storage_buffer,
+        .storage_texture => .storage_image,
+        .sampled_texture => .sampled_image,
+        .sampler, .compare_sampler => .sampler,
+    };
+}
+
+fn rayTracingShaderStageFlags() vk.ShaderStageFlags {
+    return .{
+        .raygen_bit_khr = true,
+        .any_hit_bit_khr = true,
+        .closest_hit_bit_khr = true,
+        .miss_bit_khr = true,
+        .intersection_bit_khr = true,
+        .callable_bit_khr = true,
+    };
+}
+
+fn applicationBindingValid(entry: core.BindGroupLayoutEntry) bool {
+    if (entry.array_count == 0 or entry.binding < 3 or entry.binding > 14) return false;
+    return @as(u64, entry.binding) + @as(u64, entry.array_count) <= 15;
+}
+
+fn applicationBindingsValid(entries: []const core.BindGroupLayoutEntry) bool {
+    for (entries, 0..) |entry, i| {
+        if (!applicationBindingValid(entry) or entry.dynamic_offset or !entry.visibility.ray_tracing) {
+            return false;
+        }
+        const entry_end = entry.binding + entry.array_count;
+        for (entries[i + 1 ..]) |other| {
+            if (!applicationBindingValid(other)) return false;
+            const other_end = other.binding + other.array_count;
+            if (entry.binding < other_end and other.binding < entry_end) return false;
+        }
+    }
+    return true;
+}
+
+fn bindGroupMatchesLayout(
+    expected: []const core.BindGroupLayoutEntry,
+    bind_group: ?*const VulkanBindGroupBackend.VulkanBindGroup,
+) bool {
+    const group = bind_group orelse return expected.len == 0;
+    if (expected.len == 0 or group.layout_entries.len != expected.len) return false;
+    for (expected) |expected_entry| {
+        const actual_entry = layoutEntryForBinding(group.layout_entries, expected_entry.binding) orelse return false;
+        if (!std.meta.eql(expected_entry, actual_entry)) return false;
+    }
+    return true;
+}
+
+fn bindGroupResourcesMatchLayout(
+    expected: []const core.BindGroupLayoutEntry,
+    bind_group: ?*const VulkanBindGroupBackend.VulkanBindGroup,
+) bool {
+    const group = bind_group orelse return expected.len == 0;
+    if (group.entries.len != expected.len) return false;
+    for (expected) |layout_entry| {
+        const entry = bindGroupEntryForBinding(group.entries, layout_entry.binding) orelse return false;
+        if (entry.resourceCount() != layout_entry.array_count) return false;
+        for (0..entry.resourceCount()) |resource_index| {
+            if (std.meta.activeTag(entry.resourceAt(resource_index)) != layout_entry.resource) return false;
+        }
+    }
+    return true;
+}
+
+fn bindGroupSamplesOutput(
+    output: *const VulkanTextureView,
+    bind_group: ?*const VulkanBindGroupBackend.VulkanBindGroup,
+) bool {
+    const group = bind_group orelse return false;
+    for (group.entries) |entry| {
+        for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+            .sampled_texture => |texture_view| if (texture_view.image == output.image) return true,
+            .uniform_buffer, .storage_buffer, .storage_texture, .sampler, .compare_sampler => {},
+        };
+    }
+    return false;
+}
+
+fn bindGroupEntryForBinding(
+    entries: []const VulkanBindGroupBackend.VulkanBindGroup.Entry,
+    binding: u32,
+) ?VulkanBindGroupBackend.VulkanBindGroup.Entry {
+    for (entries) |entry| {
+        if (entry.binding == binding) return entry;
+    }
+    return null;
+}
+
+fn layoutEntryForBinding(
+    entries: []const core.BindGroupLayoutEntry,
+    binding: u32,
+) ?core.BindGroupLayoutEntry {
+    for (entries) |entry| {
+        if (entry.binding == binding) return entry;
+    }
+    return null;
+}
+
+fn bindGroupResourceCount(entries: []const VulkanBindGroupBackend.VulkanBindGroup.Entry) usize {
+    var count: usize = 0;
+    for (entries) |entry| count += entry.resourceCount();
+    return count;
 }
 
 fn alignForwardU64(value: u64, alignment: u32) u64 {
@@ -440,4 +705,70 @@ test "Vulkan ray tracing dispatch state is not shared by pipeline instances" {
     try std.testing.expect(!@hasField(VulkanRayTracingPipelineState, "inline_data_buffer"));
     try std.testing.expect(@hasField(DispatchResources, "descriptor_set"));
     try std.testing.expect(@hasField(DispatchResources, "inline_data_buffer"));
+}
+
+test "Vulkan ray tracing dispatch resource lowering compiles with optional bind groups" {
+    var pipeline: VulkanRayTracingPipelineState = undefined;
+    var top_level: VulkanAccelerationStructure = undefined;
+    var output: VulkanTextureView = undefined;
+    top_level.kind = .bottom_level;
+
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        pipeline.makeDispatchResources(&top_level, &output, .{ .width = 1 }, null),
+    );
+}
+
+test "Vulkan ray tracing application descriptor counts include arrays" {
+    const counts = descriptorPoolCounts(&.{
+        .{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 2,
+        },
+        .{
+            .binding = 5,
+            .resource = .storage_buffer,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 3,
+        },
+        .{
+            .binding = 8,
+            .resource = .compare_sampler,
+            .visibility = .{ .ray_tracing = true },
+        },
+    });
+    try std.testing.expectEqual(@as(u32, 2), counts.sampled_images);
+    try std.testing.expectEqual(@as(u32, 3), counts.storage_buffers);
+    try std.testing.expectEqual(@as(u32, 1), counts.samplers);
+}
+
+test "Vulkan ray tracing application bindings reject flattened array overlap" {
+    try std.testing.expect(applicationBindingsValid(&.{
+        .{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 2,
+        },
+        .{
+            .binding = 5,
+            .resource = .sampler,
+            .visibility = .{ .ray_tracing = true },
+        },
+    }));
+    try std.testing.expect(!applicationBindingsValid(&.{
+        .{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 2,
+        },
+        .{
+            .binding = 4,
+            .resource = .sampler,
+            .visibility = .{ .ray_tracing = true },
+        },
+    }));
 }

@@ -4287,8 +4287,13 @@ pub const RayTracingPipelineDescriptor = struct {
     any_hit: ?RayTracingShaderStageDescriptor = null,
     intersection: ?RayTracingShaderStageDescriptor = null,
     max_recursion_depth: u32 = 1,
+    bind_group_layout: ?BindGroupLayoutDescriptor = null,
 
-    pub fn validate(self: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+    pub fn validate(
+        self: RayTracingPipelineDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (AdvancedFeatureError || BindingError)!void {
         if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
         if (self.shader_groups.len == 0 or self.max_recursion_depth == 0) return AdvancedFeatureError.InvalidRayTracingPipeline;
         if (limits.max_ray_tracing_recursion_depth != 0 and self.max_recursion_depth > limits.max_ray_tracing_recursion_depth) {
@@ -4313,6 +4318,7 @@ pub const RayTracingPipelineDescriptor = struct {
             if (!has_procedural_hit) return AdvancedFeatureError.InvalidRayTracingPipeline;
             try stage.validate();
         }
+        if (self.bind_group_layout) |layout| try validateRayTracingBindGroupLayout(layout);
     }
 
     pub fn hasNativeShaderStages(self: RayTracingPipelineDescriptor) bool {
@@ -4328,7 +4334,11 @@ pub const VulkanRayTracingPipelineLowering = struct {
     procedural_hit_groups: u32 = 0,
     callable_groups: u32 = 0,
 
-    pub fn fromDescriptor(descriptor: RayTracingPipelineDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!VulkanRayTracingPipelineLowering {
+    pub fn fromDescriptor(
+        descriptor: RayTracingPipelineDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (AdvancedFeatureError || BindingError)!VulkanRayTracingPipelineLowering {
         try descriptor.validate(features, limits);
         var lowering = VulkanRayTracingPipelineLowering{ .max_recursion_depth = descriptor.max_recursion_depth };
         for (descriptor.shader_groups) |group| switch (group.kind) {
@@ -4371,7 +4381,7 @@ pub const MetalRayTracingLowering = struct {
         intersections: []const MetalIntersectionFunctionDescriptor,
         features: DeviceFeatures,
         limits: DeviceLimits,
-    ) AdvancedFeatureError!MetalRayTracingLowering {
+    ) (AdvancedFeatureError || BindingError)!MetalRayTracingLowering {
         try descriptor.validate(features, limits);
         for (intersections) |intersection| try intersection.validate(features);
         var ray_generation_groups: u32 = 0;
@@ -4411,7 +4421,7 @@ pub const RayTracingPipelineLowering = union(Backend) {
         metal_intersections: []const MetalIntersectionFunctionDescriptor,
         features: DeviceFeatures,
         limits: DeviceLimits,
-    ) AdvancedFeatureError!RayTracingPipelineLowering {
+    ) (AdvancedFeatureError || BindingError)!RayTracingPipelineLowering {
         return switch (backend) {
             .vulkan => .{ .vulkan = try VulkanRayTracingPipelineLowering.fromDescriptor(descriptor, features, limits) },
             .metal => .{ .metal = try MetalRayTracingLowering.fromDescriptor(descriptor, metal_intersections, features, limits) },
@@ -4473,7 +4483,11 @@ pub const MetalRayTracingMappingDescriptor = struct {
     intersections: []const MetalIntersectionFunctionDescriptor = &.{},
     function_table_label: ?[]const u8 = null,
 
-    pub fn validate(self: MetalRayTracingMappingDescriptor, features: DeviceFeatures, limits: DeviceLimits) AdvancedFeatureError!void {
+    pub fn validate(
+        self: MetalRayTracingMappingDescriptor,
+        features: DeviceFeatures,
+        limits: DeviceLimits,
+    ) (AdvancedFeatureError || BindingError)!void {
         _ = self.function_table_label;
         _ = try MetalRayTracingLowering.fromDescriptor(
             self.pipeline,
@@ -4496,7 +4510,7 @@ pub const MetalRayTracingMappingPlan = struct {
         descriptor: MetalRayTracingMappingDescriptor,
         features: DeviceFeatures,
         limits: DeviceLimits,
-    ) AdvancedFeatureError!MetalRayTracingMappingPlan {
+    ) (AdvancedFeatureError || BindingError)!MetalRayTracingMappingPlan {
         const lowering = try MetalRayTracingLowering.fromDescriptor(
             descriptor.pipeline,
             descriptor.intersections,
@@ -4655,14 +4669,14 @@ pub const RayDispatchDescriptor = struct {
     height: u32 = 1,
     depth: u32 = 1,
     inline_data: []const u8 = &.{},
-    inline_data_binding: u32 = 1,
+    inline_data_binding: u32 = 2,
 
     pub fn validate(self: RayDispatchDescriptor, features: DeviceFeatures) AdvancedFeatureError!void {
         if (!features.ray_tracing) return AdvancedFeatureError.UnsupportedRayTracing;
         if (self.width == 0 or self.height == 0 or self.depth == 0) {
             return AdvancedFeatureError.InvalidRayTracingPipeline;
         }
-        if (self.inline_data.len != 0 and self.inline_data_binding == 0) {
+        if (self.inline_data.len != 0 and self.inline_data_binding != 2) {
             return AdvancedFeatureError.InvalidRayTracingPipeline;
         }
     }
@@ -5432,7 +5446,8 @@ pub fn deriveDescriptorIndexingLayoutFromReflection(
 fn visibilityContains(container: ShaderVisibility, required: ShaderVisibility) bool {
     return (!required.vertex or container.vertex) and
         (!required.fragment or container.fragment) and
-        (!required.compute or container.compute);
+        (!required.compute or container.compute) and
+        (!required.ray_tracing or container.ray_tracing);
 }
 
 pub const LoadAction = enum {
@@ -8875,9 +8890,10 @@ pub const ShaderVisibility = struct {
     vertex: bool = false,
     fragment: bool = false,
     compute: bool = false,
+    ray_tracing: bool = false,
 
     pub fn isEmpty(self: ShaderVisibility) bool {
-        return !self.vertex and !self.fragment and !self.compute;
+        return !self.vertex and !self.fragment and !self.compute and !self.ray_tracing;
     }
 };
 
@@ -8949,7 +8965,11 @@ pub const BindGroupLayoutEntry = struct {
         if (self.storage_access != null and self.resource != .storage_buffer and self.resource != .storage_texture) {
             return BindingError.InvalidStorageAccess;
         }
-        if (self.resource == .storage_texture and (self.visibility.vertex or self.visibility.fragment or !self.visibility.compute)) {
+        if (self.resource == .storage_texture and
+            (self.visibility.vertex or
+                self.visibility.fragment or
+                (!self.visibility.compute and !self.visibility.ray_tracing)))
+        {
             return BindingError.InvalidStorageTextureVisibility;
         }
     }
@@ -9003,6 +9023,36 @@ pub const BindGroupLayoutDescriptor = struct {
         return count;
     }
 };
+
+const first_ray_tracing_application_binding: u32 = 3;
+const last_ray_tracing_application_binding: u32 = 14;
+
+pub fn validateRayTracingBindGroupLayout(layout: BindGroupLayoutDescriptor) BindingError!void {
+    try layout.validate();
+    for (layout.entries, 0..) |entry, entry_index| {
+        if (!entry.visibility.ray_tracing) return BindingError.EmptyShaderVisibility;
+        if (entry.dynamic_offset) return BindingError.UnsupportedDynamicBinding;
+        if (entry.binding < first_ray_tracing_application_binding or
+            entry.binding > last_ray_tracing_application_binding)
+        {
+            return BindingError.ReservedRayTracingBinding;
+        }
+        const last_binding = std.math.add(u32, entry.binding, entry.array_count - 1) catch {
+            return BindingError.ReservedRayTracingBinding;
+        };
+        if (last_binding > last_ray_tracing_application_binding) {
+            return BindingError.ReservedRayTracingBinding;
+        }
+        for (layout.entries[entry_index + 1 ..]) |other| {
+            const other_last_binding = std.math.add(u32, other.binding, other.array_count - 1) catch {
+                return BindingError.ReservedRayTracingBinding;
+            };
+            if (entry.binding <= other_last_binding and other.binding <= last_binding) {
+                return BindingError.DuplicateBinding;
+            }
+        }
+    }
+}
 
 pub const AdvancedBindingModel = enum {
     descriptor_indexing,
@@ -9521,6 +9571,8 @@ pub const BindingError = error{
     InvalidResourceTableResource,
     ResourceTableVisibilityMismatch,
     ResourceTablePipelineLayoutMismatch,
+    ReservedRayTracingBinding,
+    RayTracingPipelineLayoutMismatch,
 };
 
 fn isAlignedU32(value: u32, alignment: u32) bool {
@@ -15142,6 +15194,95 @@ test "Vulkan ray tracing lowering counts shader groups" {
     try std.testing.expectEqual(@as(u32, 1), lowering.miss_groups);
     try std.testing.expectEqual(@as(u32, 1), lowering.hit_groups);
     try std.testing.expectEqual(@as(u32, 2), lowering.max_recursion_depth);
+}
+
+test "ray tracing bind group layouts reserve fixed dispatch bindings" {
+    const valid_entries = [_]BindGroupLayoutEntry{
+        .{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+        },
+        .{
+            .binding = 4,
+            .resource = .sampler,
+            .visibility = .{ .ray_tracing = true },
+        },
+        .{
+            .binding = 5,
+            .resource = .storage_texture,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 2,
+            .storage_access = .write,
+        },
+        .{
+            .binding = 14,
+            .resource = .storage_buffer,
+            .visibility = .{ .ray_tracing = true },
+            .storage_access = .read,
+        },
+    };
+    try validateRayTracingBindGroupLayout(.{ .entries = &valid_entries });
+
+    try std.testing.expectError(BindingError.ReservedRayTracingBinding, validateRayTracingBindGroupLayout(.{
+        .entries = &.{.{
+            .binding = 2,
+            .resource = .uniform_buffer,
+            .visibility = .{ .ray_tracing = true },
+        }},
+    }));
+    try std.testing.expectError(BindingError.ReservedRayTracingBinding, validateRayTracingBindGroupLayout(.{
+        .entries = &.{.{
+            .binding = 14,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+            .array_count = 2,
+        }},
+    }));
+    try std.testing.expectError(BindingError.UnsupportedDynamicBinding, validateRayTracingBindGroupLayout(.{
+        .entries = &.{.{
+            .binding = 3,
+            .resource = .uniform_buffer,
+            .visibility = .{ .ray_tracing = true },
+            .dynamic_offset = true,
+        }},
+    }));
+    try std.testing.expectError(BindingError.EmptyShaderVisibility, validateRayTracingBindGroupLayout(.{
+        .entries = &.{.{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .fragment = true },
+        }},
+    }));
+    try std.testing.expectError(BindingError.DuplicateBinding, validateRayTracingBindGroupLayout(.{
+        .entries = &.{
+            .{
+                .binding = 3,
+                .resource = .sampled_texture,
+                .visibility = .{ .ray_tracing = true },
+                .array_count = 2,
+            },
+            .{
+                .binding = 4,
+                .resource = .sampler,
+                .visibility = .{ .ray_tracing = true },
+            },
+        },
+    }));
+}
+
+test "ray tracing pipeline validates its application bind group layout" {
+    const groups = [_]RayTracingShaderGroupDescriptor{
+        .{ .kind = .ray_generation, .entry_point = "raygen" },
+    };
+    try std.testing.expectError(BindingError.ReservedRayTracingBinding, (RayTracingPipelineDescriptor{
+        .shader_groups = &groups,
+        .bind_group_layout = .{ .entries = &.{.{
+            .binding = 1,
+            .resource = .sampled_texture,
+            .visibility = .{ .ray_tracing = true },
+        }} },
+    }).validate(.{ .ray_tracing = true }, .{ .max_ray_tracing_recursion_depth = 1 }));
 }
 
 test "procedural ray tracing hit groups require custom intersection features" {

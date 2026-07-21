@@ -286,7 +286,7 @@ pub fn build(b: *std.Build) void {
     configureVulkanRuntimeForRun(b, voxel_world_cmd, target.result.os.tag, vulkan_runtime);
     forwardRunArgs(b, voxel_world_cmd);
 
-    const voxel_world_step = b.step("run-voxel-world", "Run the vkmtl voxel world pressure-test example");
+    const voxel_world_step = b.step("run-voxel-world", "Run the detailed voxel world pressure and capability-gated hybrid RT example");
     voxel_world_step.dependOn(&voxel_world_cmd.step);
 
     const transfer_readback = b.addExecutable(.{
@@ -743,6 +743,57 @@ pub fn build(b: *std.Build) void {
     });
     const run_voxel_world_tests = b.addRunArtifact(voxel_world_tests);
 
+    const voxel_world_streamer_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/voxel_world/chunk_streamer.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_voxel_world_streamer_tests = b.addRunArtifact(voxel_world_streamer_tests);
+
+    const voxel_world_sky_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/voxel_world/sky.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_voxel_world_sky_tests = b.addRunArtifact(voxel_world_sky_tests);
+
+    const voxel_world_ui_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/voxel_world/ui.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_voxel_world_ui_tests = b.addRunArtifact(voxel_world_ui_tests);
+
+    const voxel_world_ptgi_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/voxel_world/ptgi.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+            },
+        }),
+    });
+    const run_voxel_world_ptgi_tests = b.addRunArtifact(voxel_world_ptgi_tests);
+
+    const voxel_world_ray_tracing_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/voxel_world/ray_tracing.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vkmtl", .module = vkmtl },
+            },
+        }),
+    });
+    const run_voxel_world_ray_tracing_tests = b.addRunArtifact(voxel_world_ray_tracing_tests);
+
     const ray_traced_scene_color_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("examples/ray_traced_scene/color.zig"),
@@ -892,12 +943,25 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_shader_depfile_tests = b.addRunArtifact(shader_depfile_tests);
+    const metal_binding_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/precompile_shaders/metal_binding.zig"),
+            .target = b.graph.host,
+            .optimize = .Debug,
+        }),
+    });
+    const run_metal_binding_tests = b.addRunArtifact(metal_binding_tests);
 
     const test_step = b.step("test", "Run vkmtl tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_root_tests.step);
     test_step.dependOn(&run_development_matrix_tests.step);
     test_step.dependOn(&run_voxel_world_tests.step);
+    test_step.dependOn(&run_voxel_world_streamer_tests.step);
+    test_step.dependOn(&run_voxel_world_sky_tests.step);
+    test_step.dependOn(&run_voxel_world_ui_tests.step);
+    test_step.dependOn(&run_voxel_world_ptgi_tests.step);
+    test_step.dependOn(&run_voxel_world_ray_tracing_tests.step);
     test_step.dependOn(&run_ray_traced_scene_color_tests.step);
     test_step.dependOn(&run_ray_traced_scene_finite_run_tests.step);
     test_step.dependOn(&run_api_guard_tests.step);
@@ -907,6 +971,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_shader_manifest_tests.step);
     test_step.dependOn(&run_shader_build_contract_tests.step);
     test_step.dependOn(&run_shader_depfile_tests.step);
+    test_step.dependOn(&run_metal_binding_tests.step);
 }
 
 const SlangTool = struct {

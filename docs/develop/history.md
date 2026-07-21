@@ -56,7 +56,7 @@ The periods gradually tightened these evidence distinctions:
 | Native pixels and production matrix | 31-44 | First Metal/Vulkan RT pixels, full procedural scene, production contracts, edge semantics, diagnostics, CI, and device evidence |
 | Tagged baseline | v0.1.0 | First documented compatibility release at `96c5b08c` |
 | Source-driven semantic closure | 45-54 | Metal SDK semantic audit, exact executable slices, and precise unsupported decisions with zero unrouted gaps |
-| Pressure and presentation closure | 19, 55-56 | Voxel pressure test, composable RT texture output, deterministic SDR presentation selection, and corrected Vulkan visual evidence |
+| Pressure and presentation closure | 19, 55-56 and post-56 | Bounded voxel pressure, composable and material-bound hardware RT, one-sample temporal PTGI, deterministic SDR selection, corrected Vulkan orientation, and the example-private day/night/UI plus refractive-water composition |
 
 Period numbers express ownership, not strict completion order. Period 19 was
 reactivated and completed after Period 54, once the backend blockers discovered
@@ -886,6 +886,508 @@ The exact-tag review recorded:
 - **Evidence boundary:** the corrected-path log did not repeat the commit hash
   or clean-worktree command, so it proves the physical behavior but does not
   replace a future exact-release-commit matrix refresh.
+
+### Post-Period 56 - Textured Hybrid Ray-Traced Voxel World
+
+- **Goal:** turn the bounded voxel pressure example into a more representative
+  textured scene that exercises the existing native triangle BLAS/TLAS and
+  caller-owned texture-dispatch contracts without allocating public API.
+- **Materials:** replaced the small three-material atlas with a deterministic
+  476 x 68 sRGB atlas containing seven face-specific 64 x 64 tiles plus
+  replicated two-texel borders: grass top/side, dirt, stone, sand, and snow
+  top/side. Atlas alpha drives shader-side height-detail normals. No mip chain
+  was added, so distant shimmer remains an explicit example limitation.
+- **Hybrid path:** retained raster ownership of material/albedo shading and
+  added a full-resolution `rgba8_unorm` sun-shadow/sky-visibility pass. Every
+  resident chunk can own an indexed triangle BLAS; the per-frame TLAS is
+  bounded to the nearest 7 x 7 chunks (49 instances), including under the
+  289-resident stress profile.
+- **Selection:** `VKMTL_VOXEL_RT=auto|off|required` defaults to capability-based
+  automatic selection. `off` preserves the old raster pressure lane;
+  `required` returns typed capability/format errors rather than falling back.
+- **Backend correction:** Vulkan TLAS allocation now covers the complete
+  instance count and maps one repeated or N exact BLAS sources. Metal queries
+  the real indexed/AABB/instance descriptor sizes, rechecks final descriptors
+  and scratch capacity, dynamically owns source arrays, and validates that the
+  dispatched pipeline expects the actual BLAS/TLAS kind.
+- **Metal evidence:** Metal API Validation completed hybrid smoke with nine
+  traced chunks and default with 49. Deterministic default readback reported
+  2445795 primary hits, 670298 shadowed pixels, and 1621736 sky-occluded
+  pixels, with native driver submission and visibility validation true.
+- **Vulkan boundary:** shaders, focused tests, and forced Vulkan builds pass.
+  Physical Vulkan hybrid smoke/default evidence remains pending and must not be
+  inferred from compilation or earlier raster-only voxel runs.
+- **Non-goals:** this is not path tracing, global illumination, reflections,
+  HDR, denoising, sparse residency, or a production streaming architecture.
+
+### Post-Period 56 - Voxel Night Presentation And Example UI
+
+- **Goal:** turn the hybrid voxel workload into an interactive night scene
+  without adding engine policy or declarations to vkmtl's public API.
+- **Sky and lighting:** added an ordinary fullscreen render pass with a
+  world-space night gradient, visible moon, and direction-stable stars whose
+  brightness varies with time. Raster and hybrid-RT lighting share the moon
+  direction so the visible source and shadow query agree.
+- **Terrain:** replaced the periodic height profile with platform-stable
+  fixed-point continentalness, erosion, ridge, detail, temperature, and
+  moisture fields. Grass, sand, and snow surfaces, a cached one-block mesh
+  halo, and world-coordinate sampling keep positive and negative chunk
+  boundaries continuous while preserving the existing streaming limits.
+- **Example UI:** added a CPU 5x7 bitmap font, dynamic alpha-blended UI
+  vertices, a right-aligned FPS counter, and a translucent ESC title overlay.
+  The overlay displays `VKMTL VOXEL WORLD` and `Press ESC to continue`; Escape
+  toggles input capture instead of closing the window.
+- **Controls:** interactive flight now uses WASD, Space/Shift for vertical
+  motion, Ctrl acceleration, and the existing mouse/arrow look and `R` rebuild.
+- **Evidence:** `zig build test` passed with the semantic inventory check, and
+  `zig build -Dvulkan` passed as compilation evidence only. Under Metal API
+  Validation, the 48-frame default hybrid run reported native submission,
+  validated visibility, 1846752 primary hits, 785967 shadowed pixels, and
+  403844 sky-occluded pixels. A 160-frame raster stress run drained to 289
+  resident chunks with zero pending work. Physical Metal visual checks accepted
+  the night sky, moon/stars, FPS label, and both ESC overlay states.
+- **Evidence boundary:** no physical Vulkan night-presentation or hybrid result
+  is claimed; that exact-host lane remains pending.
+
+### Post-Period 56 - Voxel 60-Second Day/Night Cycle
+
+- **Goal:** extend the example-private night presentation into a complete
+  time-varying sky and lighting loop without allocating public vkmtl API or
+  changing the bounded voxel/RT workload contract.
+- **Shared clock:** one 60-second phase maps 0/15/30/45/60 seconds to midnight,
+  sunrise, noon, sunset, and wrapped midnight. The sky uniforms, raster
+  terrain uniforms, and hybrid-RT visibility dispatch all consume the same
+  per-frame celestial state.
+- **Sky:** the sun and moon remain opposite, the appropriate body is shown
+  above the horizon, night/twilight/day gradients blend continuously, and
+  direction-stable stars twinkle while fading out with daylight.
+- **Terrain and visibility:** ambient tint, direct color, strength, and
+  direction follow the shared cycle. Direct strength reaches zero at the
+  horizon transition, hiding the sun-to-moon direction handoff. The RT target
+  remains binary directional-light/sky visibility owned by the existing
+  hybrid composition rather than becoming a lighting or color buffer.
+- **Determinism:** phase key points, wrap/continuity, normalized opposite
+  directions, non-finite input handling, and the expanded sky/raster uniform
+  ABI are covered by example-local tests. Representative night, twilight, and
+  daytime frames were visually inspected on Metal.
+- **Evidence:** that presentation-slice snapshot passed 730/730 tests, the ordinary build,
+  and the forced Vulkan build. Under Metal API Validation, a 48-frame default
+  hybrid run completed with 81 resident chunks, 49 visible chunks, zero
+  pending work, native submission, validated visibility, 1846752 primary hits,
+  553298 shadowed pixels, and 403844 sky-occluded pixels.
+- **Evidence boundary:** backend shader/build checks are not physical Vulkan
+  execution. The current Vulkan hybrid and presentation lane remains pending,
+  and no Vulkan device result is inferred from compilation.
+
+### Post-Period 56 - RT Resource Binding And Material-Bound Voxel PTGI
+
+- **Goal:** extend the caller-owned RT texture route so ray shaders can consume
+  ordinary application material resources, then use that contract to evolve
+  the earlier binary-visibility voxel slice into a bounded hardware-RT PTGI
+  workload. The earlier section records the intermediate state and its then-
+  current non-goals; this later slice supersedes those example limitations.
+- **Public allocation:** `ShaderVisibility` gained default-false
+  `ray_tracing`; `RayTracingPipelineDescriptor` gained nullable
+  `bind_group_layout`; and `RayTracingDrawableResources` plus its exact
+  `RayTracingTextureResources` alias gained nullable `bind_group`. No root
+  alias, facade declaration, owner method, runtime handle, or second resource
+  union was added.
+- **Binding contract:** fixed bindings 0, 1, and 2 own the acceleration
+  structure, primary output, and inline data. One application group reuses
+  ordinary buffers, textures, and samplers in bindings 3 through 14. Arrays
+  occupy consecutive slots; dynamic offsets and multiple groups remain out of
+  scope. The pipeline copies its layout and dispatch borrows the live matching
+  group and resources through command-buffer completion.
+- **Backend mapping:** Metal binds the application group through native
+  compute-kernel buffer/texture/sampler slots. Vulkan maps the same group into
+  its RT descriptor set. Both mappings retain `native-exact` status, but their
+  evidence differs: Metal physically executes the material-bound path under
+  API Validation, while Vulkan currently has focused tests, builds, and forced
+  compile validation only. No physical Vulkan PTGI result is claimed.
+- **Scene and material evidence:** a full-resolution G-buffer records geometric
+  normal and ray distance. Exact secondary-hit material identity remains in a
+  separate CPU-derived terrain-column volume and the same deterministic atlas
+  used by rasterization; it is not guessed from height or packed into an
+  approximate G-buffer material channel.
+- **PTGI workload:** every covered full-resolution pixel keeps direct sun/moon
+  visibility separate and takes one cosine-weighted hardware-RT indirect
+  sample per frame. The one-bounce result is stored as scene-linear
+  `rgba16_float` radiance, temporally reprojected with rejection and clamping,
+  then reconstructed through four edge-aware a-trous passes before
+  composition.
+- **Bounds and discontinuities:** the TLAS covers the complete bounded 17 x 17
+  resident neighborhood, up to 289 indexed chunk sources. The material-bound
+  result fades toward the existing sky/ambient result at that source boundary.
+  History resets after resize, camera cuts, discontinuous celestial-light
+  changes, or source-signature/TLAS changes; these rules remain example policy,
+  not vkmtl core semantics.
+- **Presentation provenance:** the final pass uses independently authored fixed
+  exposure, bloom, vignette, filmic shoulder, output gamma, sharpening, and
+  dithering, with a subtle fixed saturation adjustment. Exposure and
+  saturation are not adaptive. SEUS PTGI E12 supplied visual-strategy
+  references only. No SEUS source, shader organization, constants, or assets
+  were copied, and neither source equivalence nor pixel identity is claimed.
+- **Evidence:** 780/780 tests, `run-api-guard`, the default build, package
+  consumer smoke, and forced Vulkan compilation passed. Under Metal API
+  Validation, smoke and default physically traversed all 9 and 81 resident
+  chunk sources, and a 300-frame smoke soak retained native submission,
+  finite nonzero direct, indirect, and reconstructed radiance, and zero invalid
+  samples. The three current observation groups are recorded in
+  `validation.md` rather than duplicated here.
+- **Evidence boundary:** the Metal smoke/default/soak observations came from a
+  dirty source snapshot. They establish physical implementation behavior, but
+  they are not clean exact-commit or release-candidate evidence. Vulkan PTGI
+  remains tests/build/forced-compile evidence only until the physical lane runs
+  on a supported Vulkan RT host.
+- **Compatibility:** the nullable fields preserve omitted-field source shapes,
+  but the complete binding ABI targets `v0.2.0`: inline data moves from binding
+  1 to 2, and `BindingError` gains reserved-slot and pipeline-layout mismatch
+  cases. This slice is not a `v0.1.x` patch allocation.
+
+### Post-Period 56 - Celestial-Disk Soft Visibility Refinement
+
+- **Goal:** soften the voxel world's directional shadow edges while retaining
+  the established E12-inspired presentation, full-resolution hardware-RT
+  workload, and bounded one-bounce indirect path.
+- **Source contract:** the sun and moon angular radii moved into the shared
+  celestial state. The sky disk and RT shadow sampler now consume the same
+  values, so the visible body size and emitted-direction cone cannot drift.
+- **Sampling:** each covered pixel retains one direct hardware shadow ray per
+  frame. A static per-pixel scramble plus an R2 temporal sequence selects a
+  uniform tangent-disk sample within the active angular radius. Diffuse
+  `NdotL` uses the center direction; only visibility uses the sampled
+  direction. The indirect bounce keeps its independent cosine sample, and a
+  secondary hit uses another independent disk sample.
+- **Reconstruction:** direct visibility owns two `rgba16_float` history
+  textures separate from indirect radiance. Temporal reprojection stores mean,
+  second moment, validity, and history length; geometry rejects use the same
+  depth/normal contract as indirect history. One 5 x 5 normal/depth-aware pass
+  writes final visibility, while indirect radiance keeps its four a-trous
+  passes. Existing scratch textures are reused after indirect reconstruction.
+- **Scope:** this is example-private rendering policy. It adds no vkmtl public
+  declaration, backend semantic row, source-compatibility promise, or generic
+  denoiser API. It also does not copy the HRR half-resolution pipeline or claim
+  SEUS source/pixel equivalence.
+- **Evidence:** `zig build test`, `zig build`, `zig build -Dvulkan`, and
+  `git diff --check` passed.
+  Under Metal API Validation, fixed-midnight smoke completed 24 frames with
+  86,867 reconstructed penumbra pixels, while fixed-noon default completed 48
+  frames with 237,145. Both retained native RT submission, full PTGI
+  validation, complete 9/81-source traversal, and zero invalid pixels.
+  Interactive noon and lower-sun inspection retained geometry-aligned shadows
+  with visibly softened transitions. Physical Vulkan execution remains a
+  deferred evidence lane.
+
+### Post-Period 56 - Voxel Biome And Daylight Balance Refinement
+
+- **Goal:** retain the completed material-bound one-bounce PTGI path while
+  darkening daytime occlusion correctly and adding deterministic vegetation and
+  water without changing vkmtl's public surface or pressure bounds.
+- **Lighting balance:** raster-only rendering retains its complete environment
+  term. When PTGI is active, raster environment lighting becomes a small
+  residual fill instead of adding a second full skylight contribution on top
+  of reconstructed indirect radiance. Direct light remains gated by the
+  independently reconstructed celestial-disk visibility signal.
+- **Terrain features:** world-coordinate coarse-cell anchors place compact
+  trunks and leaf crowns only when the complete footprint is ordinary grass,
+  dry, and sufficiently level. Snow and water footprints reject trees. A
+  separate low-frequency mask fills selected low sandy depressions to a fixed
+  water level without replacing their underlying ground classification. The
+  one-block chunk halo continues to sample the same global feature columns, so
+  face culling remains deterministic across positive and negative boundaries.
+- **Materials:** the deterministic atlas grew from seven to eleven tiles by
+  appending wood top/side, leaves, and water. The RT material volume now stores
+  one exact 16-byte column per world `(x,z)`: ground height, surface plus water
+  level, a wood span, and a leaf span. Zig, Slang, and the direct Metal MSL path
+  share the same packed byte-level contract, so secondary hits no longer infer
+  above-ground vegetation or lake material from height alone.
+- **Deliberate limit:** atlas alpha remains material height, chunk BLAS geometry
+  remains opaque, and the raster terrain pass has no transparency stage.
+  Consequently leaves and water are opaque voxel materials in this slice;
+  cutout foliage, transmissive/refraction water, and RT any-hit transparency
+  were not implied.
+- **Bounds and scope:** chunks remain `16 x 64 x 16`, resident profiles remain
+  9/81/289, and processing remains capped at two rebuilds and 8 MiB of uploads
+  per frame. All feature generation, daylight balance, material packing, and
+  presentation behavior remain example-private; no public API declaration or
+  backend semantic claim changed.
+- **Evidence:** `zig build test`, `zig build`, and `zig build -Dvulkan` passed.
+  Under Metal API Validation, 24-frame smoke produced 19,180 visible vertices,
+  88,473,600 primary rays, 118,340 reconstructed penumbra pixels, and zero
+  invalid pixels. The 48-frame default lane drained at 81 resident chunks and
+  produced 81,912 visible vertices, 176,947,200 rays, 258,864 penumbra pixels,
+  and zero invalid pixels. The 160-frame raster stress lane drained at 289
+  resident chunks with 242,336 visible vertices. Physical Vulkan execution of
+  the updated material-bound route remains deferred.
+
+### Post-Period 56 - Translucent Voxel Water Refinement
+
+- **Goal and scope:** refine lake presentation inside `voxel_world` without
+  changing vkmtl's public API, backend semantics, compatibility promises, or
+  the established chunk-pressure bounds. Leaves remain opaque.
+- **Geometry contract:** chunk meshing owns exact opaque and water index ranges
+  while retaining faces at the solid-water interface. The opaque range feeds
+  the terrain pass, G-buffer, and BLAS; water is excluded from G-buffer and
+  acceleration-structure geometry.
+- **Composition:** a second HDR pass draws water with premultiplied alpha,
+  disabled depth writes, and far-to-near chunk ordering. Admission requires
+  `DeviceFeatures.blend_state` and blendable `rgba16_float`; unsupported devices
+  retain a precise capability gate instead of an approximate path.
+- **Surface model:** four analytic waves use world coordinates and one
+  continuous 64-second phase, avoiding per-chunk seams and discontinuous time
+  resets. Fresnel response combines the water body with the current sky and
+  active sun or moon highlight.
+- **RT behavior:** because water is absent from the G-buffer and chunk BLASes,
+  primary, visibility, and indirect rays treat it as optically thin and can
+  reach the lake bed. The visible water surface remains raster composition;
+  this is not RT transmission or a second transparent geometry layer.
+- **Deliberate limits:** this slice adds no refraction, volumetric absorption,
+  RT reflections, multilayer transparency, or order-independent transparency.
+- **Evidence:** `zig build test`, `zig build`, and `zig build -Dvulkan` passed
+  on the current source. Under Metal API Validation, the 24-frame smoke lane
+  drained at 9 resident and zero pending chunks with 12 draws, 20,976 visible
+  vertices, 31,464 visible indices, 1,095,464 uploaded bytes, 88,473,600
+  primary rays, and zero invalid samples. The 48-frame default lane drained at
+  81 resident and zero pending chunks with 44 draws, 84,224 visible vertices,
+  126,336 visible indices, 7,080,312 uploaded bytes, 176,947,200 primary rays,
+  and zero invalid samples. Both final-integration runs retained native RT
+  submission and PTGI validation; physical Vulkan execution remains deferred.
+
+### Post-Period 56 - Refractive And RT-Reflected Voxel Water
+
+- **Goal and scope:** supersede the earlier alpha-composited lake model with
+  depth-sensitive transmission and reflection while keeping all policy and
+  resources private to `voxel_world`. No vkmtl public declaration, backend
+  semantic, compatibility promise, or chunk-pressure bound changed.
+- **Composition:** opaque sky and terrain render into a complete scene-linear
+  HDR target. Water resolves into an independent full-coverage HDR overlay so
+  its fragment shader can sample the opaque scene without a read/write feedback
+  hazard. Overlay alpha records water coverage rather than material opacity;
+  the presentation pass composites it before bloom and tone mapping.
+- **Surface and transmission:** a dedicated water G-buffer stores the same
+  world-continuous animated wave normal used for shading plus camera distance.
+  The water shader projects a refracted camera segment into screen space,
+  validates it against the opaque normal/distance G-buffer, and uses the
+  water-to-opaque distance as a bounded thickness estimate. RGB Beer-Lambert
+  transmittance attenuates the sampled opaque HDR radiance, and a water-colored
+  in-scattering term replaces absorbed light.
+- **Reflection:** the hybrid RT ray-generation pass clears the water reflection
+  target, reconstructs visible water points from the water G-buffer, and traces
+  one reflected ray against the opaque terrain TLAS. Opaque hits use the
+  existing material and direct/environment lighting; misses use the current
+  sky. Raster fallback leaves the target invalid, selecting the same sky
+  fallback in the Fresnel composition. Water remains absent from the TLAS, so
+  reflections do not contain another water layer and ordinary PTGI rays can
+  still reach the retained lake bed.
+- **Deliberate limits:** refraction can reuse only opaque data visible in the
+  current frame; off-screen or occluded geometry is unavailable. Nested and
+  underwater media, water-to-water reflection, caustics, multilayer
+  transparency, and order-independent transparency remain out of scope. The
+  reflection signal is one unfiltered ray per visible water pixel rather than
+  a recursive or temporally reconstructed reflection system.
+- **Validation contract:** finite RT runs read back reflection coverage,
+  radiance, and validity. A fixed-camera lane requires nonzero covered and lit
+  pixels plus zero invalid pixels and reports `rt_reflection_validated=true`;
+  autopilot reports the same counts and marker without requiring visible water.
+- **Evidence:** a fixed-camera 24-frame smoke run used `MTL_DEBUG_LAYER=1`, the
+  Metal backend, and required native RT, with a positive `API Validation
+  Enabled` marker. It submitted 24 RT dispatches and 88,473,600 primary rays,
+  reported 1,017,402 primary-hit pixels, 438,485 reflection-covered pixels,
+  438,485 lit reflection pixels, and zero invalid pixels, and ended with native
+  submission, visibility/PTGI/reflection validation, and
+  `voxel_world_pressure_test=ok`. The forced Vulkan build passes as compilation
+  evidence only; physical Vulkan execution of this water path remains pending.
+
+### Post-Period 56 - E12-Inspired Clean-Room Voxel Water Surface
+
+- **Goal and provenance:** refine the completed transmission/reflection route
+  toward the default SEUS PTGI E12 water character without changing its
+  resource graph, public API, or backend semantics. E12 informed visual
+  strategy only; its license precluded reuse, and no source, constants, shader
+  organization, or assets were copied.
+- **Surface:** six world-continuous analytic bands combine different scales,
+  directions, and temporal harmonics. Raster shading and the water G-buffer
+  share the same evaluated normal, with camera-distance and grazing-angle
+  stabilization to restrain distant shimmer and preserve coherent reflection.
+- **Transmission:** refraction displacement now scales with path thickness and
+  distance and rejects invalid UV/depth candidates before direct-pixel
+  fallback. A homogeneous single-scattering medium uses
+  `sigma_a = (0.240, 0.062, 0.014)` and `sigma_s = 0.070`. It applies no
+  painted blue body tint, leaving thin water predominantly transparent and
+  letting blue-green character emerge with depth.
+- **Reflection:** dielectric Fresnel uses `F0 = 0.02`, with a narrow
+  approximately 420-exponent sun/moon glint. Water rays are capped at 96 world
+  units while the opaque PTGI route retains 384. Misses evaluate a directional
+  day/night/twilight sky with a restrained horizon and the active sun or moon
+  disk and halo. The signal remains one unfiltered reflection sample per
+  visible water pixel.
+- **Deliberate limits:** foam, caustics, rain response, parallax water, TAA or
+  reflection denoising, nested/underwater media, water-to-water reflection,
+  off-screen refraction recovery, multilayer transparency, and OIT remain out
+  of scope.
+- **Evidence:** the refined source retained the strict fixed-noon Metal
+  24-frame counts: 24 RT dispatches, 88,473,600 primary rays, 1,017,402 primary
+  hits, 438,485 reflection-covered and lit pixels, and zero invalid pixels,
+  with native submission plus visibility/PTGI/reflection validation true. A
+  fixed-midnight 24-frame API Validation lane retained 438,485 covered pixels,
+  reported 429,947 lit pixels, and kept the same rays, hits, zero-invalid
+  result, and validation markers. The 24-frame Metal raster lane,
+  `zig build test`, and `zig build -Dvulkan` passed. Physical Vulkan execution
+  remains pending.
+
+### Post-Period 56 - Five-Minute Atmosphere, Clouds, And Daylight Balance
+
+- **Goal:** slow the example-private celestial presentation to a five-minute
+  cycle, give the sky and every RT environment consumer one coherent analytic
+  atmosphere/cloud model, and lower the daytime shadow floor without changing
+  public vkmtl API or backend semantics. The earlier 60-second cycle section
+  and its fixed-time commands remain historical evidence of that superseded
+  snapshot rather than current probe values.
+- **Clocks:** the 300-second celestial phase maps 0/75/150/225/300 seconds to
+  midnight, sunrise, noon, sunset, and wrapped midnight. The validation
+  override freezes only that celestial phase. World-anchored cloud wind uses
+  real elapsed time, and the existing water-wave phase keeps its independent
+  continuous 64-second loop.
+- **Atmosphere and clouds:** a clean-room, E12-inspired analytic atmosphere
+  responds to view and sun direction with a bright horizon, deep zenith, and
+  warm low-sun glow while retaining the existing moon and stars. A lower
+  self-shadowed cumulus layer and upper stretched cirrus layer appear in raster
+  sky and, on the hybrid route, RT miss/PTGI environment and hardware-RT water
+  reflection. Raster water fallback keeps the analytic current-sky tint and
+  does not evaluate procedural clouds or celestial disks. A smooth ground-
+  hemisphere fade prevents bright downward RT misses. RT cloud environment
+  work is deferred to actual reflection/PTGI misses and the outer traced-edge
+  blend. Dense cumulus gives full moving day/twilight shadows plus restrained
+  moonlight shadows. Active-light strength gates that attenuation so the
+  sun/moon switch happens at zero directional contribution. No E12 source,
+  constants, shader organization, textures, or assets were copied.
+- **Daylight balance:** daytime ambient changed from `0.52` to `0.44`; hybrid
+  raster daylight safety changed from `0.20` to `0.14`; RT secondary-hit
+  daylight environment changed from `0.18` to `0.13`; and traced-edge daylight
+  environment changed from `0.72` to `0.56`. Night raster safety remains
+  `0.20`, and direct sun, night ambient, water Fresnel, and celestial glint are
+  unchanged.
+- **Deliberate limits:** this remains a bounded analytic presentation. It does
+  not implement weather or rain, volumetric cloud raymarching, cloud textures,
+  cloud TAA, or a public atmospheric system.
+- **Evidence:** `zig build`, `zig build test`, and `zig build -Dvulkan` passed.
+  Under Metal API Validation, fixed-noon time `150` required-RT smoke completed
+  24 frames with 88,473,600 rays, 1,017,402 primary hits, 438,485 reflection-
+  covered and lit pixels, zero invalid pixels, every native/visibility/PTGI/
+  reflection marker true, and `rt_ms=9.992`. Fixed-midnight time `0` retained
+  the same ray, hit, and covered counts, reported 429,962 lit reflection pixels,
+  zero invalid pixels, all markers true, and `rt_ms=9.547`. A fixed-noon
+  24-frame Metal raster lane also passed. Default interactive required-RT noon
+  stabilized around 65-68 FPS after warmup and raster sky around 120 FPS on
+  the development machine; those frame rates are observations, not gates.
+
+### Post-Period 56 - Wider View And Background Chunk Meshing
+
+- **Goal and scope:** increase the ordinary interactive view from the former
+  9 x 9 default neighborhood to 13 x 13 while removing CPU terrain meshing
+  from the render thread. The current smoke/default/stress resident contract
+  is 9/169/289 chunks. The old 9/81/289 records above remain valid only for
+  their dated snapshots.
+- **CPU scheduler:** `voxel_world` owns one example-private worker and permits
+  one outstanding mesh ticket. Desired-set revisions issue a new ticket
+  identity, so late completions are discarded instead of being uploaded into
+  a newer world. If the worker cannot start, the same queue retains a
+  synchronous fallback. Interactive execution admits one completed mesh per
+  frame; finite validation admits two so bounded probes can drain without
+  weakening the 8 MiB per-frame upload ceiling.
+- **GPU boundary:** mesh completion does not make vkmtl command submission
+  asynchronous. Vertex/index upload, per-chunk BLAS build, queue commit, and
+  TLAS construction remain synchronous on the render thread. Normal TLAS
+  publication batches source additions for up to four frames; bootstrap,
+  queue drain, and source replacement rebuild immediately. Replaced BLAS
+  owners remain deferred until the replacement TLAS has been published, so a
+  live TLAS never references an already-retired source.
+- **Contract boundary:** the worker, tickets, admission budgets, and batching
+  policy are private to the example. They add no public API and no native-
+  semantic inventory row, and they do not alter the synchronous
+  `CommandBuffer.commit` or completion-handler contract.
+- **Metal RT evidence:** under Metal API Validation, a fixed-noon `150`
+  default run completed 96 frames without autopilot, drained 169 resident and
+  traced chunks, and reported 169 submitted/169 completed/zero failed/zero
+  stale CPU jobs. It built 169 BLAS objects and 22 TLAS versions, submitted 96
+  RT dispatches and 353,894,400 rays, and observed 2,404,265 primary hits,
+  862,626 direct-lit and 1,541,639 shadowed pixels, 2,403,729 indirect-lit and
+  2,404,265 reconstructed-lit pixels, 632,564 reflection-covered and lit
+  pixels, 298,276 reconstructed penumbra pixels, zero invalid pixels, and all
+  native/visibility/PTGI/reflection markers true. Background CPU mesh time
+  totaled 411.750 ms; synchronous upload and TLAS time totaled 179.797 ms and
+  18.437 ms. Frame p50/p95/max were 19.919/23.364/401.845 ms, with the maximum
+  including strict final readback.
+- **Metal raster evidence:** the matching fixed-noon default run completed 96
+  frames with 169 resident chunks, 81 visible and 88 culled, zero pending
+  work, 104 draws, 180,132 vertices, 270,198 indices, and 14,111,376 uploaded
+  bytes.
+- **Evidence boundary:** these observations came from the current development
+  snapshot and are not clean exact-release-commit evidence. The corresponding
+  physical Vulkan default run at 169 resident/traced chunks remains pending;
+  forced Vulkan compilation does not satisfy it.
+
+### Post-Period 56 - Three-Bounce Experimental Voxel PTGI
+
+- **Goal and provenance:** supersede the recorded one-bounce indirect shader
+  with a bounded clean-room experiment while retaining its resource graph,
+  temporal reconstruction, presentation, and public vkmtl surface. This is not
+  a claim that default SEUS PTGI E12 uses three bounces; E12 remains only a
+  visual-strategy reference under the earlier provenance limits.
+- **Path estimator:** every covered opaque pixel launches one path per frame
+  with at most three sequential cosine-weighted diffuse segments. Each hit
+  performs an independent sun/moon next-event sample, material albedo
+  propagates throughput, and terminal residual environment contributes at most
+  once. The visible water surface keeps its independent one-segment specular
+  reflection path.
+- **Execution boundary:** ray generation issues each trace sequentially and
+  the native pipeline keeps `max_recursion_depth=1`; no shader recursion,
+  public API, command behavior, or native-semantic row changed. The established
+  temporal and a-trous passes reconstruct the resulting radiance exactly as
+  before. Frame data carries nonzero x/z chunk bounds only when the published
+  TLAS contains the complete contiguous square for the active profile. Sparse
+  initial or moving subsets publish zero extent, so their diffuse misses cannot
+  sample environment. Once complete, residual environment and the older outer-
+  edge blend are both admitted only when the path is confirmed to cross
+  terrain top before a horizontal side. Side misses contribute nothing and
+  cannot leak sky light into second or third bounces.
+- **Diagnostics:** logs and the final pressure marker now report
+  `ptgi_bounces=3`. The legacy `primary_rays` name counts dispatch threads only
+  and does not include later diffuse or next-event segments.
+- **Metal default evidence:** under Metal API Validation, fixed-noon default
+  completed 96 frames with 169 resident chunks, zero pending work,
+  169 submitted/169 completed/zero failed/zero stale jobs, 22 TLAS builds, 96
+  dispatches, and `ptgi_bounces=3`. It reported 353,894,400 dispatch threads,
+  `rt_ms_per_frame=16.327`, 2,404,265 primary hits, 863,410 direct-lit and
+  1,540,855 shadowed pixels, 1,932,365 indirect-lit and 626,079 low-indirect
+  pixels, 2,404,258 reconstructed-lit pixels, 632,564 reflection-covered and
+  lit pixels, 297,535 reconstructed penumbra pixels, zero invalid pixels, and
+  every native/visibility/PTGI/reflection marker true. Frame p50/p95/max were
+  24.081/28.004/442.164 ms.
+- **Metal smoke evidence:** final-boundary fixed-noon smoke completed 24 frames
+  with nine resident chunks, zero pending work, `ptgi_bounces=3`,
+  `rt_ms_per_frame=10.767`, 1,017,402 primary hits, 431,231 direct-lit,
+  586,171 shadowed, 303,369 indirect-lit, 744,071 low-indirect, 1,017,398
+  reconstructed-lit, 438,485 reflection-covered/lit, 45,238 penumbra, zero
+  invalid pixels, and all markers true.
+  Fixed-midnight smoke retained the same resident/pending and hit counts with
+  `rt_ms_per_frame=11.248`, 431,228 direct-lit, 586,174 shadowed, 279,887
+  indirect-lit, 839,646 low-indirect, 960,442 reconstructed-lit, 438,485
+  reflection-covered, 429,973 reflection-lit, 53,592 penumbra, zero invalid
+  pixels, and all markers true.
+- **Performance and evidence boundary:** on the same fixed-noon default96
+  command, host, and final boundary logic, a temporary A/B with only the bounce
+  count set to one reported `rt_ms_per_frame=12.870`, p50/p95 20.960/23.583
+  ms, 2,137,634
+  indirect-lit, 507,522 low-indirect, and 2,404,265 reconstructed-lit pixels,
+  with all validation markers true. Three bounces reported 16.327 RT ms and
+  p50/p95 24.081/28.004 ms, about 26.9% more RT cost. The radiance-count
+  difference is not an unbiased energy comparison because terminal residual is
+  deferred until the final configured hit and side exits are conservative.
+  Frame maximum and load transients are not performance gates. The corrected
+  finite runs are dirty-source development observations, not clean release
+  candidate evidence. Physical Vulkan execution of this exact three-bounce
+  workload remains pending.
 
 ## Durable Historical Decisions
 

@@ -1,9 +1,17 @@
 # Native Semantic Coverage Inventory
 
-Status: Period 56 complete, updated 2026-07-16. Vulkan legacy RT and corrected
-canonical composition both have physical execution and visual-orientation
-evidence. The general raster-coordinate correction is implemented; its
-physical Vulkan raster and voxel reruns now pass.
+Status: Period 56 plus the post-Period-56 RT resource-binding and voxel PTGI
+slice complete, updated 2026-07-21. Vulkan legacy RT and corrected canonical
+composition both have physical execution and visual-orientation evidence.
+General raster-coordinate physical Vulkan evidence passes. The material-bound
+PTGI path has Metal physical execution; Vulkan has build, focused-test, and
+forced-compile validation only for this new path. A first Windows RTX attempt
+selected the Vulkan hybrid path and loaded all shaders but exposed an
+example-startup sampled-image transition error before the first streamed
+chunk. A follow-up interactive Windows RTX rerun no longer reproduced that
+startup failure after the guard; bounded PTGI pixel evidence remains pending.
+The current Metal PTGI records are dirty-source development snapshots, not
+exact release-commit evidence.
 
 This document is the authoritative inventory for backend semantic coverage. It
 answers a different question from `public-api-inventory.md`:
@@ -88,6 +96,62 @@ the top/bottom and facing contract. Physical Metal and Vulkan both report
 top-left raster/composition orientation; the corrected Vulkan run returned
 zero channel delta and all three voxel profiles drained pending work within
 their 9/81/289 resident bounds.
+The historical pre-PTGI textured hybrid-RT voxel slice preserved those bounds and added a
+deterministic seven-tile atlas, indexed per-chunk triangle BLAS objects, a
+then-nearest-49-instance TLAS, and full-resolution sun/sky visibility consumed by
+the raster pass. Metal API Validation and deterministic readback prove native
+instance traversal and nontrivial visibility. Metal compute dispatch now
+declares the bound TLAS and every BLAS referenced indirectly by that TLAS as
+read resources, preserving native residency throughout longer runs. Finite
+validation reads visibility after pending work drains and again on the final
+frame; a 300-frame Metal soak retained non-zero hit and occlusion counts.
+Vulkan shader/build/unit evidence passes, but a physical Vulkan hybrid run has
+not yet been recorded.
+The subsequent RT resource-binding slice reuses one ordinary bind group for
+application buffers, textures, and samplers. Metal lowers it to compute-kernel
+slots and Vulkan lowers it to the RT descriptor set; bindings 0/1/2 remain
+reserved for the AS, primary output, and inline data, while the application
+range is 3 through 14. The voxel example uses that contract for a
+material-aware `rgba16_float` hardware-RT result with one path of at most three
+sequential cosine-weighted diffuse segments per covered opaque pixel per frame,
+temporal accumulation with rejection and clamping, and four edge-aware a-trous
+passes before an independently authored fixed-exposure presentation. Every
+path hit performs independent sun/moon next-event estimation, albedo propagates
+throughput, and terminal residual environment is added once. Water keeps a
+separate one-segment specular reflection. Ray generation traces sequentially
+with native recursion depth one; this is example policy, not a new public or
+native RT semantic. The `primary_rays` diagnostic counts dispatch threads, not
+the additional path segments. Example-private frame data carries nonzero x/z
+chunk bounds only after the published TLAS contains the complete contiguous
+square for the active profile. Initial and moving sparse subsets publish zero
+extent, disabling diffuse-miss environment. Once complete, residual environment
+and the outer-edge blend are admitted only for a path confirmed to cross
+terrain top before a horizontal side; side misses contribute nothing and
+cannot leak later-bounce sky light. Camera, lighting, resize, and source
+discontinuities reset history; an outer 16-block band blends bounded indirect
+lighting back to the current sky environment only for a confirmed terrain-top
+exit. Finite acceptance rejects
+non-finite or negative raw/reconstructed radiance and requires nonzero direct,
+shadowed, indirect, and reconstructed pixels. The current bounded TLAS covers the complete
+17 x 17 resident neighborhood (up to 289 instances), and secondary hits read
+an exact material-column volume produced by the CPU terrain sampler. The SEUS
+package was a visual-strategy reference
+only: no source, shader organization, constants, or assets were copied, and no
+pixel identity is claimed. The clean-room experimental three-bounce refinement
+does not claim that default SEUS PTGI E12 uses three bounces. Metal API
+Validation physically executes complete 9- and 169-source smoke/default
+neighborhoods with `ptgi_bounces=3` on an Apple M4 Pro; the source
+bound remains 289. Vulkan unit/build/compile validation proves only the
+mapping and must not be reported as physical PTGI execution.
+The wider default neighborhood is fed by an example-private scheduler: one CPU
+mesh worker holds at most one ticket, rejects stale results, and falls back to
+synchronous meshing if worker startup fails. Interactive/finite admission is
+one/two completed meshes per frame under the existing 8 MiB upload limit. GPU
+upload, BLAS build, and command submission remain synchronous. TLAS publication
+normally batches four frames, with bootstrap, drain, and replacement forcing an
+immediate rebuild and old BLAS owners retiring only after replacement
+publication. This is workload policy, not a new semantic row or a change to
+the synchronous command-buffer contract.
 The additive headless slice creates real Metal/Vulkan device and queue owners
 without presentation objects. Metal has physical compute, transfer, and
 texture-backed offscreen evidence. The same `7d88ffe` Windows Vulkan run
@@ -177,7 +241,7 @@ develops a different lowering or support state.
 | RES-03 | Texture views with mip/layer ranges and exact current format | `resource` | `native-exact` | `native-exact` | `unit`; format reinterpretation is a separate incomplete semantic. |
 | RES-04 | Sampler filtering, addressing, LOD, comparison, anisotropy, normalized/unnormalized coordinates, and fixed border color | `resource` | `native-exact` | `native-exact` | `unit`; unnormalized coordinates use the documented shared constraint set and device gates still apply. |
 | RES-05 | Full-texture mipmap generation | `transfer` | `native-exact` | `native-exact` | `unit`; partial mip/layer ranges remain incomplete. |
-| RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit` plus Period 55 Metal `gpu-pixels`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. Period 55 admits sampled-plus-storage `rgba16_float` as the capability-gated accumulation format used by `ray_traced_scene` on both backends; the format does not impose a color-space or tone-mapping contract on generic caller-owned RT output. Period 56 bounds presentation to `bgra8_unorm_srgb` and `bgra8_unorm`; Metal advertises presentation only for its selected layer format, and Vulkan selects the exact standard-SDR pair or returns typed unsupported rather than choosing an arbitrary fallback. Other native formats remain capability-gated or unsupported. |
+| RES-06 | Finite portable texture/vertex formats and format capability queries | `resource`, `render` | `composed-exact` | `native-exact` | `unit` plus Period 55 Metal `gpu-pixels`; Period 47 covers the documented normalized, integer, floating-point, depth, stencil, and vertex-input set. Period 55 admits sampled-plus-storage `rgba16_float` as the capability-gated accumulation format used by `ray_traced_scene` on both backends; the post-Period-56 voxel PTGI example reuses that gate for scene-linear radiance. The format imposes no color-space, exposure, or tone-mapping contract on generic caller-owned RT output. Period 56 bounds presentation to `bgra8_unorm_srgb` and `bgra8_unorm`; Metal advertises presentation only for its selected layer format, and Vulkan selects the exact standard-SDR pair or returns typed unsupported rather than choosing an arbitrary fallback. Other native formats remain capability-gated or unsupported. |
 | RES-07 | Capability-gated shader-visible buffer GPU address | `resource`, `diagnostics` | `native-exact` | `native-exact` | `gpu-smoke` on Apple M4 Pro plus Vulkan unit/inspection; callers declare `shader_device_address`, creation checks the usable feature, and zero/unavailable native addresses return typed errors. |
 | RES-08 | Automatic/shared/managed/private portable storage behavior and CPU/GPU visibility boundaries | `resource`, `transfer` | `native-exact` | `composed-exact` | `gpu-pixels` on Metal plus Vulkan unit/inspection; Metal composes `didModifyRange` and `synchronizeResource`, Vulkan uses host-coherent managed buffers, and private CPU access is rejected. |
 | PRS-01 | Bounded SDR presentation request/selection, requested-versus-actual extent, exact current-drawable pipeline matching, terminal-safe resize, and legacy raw-copy compatibility | `presentation`, `render`, `ray_tracing` | `composed-exact` | `composed-exact` | Period 56 keeps request and selection separate, maps the selected BGRA8 format to the Metal layer or exact Vulkan surface pair, and rejects mismatched drawable pipelines before native bind/draw. Metal publishes resize only after depth allocation. Vulkan keeps healthy same-request resize cheap, forces recovery after present/acquire invalidation, re-queries changed requests, gates non-zero resize and clear on zero active command buffers, and gives clear a dedicated pool; destructive recreation failure permanently returns `SurfaceLost`. Legacy drawable RT is graphics-queue-only, dispatches into caller linear BGRA8, copies bytes unchanged, presents implicitly, and rejects duplicate present; Metal preflights drawable/extent/staging before compute. Deterministic/build/package evidence is complete. Physical Metal automatic/sRGB/linear runs retain the documented offscreen-readback boundary and selected-drawable smoke; both legacy formats submit three frames under API Validation. Vulkan legacy raw copy submits three frames with correctly oriented visible output. After its fullscreen Y-flip fix, canonical Vulkan submits, presents, and completes 3000 frames with the same top-left orientation. No HDR, tone mapping, gamma, or gamut conversion is part of the contract. |
@@ -196,9 +260,10 @@ develops a different lowering or support state.
 | REN-05 | Wireframe/line fill and depth bias | `render` | `native-exact` | `native-exact` | `unit`; native capability gates apply. |
 | REN-06 | Conservative rasterization | `render` | `incomplete` | `incomplete` | Public capability exists, but complete lowering/evidence is absent. |
 | REN-07 | Depth/stencil resolve and texture-view format reinterpretation | `render`, `resource` | `incomplete` | `incomplete` | Compatible linear/sRGB texture views and component swizzles are native-exact in Period 47; depth/stencil resolve remains typed unsupported. |
-| BND-01 | Ordinary render/compute bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative render/compute `gpu-pixels`. |
+| BND-01 | Ordinary render/compute bind groups, dynamic offsets, resource arrays | `binding` | `composed-exact` | `native-exact` | `unit` and representative render/compute `gpu-pixels`. Vulkan generically transitions sampled/storage textures before compute dispatch and render sampling, covers arrays and storage access masks, and makes compute writes visible to downstream shader stages. The new barrier route has focused/unit and forced-build evidence; its physical Vulkan refresh remains pending. |
 | BND-02 | Root/small constants | `binding` | `native-exact` | `native-exact` | `unit`; Metal bytes and Vulkan push-constant lowering are backend-specific. |
 | BND-03 | Bindless tables, descriptor indexing, and argument/Metal 4 compatible tables | `binding` | `composed-exact` | `native-exact` | Metal `gpu-smoke` covers a 65-slot argument buffer plus explicit resource-use residency; Vulkan descriptor-indexing feature enablement, set allocation/update/binding, and compatible pipeline layouts have unit/forced-build evidence. Raw Metal 4 table identity is not promised. |
+| BND-04 | One bounded RT application bind group over ordinary buffers, textures, samplers, and fixed resource arrays | `binding`, `ray_tracing` | `native-exact` | `native-exact` | Bindings 0/1/2 are reserved for AS/output/inline data; one group uses 3-14 without dynamic offsets. Metal lowers the group to compute-kernel buffer/texture/sampler slots and physically executes the material-column buffer, atlas texture, and sampler route under API Validation. The build-time shader path uses Slang Metal target reflection to normalize generated MSL resource namespaces back to vkmtl logical slots and fails conflicts instead of relying on target compaction; fixed arrays have reflection/unit evidence rather than physical PTGI coverage. Vulkan lowers the RT group to its descriptor set and currently has focused unit, full-build, and forced-compile validation for the new route. A first Windows RTX attempt reached hybrid selection and shader loading but an example startup frame bound undefined PTGI scratch after its render pass had begun, so no dispatch/pixel evidence was produced. A follow-up interactive rerun no longer reproduced the startup failure after the guard; bounded PTGI dispatch/pixel evidence remains pending. |
 | CMP-01 | Compute pipeline, direct dispatch, and ceil-composed logical-thread dispatch | `compute` | `native-exact` | `native-exact` | `gpu-pixels` through deterministic compute readback; shaders own out-of-logical-grid bounds checks after ceil composition. |
 | CMP-02 | Indirect compute dispatch and CPU-authored reusable dispatch lists | `compute`, `command` | `composed-exact` | `composed-exact` | `unit`; ordinary buffer-indirect dispatch is native, reusable slots use Metal ICB when available and exact direct dispatch expansion otherwise. GPU-authored mutation is excluded. |
 | CMP-03 | 32-bit integer storage-buffer/threadgroup atomics and threadgroup memory within queried limits | `compute` | `native-exact` | `native-exact` | `gpu-pixels` on Metal proves deterministic atomic/shared-memory output; Vulkan has unit/compile evidence and core semantic inspection. Storage-texture and wider atomic families are not promised. |
@@ -239,11 +304,11 @@ develops a different lowering or support state.
 | --- | --- | --- | --- | --- | --- |
 | GEO-01 | Tessellation pipeline and patch draw under the source-only artifact contract | `render` | `unsupported` | `native-exact` | Vulkan compiles schema-2 SPIR-V, enables tessellation, creates patch-list pipelines, and draws patches. The pinned Slang Metal target rejects hull/domain stages. |
 | GEO-02 | Resource-free mesh pipeline and dispatch; optional task/object stage separately gated | `render` | `native-exact` | `native-exact` | Physical Metal mesh rendering plus Vulkan forced-build/unit evidence. Pinned task/object compilation crashes, so usable task support stays false on both backends. |
-| RT-01 | Basic native acceleration structure, RT pipeline, caller-owned texture dispatch, and presentation | `ray_tracing` | `native-exact` | `native-exact` | Period 55 writes a generic caller-owned accumulation texture on both backends and leaves Vulkan output ready for fragment sampling. The `ray_traced_scene` fullscreen pass applies the sRGB EOTF to its reference values before the explicitly requested `bgra8_unorm_srgb` attachment performs the matching encode, preserving the established display bytes without making that transform a vkmtl RT semantic. Period 56 keeps this texture-plus-composition path canonical and makes legacy drawable dispatch use the caller's `bgra8_unorm` output followed by a raw byte transfer on both backends. Metal API Validation covers the canonical route plus three-frame legacy sRGB and linear runs with `trace_driver_submitted=true`. Vulkan canonical and legacy routes both build, submit, present, and finish; legacy visual orientation passes, and corrected canonical composition completed 3000 frames with the same top-left orientation. Device and format capability gates apply. |
-| RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | Metal physical evidence includes a TLAS over two distinct BLAS sources; Vulkan supports the same source array. Non-default instance metadata is outside the executable contract. |
-| RT-03 | Triangle and AABB BLAS geometry input | `ray_tracing` | `native-exact` | `native-exact` | Physical Metal headless evidence builds both forms. Metal AS allocation takes the maximum of triangle/AABB and ordinary/update native sizes, while command validation uses the selected plan's exact scratch size. For the current Vulkan single-geometry sizing templates, allocation likewise takes the component maximum across triangle/AABB geometry and all four update/compaction combinations because native build-size queries are not monotonic across flags; the first Period 56 Windows reruns exposed the earlier combined-flags upper-bound assumption before driver submission, and both post-fix routes subsequently built BLAS/TLAS objects and submitted RT work. Descriptor-exact sizing for arbitrary multi-geometry arrays is not established by this fix and remains a separate follow-up. Vulkan procedural scene evidence exercises AABB input. |
+| RT-01 | Basic native acceleration structure, RT pipeline, optional application resources, caller-owned texture dispatch, and presentation | `ray_tracing`, `binding` | `native-exact` | `native-exact` | Period 55 writes a generic caller-owned accumulation texture and Period 56 preserves canonical composition plus raw-copy legacy presentation without assigning color conversion to vkmtl. The later bounded bind group lets RT shaders read application material data and write auxiliary resources under BND-04. The voxel example now writes full-resolution `rgba16_float` material-aware radiance and direct visibility, launches one example-private diffuse path of at most three sequential cosine-weighted segments per covered opaque pixel, performs independent sun/moon next-event estimation at each hit, propagates throughput by albedo, and adds terminal residual environment once. Its frame data publishes nonzero x/z bounds only for a complete contiguous active-profile TLAS square; sparse initial/moving subsets use zero extent. Residual environment and the outer-edge blend require confirmed terrain-top escape, so side misses add nothing and cannot leak later-bounce sky light. Water reflection remains one segment. Ray generation traces sequentially with pipeline recursion depth one, so this does not add recursive-shader or public RT semantics. Temporal and four-pass a-trous reconstruction remain outside the RT command. Metal API Validation physically executes that material-bound path and its finite acceptance rejects invalid raw/reconstructed radiance while requiring nonzero direct and indirect results. Vulkan canonical and legacy RT retain earlier physical evidence. The new bind-group/PTGI route has build, unit, and forced-compile evidence; its first Windows RTX startup attempt selected the route but failed before dispatch because the example tried to bind undefined PTGI scratch inside an active render pass. A follow-up interactive rerun no longer reproduced that failure after the guard; bounded physical PTGI pixel evidence is still pending. Device, format, resource-usage, layout, and lifetime gates apply. |
+| RT-02 | Mesh BLAS/TLAS scene execution | `ray_tracing` | `native-exact` | `native-exact` | The voxel slice executes indexed per-chunk triangle BLAS objects and a TLAS covering the complete bounded 17 x 17 resident neighborhood, up to 289 sources. Vulkan instance storage covers the complete primitive count and supports either one repeated source or exactly N sources. Each Metal AS wrapper retains the build and traversal state needed for later maintenance and dispatch. TLAS source/instance replacement is transactional: failure restores the prior descriptor sources and instance contents, while successful build/update publishes the replacement state. Dispatch declares the TLAS plus its complete indirect BLAS set as read resources; pipeline-reflected AS kind is checked separately. Current physical Metal PTGI evidence covers complete 9/169-source smoke/default neighborhoods and is recorded in `validation.md`; 289 remains the executable source bound rather than a physical observation in this slice. Physical Vulkan evidence for this exact material-bound workload remains pending; earlier Vulkan multi-source and ordinary RT evidence still supports the semantic status. Non-default instance metadata remains outside the executable contract. |
+| RT-03 | Triangle and AABB BLAS geometry input | `ray_tracing` | `native-exact` | `native-exact` | Physical Metal evidence builds both forms and now includes indexed voxel triangles. Metal queries the real selected geometry descriptor, reserves the component maximum of ordinary/refit sizes, expands the result allocation when final geometry requires it, and rechecks final scratch capacity after TLAS sources are attached. Vulkan allocation takes the component maximum across triangle/AABB geometry and update/compaction variants; the voxel correction also makes indexed triangle primitive counts and TLAS instance allocation exact. Descriptor-exact Vulkan sizing for arbitrary multi-geometry arrays remains a separate follow-up. Vulkan procedural scene evidence exercises AABB input; physical Vulkan hybrid voxel execution is pending. |
 | RT-04 | Custom intersection execution | `ray_tracing` | `unsupported` | `native-exact` | Vulkan procedural pixels are observed. Metal schema-2 artifacts have no linked intersection function or driver-bound table. |
-| RT-05 | AS build-update, update/refit, and compact copy | `ray_tracing` | `native-exact` | `native-exact` | Metal physical stress covers 32 alternating maintenance operations plus compact copy. Vulkan uses native update and compact-copy commands with unit/forced-build evidence. |
+| RT-05 | AS build-update, update/refit, and compact copy | `ray_tracing` | `native-exact` | `native-exact` | Metal physical stress covers 32 alternating maintenance operations plus compact copy. Metal TLAS build/update commits wrapper state transactionally, and TLAS compact copy propagates the complete descriptor, backing-resource, traversal-dependency, and update-sizing state required for later maintenance and dispatch. Vulkan uses native update and compact-copy commands with unit/forced-build evidence. |
 | RT-06 | Post-build compacted-size query and result ownership | `ray_tracing` | `unsupported` | `unsupported` | Build/update sizing is native-query-backed for the admitted single-geometry execution paths; descriptor-exact Vulkan sizing for arbitrary multi-geometry arrays remains follow-up. No public asynchronous post-build compact-size result contract exists. |
 | RT-07 | Ray query from ordinary compute/render stages | `ray_tracing` | `unsupported` | `unsupported` | Metal has no identical inline-query contract. Vulkan extension/feature availability is diagnostic-only because ordinary stages cannot bind an AS through the current contract. |
 | RT-08 | Callable shaders and complex executable SBT/function-table layouts | `ray_tracing` | `unsupported` | `unsupported` | Schema 2 has no callable artifact or record-payload contract; planning counts do not create callable regions or multiple program groups. |
@@ -306,16 +371,19 @@ mark one backend incomplete/unsupported.
 
 ## Follow-Up Order
 
-The source audit and Periods 46-56 are complete. Metal
+The source audit, Periods 46-56, and the post-Period-56 RT resource-binding and
+voxel PTGI implementation are complete. Metal
 automatic/sRGB/linear offscreen pixels plus selected-drawable smoke and both
 legacy formats are recorded for Period 56. Vulkan legacy raw-copy physical
 evidence and the corrected canonical 3000-frame visual run are recorded. The
 general raster-coordinate correction has deterministic and physical Metal
 evidence. Corrected physical Vulkan asymmetric-raster and smoke/default/stress
-voxel evidence is also recorded; only a future exact-release-commit refresh is
-needed. The exactly-once gap-routing file is empty because all
-111 audited Metal semantic units now have an
-executable or precise unsupported outcome. New native-semantic implementation
+voxel raster evidence is also recorded. The material-bound PTGI route has
+physical Metal execution. Its Vulkan physical smoke/default lane and the
+future exact-release-commit refresh are still needed; unit, build, and forced-
+compile validation are not substitutes. The exactly-once gap-routing file is
+empty because all 111 audited Metal semantic units now have an executable or
+precise unsupported outcome. New native-semantic implementation
 periods must be created from a new SDK/baseline audit or an explicit decision
 to allocate one of the currently unsupported contracts; no incomplete Period
 45 route remains. Application-level workload periods such as Period 19 may

@@ -1,3 +1,4 @@
+const std = @import("std");
 const core = @import("../../core.zig");
 const debug = @import("debug.zig");
 const metal = @import("metal_bridge");
@@ -27,6 +28,12 @@ pub const AabbGeometryInput = struct {
     buffer: *MetalBuffer,
 };
 
+const BuildSizeQuery = union(enum) {
+    conservative,
+    triangles: core.AccelerationStructureGeometryDescriptor,
+    aabbs: core.AccelerationStructureGeometryDescriptor,
+};
+
 pub fn init(
     owner: *MetalClearScreen,
     descriptor: core.AccelerationStructureDescriptor,
@@ -52,7 +59,7 @@ pub fn init(
     };
 }
 
-pub fn queryBuildSizes(
+pub fn queryConservativeBuildSizes(
     owner: *MetalClearScreen,
     descriptor: core.AccelerationStructureDescriptor,
 ) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
@@ -64,10 +71,55 @@ pub fn queryBuildSizes(
         @intFromBool(descriptor.allow_update),
         &sizes,
     ));
-    return .{
-        .result_size = sizes.result_size,
-        .scratch_size = sizes.scratch_size,
-        .update_scratch_size = sizes.update_scratch_size,
+    return buildSizesFromNative(sizes);
+}
+
+pub fn queryBuildSizes(
+    owner: *MetalClearScreen,
+    descriptor: core.AccelerationStructureBuildDescriptor,
+) core.AdvancedFeatureError!core.AccelerationStructureBuildSizes {
+    var sizes: metal.vkmtl_metal_acceleration_structure_build_sizes = undefined;
+    switch (try buildSizeQuery(descriptor)) {
+        .conservative => return queryConservativeBuildSizes(owner, descriptor.acceleration_structure),
+        .triangles => |geometry| try checkAccelerationStructure(
+            metal.vkmtl_metal_acceleration_structure_query_triangle_sizes(
+                owner.handle,
+                geometry.primitive_count,
+                geometry.resolvedVertexStride(),
+                geometry.resolvedVertexCount(),
+                metalIndexType(geometry.index_type),
+                @intFromBool(geometry.is_opaque),
+                @intFromBool(descriptor.acceleration_structure.allow_update),
+                &sizes,
+            ),
+        ),
+        .aabbs => |geometry| try checkAccelerationStructure(
+            metal.vkmtl_metal_acceleration_structure_query_aabb_sizes(
+                owner.handle,
+                geometry.primitive_count,
+                geometry.aabb_stride,
+                @intFromBool(geometry.is_opaque),
+                @intFromBool(descriptor.acceleration_structure.allow_update),
+                &sizes,
+            ),
+        ),
+    }
+    return buildSizesFromNative(sizes);
+}
+
+fn buildSizeQuery(
+    descriptor: core.AccelerationStructureBuildDescriptor,
+) core.AdvancedFeatureError!BuildSizeQuery {
+    if (descriptor.geometries.len == 0 or descriptor.acceleration_structure.kind == .top_level) {
+        return .conservative;
+    }
+    if (descriptor.geometries.len != 1) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureDescriptor;
+    }
+    return switch (descriptor.geometries[0].kind) {
+        .triangles => .{ .triangles = descriptor.geometries[0] },
+        .aabbs => .{ .aabbs = descriptor.geometries[0] },
+        .instances => core.AdvancedFeatureError.InvalidAccelerationStructureDescriptor,
     };
 }
 
@@ -111,7 +163,9 @@ pub fn setTriangleGeometry(
         descriptor.index_buffer_offset,
         metalIndexType(descriptor.index_type),
         descriptor.primitive_count,
+        @intFromBool(descriptor.is_opaque),
     ));
+    self.refreshBuildSizes();
 }
 
 pub fn setAabbGeometry(
@@ -128,6 +182,15 @@ pub fn setAabbGeometry(
         descriptor.primitive_count,
         @intFromBool(descriptor.is_opaque),
     ));
+    self.refreshBuildSizes();
+}
+
+pub fn refreshBuildSizes(self: *MetalAccelerationStructure) void {
+    self.sizes_value = .{
+        .result_size = metal.vkmtl_metal_acceleration_structure_result_size(self.handle),
+        .scratch_size = metal.vkmtl_metal_acceleration_structure_scratch_size(self.handle),
+        .update_scratch_size = metal.vkmtl_metal_acceleration_structure_update_scratch_size(self.handle),
+    };
 }
 
 fn accelerationStructureKind(
@@ -147,6 +210,16 @@ fn metalIndexType(index_type: core.AccelerationStructureIndexType) c_uint {
     };
 }
 
+fn buildSizesFromNative(
+    sizes: metal.vkmtl_metal_acceleration_structure_build_sizes,
+) core.AccelerationStructureBuildSizes {
+    return .{
+        .result_size = sizes.result_size,
+        .scratch_size = sizes.scratch_size,
+        .update_scratch_size = sizes.update_scratch_size,
+    };
+}
+
 fn checkAccelerationStructure(status: metal.vkmtl_metal_status) core.AdvancedFeatureError!void {
     return switch (status) {
         metal.VKMTL_METAL_STATUS_OK => {},
@@ -159,4 +232,43 @@ fn checkAccelerationStructure(status: metal.vkmtl_metal_status) core.AdvancedFea
         => core.AdvancedFeatureError.InvalidAccelerationStructureResources,
         else => core.AdvancedFeatureError.UnsupportedAccelerationStructures,
     };
+}
+
+test "Metal AS size queries preserve concrete BLAS geometry" {
+    const indexed_triangle = core.AccelerationStructureGeometryDescriptor{
+        .kind = .triangles,
+        .primitive_count = 32,
+        .vertex_count = 24,
+        .vertex_stride = 36,
+        .index_type = .uint32,
+        .index_count = 96,
+        .is_opaque = false,
+    };
+    const triangle_query = try buildSizeQuery(.{
+        .acceleration_structure = .{ .kind = .bottom_level, .primitive_count = 32 },
+        .geometries = &.{indexed_triangle},
+    });
+    try std.testing.expectEqual(core.AccelerationStructureIndexType.uint32, triangle_query.triangles.index_type);
+    try std.testing.expectEqual(@as(u32, 36), triangle_query.triangles.resolvedVertexStride());
+    try std.testing.expect(!triangle_query.triangles.is_opaque);
+
+    const aabb_query = try buildSizeQuery(.{
+        .acceleration_structure = .{ .kind = .bottom_level, .primitive_count = 7 },
+        .geometries = &.{.{
+            .kind = .aabbs,
+            .primitive_count = 7,
+            .aabb_stride = 32,
+            .is_opaque = true,
+        }},
+    });
+    try std.testing.expectEqual(@as(u32, 32), aabb_query.aabbs.aabb_stride);
+    try std.testing.expect(aabb_query.aabbs.is_opaque);
+}
+
+test "Metal AS size queries reserve conservative TLAS capacity" {
+    const query = try buildSizeQuery(.{
+        .acceleration_structure = .{ .kind = .top_level, .primitive_count = 4 },
+        .geometries = &.{.{ .kind = .instances, .primitive_count = 4 }},
+    });
+    try std.testing.expect(query == .conservative);
 }

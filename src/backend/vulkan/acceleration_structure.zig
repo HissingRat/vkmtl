@@ -85,14 +85,17 @@ pub fn init(
     errdefer storage.deinit(gc);
 
     const triangle_bytes = std.mem.sliceAsBytes(fallback_triangle_vertices[0..]);
-    const instance_bytes = zeroedInstanceBytes();
-    const geometry_bytes = switch (descriptor.kind) {
+    const geometry_size: u64 = switch (descriptor.kind) {
+        .bottom_level => triangle_bytes.len,
+        .top_level => topLevelInstanceBufferSize(descriptor.primitive_count),
+    };
+    const geometry_initial_bytes: ?[]const u8 = switch (descriptor.kind) {
         .bottom_level => triangle_bytes,
-        .top_level => instance_bytes[0..@sizeOf(vk.AccelerationStructureInstanceKHR)],
+        .top_level => null,
     };
     var geometry = createBuffer(
         gc,
-        geometry_bytes.len,
+        geometry_size,
         .{
             .acceleration_structure_build_input_read_only_bit_khr = true,
             .shader_device_address_bit = true,
@@ -101,7 +104,7 @@ pub fn init(
             .host_visible_bit = true,
             .host_coherent_bit = true,
         },
-        geometry_bytes,
+        geometry_initial_bytes,
     ) catch return core.AdvancedFeatureError.UnsupportedAccelerationStructures;
     errdefer geometry.deinit(gc);
 
@@ -276,16 +279,19 @@ pub fn writeTopLevelInstances(
     self: *VulkanAccelerationStructure,
     sources: []const *const VulkanAccelerationStructure,
 ) core.AdvancedFeatureError!void {
-    if (sources.len == 0 or sources.len > self.primitive_count) {
-        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
-    }
     if (self.kind != .top_level) {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
     }
+    const instance_count: usize = @intCast(self.primitive_count);
+    const instance_bytes = topLevelInstanceBufferSize(self.primitive_count);
+    if (instance_bytes > self.geometry.size) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+    _ = try topLevelInstanceSourceIndex(self.primitive_count, sources.len, 0);
     const mapped = self.gc.dev.mapMemory(
         self.geometry.memory,
         0,
-        @sizeOf(vk.AccelerationStructureInstanceKHR) * sources.len,
+        instance_bytes,
         .{},
     ) catch {
         return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
@@ -293,7 +299,8 @@ pub fn writeTopLevelInstances(
     defer self.gc.dev.unmapMemory(self.geometry.memory);
 
     const dst: [*]vk.AccelerationStructureInstanceKHR = @ptrCast(@alignCast(mapped));
-    for (sources, 0..) |source, i| {
+    for (0..instance_count) |i| {
+        const source = sources[try topLevelInstanceSourceIndex(self.primitive_count, sources.len, i)];
         if (source.kind != .bottom_level or !source.built_value or source.device_address == 0) {
             return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
         }
@@ -504,8 +511,48 @@ test "Vulkan AS storage sizing covers all update-compaction combinations" {
     try std.testing.expect(storage_update_compaction_variants[3].allow_compaction);
 }
 
-fn zeroedInstanceBytes() [@sizeOf(vk.AccelerationStructureInstanceKHR)]u8 {
-    return [_]u8{0} ** @sizeOf(vk.AccelerationStructureInstanceKHR);
+fn topLevelInstanceBufferSize(primitive_count: u32) u64 {
+    return @as(u64, primitive_count) * @sizeOf(vk.AccelerationStructureInstanceKHR);
+}
+
+fn topLevelInstanceSourceIndex(
+    primitive_count: u32,
+    source_count: usize,
+    instance_index: usize,
+) core.AdvancedFeatureError!usize {
+    const resolved_primitive_count: usize = @intCast(primitive_count);
+    if (resolved_primitive_count == 0 or instance_index >= resolved_primitive_count) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+    if (source_count != 1 and source_count != resolved_primitive_count) {
+        return core.AdvancedFeatureError.InvalidAccelerationStructureResources;
+    }
+    return if (source_count == 1) 0 else instance_index;
+}
+
+test "Vulkan TLAS instance sources repeat one source or map exactly" {
+    try std.testing.expectEqual(
+        @as(u64, 4 * @sizeOf(vk.AccelerationStructureInstanceKHR)),
+        topLevelInstanceBufferSize(4),
+    );
+    for (0..4) |instance_index| {
+        try std.testing.expectEqual(
+            @as(usize, 0),
+            try topLevelInstanceSourceIndex(4, 1, instance_index),
+        );
+        try std.testing.expectEqual(
+            instance_index,
+            try topLevelInstanceSourceIndex(4, 4, instance_index),
+        );
+    }
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        topLevelInstanceSourceIndex(4, 2, 0),
+    );
+    try std.testing.expectError(
+        core.AdvancedFeatureError.InvalidAccelerationStructureResources,
+        topLevelInstanceSourceIndex(4, 4, 4),
+    );
 }
 
 fn createBuffer(

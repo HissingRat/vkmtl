@@ -43,7 +43,7 @@ which mode applies.
 | Offscreen texture | `zig build run-offscreen-texture` | Window | Offscreen triangle sampled onto the presented quad; pixel mode prints `render pixel regression ok backend=... max_channel_delta=...`. |
 | MSAA triangle | `zig build run-msaa-triangle` | Window | Multisampled triangle resolved and sampled into the drawable. |
 | Rainbow cube | `zig build run-rainbow-cube` | Window | Rotating textured cube with depth and indexed drawing. |
-| Voxel world | `zig build run-voxel-world` | Window; profile/frame-limit/autopilot envs provide bounded finite runs | Bounded visible-face chunk renderer with atlas materials, camera/culling, streaming, metrics, and `voxel_world_pressure_test=ok`. |
+| Voxel world | `zig build run-voxel-world` | Window; profile/frame-limit/autopilot/RT envs provide bounded finite runs | Chunk-continuous terrain with deterministic trees and lakes, clean-room E12-inspired analytic water waves and atmosphere/clouds, screen-space refraction, Beer-Lambert absorption/single-scattering, optional opaque-TLAS RT reflections, a five-minute sun/moon/star cycle, FPS/title UI, material-bound three-segment diffuse PTGI, HDR presentation, metrics, and `voxel_world_pressure_test=ok`. |
 | Transfer readback | `zig build run-transfer-readback` | Auto-exit | Exact copies pass and print `transfer readback ok`. |
 | Compute readback | `zig build run-compute-readback` | Auto-exit | Storage buffer/texture bytes match and print `compute readback ok`. |
 | Capability dump | `zig build run-capability-dump` | Auto-exit | Console reports requested/selected presentation formats, then backend/adapter, features, limits, formats, and diagnostics. |
@@ -213,39 +213,263 @@ The Slang source lives beside the example:
 examples/rainbow_cube/shaders/rainbow_cube.slang
 ```
 
-## Voxel World Pressure Test
+## Day/Night Material-Bound Hardware-RT PTGI Voxel World
 
-`examples/voxel_world` is the completed bounded Minecraft-like renderer
-pressure test. It uses deterministic `16 x 64 x 16` chunks, visible-face CPU
-meshing with cross-chunk neighbor checks, per-chunk vertex/index buffers, a
-generated atlas, reflection-derived layouts, camera uniforms, depth/back-face
-culling, CPU chunk culling, and bounded rebuild/upload work. It imports no
-backend-private API.
+`examples/voxel_world` preserves bounded `16 x 64 x 16` chunk streaming,
+visible-face CPU meshing, and culling while expanding the default view radius
+from the historical 4 to 6 chunks. The current smoke/default/stress resident
+limits are 9/169/289, with 3 x 3, 13 x 13, and 17 x 17 grids. Its deterministic
+748 x 68 sRGB atlas has eleven face-specific
+grass, dirt, stone, sand, snow, wood, leaves, and water tiles with replicated
+borders. Atlas alpha adds shader-side height-detail normals. The example has no
+atlas mipmaps yet.
 
-The `smoke`, `default`, and `stress` profiles use radii 1, 4, and 8, bounding
-resident grids to 9, 81, and 289 chunks respectively. Select a profile with
-`VKMTL_VOXEL_PROFILE`; the default is `default`. `VKMTL_VOXEL_FRAME_LIMIT=N`
-provides an exact finite run and `VKMTL_VOXEL_AUTOPILOT=1` moves the camera and
-requests periodic rebuilds.
+The current world uses deterministic fixed-point multi-scale continentalness,
+erosion, ridge, and detail fields for height, plus temperature and moisture for
+grass, sand, and snow surfaces. World-coordinate sampling and a one-block mesh
+halo keep terrain continuous across chunk boundaries. Deterministic cell
+placement adds wood-and-leaf trees to ordinary grass terrain while excluding
+snow, water footprints, and unsuitable slopes. A lowland mask fills selected
+sand depressions to a fixed water level. Trees participate in both the raster
+mesh and opaque RT material classification. Solid-water interface faces remain
+in the opaque range, so lake beds and shoreline walls remain visible through
+the surface. Leaves remain opaque.
 
-Run it interactively or as a deterministic-control finite pressure run:
+CPU terrain meshing uses one background worker with exactly one outstanding
+job/result. Interactive rendering never waits for that worker and publishes at
+most one completed mesh to GPU resources per frame. Finite validation waits for
+deterministic drain and may publish at most two per frame; both routes retain an
+8 MiB per-frame upload budget. Stream tickets discard completions made stale by
+a neighborhood move or replacement request. Worker-spawn failure prints a
+diagnostic and falls back to synchronous CPU meshing.
+
+GPU buffer upload, BLAS construction, and TLAS construction remain synchronous
+render-thread operations. Ordinary TLAS additions coalesce for at most four
+frames; bootstrap, stream drain, and replacement rebuild immediately. The
+change removes CPU meshing waits from interactive frames without claiming a
+fully asynchronous GPU publication path.
+
+Opaque sky and terrain render into a complete scene-linear HDR target. Water
+then renders into a separate full-coverage HDR overlay, allowing its shader to
+sample the opaque target without feedback; the presentation pass composites
+the overlay before postprocessing. Overlay alpha is a coverage mask rather
+than material opacity. The current clean-room, SEUS PTGI E12-inspired surface
+uses an independent 64-second loop and six world-continuous analytic bands at
+different scales, directions, and temporal harmonics. Raster shading and the
+parallel water G-buffer evaluate the same normal, with distance- and
+grazing-aware stabilization. No E12 source, constants, shader organization, or
+assets are copied.
+
+The water shader projects a thickness- and distance-aware refracted camera
+segment into screen space and rejects invalid UV or opaque-depth candidates.
+The accepted water-to-opaque distance estimates path length. A homogeneous
+medium uses `sigma_a = (0.240, 0.062, 0.014)` and `sigma_s = 0.070` for RGB
+Beer-Lambert transmission and single scattering, with no painted blue body
+tint. With hybrid RT enabled, each visible water pixel traces one reflection
+ray, capped at 96 world units, against the opaque terrain TLAS; opaque PTGI
+rays retain their independent 384-unit bound. Opaque hits receive
+material/direct/environment shading. Misses evaluate a directional
+day/night/twilight sky with a restrained horizon and the active sun or moon
+disk and halo. Raster mode uses the sky fallback. A dielectric `F0 = 0.02` and
+a narrow approximately 420-exponent celestial glint complete the Fresnel
+composition.
+
+This bounded model cannot recover off-screen or hidden screen-space refraction
+data. Water is absent from the TLAS, so reflection rays see only opaque
+terrain, while ordinary PTGI rays still pass through water to the retained
+lake bed. Foam, caustics, rain response, parallax water, temporal anti-aliasing
+and reflection denoising, nested or underwater media, water-to-water
+reflection, off-screen refraction recovery, multi-layer transparency, and
+order-independent transparency are not implemented. Reflection remains one
+unfiltered sample per visible water pixel. One example-private 300-second clock
+reaches midnight, sunrise, noon, sunset, and wrapped midnight at
+0/75/150/225/300 seconds. It drives
+continuously blended night/twilight/day sky colors, opposite sun/moon
+directions, daylight-faded twinkling stars, raster terrain lighting, and the
+hybrid-RT light direction and angular radius. An example-private CPU 5x7 font
+and alpha-blended UI pipeline draw a right-aligned FPS counter and the ESC title
+overlay without adding public vkmtl API.
+
+A clean-room E12-inspired atmosphere evaluates view and sun direction to keep
+a bright horizon, deep zenith, and warm low-sun glow around the existing moon
+and stars. World-anchored lower self-shadowed cumulus and upper stretched
+cirrus move on an independent real-time wind clock. They appear consistently
+in the raster sky and, on the hybrid path, the RT miss/PTGI environment and
+hardware-RT water reflections. Raster water fallback keeps the analytic
+current-sky tint without procedural clouds or celestial disks. The downward
+ground hemisphere fades smoothly instead of producing bright downward RT
+misses. RT cloud environment work is deferred to an actual reflection miss or
+a diffuse path whose verified terrain-top escape admits its miss/edge
+environment. Dense cumulus produces full moving
+day/twilight cloud shadows plus restrained moonlight shadows. Active-light
+strength gates that attenuation, so the sun/moon direction handoff occurs at
+zero directional contribution. No E12 source, constants, shader organization,
+textures, or assets are copied. This is an analytic bounded cloud model, not
+weather or rain, a volumetric raymarch, cloud TAA, or a public atmosphere API.
+
+`VKMTL_VOXEL_RT=auto|off|required` controls its optional hybrid path. `auto` is
+the default and falls back to raster when native RT, storage buffers, or the
+required `rgba16_float`/depth usages are not executable. `off` preserves the
+raster pressure lane. `required` returns a typed error instead of falling
+back. HDR/G-buffer composition requires `blend_state`, `independent_blend`, at
+least three simultaneous color attachments, sampled/filterable/linearly
+filterable/color-attachment `rgba16_float`, and a `depth32_float` attachment;
+it does not require `rgba16_float` to be blendable. Hybrid reflection
+additionally requires `rgba16_float` storage and copy-source/copy-destination
+support through the existing RT capability gate. The example fails explicitly
+if the selected route's capabilities are absent.
+
+When active, resident chunks own indexed triangle BLAS objects and the TLAS
+covers the complete bounded 17 x 17 resident neighborhood, up to 289
+instances. The opaque G-buffer and BLAS consume only the opaque index range,
+while the parallel water G-buffer consumes the visible water range. RT shadow
+and bounce rays therefore pass through water to the retained lake bed. Every
+full-resolution opaque surface pixel traces one stochastic diffuse path per
+frame with up to three cosine-weighted segments. Each hit performs an
+independent sun/moon next-event-estimation visibility sample, allowing direct
+illumination to accumulate through the third diffuse interaction. All hits
+read a material-column volume generated by the same CPU terrain sampler and
+sample the same opaque block-atlas materials as rasterization. Frame data
+receives nonzero TLAS x/z origin and extent only when the published TLAS holds
+the complete contiguous square for the selected profile. Sparse bootstrap or
+moving subsets use zero extent, so their diffuse misses cannot sample the
+environment. With a complete square, a miss evaluates the environment only if
+an upward ray reaches the terrain top before either horizontal boundary. The
+outer traced-edge environment mix requires the same path-level escape proof,
+so a side miss cannot add sky back through that blend. The residual environment
+approximation is added only at the terminal configured hit. Scene-linear
+`rgba16_float` indirect radiance goes through light-aware temporal
+reprojection/clamping and four edge-aware a-trous passes. Direct visibility has
+an independent temporal mean/moment history and one normal/depth-aware spatial
+pass, so raster composition consumes a reconstructed penumbra rather than the
+raw binary ray result. The outer 16 blocks of the traced neighborhood fade
+indirect lighting to the current sky environment.
+
+The native pipeline remains at `max_recursion_depth = 1` because ray generation
+issues the diffuse traces sequentially. Water remains a separate one-segment
+specular RT path and its reflection result is not denoised.
+
+Daytime ambient and the hybrid raster/RT environment floors are reduced so
+traced indirect lighting remains the primary skylight source and daytime
+shadows stay darker. Raster-only mode retains its complete environment
+response. Direct sun, night ambient, water Fresnel, and the narrow celestial
+glint are unchanged.
+
+An independently authored SEUS-PTGI-E12-default-inspired fixed-exposure
+presentation pass finishes the linear HDR scene with restrained bloom,
+sharpening, vignette, a filmic shoulder, subtle saturation, dithering, and
+exactly one output transfer. It copies no SEUS
+shader, constants, organization, or assets; the target is similar default
+color character, not source or pixel identity. This is bounded three-segment
+diffuse hybrid PTGI plus one unfiltered opaque-scene reflection ray per visible
+water pixel. E12's default explicit reflection/diffuse chain is not a
+three-bounce prescription; this is a clean-room experimental enhancement, not
+a claim about E12's default behavior. It is not a general recursive path
+tracer, recursive reflection system, or production denoiser.
+
+Run it interactively, force raster, or require the Metal hybrid path:
 
 ```sh
 zig build run-voxel-world
-VKMTL_VOXEL_PROFILE=smoke VKMTL_VOXEL_FRAME_LIMIT=24 VKMTL_VOXEL_AUTOPILOT=1 VKMTL_BACKEND=metal zig build run-voxel-world
-zig build run-voxel-world -Dvulkan
+VKMTL_VOXEL_RT=off VKMTL_VOXEL_PROFILE=smoke VKMTL_VOXEL_FRAME_LIMIT=24 VKMTL_VOXEL_AUTOPILOT=1 VKMTL_BACKEND=metal zig build run-voxel-world
+MTL_DEBUG_LAYER=1 VKMTL_VOXEL_RT=required VKMTL_VOXEL_PROFILE=default VKMTL_VOXEL_FRAME_LIMIT=96 VKMTL_VOXEL_CYCLE_TIME=150 VKMTL_BACKEND=metal zig build run-voxel-world
 ```
 
-Controls are `W/A/S/D` for horizontal movement, `Q/E` for vertical movement,
-mouse or arrow keys for look, Shift for faster movement, `R` to rebuild the
-current chunk, and Escape to exit. The exit report includes resident,
-visible/culled and pending chunks; draws/vertices/indices; rebuilds, retirements,
-uploads and allocations; CPU mesh/encode/commit time; and frame p50/p95/max.
+Controls are `W/A/S/D` for horizontal movement, Space to ascend, Shift to
+descend, Ctrl for faster movement, mouse or arrow keys for look, and `R` to
+rebuild the current chunk. Escape toggles a translucent title screen containing
+`VKMTL VOXEL WORLD` and `Press ESC to continue`; a second press resumes input,
+and window close remains the exit action. The FPS label stays in the upper-right
+corner. The canonical 96-frame default command intentionally leaves autopilot
+disabled so the complete 13 x 13 neighborhood drains around a fixed camera.
+Finite success prints `voxel_world_pressure_test=ok`; if work is still pending
+at the frame limit, the example instead prints
+`voxel_world_pressure_test=incomplete` and returns
+`VoxelWorldStreamingNotDrained`. The report includes pressure/timing metrics,
+`streaming=background|sync_fallback`, submitted/completed/stale/failed mesh-job
+counts, and cumulative mesh/upload/TLAS times. For hybrid runs it also includes
+`ptgi_bounces=3`, BLAS/TLAS/ray counts, native submission, and deterministic
+finite/nonnegative direct, indirect, reconstructed-radiance, reconstructed-
+visibility, and water-reflection readback. A fixed-camera finite RT run requires
+nonzero covered and lit reflection pixels plus zero invalid reflection pixels,
+then prints `rt_reflection_validated=true`; autopilot may turn away from all
+lakes and therefore only reports `rt_reflection_pixels`, `rt_reflection_lit`,
+and the marker without requiring it. The report also includes a diagnostic
+penumbra-pixel count. `primary_rays` remains the number of ray-generation
+dispatch threads, not the number of sequential diffuse path segments.
+`VKMTL_VOXEL_CYCLE_TIME=S` freezes the private 300-second celestial clock for
+deterministic midnight, sunrise, or noon inspection; `0`, `75`, and `150` are
+the respective probe values. Cloud motion and the independent 64-second water
+loop continue from real elapsed time. The override is not public vkmtl API. An
+earlier transparent-water lane completed Metal API Validation smoke/default at
+24/48 frames. The subsequent refraction, RGB absorption/in-scattering, and
+RT-reflection revision completed its strict fixed-camera 24-frame Metal API
+Validation smoke with 24 RT dispatches, 88,473,600 primary rays, 1,017,402
+primary-hit pixels, 438,485 reflection-covered pixels, 438,485 lit reflection
+pixels, and zero invalid pixels. It ended with native submission plus
+visibility, PTGI, and reflection validation all true. The subsequent
+E12-inspired clean-room surface refinement retained those counts and markers
+as its canonical fixed-noon evidence. A fixed-midnight 24-frame
+lane retained 88,473,600 rays, 1,017,402 primary hits, and 438,485 covered
+reflection pixels, with 429,947 lit reflection pixels, zero invalid pixels, and
+all native/visibility/PTGI/reflection markers true. The refinement also passed
+a 24-frame Metal raster lane, `zig build test`, and the forced Vulkan build.
+The latter is compilation evidence only; the refractive
+water and reflection path has no physical Vulkan execution evidence yet.
 
-Finite success prints `voxel_world_pressure_test=ok`. Metal API Validation runs
-on an Apple M4 Pro completed smoke/default/stress at their 9/81/289 resident
-bounds. The Vulkan artifacts and forced build pass, but physical Vulkan voxel
-execution is not claimed here.
+The current five-minute atmosphere/cloud and darker-daylight revision passed
+`zig build`, `zig build test`, and `zig build -Dvulkan`. Under Metal API
+Validation, fixed-noon time `150` required-RT smoke completed 24 frames with
+88,473,600 rays, 1,017,402 primary hits, 438,485 reflection-covered and lit
+pixels, zero invalid pixels, all native/visibility/PTGI/reflection markers
+true, and `rt_ms=9.992`. Fixed-midnight time `0` retained the same ray, hit,
+and covered counts, reported 429,962 lit reflection pixels, zero invalid
+pixels, all markers true, and `rt_ms=9.547`. The fixed-noon 24-frame Metal
+raster lane passed. Default interactive required-RT noon stabilized around
+65-68 FPS after warmup on the validation machine; the interactive raster sky
+was about 120 FPS. Those frame rates are observations rather than gates.
+
+Before the later three-segment and TLAS-boundary revisions, fixed-camera
+96-frame Metal API Validation lanes covered the widened default profile and
+background streamer. Raster ended with 169
+resident chunks, 81 visible, 88 culled, zero pending, 104 draws, 180,132
+vertices, 270,198 indices, and 14,111,376 cumulative uploaded bytes. Required
+RT retained the same resident/visibility result, built 169 BLASes and 22
+TLASes, submitted 96 dispatches and 353,894,400 primary rays, and read back
+2,404,265 primary hits, 632,564 covered/lit reflection pixels, 298,276
+penumbra pixels, and zero invalid pixels. Native submission, visibility, PTGI,
+reflection, and pressure markers were all true.
+
+The RT metrics included `mesh_jobs=169/169/0/0` in
+submitted/completed/stale/failed order, `mesh_ms=411.750` cumulative background
+time, `stream_upload_ms=179.797`, `tlas_build_ms=18.437`,
+`frame_p50_ms=19.919`, and `frame_p95_ms=23.364`. The reported
+`frame_max_ms=401.845` includes strict finite-run readback and does not measure
+interactive chunk-loading latency. A separate interactive required-RT
+observation progressed through 53, 115, and 169 resident chunks before
+stabilizing around 63-64 FPS; this is an observation, not an acceptance gate.
+
+After the final TLAS-boundary tightening, 24-frame three-segment required-RT
+smokes passed under Metal API Validation. Fixed noon reported 1,017,402 primary
+hits, 431,231 directly lit, 586,171 shadowed, 303,369 indirect-lit, 744,071
+low-indirect, 1,017,398 reconstructed, 438,485 covered/lit reflection pixels,
+45,238 penumbra pixels, zero invalid pixels, and
+`rt_ms_per_frame=10.767`. Fixed midnight retained 1,017,402 hits, reported
+431,228 directly lit, 586,174 shadowed, 279,887 indirect-lit, 839,646
+low-indirect, 960,442 reconstructed, 438,485 covered and 429,973 lit reflection
+pixels, 53,592 penumbra pixels, zero invalid pixels, and
+`rt_ms_per_frame=11.248`.
+
+The current fixed-noon 96-frame default lane drained at 169 resident chunks
+and zero pending with `ptgi_bounces=3`, 22 TLAS builds, 96 dispatches, and
+353,894,400 `primary_rays` dispatch threads. It reported
+`rt_ms_per_frame=16.327`, 2,404,265 primary hits, 863,410 directly lit,
+1,540,855 shadowed, 1,932,365 indirect-lit, 626,079 low-indirect, 2,404,258
+reconstructed, 632,564 covered/lit reflection pixels, 297,535 penumbra pixels,
+zero invalid pixels, and all validation markers true. Frame p50/p95/max were
+24.081/28.004/442.164 ms. The maximum includes strict finite-run validation
+work and is not an interactive latency claim; these timings are observations,
+not portable gates.
 
 ## Transfer Readback
 

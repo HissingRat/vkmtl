@@ -1,7 +1,7 @@
 # Public API Inventory
 
 Status: `v0.1.x` compatibility baseline plus allocated `v0.2.0` additions,
-refreshed on 2026-07-15.
+refreshed on 2026-07-18.
 
 This document records the public surface reachable through `src/vkmtl.zig`
 after the Period 1 Phase 9 compatibility cutover. It is the source snapshot for
@@ -917,6 +917,42 @@ request, actual-extent meaning, and terminal Vulkan resize behavior target
 or lifetime rule is removed or renamed. The
 presentation resolver and legacy raw-copy route add no HDR, tone-mapping,
 gamma, or gamut-conversion API.
+
+## Post-Period 56 v0.2.0 Ray-Tracing Bind-Group Update
+
+This allocation leaves the guarded root 69, all declaration/operation counts
+for the 13 facades, `Device` 34, `WindowContext` 10, `HeadlessContext` six,
+`Swapchain` six, `CommandBuffer` 22, the 37 runtime-handle set, and the 453
+public functions in `window_context.zig` unchanged. It extends existing public
+records rather than adding a second resource vocabulary or owner operation:
+
+- `ShaderVisibility` gains default-false `ray_tracing`;
+- `RayTracingPipelineDescriptor` gains nullable `bind_group_layout`;
+- `RayTracingDrawableResources` gains nullable `bind_group`, and its exact
+  `RayTracingTextureResources` alias changes identically.
+
+Null pipeline layout and resource-group values retain the earlier resource-free
+dispatch route. A non-null pipeline layout is copied into pipeline-owned
+storage. A resource-bearing texture or drawable dispatch then borrows one
+exactly matching `BindGroup` and its referenced resources until the command
+buffer completes. Plain `dispatchRays(...)` cannot execute a pipeline that
+declares the application layout.
+
+The RT shader ABI reserves binding 0 for the acceleration structure, binding 1
+for the primary output texture, and binding 2 for inline dispatch data. The one
+application group may occupy bindings 3 through 14 inclusive. Layout entries
+reuse ordinary uniform/storage buffers, sampled/storage textures, samplers,
+and compare samplers. Arrays consume consecutive bindings and must remain
+inside the range; dynamic offsets are not supported. Creation and dispatch
+validate the reserved range, layout identity, backend/device tracker, live
+state, queue ownership, and required usage before native work.
+
+`RayDispatchDescriptor.inline_data_binding` therefore changes its released
+default from 1 to 2 and rejects another explicit binding when inline data is
+present. `BindingError` gains `ReservedRayTracingBinding` and
+`RayTracingPipelineLayoutMismatch`. The nullable fields are defaulted shape
+extensions, but the binding-default and public-error changes make the complete
+allocation a `v0.2.0` migration rather than an additive `v0.1.x` patch.
 
 ## Raster Coordinate Contract Correction
 

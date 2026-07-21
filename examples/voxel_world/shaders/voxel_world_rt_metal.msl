@@ -1,0 +1,1208 @@
+#include <metal_stdlib>
+#include <metal_raytracing>
+
+using namespace metal;
+using namespace raytracing;
+
+struct RtFrameData
+{
+    float4 camera_position_and_tan_half_fov;
+    float4 camera_forward_and_aspect;
+    float4 camera_right_and_max_distance;
+    float4 camera_up_and_shadow_bias;
+    float4 light_direction_and_strength;
+    float4 light_color_and_daylight;
+    float4 sky_color_and_night;
+    float4 frame_index_seed_and_light_radius;
+    float4 sun_direction_and_cloud_time;
+    float4 material_origin_and_extent;
+    float4 traced_origin_and_extent;
+};
+
+constant float minimum_ray_distance = 0.0001f;
+constant float plane_tie_epsilon = 0.0005f;
+constant float pi = 3.14159265358979323846f;
+constant float traced_scene_top = 64.0f;
+constant uint maximum_diffuse_bounce_count = 3u;
+
+static inline uint hash_bits(uint value)
+{
+    value ^= value >> 16;
+    value *= 0x7feb352du;
+    value ^= value >> 15;
+    value *= 0x846ca68bu;
+    value ^= value >> 16;
+    return value;
+}
+
+static inline float static_random_01(uint2 pixel, uint lane, constant RtFrameData &frame_data)
+{
+    const uint seed = uint(max(frame_data.frame_index_seed_and_light_radius.y, 0.0f));
+    const uint bits = hash_bits(
+        pixel.x * 0x9e3779b9u ^
+        pixel.y * 0x85ebca6bu ^
+        seed ^ lane * 0x27d4eb2du
+    );
+    return (float(bits & 0x00ffffffu) + 0.5f) / 16777216.0f;
+}
+
+static inline float2 temporal_sample_2d(
+    uint2 pixel,
+    uint first_lane,
+    constant RtFrameData &frame_data
+)
+{
+    const uint frame_index = uint(max(frame_data.frame_index_seed_and_light_radius.x, 0.0f));
+    const float2 scramble = float2(
+        static_random_01(pixel, first_lane, frame_data),
+        static_random_01(pixel, first_lane + 1u, frame_data)
+    );
+    const float2 r2_increment = float2(0.7548776662466927f, 0.5698402909980532f);
+    return fract(scramble + float(frame_index) * r2_increment);
+}
+
+static inline float3 sample_celestial_disk_direction(
+    float3 center_direction,
+    float light_strength,
+    float angular_radius,
+    float2 random_sample
+)
+{
+    const float radius = max(abs(angular_radius), 0.0f);
+    if (light_strength <= 0.0f || radius <= 0.00001f)
+    {
+        return center_direction;
+    }
+
+    const float disk_radius = sqrt(random_sample.x);
+    const float disk_angle = 2.0f * pi * random_sample.y;
+    const float3 helper = abs(center_direction.y) < 0.999f
+        ? float3(0.0f, 1.0f, 0.0f)
+        : float3(1.0f, 0.0f, 0.0f);
+    const float3 tangent = normalize(cross(helper, center_direction));
+    const float3 bitangent = cross(center_direction, tangent);
+    const float2 disk_sample = disk_radius * float2(cos(disk_angle), sin(disk_angle));
+    const float safe_radius = min(radius, pi * 0.499f);
+    return normalize(
+        center_direction +
+        (tangent * disk_sample.x + bitangent * disk_sample.y) * tan(safe_radius)
+    );
+}
+
+static inline uint voxel_plane_axis(float3 world_point, float3 incoming_direction)
+{
+    const float3 plane_distance = abs(world_point - round(world_point));
+    const float nearest_distance = min(plane_distance.x, min(plane_distance.y, plane_distance.z));
+
+    uint axis = 0u;
+    float best_direction = -1.0f;
+    if (plane_distance.x <= nearest_distance + plane_tie_epsilon)
+    {
+        axis = 0u;
+        best_direction = abs(incoming_direction.x);
+    }
+    if (plane_distance.y <= nearest_distance + plane_tie_epsilon &&
+        abs(incoming_direction.y) > best_direction)
+    {
+        axis = 1u;
+        best_direction = abs(incoming_direction.y);
+    }
+    if (plane_distance.z <= nearest_distance + plane_tie_epsilon &&
+        abs(incoming_direction.z) > best_direction)
+    {
+        axis = 2u;
+    }
+    return axis;
+}
+
+static inline float3 voxel_face_normal(float3 world_point, float3 incoming_direction)
+{
+    const uint axis = voxel_plane_axis(world_point, incoming_direction);
+    if (axis == 0u)
+    {
+        return float3(incoming_direction.x >= 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f);
+    }
+    if (axis == 1u)
+    {
+        return float3(0.0f, incoming_direction.y >= 0.0f ? -1.0f : 1.0f, 0.0f);
+    }
+    return float3(0.0f, 0.0f, incoming_direction.z >= 0.0f ? -1.0f : 1.0f);
+}
+
+static inline ray make_ray(float3 origin, float3 direction, float maximum_distance)
+{
+    ray result;
+    result.origin = origin;
+    result.direction = direction;
+    result.min_distance = minimum_ray_distance;
+    result.max_distance = maximum_distance;
+    return result;
+}
+
+static inline float3 camera_ray_direction(
+    uint2 pixel,
+    uint2 size,
+    constant RtFrameData &frame_data
+)
+{
+    const float2 uv = (float2(pixel) + 0.5f) / float2(size);
+    const float2 screen = float2(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
+    const float tan_half_fov = max(abs(frame_data.camera_position_and_tan_half_fov.w), 0.0001f);
+    const float aspect = max(abs(frame_data.camera_forward_and_aspect.w), 0.0001f);
+    return normalize(
+        frame_data.camera_forward_and_aspect.xyz +
+        frame_data.camera_right_and_max_distance.xyz * (screen.x * aspect * tan_half_fov) +
+        frame_data.camera_up_and_shadow_bias.xyz * (screen.y * tan_half_fov)
+    );
+}
+
+static inline float3 cosine_hemisphere(float3 normal, float2 random_sample)
+{
+    const float radius = sqrt(random_sample.x);
+    const float angle = 2.0f * pi * random_sample.y;
+    const float3 local_direction = float3(
+        radius * cos(angle),
+        radius * sin(angle),
+        sqrt(max(1.0f - random_sample.x, 0.0f))
+    );
+    const float3 helper = abs(normal.y) < 0.999f
+        ? float3(0.0f, 1.0f, 0.0f)
+        : float3(1.0f, 0.0f, 0.0f);
+    const float3 tangent = normalize(cross(helper, normal));
+    const float3 bitangent = cross(normal, tangent);
+    return normalize(
+        tangent * local_direction.x +
+        bitangent * local_direction.y +
+        normal * local_direction.z
+    );
+}
+
+static inline uint fallback_material_tile(float3 world_point, float3 normal)
+{
+    const float height = world_point.y;
+    const bool top_face = normal.y > 0.5f;
+    const bool bottom_face = normal.y < -0.5f;
+    if (height <= 12.5f) return 4u;
+    if (height >= 30.5f) return top_face ? 5u : (bottom_face ? 2u : 6u);
+    if (top_face) return 0u;
+    if (bottom_face) return 2u;
+    return 1u;
+}
+
+static inline bool packed_span_contains(uint packed_span, int y)
+{
+    const uint minimum = packed_span & 0xffu;
+    const uint maximum = (packed_span >> 8) & 0xffu;
+    return minimum != 0xffu && y >= int(minimum) && y <= int(maximum);
+}
+
+static inline uint material_tile(
+    float3 world_point,
+    float3 normal,
+    device const uint4 *material_columns,
+    constant RtFrameData &frame_data
+)
+{
+    const float3 inside_point = world_point - normal * 0.01f;
+    const int3 voxel_position = int3(floor(inside_point));
+    const int2 origin = int2(frame_data.material_origin_and_extent.xy);
+    const int2 extent = int2(frame_data.material_origin_and_extent.zw);
+    const int2 local = voxel_position.xz - origin;
+    if (any(local < int2(0)) || any(local >= extent))
+    {
+        return fallback_material_tile(world_point, normal);
+    }
+
+    const uint4 column = material_columns[uint(local.y * extent.x + local.x)];
+    const int height = as_type<int>(column.x);
+    const uint surface = column.y & 0xffu;
+    const uint water_level = (column.y >> 8) & 0xffu;
+    uint block = 0u;
+    if (voxel_position.y <= height)
+    {
+        block = 3u;
+        if (voxel_position.y == height)
+        {
+            block = surface;
+        }
+        else if (surface == 4u && voxel_position.y >= height - 3)
+        {
+            block = 4u;
+        }
+        else if (voxel_position.y >= height - 3)
+        {
+            block = 2u;
+        }
+    }
+    else if (packed_span_contains(column.z, voxel_position.y))
+    {
+        block = 6u;
+    }
+    else if (packed_span_contains(column.w, voxel_position.y))
+    {
+        block = 7u;
+    }
+    else if (water_level != 0xffu && voxel_position.y <= int(water_level))
+    {
+        block = 8u;
+    }
+
+    const bool top_face = normal.y > 0.5f;
+    const bool bottom_face = normal.y < -0.5f;
+    if (block == 1u) return top_face ? 0u : (bottom_face ? 2u : 1u);
+    if (block == 2u) return 2u;
+    if (block == 3u) return 3u;
+    if (block == 4u) return 4u;
+    if (block == 5u) return top_face ? 5u : (bottom_face ? 2u : 6u);
+    if (block == 6u) return abs(normal.y) > 0.5f ? 7u : 8u;
+    if (block == 7u) return 9u;
+    if (block == 8u) return 10u;
+    return fallback_material_tile(world_point, normal);
+}
+
+static inline float2 voxel_atlas_uv(
+    float3 world_point,
+    float3 normal,
+    uint tile,
+    texture2d<float, access::sample> atlas
+)
+{
+    float2 local_uv;
+    if (abs(normal.y) > 0.5f)
+    {
+        local_uv = fract(world_point.xz);
+    }
+    else if (abs(normal.x) > 0.5f)
+    {
+        local_uv = fract(float2(world_point.z, world_point.y));
+    }
+    else
+    {
+        local_uv = fract(float2(world_point.x, world_point.y));
+    }
+    const float2 pixel = float2(
+        float(tile * 68u + 2u) + local_uv.x * 63.0f + 0.5f,
+        2.0f + (1.0f - local_uv.y) * 63.0f + 0.5f
+    );
+    return pixel / float2(max(atlas.get_width(), 1u), max(atlas.get_height(), 1u));
+}
+
+static inline float cloud_light_transmittance(
+    float3 world_position,
+    float3 light_direction,
+    float cloud_time,
+    float daylight,
+    float night,
+    float twilight,
+    float active_light_strength
+);
+
+static inline float3 secondary_surface_albedo(
+    texture2d<float, access::sample> block_atlas,
+    sampler block_sampler,
+    device const uint4 *material_columns,
+    constant RtFrameData &frame_data,
+    float3 world_point,
+    float3 normal
+)
+{
+    const uint tile = material_tile(world_point, normal, material_columns, frame_data);
+    const float2 atlas_uv = voxel_atlas_uv(world_point, normal, tile, block_atlas);
+    return block_atlas.sample(block_sampler, atlas_uv, level(0.0f)).rgb;
+}
+
+static inline float3 secondary_environment_illumination(
+    constant RtFrameData &frame_data
+)
+{
+    const float daylight = saturate(frame_data.light_color_and_daylight.w);
+    const float night = saturate(frame_data.sky_color_and_night.w);
+    return frame_data.sky_color_and_night.rgb *
+        mix(0.035f, 0.13f, daylight) * mix(1.0f, 0.42f, night);
+}
+
+static inline float3 secondary_direct_illumination(
+    thread intersector<triangle_data, instancing> &native_intersector,
+    instance_acceleration_structure voxel_scene,
+    constant RtFrameData &frame_data,
+    uint2 pixel,
+    uint first_random_lane,
+    float3 world_point,
+    float3 normal,
+    float maximum_distance,
+    float shadow_bias
+)
+{
+    const float3 light_direction = normalize(frame_data.light_direction_and_strength.xyz);
+    const float light_strength = max(frame_data.light_direction_and_strength.w, 0.0f);
+    const float n_dot_l = max(dot(normal, light_direction), 0.0f);
+    const float daylight = saturate(frame_data.light_color_and_daylight.w);
+    const float night = saturate(frame_data.sky_color_and_night.w);
+    const float twilight = saturate(1.0f - daylight - night);
+    float visibility = 0.0f;
+    if (n_dot_l > 0.0f && light_strength > 0.0f)
+    {
+        const float3 shadow_direction = sample_celestial_disk_direction(
+            light_direction,
+            light_strength,
+            frame_data.frame_index_seed_and_light_radius.z,
+            temporal_sample_2d(pixel, first_random_lane, frame_data)
+        );
+        const ray shadow_ray = make_ray(
+            world_point + normal * shadow_bias,
+            shadow_direction,
+            maximum_distance
+        );
+        const auto shadow_hit = native_intersector.intersect(shadow_ray, voxel_scene);
+        visibility = shadow_hit.type == intersection_type::none
+            ? cloud_light_transmittance(
+                world_point,
+                shadow_direction,
+                frame_data.sun_direction_and_cloud_time.w,
+                daylight,
+                night,
+                twilight,
+                light_strength
+            )
+            : 0.0f;
+    }
+    return frame_data.light_color_and_daylight.rgb *
+        (light_strength * n_dot_l * visibility);
+}
+
+static inline float3 secondary_surface_radiance(
+    thread intersector<triangle_data, instancing> &native_intersector,
+    instance_acceleration_structure voxel_scene,
+    texture2d<float, access::sample> block_atlas,
+    sampler block_sampler,
+    device const uint4 *material_columns,
+    constant RtFrameData &frame_data,
+    uint2 pixel,
+    uint first_random_lane,
+    float3 world_point,
+    float3 normal,
+    float maximum_distance,
+    float shadow_bias
+)
+{
+    const float3 albedo = secondary_surface_albedo(
+        block_atlas,
+        block_sampler,
+        material_columns,
+        frame_data,
+        world_point,
+        normal
+    );
+    return albedo * (
+        secondary_environment_illumination(frame_data) +
+        secondary_direct_illumination(
+            native_intersector,
+            voxel_scene,
+            frame_data,
+            pixel,
+            first_random_lane,
+            world_point,
+            normal,
+            maximum_distance,
+            shadow_bias
+        )
+    );
+}
+
+static inline float traced_neighborhood_weight(
+    float3 world_point,
+    constant RtFrameData &frame_data
+)
+{
+    if (any(frame_data.traced_origin_and_extent.zw <= 0.0f))
+    {
+        return 1.0f;
+    }
+    const float2 origin = frame_data.traced_origin_and_extent.xy;
+    const float2 limit = origin + frame_data.traced_origin_and_extent.zw;
+    const float2 edge_distance = min(world_point.xz - origin, limit - world_point.xz);
+    return smoothstep(0.0f, 16.0f, min(edge_distance.x, edge_distance.y));
+}
+
+static inline float distance_to_traced_boundary(
+    float origin,
+    float direction,
+    float minimum,
+    float maximum,
+    float maximum_distance
+)
+{
+    if (direction > 0.000001f)
+    {
+        return max((maximum - origin) / direction, 0.0f);
+    }
+    if (direction < -0.000001f)
+    {
+        return max((minimum - origin) / direction, 0.0f);
+    }
+    return maximum_distance;
+}
+
+static inline bool diffuse_miss_reaches_environment(
+    float3 ray_origin,
+    float3 ray_direction,
+    float maximum_distance,
+    constant RtFrameData &frame_data
+)
+{
+    const float2 traced_origin = frame_data.traced_origin_and_extent.xy;
+    const float2 traced_extent = frame_data.traced_origin_and_extent.zw;
+    const float2 traced_limit = traced_origin + traced_extent;
+    if (any(traced_extent <= 0.0f) ||
+        any(ray_origin.xz < traced_origin) || any(ray_origin.xz > traced_limit) ||
+        ray_direction.y <= 0.000001f)
+    {
+        return false;
+    }
+
+    const float x_exit = distance_to_traced_boundary(
+        ray_origin.x,
+        ray_direction.x,
+        traced_origin.x,
+        traced_limit.x,
+        maximum_distance
+    );
+    const float z_exit = distance_to_traced_boundary(
+        ray_origin.z,
+        ray_direction.z,
+        traced_origin.y,
+        traced_limit.y,
+        maximum_distance
+    );
+    const float horizontal_exit = min(maximum_distance, min(x_exit, z_exit));
+    const float top_exit = (traced_scene_top - ray_origin.y) / ray_direction.y;
+    return top_exit >= 0.0f &&
+        top_exit <= maximum_distance &&
+        top_exit <= horizontal_exit + 0.0001f;
+}
+
+static inline float cloud_hash_12(float2 value)
+{
+    float3 p = fract(float3(value.x, value.y, value.x) * 0.1031f);
+    p += dot(p, p.yzx + 33.33f);
+    return fract((p.x + p.y) * p.z);
+}
+
+static inline float cloud_value_noise_2d(float2 point)
+{
+    const float2 cell = floor(point);
+    const float2 local = fract(point);
+    const float2 blend = local * local * (3.0f - 2.0f * local);
+    const float lower = mix(
+        cloud_hash_12(cell),
+        cloud_hash_12(cell + float2(1.0f, 0.0f)),
+        blend.x
+    );
+    const float upper = mix(
+        cloud_hash_12(cell + float2(0.0f, 1.0f)),
+        cloud_hash_12(cell + float2(1.0f, 1.0f)),
+        blend.x
+    );
+    return mix(lower, upper, blend.y);
+}
+
+static inline float3 cloud_safe_normalize(float3 value, float3 fallback)
+{
+    const float length_squared = dot(value, value);
+    return isfinite(length_squared) && length_squared > 0.000001f
+        ? value * rsqrt(length_squared)
+        : fallback;
+}
+
+static inline float3 cloud_finite_radiance(float3 value)
+{
+    return float3(
+        isfinite(value.x) ? max(value.x, 0.0f) : 0.0f,
+        isfinite(value.y) ? max(value.y, 0.0f) : 0.0f,
+        isfinite(value.z) ? max(value.z, 0.0f) : 0.0f
+    );
+}
+
+static inline float cloud_mie_phase(float alignment)
+{
+    const float anisotropy = 0.72f;
+    const float denominator = max(
+        1.0f + anisotropy * anisotropy - 2.0f * anisotropy * alignment,
+        0.04f
+    );
+    return min(
+        (1.0f - anisotropy * anisotropy) / pow(denominator, 1.5f),
+        12.0f
+    );
+}
+
+static inline float3 atmosphere_radiance(
+    float3 ray_direction,
+    float3 sun_direction,
+    float daylight,
+    float night,
+    float twilight
+)
+{
+    const float sky_visibility = smoothstep(-0.035f, 0.012f, ray_direction.y);
+    const float view_height = saturate(ray_direction.y);
+    const float horizon = exp(-view_height * 5.2f);
+    const float view_airmass = 1.0f / (0.18f + view_height * 2.65f);
+    const float sun_airmass = 1.0f / (0.14f + saturate(sun_direction.y) * 3.8f);
+    const float3 spectral_scatter = float3(0.18f, 0.43f, 1.0f);
+    const float3 sun_transmittance = exp(-spectral_scatter * sun_airmass * 0.32f);
+    const float3 view_scatter = 1.0f - exp(-spectral_scatter * view_airmass * 0.70f);
+    const float alignment = clamp(dot(ray_direction, sun_direction), -1.0f, 1.0f);
+    const float rayleigh_phase = 0.75f * (1.0f + alignment * alignment);
+    const float mie_phase = cloud_mie_phase(alignment);
+    const float solar_visibility = smoothstep(-0.10f, 0.035f, sun_direction.y);
+    const float solar_energy = saturate(daylight + twilight * 0.82f) * solar_visibility;
+
+    const float3 zenith_floor = float3(0.025f, 0.105f, 0.38f);
+    const float3 horizon_floor = float3(0.22f, 0.42f, 0.65f);
+    float3 daytime = mix(zenith_floor, horizon_floor, horizon) * daylight;
+    daytime += view_scatter * sun_transmittance *
+        (rayleigh_phase * 0.72f + mie_phase * 0.038f) * solar_energy * 1.30f;
+
+    const float2 flat_view = cloud_safe_normalize(
+        float3(ray_direction.x, 0.0f, ray_direction.z),
+        float3(0.0f, 0.0f, 1.0f)
+    ).xz;
+    const float2 flat_sun = cloud_safe_normalize(
+        float3(sun_direction.x, 0.0f, sun_direction.z),
+        float3(0.0f, 0.0f, 1.0f)
+    ).xz;
+    const float sun_side = saturate(dot(flat_view, flat_sun));
+    const float low_sun_band = exp(-abs(ray_direction.y) * 8.5f) *
+        pow(sun_side, 5.0f) * twilight;
+    const float3 twilight_base = mix(
+        float3(0.018f, 0.026f, 0.095f),
+        float3(0.30f, 0.095f, 0.028f),
+        horizon * (0.30f + 0.70f * sun_side)
+    );
+    const float3 twilight_glow = float3(1.0f, 0.20f, 0.035f) *
+        low_sun_band * 0.62f;
+
+    const float3 night_zenith = float3(0.002f, 0.005f, 0.020f);
+    const float3 night_horizon = float3(0.010f, 0.018f, 0.050f);
+    const float3 night_sky = mix(night_zenith, night_horizon, horizon) * night;
+    return cloud_finite_radiance(
+        daytime + twilight_base * twilight + twilight_glow + night_sky
+    ) * sky_visibility;
+}
+
+static inline float cumulus_density(float2 world_position, float cloud_time)
+{
+    const float2 wind = float2(0.52f, 0.18f) * cloud_time;
+    const float2 p = (world_position + wind) * 0.0062f;
+    const float broad = cloud_value_noise_2d(p * 0.43f + float2(12.7f, -8.4f));
+    const float detail =
+        cloud_value_noise_2d(p) * 0.55f +
+        cloud_value_noise_2d(p * 2.07f + float2(19.4f, 5.6f)) * 0.28f +
+        cloud_value_noise_2d(p * 4.31f + float2(-7.2f, 31.8f)) * 0.17f;
+    return smoothstep(0.50f, 0.72f, detail + broad * 0.20f);
+}
+
+static inline float cirrus_density(float2 world_position, float cloud_time)
+{
+    const float2 wind = float2(-0.22f, 0.31f) * cloud_time;
+    const float2 p = (world_position + wind) * 0.0037f;
+    float2 stretched = float2(
+        p.x * 0.62f + p.y * 0.18f,
+        p.y * 2.60f - p.x * 0.08f
+    );
+    const float2 warp = float2(
+        cloud_value_noise_2d(stretched * 0.55f + float2(4.3f, 15.7f)),
+        cloud_value_noise_2d(stretched * 0.47f + float2(-9.1f, 2.8f))
+    ) - 0.5f;
+    stretched += float2(warp.x * 0.85f, warp.y * 0.22f);
+    const float bands =
+        cloud_value_noise_2d(stretched) * 0.58f +
+        cloud_value_noise_2d(stretched * 2.13f + float2(8.6f, -6.9f)) * 0.27f +
+        cloud_value_noise_2d(stretched * 4.40f + float2(-3.7f, 22.1f)) * 0.15f;
+    const float ridge = 1.0f - abs(bands * 2.0f - 1.0f);
+    const float coverage = cloud_value_noise_2d(stretched * 0.31f + float2(27.2f, 11.3f));
+    return smoothstep(0.58f, 0.78f, ridge * 0.78f + coverage * 0.22f);
+}
+
+static inline float cloud_view_fade(float ray_height, float distance_to_cloud)
+{
+    const float horizon_fade = smoothstep(0.018f, 0.095f, ray_height);
+    const float distance_fade = 1.0f - smoothstep(2600.0f, 5200.0f, distance_to_cloud);
+    return horizon_fade * distance_fade;
+}
+
+static inline float3 cloud_light_color(float daylight, float night, float twilight)
+{
+    return float3(1.0f, 0.91f, 0.74f) * daylight +
+        float3(1.0f, 0.36f, 0.12f) * twilight +
+        float3(0.40f, 0.53f, 0.90f) * night;
+}
+
+static inline float3 cloud_ambient_color(float daylight, float night, float twilight)
+{
+    return float3(0.54f, 0.63f, 0.75f) * daylight +
+        float3(0.32f, 0.17f, 0.13f) * twilight +
+        float3(0.014f, 0.022f, 0.050f) * night;
+}
+
+static inline float4 sample_cumulus(
+    float3 ray_direction,
+    float3 light_direction,
+    float active_light_strength,
+    float3 camera_position,
+    float cloud_time,
+    float daylight,
+    float night,
+    float twilight
+)
+{
+    const float altitude = 145.0f;
+    if (ray_direction.y <= 0.018f)
+    {
+        return float4(0.0f);
+    }
+    const float distance_to_cloud = (altitude - camera_position.y) / ray_direction.y;
+    if (distance_to_cloud <= 0.0f)
+    {
+        return float4(0.0f);
+    }
+
+    const float2 world_position = (camera_position + ray_direction * distance_to_cloud).xz;
+    const float density = cumulus_density(world_position, cloud_time);
+    if (density <= 0.001f)
+    {
+        return float4(0.0f);
+    }
+
+    const float light_slope = 1.0f / max(abs(light_direction.y), 0.22f);
+    const float2 light_step = light_direction.xz * light_slope * 24.0f;
+    const float near_probe = cumulus_density(world_position + light_step, cloud_time);
+    const float far_probe = cumulus_density(world_position + light_step * 2.4f, cloud_time);
+    const float optical_shadow = near_probe * 0.68f + far_probe * 0.32f;
+    const float direct_transmittance = exp(-optical_shadow * 2.65f);
+    const float directional_gate = saturate(active_light_strength);
+    const float gated_transmittance = mix(
+        1.0f,
+        direct_transmittance,
+        directional_gate
+    );
+    const float forward = pow(saturate(dot(ray_direction, light_direction)), 18.0f);
+    const float edge = smoothstep(0.06f, 0.62f, density) * (1.0f - density);
+
+    const float3 ambient_color = cloud_ambient_color(daylight, night, twilight);
+    const float3 light_color = cloud_light_color(daylight, night, twilight);
+    const float direct_weight = daylight * 0.58f + twilight * 0.42f + night * 0.10f;
+    float3 color = ambient_color * (0.46f + gated_transmittance * 0.40f);
+    color += light_color * direct_transmittance * direct_weight * 0.42f *
+        active_light_strength;
+    color += light_color * forward * edge *
+        (daylight * 1.20f + twilight * 1.55f + night * 0.20f) *
+        active_light_strength;
+
+    const float alpha = density * cloud_view_fade(ray_direction.y, distance_to_cloud) * 0.94f;
+    return float4(cloud_finite_radiance(color), saturate(alpha));
+}
+
+static inline float4 sample_cirrus(
+    float3 ray_direction,
+    float3 light_direction,
+    float active_light_strength,
+    float3 camera_position,
+    float cloud_time,
+    float daylight,
+    float night,
+    float twilight
+)
+{
+    const float altitude = 225.0f;
+    if (ray_direction.y <= 0.018f)
+    {
+        return float4(0.0f);
+    }
+    const float distance_to_cloud = (altitude - camera_position.y) / ray_direction.y;
+    if (distance_to_cloud <= 0.0f)
+    {
+        return float4(0.0f);
+    }
+
+    const float2 world_position = (camera_position + ray_direction * distance_to_cloud).xz;
+    const float density = cirrus_density(world_position, cloud_time);
+    const float forward = pow(saturate(dot(ray_direction, light_direction)), 10.0f);
+    const float3 ambient_color = cloud_ambient_color(daylight, night, twilight);
+    const float3 light_color = cloud_light_color(daylight, night, twilight);
+    float3 color = ambient_color * 0.78f;
+    color += light_color * (daylight * 0.16f + twilight * 0.22f + night * 0.035f) *
+        active_light_strength;
+    color += light_color * forward *
+        (daylight * 0.42f + twilight * 0.58f + night * 0.08f) *
+        active_light_strength;
+
+    const float alpha = density * cloud_view_fade(ray_direction.y, distance_to_cloud) * 0.46f;
+    return float4(cloud_finite_radiance(color), saturate(alpha));
+}
+
+static inline float3 composite_cloud_layers(
+    float3 background,
+    float3 ray_direction,
+    float3 cloud_light_direction,
+    float active_light_strength,
+    float3 ray_origin,
+    float cloud_time,
+    float daylight,
+    float night,
+    float twilight
+)
+{
+    const float4 cirrus = sample_cirrus(
+        ray_direction,
+        cloud_light_direction,
+        active_light_strength,
+        ray_origin,
+        cloud_time,
+        daylight,
+        night,
+        twilight
+    );
+    float3 radiance = mix(background, cirrus.rgb, cirrus.a);
+    const float4 cumulus = sample_cumulus(
+        ray_direction,
+        cloud_light_direction,
+        active_light_strength,
+        ray_origin,
+        cloud_time,
+        daylight,
+        night,
+        twilight
+    );
+    radiance = mix(radiance, cumulus.rgb, cumulus.a);
+    return min(cloud_finite_radiance(radiance), float3(16.0f));
+}
+
+static inline float cloud_light_transmittance(
+    float3 world_position,
+    float3 light_direction,
+    float cloud_time,
+    float daylight,
+    float night,
+    float twilight,
+    float active_light_strength
+)
+{
+    if (light_direction.y <= 0.018f)
+    {
+        return 1.0f;
+    }
+    const float cumulus_distance = (145.0f - world_position.y) / light_direction.y;
+    const float cumulus_value = cumulus_distance > 0.0f
+        ? cumulus_density((world_position + light_direction * cumulus_distance).xz, cloud_time)
+        : 0.0f;
+    // Thin cirrus remains in the environment but the denser lower layer owns
+    // the slow, soft direct-light shadow, avoiding a second costly lookup.
+    const float optical_depth = cumulus_value * 1.55f;
+    const float covered_transmittance = exp(-optical_depth);
+    const float directional_gate = saturate(active_light_strength);
+    const float shadow_strength = saturate(
+        (daylight * 0.62f + twilight * 0.30f + night * 0.14f) * directional_gate
+    );
+    return mix(1.0f, covered_transmittance, shadow_strength);
+}
+
+static inline float3 ptgi_environment_radiance(
+    float3 direction,
+    float3 ray_origin,
+    constant RtFrameData &frame_data
+)
+{
+    const float3 ray_direction = cloud_safe_normalize(direction, float3(0.0f, 1.0f, 0.0f));
+    const float daylight = saturate(frame_data.light_color_and_daylight.w);
+    const float night = saturate(frame_data.sky_color_and_night.w);
+    const float twilight = saturate(1.0f - daylight - night);
+    const float3 sun_direction = cloud_safe_normalize(
+        frame_data.sun_direction_and_cloud_time.xyz,
+        float3(0.0f, 1.0f, 0.0f)
+    );
+    const float3 cloud_light_direction = cloud_safe_normalize(
+        frame_data.light_direction_and_strength.xyz,
+        sun_direction
+    );
+    const float active_light_strength = max(
+        frame_data.light_direction_and_strength.w,
+        0.0f
+    );
+    float3 radiance = atmosphere_radiance(
+        ray_direction,
+        sun_direction,
+        daylight,
+        night,
+        twilight
+    );
+    radiance = composite_cloud_layers(
+        radiance,
+        ray_direction,
+        cloud_light_direction,
+        active_light_strength,
+        ray_origin,
+        frame_data.sun_direction_and_cloud_time.w,
+        daylight,
+        night,
+        twilight
+    );
+    return radiance * mix(0.35f, 0.56f, daylight);
+}
+
+static inline float3 trace_diffuse_indirect_radiance(
+    thread intersector<triangle_data, instancing> &native_intersector,
+    instance_acceleration_structure voxel_scene,
+    texture2d<float, access::sample> block_atlas,
+    sampler block_sampler,
+    device const uint4 *material_columns,
+    constant RtFrameData &frame_data,
+    uint2 pixel,
+    float3 primary_point,
+    float3 primary_normal,
+    float maximum_distance,
+    float shadow_bias
+)
+{
+    const uint requested_bounces = uint(max(
+        frame_data.frame_index_seed_and_light_radius.w,
+        1.0f
+    ));
+    const uint bounce_count = min(
+        requested_bounces,
+        maximum_diffuse_bounce_count
+    );
+    float3 radiance = float3(0.0f);
+    float3 throughput = float3(1.0f);
+    float3 bounce_point = primary_point;
+    float3 bounce_normal = primary_normal;
+    float3 first_direction = primary_normal;
+    bool path_reached_environment = false;
+
+    for (uint bounce_index = 0u;
+        bounce_index < maximum_diffuse_bounce_count;
+        ++bounce_index)
+    {
+        if (bounce_index >= bounce_count)
+        {
+            break;
+        }
+
+        const uint first_random_lane = bounce_index * 4u;
+        const float3 bounce_direction = cosine_hemisphere(
+            bounce_normal,
+            temporal_sample_2d(pixel, first_random_lane, frame_data)
+        );
+        const float3 bounce_origin = bounce_point + bounce_normal * shadow_bias;
+        if (bounce_index == 0u)
+        {
+            first_direction = bounce_direction;
+        }
+
+        const auto bounce_hit = native_intersector.intersect(
+            make_ray(bounce_origin, bounce_direction, maximum_distance),
+            voxel_scene
+        );
+        if (bounce_hit.type == intersection_type::none)
+        {
+            if (diffuse_miss_reaches_environment(
+                bounce_origin,
+                bounce_direction,
+                maximum_distance,
+                frame_data
+            ))
+            {
+                path_reached_environment = true;
+                radiance += throughput * ptgi_environment_radiance(
+                    bounce_direction,
+                    bounce_origin,
+                    frame_data
+                );
+            }
+            break;
+        }
+
+        bounce_point = bounce_origin + bounce_direction * bounce_hit.distance;
+        bounce_normal = voxel_face_normal(bounce_point, bounce_direction);
+        const float3 albedo = secondary_surface_albedo(
+            block_atlas,
+            block_sampler,
+            material_columns,
+            frame_data,
+            bounce_point,
+            bounce_normal
+        );
+        const float3 direct = secondary_direct_illumination(
+            native_intersector,
+            voxel_scene,
+            frame_data,
+            pixel,
+            first_random_lane + 2u,
+            bounce_point,
+            bounce_normal,
+            maximum_distance,
+            shadow_bias
+        );
+        radiance += throughput * albedo * direct;
+        throughput *= albedo;
+
+        if (bounce_index + 1u >= bounce_count)
+        {
+            // Preserve the one-bounce residual fill only at the configured
+            // terminal hit instead of adding the approximation every bounce.
+            radiance += throughput * secondary_environment_illumination(frame_data);
+            break;
+        }
+    }
+
+    const float neighborhood_weight = traced_neighborhood_weight(
+        primary_point,
+        frame_data
+    );
+    if (path_reached_environment && neighborhood_weight < 1.0f)
+    {
+        const float3 edge_environment = ptgi_environment_radiance(
+            first_direction,
+            primary_point + primary_normal * shadow_bias,
+            frame_data
+        );
+        radiance = mix(edge_environment, radiance, neighborhood_weight);
+    }
+    return radiance;
+}
+
+static inline float3 water_reflection_sky_radiance(
+    float3 direction,
+    float3 ray_origin,
+    constant RtFrameData &frame_data
+)
+{
+    const float3 ray_direction = cloud_safe_normalize(direction, float3(0.0f, 1.0f, 0.0f));
+    const float daylight = saturate(frame_data.light_color_and_daylight.w);
+    const float night = saturate(frame_data.sky_color_and_night.w);
+    const float twilight = saturate(1.0f - daylight - night);
+    const float3 sun_direction = cloud_safe_normalize(
+        frame_data.sun_direction_and_cloud_time.xyz,
+        float3(0.0f, 1.0f, 0.0f)
+    );
+    const float3 moon_direction = -sun_direction;
+    const float3 cloud_light_direction = cloud_safe_normalize(
+        frame_data.light_direction_and_strength.xyz,
+        sun_direction
+    );
+    const float active_light_strength = max(
+        frame_data.light_direction_and_strength.w,
+        0.0f
+    );
+    float3 radiance = atmosphere_radiance(
+        ray_direction,
+        sun_direction,
+        daylight,
+        night,
+        twilight
+    );
+
+    const float sun_alignment = dot(ray_direction, sun_direction);
+    const float sun_disk = smoothstep(cos(0.045f), cos(0.045f * 0.82f), sun_alignment);
+    const float sun_halo = smoothstep(cos(0.045f * 8.0f), 1.0f, sun_alignment);
+    const float sun_visibility = saturate(daylight + twilight) *
+        smoothstep(-0.04f, 0.03f, sun_direction.y);
+    radiance += float3(1.0f, 0.30f, 0.07f) * sun_halo * sun_halo *
+        twilight * 0.56f;
+    radiance += float3(1.0f, 0.84f, 0.58f) * sun_halo * daylight * 0.22f;
+    radiance = mix(
+        radiance,
+        mix(float3(1.0f, 0.48f, 0.15f), float3(1.0f, 0.95f, 0.78f), daylight),
+        sun_disk * sun_visibility
+    );
+
+    const float moon_alignment = dot(ray_direction, moon_direction);
+    const float moon_disk = smoothstep(cos(0.055f), cos(0.055f * 0.82f), moon_alignment);
+    const float moon_halo = smoothstep(cos(0.055f * 5.0f), 1.0f, moon_alignment);
+    const float moon_visibility = saturate(night + twilight * 0.18f) *
+        smoothstep(-0.04f, 0.03f, moon_direction.y);
+    radiance += float3(0.12f, 0.18f, 0.34f) * moon_halo * moon_halo *
+        0.8f * moon_visibility;
+    radiance = mix(
+        radiance,
+        float3(0.82f, 0.88f, 1.0f),
+        moon_disk * moon_visibility
+    );
+
+    return composite_cloud_layers(
+        radiance,
+        ray_direction,
+        cloud_light_direction,
+        active_light_strength,
+        ray_origin,
+        frame_data.sun_direction_and_cloud_time.w,
+        daylight,
+        night,
+        twilight
+    );
+}
+
+kernel void raygen(
+    texture2d<float, access::write> output [[texture(0)]],
+    instance_acceleration_structure voxel_scene [[buffer(0)]],
+    constant RtFrameData &frame_data [[buffer(2)]],
+    texture2d<float, access::sample> surface_gbuffer [[texture(3)]],
+    texture2d<float, access::sample> block_atlas [[texture(4)]],
+    sampler block_sampler [[sampler(5)]],
+    device const uint4 *material_columns [[buffer(6)]],
+    texture2d<float, access::sample> water_surface_gbuffer [[texture(7)]],
+    texture2d<float, access::write> water_reflection_target [[texture(8)]],
+    uint2 pixel [[thread_position_in_grid]]
+)
+{
+    const uint width = output.get_width();
+    const uint height = output.get_height();
+    if (pixel.x >= width || pixel.y >= height)
+    {
+        return;
+    }
+
+    water_reflection_target.write(float4(0.0f), pixel);
+
+    const float maximum_distance = max(
+        abs(frame_data.camera_right_and_max_distance.w),
+        minimum_ray_distance * 2.0f
+    );
+    const float water_reflection_maximum_distance = min(maximum_distance, 96.0f);
+    const float shadow_bias = max(abs(frame_data.camera_up_and_shadow_bias.w), minimum_ray_distance);
+    const float3 ray_origin = frame_data.camera_position_and_tan_half_fov.xyz;
+    const float3 primary_direction = camera_ray_direction(pixel, uint2(width, height), frame_data);
+    intersector<triangle_data, instancing> native_intersector;
+
+    const float4 water_surface = water_surface_gbuffer.read(pixel);
+    if (water_surface.w > 0.0f &&
+        all(isfinite(water_surface)) &&
+        dot(water_surface.xyz, water_surface.xyz) > 0.000001f)
+    {
+        const float3 water_point = ray_origin + primary_direction * water_surface.w;
+        float3 water_normal = normalize(water_surface.xyz);
+        if (dot(water_normal, -primary_direction) < 0.0f)
+        {
+            water_normal = -water_normal;
+        }
+        const float3 reflection_direction = reflect(primary_direction, water_normal);
+        const float3 reflection_origin = water_point + water_normal * shadow_bias;
+        const auto reflection_hit = native_intersector.intersect(
+            make_ray(
+                reflection_origin,
+                reflection_direction,
+                water_reflection_maximum_distance
+            ),
+            voxel_scene
+        );
+        float3 reflection_radiance;
+        if (reflection_hit.type != intersection_type::none)
+        {
+            const float3 reflection_point = reflection_origin +
+                reflection_direction * reflection_hit.distance;
+            const float3 reflection_normal = voxel_face_normal(
+                reflection_point,
+                reflection_direction
+            );
+            reflection_radiance = secondary_surface_radiance(
+                native_intersector,
+                voxel_scene,
+                block_atlas,
+                block_sampler,
+                material_columns,
+                frame_data,
+                pixel,
+                14u,
+                reflection_point,
+                reflection_normal,
+                maximum_distance,
+                shadow_bias
+            );
+        }
+        else
+        {
+            reflection_radiance = water_reflection_sky_radiance(
+                reflection_direction,
+                reflection_origin,
+                frame_data
+            );
+        }
+        if (!all(isfinite(reflection_radiance)))
+        {
+            reflection_radiance = float3(0.0f);
+        }
+        water_reflection_target.write(
+            float4(min(max(reflection_radiance, 0.0f), 4.0f), 1.0f),
+            pixel
+        );
+    }
+
+    const float4 surface = surface_gbuffer.read(pixel);
+    if (surface.w <= 0.0f)
+    {
+        output.write(float4(0.0f, 0.0f, 0.0f, -1.0f), pixel);
+        return;
+    }
+
+    const float3 hit_point = ray_origin + primary_direction * surface.w;
+    const float3 normal = normalize(surface.xyz);
+    const float3 secondary_origin = hit_point + normal * shadow_bias;
+
+    const float3 light_direction = normalize(frame_data.light_direction_and_strength.xyz);
+    const float n_dot_l = max(dot(normal, light_direction), 0.0f);
+    const float daylight = saturate(frame_data.light_color_and_daylight.w);
+    const float night = saturate(frame_data.sky_color_and_night.w);
+    const float twilight = saturate(1.0f - daylight - night);
+    float directional_visibility = 0.0f;
+    if (n_dot_l > 0.0f && frame_data.light_direction_and_strength.w > 0.0f)
+    {
+        const float3 shadow_direction = sample_celestial_disk_direction(
+            light_direction,
+            frame_data.light_direction_and_strength.w,
+            frame_data.frame_index_seed_and_light_radius.z,
+            temporal_sample_2d(pixel, 12u, frame_data)
+        );
+        const auto light_hit = native_intersector.intersect(
+            make_ray(secondary_origin, shadow_direction, maximum_distance),
+            voxel_scene
+        );
+        directional_visibility = light_hit.type == intersection_type::none
+            ? cloud_light_transmittance(
+                hit_point,
+                shadow_direction,
+                frame_data.sun_direction_and_cloud_time.w,
+                daylight,
+                night,
+                twilight,
+                frame_data.light_direction_and_strength.w
+            )
+            : 0.0f;
+    }
+
+    float3 indirect_radiance = trace_diffuse_indirect_radiance(
+        native_intersector,
+        voxel_scene,
+        block_atlas,
+        block_sampler,
+        material_columns,
+        frame_data,
+        pixel,
+        hit_point,
+        normal,
+        maximum_distance,
+        shadow_bias
+    );
+    if (!all(isfinite(indirect_radiance)))
+    {
+        indirect_radiance = float3(0.0f);
+    }
+
+    output.write(
+        float4(
+            min(max(indirect_radiance, float3(0.0f)), float3(4.0f)),
+            directional_visibility
+        ),
+        pixel
+    );
+}

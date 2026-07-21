@@ -202,17 +202,6 @@ pub const CommandBuffer = struct {
         const pass = try self.renderPassSetup(descriptor);
         self.uses_current_drawable = pass.uses_current_drawable;
 
-        self.gc.dev.cmdBeginRenderPass(cmdbuf, &.{
-            .render_pass = pass.render_pass,
-            .framebuffer = pass.framebuffer,
-            .render_area = .{
-                .offset = .{ .x = 0, .y = 0 },
-                .extent = pass.extent,
-            },
-            .clear_value_count = clear_value_count,
-            .p_clear_values = &clear_values,
-        }, .@"inline");
-
         const viewport = lowerViewport(.{
             .width = @floatFromInt(pass.extent.width),
             .height = @floatFromInt(pass.extent.height),
@@ -227,6 +216,14 @@ pub const CommandBuffer = struct {
         return .{
             .gc = self.gc,
             .cmdbuf = cmdbuf,
+            .render_pass = pass.render_pass,
+            .framebuffer = pass.framebuffer,
+            .render_area = .{
+                .offset = .{ .x = 0, .y = 0 },
+                .extent = pass.extent,
+            },
+            .clear_values = clear_values,
+            .clear_value_count = clear_value_count,
             .uses_depth_pass = uses_depth,
             .color_layout = pass.color_layout,
             .color_final_layout = pass.color_final_layout,
@@ -429,19 +426,24 @@ pub const CommandBuffer = struct {
         top_level: *const VulkanAccelerationStructure,
         output: *const VulkanTextureView,
         dispatch: core.RayDispatchDescriptor,
+        bind_group: ?*const VulkanBindGroup,
     ) core.AdvancedFeatureError!void {
         self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         self.temporary_ray_dispatch_resources.ensureUnusedCapacity(self.gc.allocator, 1) catch {
             return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         };
-        var dispatch_resources = try pipeline.makeDispatchResources(top_level, output, dispatch);
+        var dispatch_resources = try pipeline.makeDispatchResources(top_level, output, dispatch, bind_group);
         errdefer dispatch_resources.deinit();
 
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         }) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
 
-        output.transitionLayout(self.cmdbuf, .general);
+        transitionTextureForRayTracing(self.cmdbuf, output, .general, .{
+            .shader_read_bit = true,
+            .shader_write_bit = true,
+        });
+        transitionRayTracingBindGroup(self.cmdbuf, bind_group);
         self.gc.dev.cmdBindPipeline(self.cmdbuf, .ray_tracing_khr, pipeline.handle);
         self.gc.dev.cmdBindDescriptorSets(
             self.cmdbuf,
@@ -461,7 +463,8 @@ pub const CommandBuffer = struct {
             dispatch.height,
             dispatch.depth,
         );
-        output.transitionLayout(self.cmdbuf, .shader_read_only_optimal);
+        synchronizeRayTracingBindGroup(self.cmdbuf, bind_group);
+        transitionRayTracingOutput(self.cmdbuf, output, .shader_read_only_optimal);
 
         self.gc.dev.endCommandBuffer(self.cmdbuf) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         self.temporary_ray_dispatch_resources.appendAssumeCapacity(dispatch_resources);
@@ -473,6 +476,7 @@ pub const CommandBuffer = struct {
         top_level: *const VulkanAccelerationStructure,
         output: *const VulkanTextureView,
         dispatch: core.RayDispatchDescriptor,
+        bind_group: ?*const VulkanBindGroup,
     ) (core.AdvancedFeatureError || core.CommandEncodingError)!void {
         try self.requireCurrentPresentationGeneration();
         self.waitForOutstandingWork() catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
@@ -480,14 +484,18 @@ pub const CommandBuffer = struct {
         self.temporary_ray_dispatch_resources.ensureUnusedCapacity(self.gc.allocator, 1) catch {
             return core.AdvancedFeatureError.InvalidRayTracingPipeline;
         };
-        var dispatch_resources = try pipeline.makeDispatchResources(top_level, output, dispatch);
+        var dispatch_resources = try pipeline.makeDispatchResources(top_level, output, dispatch, bind_group);
         errdefer dispatch_resources.deinit();
 
         self.gc.dev.beginCommandBuffer(self.cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
         }) catch return core.AdvancedFeatureError.InvalidRayTracingPipeline;
 
-        output.transitionLayout(self.cmdbuf, .general);
+        transitionTextureForRayTracing(self.cmdbuf, output, .general, .{
+            .shader_read_bit = true,
+            .shader_write_bit = true,
+        });
+        transitionRayTracingBindGroup(self.cmdbuf, bind_group);
         self.gc.dev.cmdBindPipeline(self.cmdbuf, .ray_tracing_khr, pipeline.handle);
         self.gc.dev.cmdBindDescriptorSets(
             self.cmdbuf,
@@ -508,7 +516,8 @@ pub const CommandBuffer = struct {
             dispatch.depth,
         );
 
-        output.transitionLayout(self.cmdbuf, .transfer_src_optimal);
+        synchronizeRayTracingBindGroup(self.cmdbuf, bind_group);
+        transitionRayTracingOutput(self.cmdbuf, output, .transfer_src_optimal);
         const swapchain_image = swapchain.currentImageHandle();
         transitionSwapchainImage(
             self.gc,
@@ -864,6 +873,163 @@ pub const CommandBuffer = struct {
     }
 };
 
+fn transitionRayTracingBindGroup(
+    cmdbuf: vk.CommandBuffer,
+    bind_group: ?*const VulkanBindGroup,
+) void {
+    const group = bind_group orelse return;
+    const resource_barrier = vk.MemoryBarrier{
+        .src_access_mask = .{ .memory_read_bit = true, .memory_write_bit = true },
+        .dst_access_mask = .{ .shader_read_bit = true, .shader_write_bit = true },
+    };
+    group.gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        .{ .all_commands_bit = true },
+        rayTracingShaderStageMask(),
+        .{},
+        &.{resource_barrier},
+        null,
+        null,
+    );
+
+    for (group.entries) |entry| {
+        for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+            .sampled_texture => |texture_view| transitionTextureForRayTracing(
+                cmdbuf,
+                texture_view,
+                .shader_read_only_optimal,
+                .{ .shader_read_bit = true },
+            ),
+            .storage_texture => |texture_view| transitionTextureForRayTracing(
+                cmdbuf,
+                texture_view,
+                .general,
+                .{ .shader_read_bit = true, .shader_write_bit = true },
+            ),
+            .uniform_buffer, .storage_buffer, .sampler, .compare_sampler => {},
+        };
+    }
+}
+
+fn transitionTextureForRayTracing(
+    cmdbuf: vk.CommandBuffer,
+    texture_view: *const VulkanTextureView,
+    new_layout: vk.ImageLayout,
+    dst_access_mask: vk.AccessFlags,
+) void {
+    const old_layout = texture_view.layout.*;
+    const barrier = vk.ImageMemoryBarrier{
+        .src_access_mask = if (old_layout == .undefined)
+            .{}
+        else
+            .{ .memory_read_bit = true, .memory_write_bit = true },
+        .dst_access_mask = dst_access_mask,
+        .old_layout = old_layout,
+        .new_layout = new_layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = texture_view.image,
+        .subresource_range = texture_view.subresource_range,
+    };
+    texture_view.gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        if (old_layout == .undefined) .{ .top_of_pipe_bit = true } else .{ .all_commands_bit = true },
+        rayTracingShaderStageMask(),
+        .{},
+        null,
+        null,
+        &.{barrier},
+    );
+    texture_view.layout.* = new_layout;
+}
+
+fn transitionRayTracingOutput(
+    cmdbuf: vk.CommandBuffer,
+    output: *const VulkanTextureView,
+    new_layout: vk.ImageLayout,
+) void {
+    const destination = rayTracingOutputDestination(new_layout);
+    const barrier = vk.ImageMemoryBarrier{
+        .src_access_mask = .{ .shader_read_bit = true, .shader_write_bit = true },
+        .dst_access_mask = destination.access,
+        .old_layout = output.layout.*,
+        .new_layout = new_layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = output.image,
+        .subresource_range = output.subresource_range,
+    };
+    output.gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        rayTracingShaderStageMask(),
+        destination.stages,
+        .{},
+        null,
+        null,
+        &.{barrier},
+    );
+    output.layout.* = new_layout;
+}
+
+const RayTracingOutputDestination = struct {
+    access: vk.AccessFlags,
+    stages: vk.PipelineStageFlags,
+};
+
+fn rayTracingOutputDestination(new_layout: vk.ImageLayout) RayTracingOutputDestination {
+    return switch (new_layout) {
+        .shader_read_only_optimal => .{
+            .access = vk.AccessFlags{ .shader_read_bit = true },
+            .stages = vk.PipelineStageFlags{
+                .vertex_shader_bit = true,
+                .fragment_shader_bit = true,
+                .compute_shader_bit = true,
+                .ray_tracing_shader_bit_khr = true,
+            },
+        },
+        .transfer_src_optimal => .{
+            .access = vk.AccessFlags{ .transfer_read_bit = true },
+            .stages = vk.PipelineStageFlags{ .transfer_bit = true },
+        },
+        else => unreachable,
+    };
+}
+
+fn rayTracingShaderStageMask() vk.PipelineStageFlags {
+    return .{ .ray_tracing_shader_bit_khr = true };
+}
+
+fn synchronizeRayTracingBindGroup(
+    cmdbuf: vk.CommandBuffer,
+    bind_group: ?*const VulkanBindGroup,
+) void {
+    const group = bind_group orelse return;
+    var has_writable_storage = false;
+    for (group.layout_entries) |layout_entry| {
+        if (layout_entry.resolvedStorageAccess()) |access| {
+            if (access.requiresWrite()) {
+                has_writable_storage = true;
+                break;
+            }
+        }
+    }
+    if (!has_writable_storage) return;
+
+    const barrier = vk.MemoryBarrier{
+        .src_access_mask = .{ .shader_write_bit = true },
+        .dst_access_mask = .{ .memory_read_bit = true, .memory_write_bit = true },
+    };
+    group.gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        rayTracingShaderStageMask(),
+        .{ .all_commands_bit = true },
+        .{},
+        &.{barrier},
+        null,
+        null,
+    );
+}
+
 const RenderPassSetup = struct {
     render_pass: vk.RenderPass,
     framebuffer: vk.Framebuffer,
@@ -994,6 +1160,12 @@ fn attachmentStoreOp(action: core.StoreAction) vk.AttachmentStoreOp {
 pub const RenderCommandEncoder = struct {
     gc: *const GraphicsContext,
     cmdbuf: vk.CommandBuffer,
+    render_pass: vk.RenderPass,
+    framebuffer: vk.Framebuffer,
+    render_area: vk.Rect2D,
+    clear_values: [core.default_max_color_attachments + 1]vk.ClearValue,
+    clear_value_count: u32,
+    render_pass_started: bool = false,
     uses_depth_pass: bool,
     color_layout: ?*vk.ImageLayout = null,
     color_final_layout: vk.ImageLayout = .shader_read_only_optimal,
@@ -1007,6 +1179,18 @@ pub const RenderCommandEncoder = struct {
     sample_count: u32 = 1,
     index_buffer: vk.Buffer = .null_handle,
     pipeline_layout: vk.PipelineLayout = .null_handle,
+
+    fn ensureRenderPassStarted(self: *RenderCommandEncoder) void {
+        if (self.render_pass_started) return;
+        self.gc.dev.cmdBeginRenderPass(self.cmdbuf, &.{
+            .render_pass = self.render_pass,
+            .framebuffer = self.framebuffer,
+            .render_area = self.render_area,
+            .clear_value_count = self.clear_value_count,
+            .p_clear_values = &self.clear_values,
+        }, .@"inline");
+        self.render_pass_started = true;
+    }
 
     pub fn setLabel(self: *RenderCommandEncoder, label_value: ?[]const u8) void {
         _ = self;
@@ -1062,6 +1246,7 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         try binding.validate();
         if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingRenderPipelineState;
+        try transitionRenderBindGroupTextures(self, bind_group);
         const dynamic_offsets = try bind_group.dynamicOffsets(binding);
         defer bind_group.allocator.free(dynamic_offsets);
 
@@ -1154,6 +1339,7 @@ pub const RenderCommandEncoder = struct {
     }
 
     pub fn beginOcclusionQuery(self: *RenderCommandEncoder, query_set: *VulkanQuerySet, query_index: u32) void {
+        self.ensureRenderPassStarted();
         query_set.beginOcclusion(self.cmdbuf, query_index);
     }
 
@@ -1170,6 +1356,7 @@ pub const RenderCommandEncoder = struct {
         descriptor: core.DrawPrimitivesDescriptor,
     ) !void {
         try descriptor.validate();
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdDraw(
             self.cmdbuf,
             descriptor.vertex_count,
@@ -1190,6 +1377,7 @@ pub const RenderCommandEncoder = struct {
             .{ .max_tessellation_control_points = descriptor.tessellation.control_point_count },
         );
         const lowering = try core.vulkanTessellationDrawLowering(plan);
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdDraw(
             self.cmdbuf,
             lowering.draw_vertex_count,
@@ -1214,6 +1402,7 @@ pub const RenderCommandEncoder = struct {
             limits,
         );
         const lowering = try core.vulkanMeshDispatchLowering(plan);
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdDrawMeshTasksEXT(
             self.cmdbuf,
             lowering.group_count_x,
@@ -1227,6 +1416,7 @@ pub const RenderCommandEncoder = struct {
         descriptor: core.DrawIndexedPrimitivesDescriptor,
     ) !void {
         try descriptor.validate();
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdBindIndexBuffer(
             self.cmdbuf,
             self.index_buffer,
@@ -1250,6 +1440,7 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         try descriptor.validate();
         if (descriptor.draw_count != 1) return core.CommandEncodingError.UnsupportedMultiDraw;
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdDrawIndirect(
             self.cmdbuf,
             indirect_buffer.handle,
@@ -1266,6 +1457,7 @@ pub const RenderCommandEncoder = struct {
     ) !void {
         try descriptor.validate();
         if (descriptor.draw_count != 1) return core.CommandEncodingError.UnsupportedMultiDraw;
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdBindIndexBuffer(
             self.cmdbuf,
             self.index_buffer,
@@ -1282,6 +1474,7 @@ pub const RenderCommandEncoder = struct {
     }
 
     pub fn endEncoding(self: *RenderCommandEncoder) !void {
+        self.ensureRenderPassStarted();
         self.gc.dev.cmdEndRenderPass(self.cmdbuf);
         for (self.color_layouts[0..self.color_layout_count], 0..) |maybe_layout, i| {
             if (maybe_layout) |layout| layout.* = self.color_final_layouts[i];
@@ -1621,6 +1814,9 @@ pub const ComputeCommandEncoder = struct {
     gc: *const GraphicsContext,
     cmdbuf: vk.CommandBuffer,
     pipeline_layout: vk.PipelineLayout = .null_handle,
+    active_bind_group_count: usize = 0,
+    bound_bind_groups: [core.default_max_bind_group_slots]?*const VulkanBindGroup =
+        .{null} ** core.default_max_bind_group_slots,
 
     pub fn setLabel(self: *ComputeCommandEncoder, label_value: ?[]const u8) void {
         _ = self;
@@ -1646,6 +1842,7 @@ pub const ComputeCommandEncoder = struct {
     pub fn setComputePipelineState(self: *ComputeCommandEncoder, pipeline: *VulkanComputePipelineState) !void {
         self.gc.dev.cmdBindPipeline(self.cmdbuf, .compute, pipeline.handle);
         self.pipeline_layout = pipeline.layout;
+        self.active_bind_group_count = pipeline.bind_group_layouts.len;
     }
 
     pub fn setBindGroup(
@@ -1656,12 +1853,6 @@ pub const ComputeCommandEncoder = struct {
         try binding.validate();
         if (self.pipeline_layout == .null_handle) return core.CommandEncodingError.MissingComputePipelineState;
 
-        for (bind_group.entries) |entry| {
-            for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
-                .storage_texture => |texture_view| texture_view.transitionLayout(self.cmdbuf, .general),
-                else => {},
-            };
-        }
         const dynamic_offsets = try bind_group.dynamicOffsets(binding);
         defer bind_group.allocator.free(dynamic_offsets);
 
@@ -1673,6 +1864,7 @@ pub const ComputeCommandEncoder = struct {
             &.{bind_group.set},
             if (dynamic_offsets.len == 0) null else dynamic_offsets,
         );
+        self.bound_bind_groups[@intCast(binding.index)] = bind_group;
     }
 
     pub fn setResourceTable(
@@ -1714,12 +1906,14 @@ pub const ComputeCommandEncoder = struct {
         descriptor: core.DispatchThreadgroupsDescriptor,
     ) !void {
         try descriptor.validate();
+        try transitionComputeBindGroupsBeforeDispatch(self);
         self.gc.dev.cmdDispatch(
             self.cmdbuf,
             descriptor.threadgroup_count_x,
             descriptor.threadgroup_count_y,
             descriptor.threadgroup_count_z,
         );
+        finalizeComputeTextureBindings(self);
     }
 
     pub fn dispatchThreadgroupsIndirect(
@@ -1727,11 +1921,13 @@ pub const ComputeCommandEncoder = struct {
         indirect_buffer: *const VulkanBuffer,
         descriptor: core.DispatchThreadgroupsIndirectDescriptor,
     ) !void {
+        try transitionComputeBindGroupsBeforeDispatch(self);
         self.gc.dev.cmdDispatchIndirect(
             self.cmdbuf,
             indirect_buffer.handle,
             descriptor.offset,
         );
+        finalizeComputeTextureBindings(self);
     }
 
     pub fn bufferBarrier(
@@ -1754,6 +1950,240 @@ pub const ComputeCommandEncoder = struct {
         try self.gc.dev.endCommandBuffer(self.cmdbuf);
     }
 };
+
+const ShaderTextureState = struct {
+    layout: vk.ImageLayout,
+    access: vk.AccessFlags,
+    stages: vk.PipelineStageFlags,
+};
+
+const TextureTransitionSource = struct {
+    access: vk.AccessFlags,
+    stages: vk.PipelineStageFlags,
+};
+
+fn sampledTextureState(stages: vk.PipelineStageFlags) ShaderTextureState {
+    return .{
+        .layout = .shader_read_only_optimal,
+        .access = .{ .shader_read_bit = true },
+        .stages = stages,
+    };
+}
+
+fn storageTextureState(
+    access: core.StorageAccess,
+    stages: vk.PipelineStageFlags,
+) ShaderTextureState {
+    return .{
+        .layout = .general,
+        .access = .{
+            .shader_read_bit = access.requiresRead(),
+            .shader_write_bit = access.requiresWrite(),
+        },
+        .stages = stages,
+    };
+}
+
+fn shaderStagesForRender(visibility: core.ShaderVisibility) vk.PipelineStageFlags {
+    return .{
+        .vertex_shader_bit = visibility.vertex,
+        .fragment_shader_bit = visibility.fragment,
+    };
+}
+
+fn computeTextureFinalState(
+    usage: core.TextureUsage,
+    access: core.StorageAccess,
+) ?ShaderTextureState {
+    if (usage.shader_read) return sampledTextureState(.{ .all_commands_bit = true });
+    if (access.requiresWrite()) {
+        return storageTextureState(.read_write, .{ .all_commands_bit = true });
+    }
+    return null;
+}
+
+fn transitionTextureViewForShader(
+    cmdbuf: vk.CommandBuffer,
+    texture_view: *const VulkanTextureView,
+    destination: ShaderTextureState,
+    source_override: ?TextureTransitionSource,
+    force_same_layout_barrier: bool,
+) void {
+    const old_layout = texture_view.layout.*;
+    if (old_layout == destination.layout and !force_same_layout_barrier) return;
+
+    const source = source_override orelse if (old_layout == .undefined)
+        TextureTransitionSource{
+            .access = .{},
+            .stages = .{ .top_of_pipe_bit = true },
+        }
+    else
+        TextureTransitionSource{
+            .access = .{ .memory_read_bit = true, .memory_write_bit = true },
+            .stages = .{ .all_commands_bit = true },
+        };
+    const barrier = vk.ImageMemoryBarrier{
+        .src_access_mask = source.access,
+        .dst_access_mask = destination.access,
+        .old_layout = old_layout,
+        .new_layout = destination.layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = texture_view.image,
+        .subresource_range = texture_view.subresource_range,
+    };
+    texture_view.gc.dev.cmdPipelineBarrier(
+        cmdbuf,
+        source.stages,
+        destination.stages,
+        .{},
+        null,
+        null,
+        &.{barrier},
+    );
+    texture_view.layout.* = destination.layout;
+}
+
+fn transitionRenderBindGroupTextures(
+    encoder: *RenderCommandEncoder,
+    bind_group: *const VulkanBindGroup,
+) core.CommandEncodingError!void {
+    for (bind_group.entries) |entry| {
+        const layout_entry = bindGroupLayoutEntry(bind_group, entry.binding) orelse continue;
+        const stages = shaderStagesForRender(layout_entry.visibility);
+        if (!stages.vertex_shader_bit and !stages.fragment_shader_bit) continue;
+
+        for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+            .sampled_texture => |texture_view| {
+                const destination = sampledTextureState(stages);
+                if (encoder.render_pass_started and texture_view.layout.* != destination.layout) {
+                    return core.CommandEncodingError.InvalidResourceBarrierState;
+                }
+                transitionTextureViewForShader(
+                    encoder.cmdbuf,
+                    texture_view,
+                    destination,
+                    null,
+                    false,
+                );
+            },
+            .uniform_buffer, .storage_buffer, .storage_texture, .sampler, .compare_sampler => {},
+        };
+    }
+}
+
+fn transitionComputeBindGroupsBeforeDispatch(
+    encoder: *ComputeCommandEncoder,
+) core.CommandEncodingError!void {
+    const active_groups = encoder.bound_bind_groups[0..encoder.active_bind_group_count];
+    for (active_groups) |maybe_group| {
+        const bind_group = maybe_group orelse continue;
+        for (bind_group.entries) |entry| {
+            const layout_entry = bindGroupLayoutEntry(bind_group, entry.binding) orelse continue;
+            if (!layout_entry.visibility.compute) continue;
+
+            for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+                .sampled_texture => |texture_view| {
+                    if (computeBindingsContainTextureKind(
+                        active_groups,
+                        texture_view.image,
+                        .storage_texture,
+                    )) return core.CommandEncodingError.InvalidResourceBarrierState;
+                    transitionTextureViewForShader(
+                        encoder.cmdbuf,
+                        texture_view,
+                        sampledTextureState(.{ .compute_shader_bit = true }),
+                        null,
+                        true,
+                    );
+                },
+                .storage_texture => |texture_view| {
+                    if (computeBindingsContainTextureKind(
+                        active_groups,
+                        texture_view.image,
+                        .sampled_texture,
+                    )) return core.CommandEncodingError.InvalidResourceBarrierState;
+                    transitionTextureViewForShader(
+                        encoder.cmdbuf,
+                        texture_view,
+                        storageTextureState(
+                            layout_entry.resolvedStorageAccess().?,
+                            .{ .compute_shader_bit = true },
+                        ),
+                        null,
+                        true,
+                    );
+                },
+                .uniform_buffer, .storage_buffer, .sampler, .compare_sampler => {},
+            };
+        }
+    }
+}
+
+fn finalizeComputeTextureBindings(encoder: *ComputeCommandEncoder) void {
+    for (encoder.bound_bind_groups[0..encoder.active_bind_group_count]) |maybe_group| {
+        const bind_group = maybe_group orelse continue;
+        for (bind_group.entries) |entry| {
+            const layout_entry = bindGroupLayoutEntry(bind_group, entry.binding) orelse continue;
+            if (!layout_entry.visibility.compute) continue;
+            const storage_access = layout_entry.resolvedStorageAccess() orelse continue;
+
+            for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+                .storage_texture => |texture_view| {
+                    const destination = computeTextureFinalState(
+                        texture_view.usage,
+                        storage_access,
+                    ) orelse continue;
+                    const compute_access = TextureTransitionSource{
+                        .access = .{
+                            .shader_read_bit = storage_access.requiresRead(),
+                            .shader_write_bit = storage_access.requiresWrite(),
+                        },
+                        .stages = .{ .compute_shader_bit = true },
+                    };
+                    transitionTextureViewForShader(
+                        encoder.cmdbuf,
+                        texture_view,
+                        destination,
+                        compute_access,
+                        true,
+                    );
+                },
+                .uniform_buffer, .storage_buffer, .sampled_texture, .sampler, .compare_sampler => {},
+            };
+        }
+    }
+}
+
+fn computeBindingsContainTextureKind(
+    groups: []const ?*const VulkanBindGroup,
+    image: vk.Image,
+    expected_kind: core.BindingResourceKind,
+) bool {
+    for (groups) |maybe_group| {
+        const bind_group = maybe_group orelse continue;
+        for (bind_group.entries) |entry| {
+            const layout_entry = bindGroupLayoutEntry(bind_group, entry.binding) orelse continue;
+            if (!layout_entry.visibility.compute or layout_entry.resource != expected_kind) continue;
+            for (0..entry.resourceCount()) |resource_index| switch (entry.resourceAt(resource_index)) {
+                .sampled_texture => |texture_view| if (expected_kind == .sampled_texture and texture_view.image == image) return true,
+                .storage_texture => |texture_view| if (expected_kind == .storage_texture and texture_view.image == image) return true,
+                .uniform_buffer, .storage_buffer, .sampler, .compare_sampler => {},
+            };
+        }
+    }
+    return false;
+}
+
+fn bindGroupLayoutEntry(
+    bind_group: *const VulkanBindGroup,
+    binding: u32,
+) ?core.BindGroupLayoutEntry {
+    for (bind_group.layout_entries) |entry| {
+        if (entry.binding == binding) return entry;
+    }
+    return null;
+}
 
 fn applyBufferBarrier(
     gc: *const GraphicsContext,
@@ -2256,4 +2686,127 @@ test "Vulkan presentation generation invalidates drawable command state" {
     generation = 10;
     try std.testing.expect(!presentationGenerationMatches(&generation, 9));
     try std.testing.expect(!presentationGenerationMatches(null, 0));
+}
+
+test "Vulkan ray tracing texture barriers cover RT and downstream shader stages" {
+    const input_stages = rayTracingShaderStageMask();
+    try std.testing.expect(input_stages.ray_tracing_shader_bit_khr);
+
+    const sampled_output = rayTracingOutputDestination(.shader_read_only_optimal);
+    try std.testing.expect(sampled_output.access.shader_read_bit);
+    try std.testing.expect(sampled_output.stages.vertex_shader_bit);
+    try std.testing.expect(sampled_output.stages.fragment_shader_bit);
+    try std.testing.expect(sampled_output.stages.compute_shader_bit);
+    try std.testing.expect(sampled_output.stages.ray_tracing_shader_bit_khr);
+
+    const transfer_output = rayTracingOutputDestination(.transfer_src_optimal);
+    try std.testing.expect(transfer_output.access.transfer_read_bit);
+    try std.testing.expect(transfer_output.stages.transfer_bit);
+}
+
+test "Vulkan bind-group texture states preserve stage and storage access" {
+    const sampled_compute = sampledTextureState(.{ .compute_shader_bit = true });
+    try std.testing.expectEqual(vk.ImageLayout.shader_read_only_optimal, sampled_compute.layout);
+    try std.testing.expect(sampled_compute.access.shader_read_bit);
+    try std.testing.expect(sampled_compute.stages.compute_shader_bit);
+    try std.testing.expect(!sampled_compute.stages.fragment_shader_bit);
+
+    const render_stages = shaderStagesForRender(.{ .vertex = true, .fragment = true });
+    try std.testing.expect(render_stages.vertex_shader_bit);
+    try std.testing.expect(render_stages.fragment_shader_bit);
+    try std.testing.expect(!render_stages.compute_shader_bit);
+
+    const storage_read = storageTextureState(.read, .{ .compute_shader_bit = true });
+    try std.testing.expectEqual(vk.ImageLayout.general, storage_read.layout);
+    try std.testing.expect(storage_read.access.shader_read_bit);
+    try std.testing.expect(!storage_read.access.shader_write_bit);
+
+    const storage_write = storageTextureState(.write, .{ .compute_shader_bit = true });
+    try std.testing.expect(!storage_write.access.shader_read_bit);
+    try std.testing.expect(storage_write.access.shader_write_bit);
+
+    const sampled_final = computeTextureFinalState(.{ .shader_read = true }, .write).?;
+    try std.testing.expectEqual(vk.ImageLayout.shader_read_only_optimal, sampled_final.layout);
+    try std.testing.expect(sampled_final.stages.all_commands_bit);
+
+    const storage_final = computeTextureFinalState(.{}, .write).?;
+    try std.testing.expectEqual(vk.ImageLayout.general, storage_final.layout);
+    try std.testing.expect(storage_final.access.shader_read_bit);
+    try std.testing.expect(storage_final.access.shader_write_bit);
+    try std.testing.expectEqual(@as(?ShaderTextureState, null), computeTextureFinalState(.{}, .read));
+}
+
+test "Vulkan compute texture alias scan covers resource arrays" {
+    var layout: vk.ImageLayout = .shader_read_only_optimal;
+    var first_view = VulkanTextureView{
+        .gc = undefined,
+        .image = @enumFromInt(1),
+        .handle = .null_handle,
+        .format = .rgba8_unorm,
+        .width = 1,
+        .height = 1,
+        .sample_count = 1,
+        .usage = .{ .shader_read = true },
+        .layout = &layout,
+        .subresource_range = undefined,
+    };
+    var aliased_view = first_view;
+    aliased_view.image = @enumFromInt(2);
+
+    const sampled_resources = [_]VulkanBindGroup.Resource{
+        .{ .sampled_texture = &first_view },
+        .{ .sampled_texture = &aliased_view },
+    };
+    var layout_entries = [_]core.BindGroupLayoutEntry{
+        .{
+            .binding = 3,
+            .resource = .sampled_texture,
+            .visibility = .{ .compute = true },
+            .array_count = sampled_resources.len,
+        },
+        .{
+            .binding = 7,
+            .resource = .storage_texture,
+            .visibility = .{ .compute = true },
+        },
+    };
+    var entries = [_]VulkanBindGroup.Entry{
+        .{
+            .binding = 3,
+            .resource = sampled_resources[0],
+            .resources = &sampled_resources,
+        },
+        .{
+            .binding = 7,
+            .resource = .{ .storage_texture = &aliased_view },
+        },
+    };
+    var stored_resources: [0]VulkanBindGroup.Resource = .{};
+    var group = VulkanBindGroup{
+        .gc = undefined,
+        .allocator = std.testing.allocator,
+        .pool = .null_handle,
+        .set = .null_handle,
+        .layout_entries = &layout_entries,
+        .entries = &entries,
+        .entry_resources = &stored_resources,
+    };
+    var groups = [_]?*const VulkanBindGroup{null} ** core.default_max_bind_group_slots;
+    groups[0] = &group;
+
+    try std.testing.expect(computeBindingsContainTextureKind(
+        &groups,
+        aliased_view.image,
+        .sampled_texture,
+    ));
+    try std.testing.expect(computeBindingsContainTextureKind(
+        &groups,
+        aliased_view.image,
+        .storage_texture,
+    ));
+    try std.testing.expect(!computeBindingsContainTextureKind(
+        &groups,
+        first_view.image,
+        .storage_texture,
+    ));
 }
